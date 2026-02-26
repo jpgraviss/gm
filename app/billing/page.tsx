@@ -170,6 +170,7 @@ export default function BillingPage() {
 
         {/* Invoice Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <div className="flex items-center gap-2">
               <button onClick={() => setStatusFilter('All')} className={`tab-btn ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
@@ -205,6 +206,7 @@ export default function BillingPage() {
           {filtered.length === 0 && (
             <div className="py-12 text-center text-gray-400 text-sm">No invoices in this status</div>
           )}
+          </div>
         </div>
       </div>
     </>

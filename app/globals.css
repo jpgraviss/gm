@@ -175,6 +175,36 @@ input, select, textarea {
   font-family: var(--font-body);
 }
 
+/* Mobile-specific */
+@media (max-width: 1023px) {
+  .kanban-col {
+    min-width: 200px;
+  }
+}
+
+/* Table scroll containers */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Responsive page padding */
+@media (max-width: 767px) {
+  .page-header h1 {
+    font-size: 14px;
+  }
+  .metric-card {
+    padding: 16px;
+  }
+}
+
+/* Safe bottom padding for mobile nav */
+@media (max-width: 1023px) {
+  main {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

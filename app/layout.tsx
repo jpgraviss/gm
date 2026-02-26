@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import Sidebar from '@/components/layout/Sidebar'
+import { AuthProvider } from '@/contexts/AuthContext'
+import { UIProvider } from '@/contexts/UIContext'
+import AppShell from '@/components/layout/AppShell'
 
 export const metadata: Metadata = {
   title: 'GravHub — Graviss Marketing OS',
@@ -23,12 +25,13 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1 flex flex-col min-w-0" style={{ background: '#f4f5f7' }}>
-            {children}
-          </main>
-        </div>
+        <AuthProvider>
+          <UIProvider>
+            <AppShell>
+              {children}
+            </AppShell>
+          </UIProvider>
+        </AuthProvider>
       </body>
     </html>
   )

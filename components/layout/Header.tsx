@@ -1,6 +1,10 @@
 'use client'
 
-import { Bell, Search, Plus } from 'lucide-react'
+import { useState } from 'react'
+import { Bell, Search, Plus, Menu, X, LogOut, ShieldCheck, User } from 'lucide-react'
+import { useUI } from '@/contexts/UIContext'
+import { useAuth } from '@/contexts/AuthContext'
+import Link from 'next/link'
 
 interface HeaderProps {
   title: string
@@ -12,28 +16,53 @@ interface HeaderProps {
 }
 
 export default function Header({ title, subtitle, action }: HeaderProps) {
+  const { toggleSidebar } = useUI()
+  const { user, logout } = useAuth()
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+
   return (
-    <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200 sticky top-0 z-10">
-      <div>
-        <h1
-          className="text-base font-bold text-gray-900 tracking-widest uppercase"
-          style={{ fontFamily: 'var(--font-syncopate), sans-serif', fontSize: '14px' }}
+    <header className="flex items-center justify-between px-4 md:px-6 py-3.5 bg-white border-b border-gray-200 sticky top-0 z-20">
+      {/* Left: hamburger (mobile) + title */}
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={toggleSidebar}
+          className="p-1.5 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0 lg:hidden"
         >
-          {title}
-        </h1>
-        {subtitle && <p className="text-gray-500 text-xs mt-0.5">{subtitle}</p>}
+          <Menu size={18} className="text-gray-600" />
+        </button>
+
+        <div className="min-w-0">
+          <h1
+            className="font-bold text-gray-900 tracking-widest uppercase truncate"
+            style={{ fontFamily: 'var(--font-heading)', fontSize: '13px' }}
+          >
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="text-gray-500 text-xs mt-0.5 hidden sm:block truncate">{subtitle}</p>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        {/* Search */}
-        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+      {/* Right: actions */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Search — expandable on mobile */}
+        <div className="hidden md:flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
           <Search size={13} className="text-gray-400" />
           <input
             type="text"
             placeholder="Search..."
-            className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-44"
+            className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-36"
           />
         </div>
+        <button
+          onClick={() => setSearchOpen(!searchOpen)}
+          className="md:hidden p-2 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          <Search size={16} className="text-gray-500" />
+        </button>
 
         {/* Notifications */}
         <button className="relative p-2 rounded-lg hover:bg-gray-50 transition-colors">
@@ -49,10 +78,88 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
             style={{ background: '#015035' }}
           >
             <Plus size={14} />
-            {action.label}
+            <span className="hidden sm:inline">{action.label}</span>
           </button>
         )}
+
+        {/* User avatar + dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+              style={{ background: user?.isAdmin ? '#f59e0b' : '#015035' }}
+            >
+              {user?.initials || '?'}
+            </div>
+            <div className="hidden md:block text-left">
+              <p className="text-xs font-semibold text-gray-900 leading-tight">{user?.name}</p>
+              <p className="text-[10px] text-gray-400">{user?.isAdmin ? '★ Super Admin' : user?.role}</p>
+            </div>
+          </button>
+
+          {/* Dropdown */}
+          {userMenuOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-30"
+                onClick={() => setUserMenuOpen(false)}
+              />
+              <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl border border-gray-200 shadow-lg z-40 py-1 overflow-hidden">
+                <div className="px-3 py-2.5 border-b border-gray-100">
+                  <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
+                  <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+                </div>
+                <div className="py-1">
+                  {user?.isAdmin && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-2.5 px-3 py-2 text-sm text-amber-600 hover:bg-amber-50 transition-colors"
+                    >
+                      <ShieldCheck size={14} />
+                      Admin Panel
+                    </Link>
+                  )}
+                  <Link
+                    href="/settings"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <User size={14} />
+                    My Profile
+                  </Link>
+                  <button
+                    onClick={() => { logout(); setUserMenuOpen(false) }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut size={14} />
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Mobile search bar — expands below */}
+      {searchOpen && (
+        <div className="absolute top-full left-0 right-0 bg-white border-b border-gray-200 px-4 py-3 md:hidden flex items-center gap-2 z-10">
+          <Search size={15} className="text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search GravHub..."
+            className="flex-1 bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none"
+            autoFocus
+          />
+          <button onClick={() => setSearchOpen(false)}>
+            <X size={16} className="text-gray-400" />
+          </button>
+        </div>
+      )}
     </header>
   )
 }

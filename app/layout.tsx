@@ -23,6 +23,9 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Syncopate:wght@400;700&display=swap"
           rel="stylesheet"
         />
+        {/* Google Identity Services */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script id="google-gsi" src="https://accounts.google.com/gsi/client" async defer />
       </head>
       <body>
         <AuthProvider>

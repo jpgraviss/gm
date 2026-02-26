@@ -17,13 +17,14 @@ interface AuthContextType {
   user: AuthUser | null
   loading: boolean
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  loginWithGoogle: (credential: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
 }
 
 // Registered platform users
 const USERS: Record<string, { password: string; user: AuthUser }> = {
   'jonathan@gravissmarketing.com': {
-    password: 'Graviss2024!',
+    password: 'Gr@v!ss32603',
     user: {
       id: 'u0',
       email: 'jonathan@gravissmarketing.com',
@@ -115,13 +116,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true }
   }
 
+  const loginWithGoogle = async (credential: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      // Decode JWT payload (signature verification handled server-side in M2 with Supabase)
+      const payloadB64 = credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+      const payload = JSON.parse(atob(payloadB64)) as {
+        email: string; name: string; picture?: string; sub: string
+      }
+      const email = payload.email.toLowerCase()
+
+      // Match a known registered user first
+      const entry = USERS[email]
+      if (entry) {
+        const authedUser: AuthUser = { ...entry.user, avatar: payload.picture }
+        localStorage.setItem('gravhub_session', JSON.stringify(authedUser))
+        setUser(authedUser)
+        return { ok: true }
+      }
+
+      // Allow any @gravissmarketing.com Google Workspace account
+      if (email.endsWith('@gravissmarketing.com')) {
+        const initials = payload.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+        const newUser: AuthUser = {
+          id: `google_${payload.sub}`,
+          email: payload.email,
+          name: payload.name,
+          role: 'Team Member',
+          initials,
+          unit: 'Delivery/Operations',
+          isAdmin: false,
+          avatar: payload.picture,
+        }
+        localStorage.setItem('gravhub_session', JSON.stringify(newUser))
+        setUser(newUser)
+        return { ok: true }
+      }
+
+      return { ok: false, error: 'Access is restricted to Graviss Marketing team members.' }
+    } catch {
+      return { ok: false, error: 'Google sign-in failed. Please try again.' }
+    }
+  }
+
   const logout = () => {
     localStorage.removeItem('gravhub_session')
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   )

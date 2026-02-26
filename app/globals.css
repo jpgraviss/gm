@@ -1,0 +1,191 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-green: #015035;
+  --color-brand-green-hover: #01673f;
+  --color-brand-green-light: #e6f0ec;
+  --color-brand-tan: #FFF3EA;
+  --color-brand-tan-dark: #f5e6d4;
+  --color-sidebar-bg: #013525;
+  --color-sidebar-hover: #015035;
+  --color-sidebar-active: #01673f;
+
+  --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+}
+
+:root {
+  --brand-green: #015035;
+  --brand-tan: #FFF3EA;
+  --sidebar-bg: #012b1e;
+  --font-heading: 'Syncopate', sans-serif;
+  --font-body: 'Montserrat', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-body);
+  background-color: #f4f5f7;
+  color: #1a1a2e;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.sidebar-nav-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.sidebar-nav-item.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.sidebar-nav-item.active .nav-dot {
+  background: #4ade80;
+}
+
+.metric-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid #e8eaed;
+  transition: box-shadow 0.2s;
+}
+
+.metric-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.deal-card {
+  background: white;
+  border: 1px solid #e8eaed;
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.deal-card:hover {
+  border-color: #015035;
+  box-shadow: 0 2px 12px rgba(1, 80, 53, 0.12);
+  transform: translateY(-1px);
+}
+
+.kanban-col {
+  background: #f4f5f7;
+  border-radius: 12px;
+  padding: 12px;
+  min-height: 400px;
+  flex: 1;
+  min-width: 230px;
+}
+
+.bar-chart-bar {
+  border-radius: 4px 4px 0 0;
+  transition: opacity 0.2s;
+}
+
+.bar-chart-bar:hover {
+  opacity: 0.85;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+  color: #012b1e;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+
+.page-header p {
+  color: #6b7280;
+  font-size: 13.5px;
+  margin: 0;
+}
+
+.tab-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.tab-btn.active {
+  background: #015035;
+  color: white;
+  border-color: #015035;
+}
+
+.tab-btn:not(.active) {
+  background: white;
+  color: #6b7280;
+  border-color: #e5e7eb;
+}
+
+.tab-btn:not(.active):hover {
+  border-color: #015035;
+  color: #015035;
+}
+
+input, select, textarea {
+  font-family: var(--font-body);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}

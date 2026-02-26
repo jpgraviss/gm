@@ -210,6 +210,49 @@ export const projects: Project[] = [
     ],
     tasks: [],
   },
+  {
+    id: 'pr4', contractId: 'con4', company: 'Apex Solutions', serviceType: 'Website', status: 'Not Started',
+    startDate: '2026-03-01', launchDate: '2026-05-15', assignedTeam: ['Jordan Ellis', 'Priya Patel'], progress: 0,
+    milestones: [
+      { id: 'm14', name: 'Kickoff Meeting', dueDate: '2026-03-05', completed: false },
+      { id: 'm15', name: 'Brand Discovery', dueDate: '2026-03-20', completed: false },
+      { id: 'm16', name: 'Wireframes Approved', dueDate: '2026-04-05', completed: false },
+      { id: 'm17', name: 'Design & Development', dueDate: '2026-04-30', completed: false },
+      { id: 'm18', name: 'Launch', dueDate: '2026-05-15', completed: false },
+    ],
+    tasks: [
+      { id: 'tk10', title: 'Schedule kickoff call with Marcus Rivera', assignee: 'Jordan Ellis', dueDate: '2026-02-28', completed: false, priority: 'High' },
+      { id: 'tk11', title: 'Prepare project brief document', assignee: 'Priya Patel', dueDate: '2026-03-01', completed: false, priority: 'Medium' },
+      { id: 'tk12', title: 'Set up project in tracking system', assignee: 'Priya Patel', dueDate: '2026-03-02', completed: false, priority: 'Low' },
+    ],
+  },
+  {
+    id: 'pr5', contractId: '', company: 'GreenLeaf Organics', serviceType: 'Social Media', status: 'Awaiting Client',
+    startDate: '2026-02-15', launchDate: '2026-03-15', assignedTeam: ['Jordan Ellis'], progress: 45,
+    milestones: [
+      { id: 'm19', name: 'Account Audit', dueDate: '2026-02-20', completed: true },
+      { id: 'm20', name: 'Strategy Approved', dueDate: '2026-02-28', completed: false },
+      { id: 'm21', name: 'Content Calendar Live', dueDate: '2026-03-07', completed: false },
+      { id: 'm22', name: 'First Month Report', dueDate: '2026-03-15', completed: false },
+    ],
+    tasks: [
+      { id: 'tk13', title: 'Send strategy deck for client approval', assignee: 'Jordan Ellis', dueDate: '2026-02-25', completed: false, priority: 'High' },
+      { id: 'tk14', title: 'Create 30-day content calendar', assignee: 'Jordan Ellis', dueDate: '2026-03-01', completed: false, priority: 'High' },
+      { id: 'tk15', title: 'Set up Buffer scheduling tool', assignee: 'Jordan Ellis', dueDate: '2026-02-28', completed: true, priority: 'Medium' },
+    ],
+  },
+  {
+    id: 'pr6', contractId: 'con-old2', company: 'NovaBuild Corp', serviceType: 'SEO', status: 'In Maintenance',
+    startDate: '2025-04-15', launchDate: '2025-07-01', maintenanceStartDate: '2025-07-01',
+    assignedTeam: ['Priya Patel'], progress: 100,
+    milestones: [
+      { id: 'm23', name: 'Technical SEO Audit', dueDate: '2025-04-30', completed: true },
+      { id: 'm24', name: 'On-Page Optimization', dueDate: '2025-05-31', completed: true },
+      { id: 'm25', name: 'Link Building Campaign', dueDate: '2025-06-15', completed: true },
+      { id: 'm26', name: 'Monthly Reporting Live', dueDate: '2025-07-01', completed: true },
+    ],
+    tasks: [],
+  },
 ]
 
 export const maintenanceRecords: MaintenanceRecord[] = [

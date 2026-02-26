@@ -7,7 +7,7 @@ import { useUI } from '@/contexts/UIContext'
 import {
   LayoutDashboard, Users, FileText, ScrollText, CreditCard,
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
-  Settings, ChevronRight, X, ShieldCheck, LogOut,
+  Settings, ChevronRight, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail,
 } from 'lucide-react'
 
 interface NavItem {
@@ -30,9 +30,17 @@ const navigation: NavSection[] = [
     ],
   },
   {
+    section: 'CRM',
+    items: [
+      { label: 'Pipeline', href: '/crm/pipeline', icon: <TrendingUp size={15} /> },
+      { label: 'Companies', href: '/crm/companies', icon: <Building2 size={15} /> },
+      { label: 'Contacts', href: '/crm/contacts', icon: <Users size={15} /> },
+      { label: 'Sequences', href: '/crm/sequences', icon: <Mail size={15} /> },
+    ],
+  },
+  {
     section: 'Revenue',
     items: [
-      { label: 'CRM & Pipeline', href: '/crm', icon: <Users size={15} /> },
       { label: 'Proposals', href: '/proposals', icon: <FileText size={15} /> },
       { label: 'Contracts', href: '/contracts', icon: <ScrollText size={15} /> },
       { label: 'Billing', href: '/billing', icon: <CreditCard size={15} /> },

@@ -1,0 +1,627 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import Header from '@/components/layout/Header'
+import { crmCompanies, crmContacts, deals, contracts, invoices, projects, crmActivities } from '@/lib/data'
+import {
+  formatCurrency, stageColors, serviceTypeColors, contractStatusColors,
+  projectStatusColors, invoiceStatusColors,
+} from '@/lib/utils'
+import StatusBadge from '@/components/ui/StatusBadge'
+import type { CRMCompany, CRMActivity, ActivityType, CompanyStatus } from '@/lib/types'
+import {
+  X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
+  User, Filter, Search, Plus, FileText, ScrollText, ChevronRight,
+  ExternalLink, PhoneCall, Video, StickyNote, CheckSquare, TrendingUp,
+  FolderKanban, Clock,
+} from 'lucide-react'
+
+// ─── CRM Sub-Nav ──────────────────────────────────────────────────────────────
+
+function CRMSubNav() {
+  const pathname = usePathname()
+  const tabs = [
+    { label: 'Pipeline', href: '/crm/pipeline' },
+    { label: `Companies (${crmCompanies.length})`, href: '/crm/companies' },
+    { label: `Contacts (${crmContacts.length})`, href: '/crm/contacts' },
+    { label: 'Sequences', href: '/crm/sequences' },
+  ]
+  return (
+    <div className="flex gap-1 border-b border-gray-200 px-6 pt-2 bg-white -mt-2 mb-5">
+      {tabs.map(t => (
+        <Link key={t.href} href={t.href} className={`tab-btn ${pathname === t.href ? 'active' : ''}`}>
+          {t.label}
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+// ─── Status colors ────────────────────────────────────────────────────────────
+
+const companyStatusColors: Record<CompanyStatus, string> = {
+  Prospect: 'bg-blue-50 text-blue-700',
+  'Active Client': 'bg-emerald-50 text-emerald-700',
+  'Past Client': 'bg-gray-100 text-gray-600',
+  Partner: 'bg-purple-50 text-purple-700',
+  Churned: 'bg-red-50 text-red-600',
+}
+
+const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned']
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="text-gray-400 mt-0.5 flex-shrink-0">{icon}</span>
+      <div>
+        {label && <p className="text-[11px] text-gray-400">{label}</p>}
+        <div className="text-sm text-gray-800">{value}</div>
+      </div>
+    </div>
+  )
+}
+
+const activityConfig: Record<ActivityType, { icon: React.ReactNode; color: string }> = {
+  call:     { icon: <PhoneCall size={14} />,   color: '#3b82f6' },
+  email:    { icon: <Mail size={14} />,         color: '#f59e0b' },
+  meeting:  { icon: <Video size={14} />,        color: '#8b5cf6' },
+  note:     { icon: <StickyNote size={14} />,   color: '#6b7280' },
+  task:     { icon: <CheckSquare size={14} />,  color: '#10b981' },
+  deal:     { icon: <TrendingUp size={14} />,   color: '#015035' },
+  contract: { icon: <ScrollText size={14} />,   color: '#f97316' },
+  invoice:  { icon: <DollarSign size={14} />,   color: '#ef4444' },
+  proposal: { icon: <FileText size={14} />,     color: '#6366f1' },
+}
+
+// ─── Company Detail Panel ─────────────────────────────────────────────────────
+
+function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () => void }) {
+  const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'activity'>('overview')
+
+  // Cross-linked data
+  const companyContacts = crmContacts.filter(c => c.companyId === company.id)
+  const companyDeals = deals.filter(d => d.company === company.name)
+  const companyContracts = contracts.filter(c => c.company === company.name)
+  const companyInvoices = invoices.filter(i => i.company === company.name)
+  const companyProject = projects.find(p => p.company === company.name)
+  const activities = crmActivities.filter(a => a.companyId === company.id)
+
+  const totalInvoiced = companyInvoices.reduce((s, i) => s + i.amount, 0)
+  const totalPaid = companyInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0)
+  const openDeals = companyDeals.filter(d => !d.stage.startsWith('Closed'))
+
+  return (
+    <div className="fixed inset-0 z-50 flex pointer-events-none">
+      <div className="flex-1 pointer-events-auto" onClick={onClose} />
+      <div className="w-[560px] bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200">
+
+        {/* Header */}
+        <div className="p-6 flex-shrink-0" style={{ background: '#012b1e' }}>
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0 pr-3">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center text-lg font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                {company.name[0]}
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-white text-lg font-bold truncate" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
+                  {company.name}
+                </h2>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${companyStatusColors[company.status]}`}>
+                    {company.status}
+                  </span>
+                  <span className="text-white/40 text-xs">{company.industry}</span>
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0">
+              <X size={18} className="text-white/60" />
+            </button>
+          </div>
+
+          {/* Metrics */}
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { label: 'Deal Value', value: formatCurrency(company.totalDealValue) },
+              { label: 'Contacts', value: companyContacts.length.toString() },
+              { label: 'Open Deals', value: openDeals.length.toString() },
+              { label: 'Paid', value: formatCurrency(totalPaid) },
+            ].map(s => (
+              <div key={s.label} className="bg-white/10 rounded-xl p-2.5 text-center">
+                <p className="text-white text-sm font-bold" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{s.value}</p>
+                <p className="text-white/50 text-[10px] uppercase tracking-wide font-semibold">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
+          {(['overview', 'contacts', 'deals', 'contracts', 'activity'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}>{t}</button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-5">
+
+          {/* ── Overview ── */}
+          {tab === 'overview' && (
+            <div className="flex flex-col gap-4">
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Company Details</p>
+                <div className="flex flex-col gap-2.5">
+                  <InfoRow icon={<Building2 size={14} />} label="Industry" value={company.industry} />
+                  <InfoRow icon={<MapPin size={14} />} label="HQ" value={company.hq} />
+                  <InfoRow icon={<Users size={14} />} label="Size" value={`${company.size} employees`} />
+                  {company.annualRevenue && (
+                    <InfoRow icon={<DollarSign size={14} />} label="Annual Revenue" value={formatCurrency(company.annualRevenue)} />
+                  )}
+                  {company.phone && <InfoRow icon={<Phone size={14} />} label="Phone" value={company.phone} />}
+                  {company.website && (
+                    <InfoRow icon={<Globe size={14} />} label="Website" value={
+                      <a href={`https://${company.website}`} target="_blank" rel="noopener noreferrer"
+                        className="text-blue-500 hover:underline flex items-center gap-1">
+                        {company.website} <ExternalLink size={11} />
+                      </a>
+                    } />
+                  )}
+                  <InfoRow icon={<User size={14} />} label="Owner" value={company.owner} />
+                </div>
+              </div>
+
+              {company.description && (
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">About</p>
+                  <p className="text-sm text-gray-700 leading-relaxed">{company.description}</p>
+                </div>
+              )}
+
+              {/* Primary contact quick view */}
+              {companyContacts.filter(c => c.isPrimary).map(c => (
+                <div key={c.id} className="p-4 bg-gray-50 rounded-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Primary Contact</p>
+                    <button onClick={() => setTab('contacts')} className="text-xs text-blue-500 hover:underline flex items-center gap-1">
+                      All contacts <ChevronRight size={11} />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-100">
+                    <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                      {c.firstName[0]}{c.lastName[0]}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-900">{c.fullName}</p>
+                      <p className="text-xs text-gray-400">{c.title}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <a href={`mailto:${c.email}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                        <Mail size={13} />
+                      </a>
+                      <a href={`tel:${c.phone}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                        <Phone size={13} />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Active project */}
+              {companyProject && (
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Active Project</p>
+                    <Link href="/projects" className="text-xs text-blue-500 hover:underline flex items-center gap-1">
+                      View <ChevronRight size={11} />
+                    </Link>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-100">
+                    <div className="flex items-center gap-2 flex-1">
+                      <FolderKanban size={14} className="text-gray-400 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{companyProject.serviceType}</p>
+                        <StatusBadge label={companyProject.status} colorClass={projectStatusColors[companyProject.status]} />
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold" style={{ color: '#015035' }}>{companyProject.progress}%</p>
+                      <p className="text-[11px] text-gray-400">complete</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {company.tags.length > 0 && (
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tags</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {company.tags.map(tag => (
+                      <span key={tag} className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">{tag}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Contacts ── */}
+          {tab === 'contacts' && (
+            <div className="flex flex-col gap-3">
+              {companyContacts.map(c => (
+                <div key={c.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                    {c.firstName[0]}{c.lastName[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-gray-900">{c.fullName}</p>
+                      {c.isPrimary && (
+                        <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                          Primary
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">{c.title}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{c.email}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <a href={`mailto:${c.email}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600">
+                      <Mail size={13} />
+                    </a>
+                    <a href={`tel:${c.phone}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600">
+                      <Phone size={13} />
+                    </a>
+                  </div>
+                </div>
+              ))}
+              {companyContacts.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">No contacts linked to this company.</p>
+              )}
+              <button className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5">
+                <Plus size={14} /> Add Contact
+              </button>
+            </div>
+          )}
+
+          {/* ── Deals ── */}
+          {tab === 'deals' && (
+            <div className="flex flex-col gap-3">
+              {companyDeals.map(d => (
+                <div key={d.id} className="p-4 bg-gray-50 rounded-xl">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <StatusBadge label={d.stage} colorClass={stageColors[d.stage]} />
+                      <StatusBadge label={d.serviceType} colorClass={serviceTypeColors[d.serviceType]} />
+                    </div>
+                    <p className="text-base font-bold flex-shrink-0" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
+                      {formatCurrency(d.value)}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>{d.contact.name} · {d.contact.title}</span>
+                    <span>Close {new Date(d.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${d.probability}%`, background: '#015035' }} />
+                    </div>
+                    <span className="text-[11px] text-gray-500 font-medium">{d.probability}% probability</span>
+                  </div>
+                </div>
+              ))}
+              {companyDeals.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">No deals linked to this company.</p>
+              )}
+            </div>
+          )}
+
+          {/* ── Contracts ── */}
+          {tab === 'contracts' && (
+            <div className="flex flex-col gap-3">
+              {companyContracts.map(c => (
+                <div key={c.id} className="p-4 bg-gray-50 rounded-xl">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <StatusBadge label={c.status} colorClass={contractStatusColors[c.status]} />
+                      <p className="text-xs text-gray-500 mt-1.5">{c.billingStructure}</p>
+                    </div>
+                    <p className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
+                      {formatCurrency(c.value)}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    {[
+                      { label: 'Service', value: c.serviceType },
+                      { label: 'Start', value: new Date(c.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+                      { label: 'Renewal', value: new Date(c.renewalDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) },
+                    ].map(f => (
+                      <div key={f.label} className="bg-white rounded-lg p-2.5 border border-gray-100">
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{f.label}</p>
+                        <p className="text-xs font-semibold text-gray-800">{f.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Invoices for this contract */}
+                  {companyInvoices.filter(i => i.company === c.company).length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Invoices</p>
+                      <div className="flex flex-col gap-1.5">
+                        {companyInvoices.map(inv => (
+                          <div key={inv.id} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
+                              <span className="text-gray-500">Due {new Date(inv.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                            </div>
+                            <span className="font-semibold text-gray-800">{formatCurrency(inv.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between text-xs">
+                        <span className="text-gray-500">Total Invoiced: {formatCurrency(totalInvoiced)}</span>
+                        <span className="font-semibold text-emerald-700">Paid: {formatCurrency(totalPaid)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {companyContracts.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">No contracts found for this company.</p>
+              )}
+            </div>
+          )}
+
+          {/* ── Activity ── */}
+          {tab === 'activity' && (
+            <div>
+              <button className="mb-4 flex items-center gap-2 text-sm font-medium text-white px-3 py-2 rounded-lg hover:opacity-90" style={{ background: '#015035' }}>
+                <Plus size={14} /> Log Activity
+              </button>
+              {activities.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">No activities logged.</p>
+              ) : (
+                <div className="flex flex-col">
+                  {activities.map((act, idx) => {
+                    const cfg = activityConfig[act.type]
+                    return (
+                      <div key={act.id} className="flex gap-3 group">
+                        <div className="flex flex-col items-center">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-1"
+                            style={{ background: `${cfg.color}15`, color: cfg.color }}>
+                            {cfg.icon}
+                          </div>
+                          {idx < activities.length - 1 && <div className="w-px flex-1 bg-gray-100 my-1" />}
+                        </div>
+                        <div className="flex-1 pb-5">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-gray-900">{act.title}</p>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {act.duration && (
+                                <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                                  <Clock size={10} />{act.duration}m
+                                </span>
+                              )}
+                              <span className="text-[11px] text-gray-400">
+                                {new Date(act.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
+                            </div>
+                          </div>
+                          {act.body && <p className="text-sm text-gray-600 mt-1 leading-relaxed">{act.body}</p>}
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {act.outcome && (
+                              <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">
+                                Outcome: {act.outcome}
+                              </span>
+                            )}
+                            {act.nextStep && (
+                              <span className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                Next: {act.nextStep}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-gray-400">by {act.user}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
+          <button className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: '#015035' }}>
+            Log Activity
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function CompaniesPage() {
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('All')
+  const [selectedCompany, setSelectedCompany] = useState<CRMCompany | null>(null)
+
+  const filtered = crmCompanies.filter(c => {
+    const matchSearch =
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.industry.toLowerCase().includes(search.toLowerCase()) ||
+      c.hq.toLowerCase().includes(search.toLowerCase())
+    const matchStatus = statusFilter === 'All' || c.status === statusFilter
+    return matchSearch && matchStatus
+  })
+
+  return (
+    <>
+      <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" action={{ label: 'New Company' }} />
+      <div className="p-4 md:p-6 flex-1 flex flex-col">
+        <CRMSubNav />
+
+        {/* Summary metrics */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+          {(['All', ...companyStatuses] as const).map(s => {
+            const count = s === 'All' ? crmCompanies.length : crmCompanies.filter(c => c.status === s).length
+            return (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`metric-card text-left transition-all ${statusFilter === s ? 'ring-2 ring-green-800 ring-offset-1' : ''}`}
+              >
+                <p className="text-xl font-bold text-gray-900 mb-1" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
+                  {count}
+                </p>
+                <p className="text-xs text-gray-500 font-medium">{s}</p>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Filters */}
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 flex-1 max-w-sm">
+            <Search size={13} className="text-gray-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search companies, industry, location..."
+              className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-full"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <Filter size={13} className="text-gray-400" />
+            {(['All', ...companyStatuses] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                  statusFilter === s ? 'text-white' : 'text-gray-500 hover:bg-gray-100'
+                }`}
+                style={statusFilter === s ? { background: '#015035' } : {}}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          <span className="ml-auto text-sm text-gray-400">{filtered.length} companies</span>
+        </div>
+
+        {/* Table */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
+                <th className="text-left py-2.5 px-4 font-semibold">Company</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Industry</th>
+                <th className="text-left py-2.5 px-4 font-semibold">Status</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Contacts</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Pipeline</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Contract</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden xl:table-cell">Owner</th>
+                <th className="text-left py-2.5 px-4 font-semibold" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(company => {
+                const companyContacts = crmContacts.filter(c => c.companyId === company.id)
+                const companyDeals = deals.filter(d => d.company === company.name && !d.stage.startsWith('Closed'))
+                const companyContract = contracts.find(c => c.company === company.name)
+                return (
+                  <tr
+                    key={company.id}
+                    onClick={() => setSelectedCompany(company)}
+                    className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors"
+                  >
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                          {company.name[0]}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{company.name}</p>
+                          <p className="text-xs text-gray-400 hidden sm:block">{company.hq}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 hidden sm:table-cell">
+                      <span className="text-sm text-gray-600">{company.industry}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${companyStatusColors[company.status]}`}>
+                        {company.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 hidden md:table-cell">
+                      <div className="flex items-center gap-1">
+                        {companyContacts.slice(0, 3).map(c => (
+                          <div
+                            key={c.id}
+                            className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-bold text-gray-600 -ml-1 first:ml-0 border border-white"
+                            title={c.fullName}
+                          >
+                            {c.firstName[0]}{c.lastName[0]}
+                          </div>
+                        ))}
+                        {companyContacts.length > 3 && (
+                          <span className="text-xs text-gray-400 ml-1">+{companyContacts.length - 3}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 hidden lg:table-cell">
+                      {companyDeals.length > 0 ? (
+                        <div>
+                          <p className="text-sm font-semibold" style={{ color: '#015035' }}>
+                            {formatCurrency(companyDeals.reduce((s, d) => s + d.value, 0))}
+                          </p>
+                          <p className="text-[11px] text-gray-400">{companyDeals.length} open deal{companyDeals.length > 1 ? 's' : ''}</p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 hidden lg:table-cell">
+                      {companyContract ? (
+                        <div>
+                          <StatusBadge label={companyContract.status} colorClass={contractStatusColors[companyContract.status]} />
+                          <p className="text-xs text-gray-500 mt-0.5">{formatCurrency(companyContract.value)}</p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 hidden xl:table-cell">
+                      <span className="text-sm text-gray-600">{company.owner.split(' ')[0]}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <ChevronRight size={14} className="text-gray-300" />
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {filtered.length === 0 && (
+            <div className="text-center py-12">
+              <Building2 size={32} className="text-gray-300 mx-auto mb-3" />
+              <p className="text-sm text-gray-400">No companies match your search.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {selectedCompany && <CompanyPanel company={selectedCompany} onClose={() => setSelectedCompany(null)} />}
+    </>
+  )
+}

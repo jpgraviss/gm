@@ -209,3 +209,68 @@ export interface RevenueMonth {
   revenue: number
   recurring: number
 }
+
+// ─── Full CRM Types ──────────────────────────────────────────────────────────
+
+export type CompanyStatus = 'Prospect' | 'Active Client' | 'Past Client' | 'Partner' | 'Churned'
+export type CompanySize = '1-10' | '11-50' | '51-200' | '201-500' | '500+'
+export type ActivityType = 'call' | 'email' | 'meeting' | 'note' | 'task' | 'deal' | 'contract' | 'invoice' | 'proposal'
+
+export interface CRMContact {
+  id: string
+  companyId: string
+  companyName: string
+  firstName: string
+  lastName: string
+  fullName: string
+  title: string
+  email: string
+  phone: string
+  mobile?: string
+  linkedIn?: string
+  isPrimary: boolean
+  owner: string
+  tags: string[]
+  notes?: string
+  createdDate: string
+  lastActivity?: string
+}
+
+export interface CRMCompany {
+  id: string
+  name: string
+  industry: string
+  website?: string
+  phone?: string
+  hq: string
+  size: CompanySize
+  annualRevenue?: number
+  status: CompanyStatus
+  owner: string
+  description?: string
+  tags: string[]
+  contactIds: string[]
+  dealIds: string[]
+  createdDate: string
+  lastActivity?: string
+  totalDealValue: number
+}
+
+export interface CRMActivity {
+  id: string
+  type: ActivityType
+  title: string
+  body?: string
+  companyId?: string
+  companyName?: string
+  contactId?: string
+  contactName?: string
+  dealId?: string
+  user: string
+  timestamp: string
+  duration?: number   // minutes, for calls/meetings
+  outcome?: string
+  nextStep?: string
+  pinned?: boolean
+}
+

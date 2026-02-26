@@ -28,6 +28,7 @@ declare global {
               logo_alignment?: string
             }
           ) => void
+          prompt: (callback?: (notification: { isNotDisplayed?: () => boolean; isSkippedMoment?: () => boolean }) => void) => void
           disableAutoSelect: () => void
         }
       }
@@ -47,7 +48,6 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
-  const googleBtnRef = useRef<HTMLDivElement>(null)
   const gisInitialized = useRef(false)
 
   // Redirect if already authenticated
@@ -60,7 +60,7 @@ export default function LoginPage() {
     if (!GOOGLE_CLIENT_ID) return
 
     const initGIS = () => {
-      if (gisInitialized.current || !window.google || !googleBtnRef.current) return
+      if (gisInitialized.current || !window.google) return
       gisInitialized.current = true
 
       window.google.accounts.id.initialize({
@@ -79,15 +79,6 @@ export default function LoginPage() {
         auto_select: false,
         cancel_on_tap_outside: true,
       })
-
-      window.google.accounts.id.renderButton(googleBtnRef.current, {
-        theme: 'outline',
-        size: 'large',
-        width: googleBtnRef.current.clientWidth || 380,
-        text: 'signin_with',
-        shape: 'rectangular',
-        logo_alignment: 'center',
-      })
     }
 
     if (window.google) {
@@ -99,10 +90,16 @@ export default function LoginPage() {
     }
   }, [loginWithGoogle, router])
 
-  const handleGoogleFallback = () => {
+  const handleGoogleSignIn = () => {
     if (!GOOGLE_CLIENT_ID) {
-      setError('Google Sign-In is not configured. Contact your administrator to add the NEXT_PUBLIC_GOOGLE_CLIENT_ID.')
+      setError('Google Sign-In is not configured. Contact your administrator.')
+      return
     }
+    if (!window.google) {
+      setError('Google Sign-In failed to load. Check your connection and try again.')
+      return
+    }
+    window.google.accounts.id.prompt()
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -188,34 +185,33 @@ export default function LoginPage() {
 
             {/* ── Google Sign-In ── */}
             <div className="mb-5">
-              {GOOGLE_CLIENT_ID ? (
-                /* Google renders its official button here */
-                <div
-                  ref={googleBtnRef}
-                  className="w-full min-h-[44px] flex items-center justify-center"
-                  style={{ minHeight: 44 }}
-                />
-              ) : (
-                /* Placeholder button when client ID not yet configured */
-                <button
-                  type="button"
-                  onClick={handleGoogleFallback}
-                  disabled={googleLoading}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
-                >
+              <button
+                type="button"
+                className="gsi-material-button"
+                onClick={handleGoogleSignIn}
+                disabled={googleLoading}
+              >
+                <div className="gsi-material-button-state" />
+                <div className="gsi-material-button-content-wrapper">
                   {googleLoading ? (
-                    <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                    <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
                   ) : (
-                    <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
-                      <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
-                      <path d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/>
-                      <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 6.294C4.672 4.169 6.656 3.58 9 3.58z" fill="#EA4335"/>
-                    </svg>
+                    <>
+                      <div className="gsi-material-button-icon">
+                        <svg version="1.1" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+                          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                          <path fill="none" d="M0 0h48v48H0z"/>
+                        </svg>
+                      </div>
+                      <span className="gsi-material-button-contents">Sign in with Google</span>
+                      <span style={{ display: 'none' }}>Sign in with Google</span>
+                    </>
                   )}
-                  Sign in with Google
-                </button>
-              )}
+                </div>
+              </button>
             </div>
 
             {/* Divider */}

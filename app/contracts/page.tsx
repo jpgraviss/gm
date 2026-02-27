@@ -396,22 +396,6 @@ export default function ContractsPage() {
           ))}
         </div>
 
-        {/* Status summary tiles */}
-        <div className="grid grid-cols-4 lg:grid-cols-7 gap-2 mb-5">
-          {allStatuses.map(s => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(statusFilter === s ? 'All' : s)}
-              className={`metric-card text-center p-3 transition-all ${statusFilter === s ? 'ring-2 ring-green-800' : ''}`}
-            >
-              <p className="text-xl font-bold text-gray-900 mb-1" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
-                {statusCounts[s]}
-              </p>
-              <StatusBadge label={s} colorClass={contractStatusColors[s]} />
-            </button>
-          ))}
-        </div>
-
         {/* Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">

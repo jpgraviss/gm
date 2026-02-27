@@ -3,7 +3,11 @@
 import { useState } from 'react'
 import Header from '@/components/layout/Header'
 import { teamMembers } from '@/lib/data'
-import { Settings, Users, Shield, Bell, Palette, Building, Plus, Pencil } from 'lucide-react'
+import {
+  Users, Shield, Bell, Palette, Building, Plus, Pencil, Link2,
+  CheckCircle, AlertCircle, RefreshCw, Plug, Globe, Tag,
+  FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
+} from 'lucide-react'
 
 const membershipColors: Record<string, string> = {
   'Super Admin': 'bg-purple-100 text-purple-700',
@@ -14,8 +18,45 @@ const membershipColors: Record<string, string> = {
   Client: 'bg-green-100 text-green-700',
 }
 
-const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Notifications'] as const
+const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Notifications', 'Integrations', 'CRM Setup', 'Billing'] as const
 type Tab = typeof tabs[number]
+
+const tabIcons: Record<Tab, React.ReactNode> = {
+  Company: <Building size={14} />,
+  Team: <Users size={14} />,
+  Permissions: <Shield size={14} />,
+  Branding: <Palette size={14} />,
+  Notifications: <Bell size={14} />,
+  Integrations: <Plug size={14} />,
+  'CRM Setup': <Tag size={14} />,
+  Billing: <DollarSign size={14} />,
+}
+
+function FieldRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{label}</label>
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg">
+        <span className="text-sm text-gray-800 flex-1">{value}</span>
+        <Pencil size={12} className="text-gray-300" />
+      </div>
+    </div>
+  )
+}
+
+function Toggle({ enabled }: { enabled: boolean }) {
+  return (
+    <button
+      className="rounded-full relative flex items-center px-0.5 transition-colors flex-shrink-0"
+      style={{ background: enabled ? '#015035' : '#d1d5db', width: '40px', height: '22px' }}
+    >
+      <div
+        className="w-4 h-4 bg-white rounded-full shadow-sm transition-transform"
+        style={{ transform: enabled ? 'translateX(18px)' : 'translateX(0px)' }}
+      />
+    </button>
+  )
+}
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Company')
@@ -25,62 +66,56 @@ export default function SettingsPage() {
       <Header title="Settings" subtitle="Administration and configuration" />
       <div className="p-6 flex-1">
         <div className="flex gap-6">
-          {/* Sidebar tabs */}
-          <div className="w-48 flex-shrink-0">
+          {/* Left nav */}
+          <div className="w-52 flex-shrink-0">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               {tabs.map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors flex items-center gap-2.5 border-b border-gray-100 last:border-0 ${
-                    activeTab === tab
-                      ? 'text-white'
-                      : 'text-gray-600 hover:bg-gray-50'
+                    activeTab === tab ? 'text-white' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                   style={{ background: activeTab === tab ? '#015035' : undefined }}
                 >
-                  {tab === 'Company' && <Building size={14} />}
-                  {tab === 'Team' && <Users size={14} />}
-                  {tab === 'Permissions' && <Shield size={14} />}
-                  {tab === 'Branding' && <Palette size={14} />}
-                  {tab === 'Notifications' && <Bell size={14} />}
+                  {tabIcons[tab]}
                   {tab}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Content */}
-          <div className="flex-1">
+          {/* Content panel */}
+          <div className="flex-1 min-w-0">
+
+            {/* ── Company ── */}
             {activeTab === 'Company' && (
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Company Information</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { label: 'Company Name', value: 'Graviss Marketing' },
-                    { label: 'Industry', value: 'Marketing Agency' },
-                    { label: 'Primary Email', value: 'info@gravissmarketing.com' },
-                    { label: 'Phone', value: '+1 (555) 000-0000' },
-                    { label: 'Website', value: 'www.gravissmarketing.com' },
-                    { label: 'Timezone', value: 'America/New_York' },
-                  ].map(field => (
-                    <div key={field.label}>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{field.label}</label>
-                      <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg">
-                        <span className="text-sm text-gray-800 flex-1">{field.value}</span>
-                        <Pencil size={12} className="text-gray-300" />
-                      </div>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <FieldRow label="Company Name" value="Graviss Marketing" />
+                  <FieldRow label="Industry" value="Marketing Agency" />
+                  <FieldRow label="Primary Email" value="info@gravissmarketing.com" />
+                  <FieldRow label="Phone" value="+1 (830) 326-0320" />
+                  <FieldRow label="Website" value="www.gravissmarketing.com" />
+                  <FieldRow label="Timezone" value="America/Chicago (CT)" />
+                  <FieldRow label="Fiscal Year Start" value="January 1" />
+                  <FieldRow label="Default Currency" value="USD ($)" />
                 </div>
-                <div className="mt-5 flex gap-2">
-                  <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
-                    Save Changes
-                  </button>
+                <h4 className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wide">Address</h4>
+                <div className="grid grid-cols-2 gap-4 mb-5">
+                  <FieldRow label="Street" value="123 Main St" />
+                  <FieldRow label="City" value="Kerrville" />
+                  <FieldRow label="State" value="Texas" />
+                  <FieldRow label="ZIP" value="78028" />
                 </div>
+                <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+                  Save Changes
+                </button>
               </div>
             )}
 
+            {/* ── Team ── */}
             {activeTab === 'Team' && (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -95,6 +130,7 @@ export default function SettingsPage() {
                       <th className="text-left py-2.5 px-6 font-semibold">Member</th>
                       <th className="text-left py-2.5 px-4 font-semibold">Role</th>
                       <th className="text-left py-2.5 px-4 font-semibold">Unit</th>
+                      <th className="text-left py-2.5 px-4 font-semibold">Status</th>
                       <th className="text-left py-2.5 px-4 font-semibold">Action</th>
                     </tr>
                   </thead>
@@ -103,10 +139,7 @@ export default function SettingsPage() {
                       <tr key={member.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
                         <td className="py-3 px-6">
                           <div className="flex items-center gap-3">
-                            <div
-                              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                              style={{ background: '#015035' }}
-                            >
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
                               {member.initials}
                             </div>
                             <div>
@@ -118,11 +151,17 @@ export default function SettingsPage() {
                         <td className="py-3 px-4">
                           <span className={`status-badge ${membershipColors[member.role]}`}>{member.role}</span>
                         </td>
+                        <td className="py-3 px-4"><span className="text-sm text-gray-600">{member.unit}</span></td>
                         <td className="py-3 px-4">
-                          <span className="text-sm text-gray-600">{member.unit}</span>
+                          <span className="flex items-center gap-1 text-xs text-emerald-600">
+                            <CheckCircle size={11} /> Active
+                          </span>
                         </td>
                         <td className="py-3 px-4">
-                          <button className="text-xs text-blue-600 hover:text-blue-700 font-medium">Edit</button>
+                          <div className="flex gap-2">
+                            <button className="text-xs text-blue-600 hover:text-blue-700 font-medium">Edit</button>
+                            <button className="text-xs text-gray-400 hover:text-red-500 font-medium">Remove</button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -131,6 +170,7 @@ export default function SettingsPage() {
               </div>
             )}
 
+            {/* ── Permissions ── */}
             {activeTab === 'Permissions' && (
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Permission Matrix</h3>
@@ -152,6 +192,7 @@ export default function SettingsPage() {
                         { module: 'Contracts', perms: ['Full', 'Full', 'Summary', 'Summary', 'None', 'Executed'] },
                         { module: 'Billing', perms: ['Full', 'Full', 'Read', 'None', 'None', 'Own'] },
                         { module: 'Projects', perms: ['Full', 'Full', 'Full', 'Assigned', 'Assigned', 'Portal'] },
+                        { module: 'Tickets', perms: ['Full', 'Full', 'Unit', 'Assigned', 'None', 'Own'] },
                         { module: 'Reports', perms: ['Full', 'Full', 'Unit', 'None', 'None', 'None'] },
                         { module: 'Settings', perms: ['Full', 'Read', 'Limited', 'None', 'None', 'None'] },
                       ].map(row => (
@@ -160,9 +201,9 @@ export default function SettingsPage() {
                           {row.perms.map((perm, i) => (
                             <td key={i} className="py-2.5 px-2 text-center">
                               <span className={`status-badge ${
-                                perm === 'Full' ? 'bg-green-100 text-green-700' :
-                                perm === 'None' ? 'bg-gray-100 text-gray-400' :
-                                'bg-yellow-100 text-yellow-700'
+                                perm === 'Full' ? 'bg-green-100 text-green-700'
+                                : perm === 'None' ? 'bg-gray-100 text-gray-400'
+                                : 'bg-yellow-100 text-yellow-700'
                               }`}>{perm}</span>
                             </td>
                           ))}
@@ -174,6 +215,7 @@ export default function SettingsPage() {
               </div>
             )}
 
+            {/* ── Branding ── */}
             {activeTab === 'Branding' && (
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Brand Configuration</h3>
@@ -182,9 +224,7 @@ export default function SettingsPage() {
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Primary Color</label>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg border border-gray-200" style={{ background: '#015035' }} />
-                      <div className="flex-1">
-                        <input className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50" defaultValue="#015035" />
-                      </div>
+                      <input className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50" defaultValue="#015035" />
                       <span className="text-xs text-gray-500">Deep Green</span>
                     </div>
                   </div>
@@ -192,56 +232,318 @@ export default function SettingsPage() {
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Secondary Color</label>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg border border-gray-200" style={{ background: '#FFF3EA' }} />
-                      <div className="flex-1">
-                        <input className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50" defaultValue="#FFF3EA" />
-                      </div>
+                      <input className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50" defaultValue="#FFF3EA" />
                       <span className="text-xs text-gray-500">Soft Tan</span>
                     </div>
                   </div>
                   <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Sidebar Dark Color</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg border border-gray-200" style={{ background: '#012b1e' }} />
+                      <input className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50" defaultValue="#012b1e" />
+                      <span className="text-xs text-gray-500">Dark Forest</span>
+                    </div>
+                  </div>
+                  <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Heading Font</label>
-                    <div className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800"
-                      style={{ fontFamily: 'var(--font-syncopate), sans-serif', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                    <div className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800" style={{ fontFamily: 'var(--font-syncopate), sans-serif', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                       Syncopate — GRAVHUB
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Body Font</label>
                     <div className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800">
-                      Montserrat — The unified internal operating system
+                      Montserrat — The unified internal operating system for Graviss Marketing
                     </div>
+                  </div>
+                  <button className="w-fit px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>Save Branding</button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Notifications ── */}
+            {activeTab === 'Notifications' && (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Notification Preferences</h3>
+                <div className="flex flex-col gap-1">
+                  {[
+                    { label: 'Contract requires signature', enabled: true, category: 'Contracts' },
+                    { label: 'Contract fully executed', enabled: true, category: 'Contracts' },
+                    { label: 'Invoice overdue by 3+ days', enabled: true, category: 'Billing' },
+                    { label: 'Payment received', enabled: true, category: 'Billing' },
+                    { label: 'Renewal within 90 days', enabled: true, category: 'Renewals' },
+                    { label: 'Renewal within 30 days', enabled: true, category: 'Renewals' },
+                    { label: 'New deal created', enabled: false, category: 'CRM' },
+                    { label: 'Proposal viewed by client', enabled: true, category: 'Proposals' },
+                    { label: 'Proposal accepted / declined', enabled: true, category: 'Proposals' },
+                    { label: 'Project milestone completed', enabled: true, category: 'Projects' },
+                    { label: 'Project overdue tasks', enabled: true, category: 'Projects' },
+                    { label: 'New client ticket submitted', enabled: true, category: 'Tickets' },
+                    { label: 'Ticket unresponded for 24h', enabled: true, category: 'Tickets' },
+                    { label: 'Client portal login', enabled: false, category: 'Portal' },
+                  ].map(n => (
+                    <div key={n.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
+                      <div>
+                        <span className="text-sm text-gray-700">{n.label}</span>
+                        <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{n.category}</span>
+                      </div>
+                      <Toggle enabled={n.enabled} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Integrations ── */}
+            {activeTab === 'Integrations' && (
+              <div className="flex flex-col gap-4">
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
+                  <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Connected Integrations</h3>
+                  <div className="flex flex-col gap-3">
+                    {[
+                      {
+                        name: 'QuickBooks Online',
+                        description: 'Sync invoices, payments, and client accounts with QuickBooks',
+                        status: 'connected',
+                        statusLabel: 'Connected',
+                        lastSync: '2 hours ago',
+                        icon: '🟢',
+                        action: 'Manage',
+                      },
+                      {
+                        name: 'Google Workspace',
+                        description: 'Single sign-on and calendar integration for the Graviss team',
+                        status: 'connected',
+                        statusLabel: 'Active',
+                        lastSync: 'Continuous',
+                        icon: '🔵',
+                        action: 'Manage',
+                      },
+                      {
+                        name: 'DocuSign',
+                        description: 'E-signature workflow for proposals and contracts',
+                        status: 'not_connected',
+                        statusLabel: 'Not Connected',
+                        lastSync: null,
+                        icon: '⚪',
+                        action: 'Connect',
+                      },
+                      {
+                        name: 'Slack',
+                        description: 'Team notifications for deals, contracts, and project updates',
+                        status: 'not_connected',
+                        statusLabel: 'Not Connected',
+                        lastSync: null,
+                        icon: '⚪',
+                        action: 'Connect',
+                      },
+                      {
+                        name: 'Stripe',
+                        description: 'Accept online invoice payments directly from clients',
+                        status: 'not_connected',
+                        statusLabel: 'Not Connected',
+                        lastSync: null,
+                        icon: '⚪',
+                        action: 'Connect',
+                      },
+                      {
+                        name: 'Zapier',
+                        description: 'Connect GravHub to 5,000+ apps with custom automations',
+                        status: 'not_connected',
+                        statusLabel: 'Not Connected',
+                        lastSync: null,
+                        icon: '⚪',
+                        action: 'Connect',
+                      },
+                    ].map(integration => (
+                      <div key={integration.name} className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
+                        <div className="text-2xl flex-shrink-0">{integration.icon}</div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800">{integration.name}</p>
+                          <p className="text-xs text-gray-500">{integration.description}</p>
+                          {integration.lastSync && (
+                            <p className="text-[11px] text-gray-400 mt-0.5">Last sync: {integration.lastSync}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className={`text-[11px] font-semibold ${integration.status === 'connected' ? 'text-emerald-600' : 'text-gray-400'}`}>
+                            {integration.status === 'connected' ? <CheckCircle size={12} className="inline mr-0.5" /> : <AlertCircle size={12} className="inline mr-0.5" />}
+                            {integration.statusLabel}
+                          </span>
+                          <button
+                            className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                              integration.status === 'connected'
+                                ? 'border border-gray-200 text-gray-600 hover:bg-gray-200'
+                                : 'text-white'
+                            }`}
+                            style={integration.status !== 'connected' ? { background: '#015035' } : undefined}
+                          >
+                            {integration.action}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
             )}
 
-            {activeTab === 'Notifications' && (
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Notification Preferences</h3>
-                <div className="flex flex-col gap-4">
-                  {[
-                    { label: 'Contract requires signature', enabled: true },
-                    { label: 'Invoice overdue by 3+ days', enabled: true },
-                    { label: 'Renewal within 90 days', enabled: true },
-                    { label: 'New deal created', enabled: false },
-                    { label: 'Proposal viewed by client', enabled: true },
-                    { label: 'Project milestone completed', enabled: true },
-                    { label: 'Payment received', enabled: true },
-                    { label: 'Client portal login', enabled: false },
-                  ].map(n => (
-                    <div key={n.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
-                      <span className="text-sm text-gray-700">{n.label}</span>
-                      <button
-                        className={`w-10 h-5.5 rounded-full relative transition-colors flex items-center px-0.5 ${n.enabled ? '' : 'bg-gray-200'}`}
-                        style={{ background: n.enabled ? '#015035' : undefined, width: '40px', height: '22px' }}
-                      >
-                        <div
-                          className="w-4 h-4 bg-white rounded-full shadow-sm transition-transform"
-                          style={{ transform: n.enabled ? 'translateX(18px)' : 'translateX(0px)' }}
-                        />
+            {/* ── CRM Setup ── */}
+            {activeTab === 'CRM Setup' && (
+              <div className="flex flex-col gap-4">
+                {/* Pipeline Stages */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Pipeline Stages</h3>
+                    <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
+                      <Plus size={12} /> Add Stage
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost'].map((stage, i) => (
+                      <div key={stage} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
+                        <span className="text-xs text-gray-400 font-mono w-4">{i + 1}</span>
+                        <span className="text-sm text-gray-800 flex-1 font-medium">{stage}</span>
+                        <div className="flex gap-1.5">
+                          <button className="text-xs text-gray-400 hover:text-blue-500 transition-colors">Edit</button>
+                          <button className="text-xs text-gray-400 hover:text-red-500 transition-colors">Remove</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Service Types */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Service Types</h3>
+                    <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
+                      <Plus size={12} /> Add Service
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {['Website', 'SEO', 'Social Media', 'Email Marketing', 'Branding', 'Custom'].map(s => (
+                      <div key={s} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-full">
+                        <span className="text-xs font-medium text-gray-700">{s}</span>
+                        <button className="text-gray-400 hover:text-gray-600"><ChevronRight size={10} /></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Contact Tags */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Contact Tags</h3>
+                    <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
+                      <Plus size={12} /> Add Tag
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {['Decision Maker', 'Executive', 'Signed Client', 'Warm Lead', 'Marketing', 'Healthcare', 'Partner'].map(tag => (
+                      <div key={tag} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-full">
+                        <Tag size={10} className="text-blue-400" />
+                        <span className="text-xs font-medium text-blue-700">{tag}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Company Statuses */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Company Statuses</h3>
+                  <div className="flex flex-col gap-1.5">
+                    {[
+                      { label: 'Prospect', color: '#3b82f6' },
+                      { label: 'Active Client', color: '#22c55e' },
+                      { label: 'Past Client', color: '#6b7280' },
+                      { label: 'Partner', color: '#8b5cf6' },
+                      { label: 'Churned', color: '#ef4444' },
+                    ].map(s => (
+                      <div key={s.label} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
+                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                        <span className="text-sm text-gray-800 flex-1 font-medium">{s.label}</span>
+                        <button className="text-xs text-gray-400 hover:text-blue-500 transition-colors">Edit</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Billing ── */}
+            {activeTab === 'Billing' && (
+              <div className="flex flex-col gap-4">
+                {/* QB Connection */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-start gap-4 mb-5">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e8f5e9' }}>
+                      <span className="text-xl">🟢</span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-gray-800">QuickBooks Online</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Graviss Marketing — Connected</p>
+                      <p className="flex items-center gap-1 text-[11px] text-emerald-600 mt-1">
+                        <CheckCircle size={11} /> Last synced 2 hours ago · Auto-sync every 15 min
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+                        <RefreshCw size={11} /> Sync Now
+                      </button>
+                      <button className="text-xs font-medium px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
+                        Disconnect
                       </button>
                     </div>
-                  ))}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Clients Synced', value: '12', sub: 'QB customers linked' },
+                      { label: 'Invoices Synced', value: '7', sub: 'All statuses' },
+                      { label: 'Payments Synced', value: '5', sub: 'Paid invoices' },
+                    ].map(stat => (
+                      <div key={stat.label} className="p-3 bg-gray-50 rounded-xl">
+                        <p className="text-xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{stat.value}</p>
+                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mt-0.5">{stat.label}</p>
+                        <p className="text-[11px] text-gray-400">{stat.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sync settings */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Sync Settings</h3>
+                  <div className="flex flex-col gap-1">
+                    {[
+                      { label: 'Sync new invoices to QuickBooks automatically', enabled: true },
+                      { label: 'Pull payment updates from QuickBooks', enabled: true },
+                      { label: 'Match QB customers to GravHub companies', enabled: true },
+                      { label: 'Sync overdue flags from QuickBooks', enabled: true },
+                      { label: 'Create QB invoice when GravHub invoice is sent', enabled: false },
+                    ].map(item => (
+                      <div key={item.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
+                        <span className="text-sm text-gray-700">{item.label}</span>
+                        <Toggle enabled={item.enabled} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Invoice settings */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Invoice Defaults</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FieldRow label="Payment Terms" value="Net 7" />
+                    <FieldRow label="Default Due Days" value="7" />
+                    <FieldRow label="Invoice Prefix" value="INV-" />
+                    <FieldRow label="Next Invoice #" value="00008" />
+                    <FieldRow label="Late Fee %" value="1.5% / month" />
+                    <FieldRow label="Send Reminders" value="3 days before due" />
+                  </div>
+                  <button className="mt-4 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+                    Save Invoice Settings
+                  </button>
                 </div>
               </div>
             )}

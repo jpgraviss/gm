@@ -1,0 +1,513 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import Header from '@/components/layout/Header'
+import { projects, crmContacts } from '@/lib/data'
+import { formatDate } from '@/lib/utils'
+import {
+  MessageSquare, CheckCircle, Clock, AlertTriangle, X, ExternalLink,
+  Plus, ChevronRight, ArrowUpRight, Send, User, Tag, FolderKanban,
+  Zap, Circle,
+} from 'lucide-react'
+
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
+type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Client' | 'Resolved' | 'Closed'
+type TicketPriority = 'Low' | 'Medium' | 'High' | 'Urgent'
+type TicketSource = 'Client Portal' | 'Email' | 'Phone' | 'Internal'
+
+interface TicketMessage {
+  id: string
+  author: string
+  isInternal: boolean
+  body: string
+  timestamp: string
+}
+
+interface Ticket {
+  id: string
+  subject: string
+  company: string
+  contactName: string
+  contactEmail: string
+  status: TicketStatus
+  priority: TicketPriority
+  source: TicketSource
+  serviceType: string
+  projectId?: string
+  createdDate: string
+  updatedDate: string
+  assignedTo?: string
+  tags: string[]
+  messages: TicketMessage[]
+  linkedTaskId?: string
+}
+
+// ─── Mock Ticket Data ──────────────────────────────────────────────────────────
+
+const tickets: Ticket[] = [
+  {
+    id: 'tkt-001',
+    subject: 'Homepage hero image needs to be updated',
+    company: 'Coastal Realty',
+    contactName: 'Dana Kim',
+    contactEmail: 'dana@coastalrealty.com',
+    status: 'Open',
+    priority: 'High',
+    source: 'Client Portal',
+    serviceType: 'Website',
+    projectId: 'pr1',
+    createdDate: '2026-02-25',
+    updatedDate: '2026-02-25',
+    assignedTo: 'Jordan Ellis',
+    tags: ['Design', 'Content'],
+    messages: [
+      { id: 'm1', author: 'Dana Kim', isInternal: false, body: 'Hi team! We need to update the hero image on the homepage. The current one doesn\'t reflect our Q1 listings. Can we swap this out this week?', timestamp: '2026-02-25 09:14' },
+      { id: 'm2', author: 'Jordan Ellis', isInternal: false, body: 'Hi Dana, absolutely! Can you send over the new image file? Should be at least 2000px wide for best quality.', timestamp: '2026-02-25 10:30' },
+    ],
+  },
+  {
+    id: 'tkt-002',
+    subject: 'Monthly SEO report missing — February',
+    company: 'BlueStar Logistics',
+    contactName: 'Kelly Shaw',
+    contactEmail: 'kelly@bluestar.com',
+    status: 'In Progress',
+    priority: 'Medium',
+    source: 'Email',
+    serviceType: 'SEO',
+    projectId: 'pr2',
+    createdDate: '2026-02-24',
+    updatedDate: '2026-02-26',
+    assignedTo: 'Priya Patel',
+    tags: ['Reporting'],
+    messages: [
+      { id: 'm3', author: 'Kelly Shaw', isInternal: false, body: 'We haven\'t received the February SEO report yet. Usually gets delivered on the 20th. Can you share it ASAP?', timestamp: '2026-02-24 14:00' },
+      { id: 'm4', author: 'Priya Patel', isInternal: true, body: '⚠️ Internal note: February report is still being compiled. Rankings data delayed due to GA4 API issue. ETA Friday.', timestamp: '2026-02-24 15:22' },
+      { id: 'm5', author: 'Priya Patel', isInternal: false, body: 'Hi Kelly, apologies for the delay! We\'re finalizing the February report now and will have it to you by Friday EOD. The data looks great — rankings up 12% month-over-month.', timestamp: '2026-02-24 15:24' },
+    ],
+  },
+  {
+    id: 'tkt-003',
+    subject: 'Email campaign — wrong link in footer CTA',
+    company: 'Harvest Foods',
+    contactName: 'Frank Lopez',
+    contactEmail: 'frank@harvestfoods.com',
+    status: 'Resolved',
+    priority: 'Urgent',
+    source: 'Phone',
+    serviceType: 'Email Marketing',
+    projectId: 'pr3',
+    createdDate: '2026-02-20',
+    updatedDate: '2026-02-20',
+    assignedTo: 'Jordan Ellis',
+    tags: ['Bug', 'Email Campaign'],
+    messages: [
+      { id: 'm6', author: 'Frank Lopez', isInternal: false, body: 'The footer CTA link in today\'s email blast is pointing to the old landing page URL. Several customers have complained. This needs to be fixed immediately.', timestamp: '2026-02-20 11:00' },
+      { id: 'm7', author: 'Jordan Ellis', isInternal: false, body: 'We see the issue — fixing right now. The corrected version is scheduled for a resend at 2pm to the full list. Very sorry about this.', timestamp: '2026-02-20 11:18' },
+      { id: 'm8', author: 'Jordan Ellis', isInternal: false, body: 'Resend is live. All links confirmed working. Reach out if you see anything else.', timestamp: '2026-02-20 14:05' },
+    ],
+  },
+  {
+    id: 'tkt-004',
+    subject: 'Request: Add team bios page to website',
+    company: 'Apex Solutions',
+    contactName: 'Marcus Rivera',
+    contactEmail: 'marcus@apex.com',
+    status: 'Open',
+    priority: 'Low',
+    source: 'Client Portal',
+    serviceType: 'Website',
+    projectId: 'pr4',
+    createdDate: '2026-02-26',
+    updatedDate: '2026-02-26',
+    assignedTo: undefined,
+    tags: ['Feature Request', 'Content'],
+    messages: [
+      { id: 'm9', author: 'Marcus Rivera', isInternal: false, body: 'As we near launch, we\'d love to add a "Meet the Team" page with short bios for our 5 leadership members. Is this in scope or additional?', timestamp: '2026-02-26 08:45' },
+    ],
+  },
+  {
+    id: 'tkt-005',
+    subject: 'Social media calendar for March not shared',
+    company: 'GreenLeaf Organics',
+    contactName: 'Olivia Grant',
+    contactEmail: 'olivia@greenleaf.com',
+    status: 'Waiting on Client',
+    priority: 'Medium',
+    source: 'Email',
+    serviceType: 'Social Media',
+    projectId: 'pr5',
+    createdDate: '2026-02-23',
+    updatedDate: '2026-02-25',
+    assignedTo: 'Jordan Ellis',
+    tags: ['Content Calendar'],
+    messages: [
+      { id: 'm10', author: 'Olivia Grant', isInternal: false, body: 'Hi, I haven\'t received the March content calendar for approval yet. We need this by end of week to stay on schedule.', timestamp: '2026-02-23 16:00' },
+      { id: 'm11', author: 'Jordan Ellis', isInternal: false, body: 'Hi Olivia! The calendar draft is ready. I\'m waiting on the 4 product photos you mentioned — can you send those so I can finalize and send everything together?', timestamp: '2026-02-25 09:00' },
+    ],
+  },
+]
+
+// ─── Status / Priority Config ─────────────────────────────────────────────────
+
+const statusConfig: Record<TicketStatus, { color: string; bg: string; icon: React.ReactNode }> = {
+  'Open': { color: '#3b82f6', bg: '#eff6ff', icon: <Circle size={11} /> },
+  'In Progress': { color: '#f59e0b', bg: '#fffbeb', icon: <Clock size={11} /> },
+  'Waiting on Client': { color: '#8b5cf6', bg: '#f5f3ff', icon: <User size={11} /> },
+  'Resolved': { color: '#22c55e', bg: '#f0fdf4', icon: <CheckCircle size={11} /> },
+  'Closed': { color: '#9ca3af', bg: '#f9fafb', icon: <X size={11} /> },
+}
+
+const priorityConfig: Record<TicketPriority, { color: string; label: string }> = {
+  Low: { color: '#9ca3af', label: 'Low' },
+  Medium: { color: '#f59e0b', label: 'Medium' },
+  High: { color: '#ef4444', label: 'High' },
+  Urgent: { color: '#dc2626', label: 'Urgent' },
+}
+
+const allStatuses: TicketStatus[] = ['Open', 'In Progress', 'Waiting on Client', 'Resolved', 'Closed']
+
+// ─── Ticket Panel ─────────────────────────────────────────────────────────────
+
+function TicketPanel({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
+  const [reply, setReply] = useState('')
+  const [showInternal, setShowInternal] = useState(true)
+
+  const linkedProject = ticket.projectId ? projects.find(p => p.id === ticket.projectId) : null
+  const cfg = statusConfig[ticket.status]
+  const priCfg = priorityConfig[ticket.priority]
+
+  return (
+    <div className="pointer-events-none fixed inset-0 z-40 flex">
+      <div className="flex-1" onClick={onClose} style={{ pointerEvents: 'auto' }} />
+      <div
+        className="pointer-events-auto flex flex-col shadow-2xl border-l border-gray-200 bg-white"
+        style={{ width: 480, height: '100vh' }}
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 p-5 border-b border-white/10" style={{ background: '#012b1e' }}>
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex-1 min-w-0 pr-2">
+              <p className="text-white/50 text-[11px] mb-0.5">{ticket.id.toUpperCase()} · {ticket.source}</p>
+              <h2 className="text-white text-sm font-bold leading-snug" style={{ fontFamily: 'var(--font-heading)' }}>
+                {ticket.subject}
+              </h2>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
+              <X size={16} className="text-white/60" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+              style={{ background: cfg.bg, color: cfg.color }}
+            >
+              {cfg.icon} {ticket.status}
+            </span>
+            <span className="text-[11px] font-semibold" style={{ color: priCfg.color }}>
+              ● {ticket.priority}
+            </span>
+            <span className="text-white/40 text-xs ml-auto">{ticket.company}</span>
+          </div>
+        </div>
+
+        {/* Quick info */}
+        <div className="flex-shrink-0 grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100">
+          {[
+            { label: 'Contact', value: ticket.contactName },
+            { label: 'Assigned', value: ticket.assignedTo ?? 'Unassigned' },
+            { label: 'Service', value: ticket.serviceType },
+          ].map((item, i) => (
+            <div key={i} className="p-3">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{item.label}</p>
+              <p className="text-xs font-semibold text-gray-800 truncate">{item.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Linked project banner */}
+        {linkedProject && (
+          <div className="flex-shrink-0 mx-4 mt-3">
+            <Link
+              href="/projects"
+              className="flex items-center gap-2 p-2.5 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors"
+            >
+              <FolderKanban size={14} style={{ color: '#015035' }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-800 truncate">{linkedProject.company} — {linkedProject.serviceType}</p>
+                <p className="text-[11px] text-gray-500">{linkedProject.status} · {linkedProject.progress}% complete</p>
+              </div>
+              <ExternalLink size={12} className="text-gray-400 flex-shrink-0" />
+            </Link>
+          </div>
+        )}
+
+        {/* Auto-create task banner for unassigned open tickets */}
+        {ticket.status === 'Open' && !ticket.assignedTo && (
+          <div className="flex-shrink-0 mx-4 mt-3">
+            <div className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+              <Zap size={13} className="text-amber-500 flex-shrink-0" />
+              <p className="text-xs text-amber-800 flex-1">Unassigned — assign this ticket to auto-create a project task</p>
+              <button className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 transition-colors flex-shrink-0">
+                Assign →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Message thread */}
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+              Conversation ({ticket.messages.length})
+            </p>
+            <button
+              onClick={() => setShowInternal(v => !v)}
+              className="text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              {showInternal ? 'Hide internal notes' : 'Show internal notes'}
+            </button>
+          </div>
+
+          {ticket.messages
+            .filter(m => showInternal || !m.isInternal)
+            .map(msg => (
+              <div
+                key={msg.id}
+                className={`rounded-xl p-3 ${
+                  msg.isInternal
+                    ? 'bg-amber-50 border border-amber-200'
+                    : msg.author === ticket.contactName
+                    ? 'bg-gray-50 border border-gray-100'
+                    : 'border border-green-100'
+                }`}
+                style={!msg.isInternal && msg.author !== ticket.contactName ? { background: '#f0fdf4' } : {}}
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                    style={{ background: msg.isInternal ? '#f59e0b' : msg.author === ticket.contactName ? '#6b7280' : '#015035' }}
+                  >
+                    {msg.author.split(' ').map(n => n[0]).join('')}
+                  </div>
+                  <span className="text-xs font-semibold text-gray-700">{msg.author}</span>
+                  {msg.isInternal && (
+                    <span className="text-[10px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full font-semibold">Internal</span>
+                  )}
+                  <span className="text-[10px] text-gray-400 ml-auto">{msg.timestamp}</span>
+                </div>
+                <p className="text-xs text-gray-700 leading-relaxed">{msg.body}</p>
+              </div>
+            ))}
+        </div>
+
+        {/* Reply box */}
+        <div className="flex-shrink-0 p-4 border-t border-gray-100">
+          <div className="flex items-start gap-2">
+            <textarea
+              value={reply}
+              onChange={e => setReply(e.target.value)}
+              placeholder="Write a reply to the client..."
+              className="flex-1 text-xs border border-gray-200 rounded-xl p-2.5 resize-none focus:outline-none focus:border-green-700 transition-colors"
+              rows={3}
+            />
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              style={{ background: '#015035' }}
+            >
+              <Send size={12} /> Send Reply
+            </button>
+            <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-300 text-amber-700 bg-amber-50 text-xs font-semibold hover:bg-amber-100 transition-colors">
+              Add Internal Note
+            </button>
+            <button className="ml-auto flex items-center gap-1 px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors">
+              <CheckCircle size={12} /> Resolve
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
+export default function TicketsPage() {
+  const [selected, setSelected] = useState<Ticket | null>(null)
+  const [statusFilter, setStatusFilter] = useState<TicketStatus | 'All'>('All')
+
+  const filtered = statusFilter === 'All' ? tickets : tickets.filter(t => t.status === statusFilter)
+
+  const counts = allStatuses.reduce((acc, s) => {
+    acc[s] = tickets.filter(t => t.status === s).length
+    return acc
+  }, {} as Record<TicketStatus, number>)
+
+  const openUrgent = tickets.filter(t => t.status === 'Open' && t.priority === 'Urgent').length
+  const unassigned = tickets.filter(t => !t.assignedTo && t.status !== 'Resolved' && t.status !== 'Closed').length
+
+  return (
+    <>
+      <Header
+        title="Tickets"
+        subtitle="Client requests and support conversations"
+        action={{ label: 'New Ticket' }}
+      />
+      <div className="p-6 flex-1">
+
+        {/* Info banner — Tickets concept */}
+        <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl mb-5">
+          <MessageSquare size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-blue-800">Client Ticket System</p>
+            <p className="text-xs text-blue-600 mt-0.5">
+              Clients submit requests via the <Link href="/portal" className="underline">Client Portal</Link> or email. Each ticket is linked to the client's project and can be converted to a project task automatically.
+            </p>
+          </div>
+        </div>
+
+        {/* Metrics */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+          {[
+            { label: 'All', value: tickets.length, color: '#6b7280', icon: <MessageSquare size={14} /> },
+            { label: 'Open', value: counts['Open'], color: '#3b82f6', icon: <Circle size={14} /> },
+            { label: 'In Progress', value: counts['In Progress'], color: '#f59e0b', icon: <Clock size={14} /> },
+            { label: 'Waiting on Client', value: counts['Waiting on Client'], color: '#8b5cf6', icon: <User size={14} /> },
+            { label: 'Resolved', value: counts['Resolved'], color: '#22c55e', icon: <CheckCircle size={14} /> },
+          ].map(m => (
+            <button
+              key={m.label}
+              onClick={() => setStatusFilter(m.label === 'All' ? 'All' : m.label as TicketStatus)}
+              className={`metric-card text-left p-3 transition-all ${statusFilter === m.label ? 'ring-2 ring-green-800 ring-offset-1' : ''}`}
+            >
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: `${m.color}18` }}>
+                <span style={{ color: m.color }}>{m.icon}</span>
+              </div>
+              <p className="text-xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{m.value}</p>
+              <p className="text-[10px] font-semibold text-gray-500 mt-0.5">{m.label}</p>
+            </button>
+          ))}
+        </div>
+
+        {/* Alert banners */}
+        {(openUrgent > 0 || unassigned > 0) && (
+          <div className="flex gap-3 mb-5 flex-wrap">
+            {openUrgent > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
+                <AlertTriangle size={13} className="text-red-500" />
+                <span className="text-xs font-semibold text-red-700">{openUrgent} urgent ticket{openUrgent > 1 ? 's' : ''} need immediate attention</span>
+              </div>
+            )}
+            {unassigned > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl">
+                <Zap size={13} className="text-amber-500" />
+                <span className="text-xs font-semibold text-amber-700">{unassigned} ticket{unassigned > 1 ? 's' : ''} unassigned</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Filter tabs */}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <button onClick={() => setStatusFilter('All')} className={`tab-btn ${statusFilter === 'All' ? 'active' : ''}`}>All ({tickets.length})</button>
+          {allStatuses.map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn ${statusFilter === s ? 'active' : ''}`}>
+              {s} ({counts[s]})
+            </button>
+          ))}
+        </div>
+
+        {/* Ticket list */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
+                <th className="text-left py-2.5 px-4 font-semibold">Subject</th>
+                <th className="text-left py-2.5 px-4 font-semibold">Company</th>
+                <th className="text-left py-2.5 px-4 font-semibold">Status</th>
+                <th className="text-left py-2.5 px-4 font-semibold">Priority</th>
+                <th className="text-left py-2.5 px-4 font-semibold">Assigned</th>
+                <th className="text-left py-2.5 px-4 font-semibold">Service</th>
+                <th className="text-left py-2.5 px-4 font-semibold">Created</th>
+                <th className="py-2.5 px-4" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(t => {
+                const cfg = statusConfig[t.status]
+                const priCfg = priorityConfig[t.priority]
+                return (
+                  <tr
+                    key={t.id}
+                    className="hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors group"
+                    onClick={() => setSelected(t)}
+                  >
+                    <td className="py-3 px-4">
+                      <p className="text-sm font-semibold text-gray-900 leading-snug">{t.subject}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{t.id.toUpperCase()} · {t.source} · {t.messages.length} msg{t.messages.length !== 1 ? 's' : ''}</p>
+                    </td>
+                    <td className="py-3 px-4">
+                      <p className="text-sm text-gray-700 font-medium">{t.company}</p>
+                      <p className="text-xs text-gray-400">{t.contactName}</p>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit"
+                        style={{ background: cfg.bg, color: cfg.color }}
+                      >
+                        {cfg.icon} {t.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: priCfg.color }}>
+                        ● {t.priority}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {t.assignedTo ? (
+                        <span className="text-xs text-gray-600">{t.assignedTo}</span>
+                      ) : (
+                        <span className="text-xs text-amber-500 font-medium">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-gray-500">{t.serviceType}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-gray-400">{formatDate(t.createdDate)}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {filtered.length === 0 && (
+            <div className="py-12 text-center text-gray-400 text-sm">No tickets in this status</div>
+          )}
+        </div>
+
+        {/* Auto-task explanation */}
+        <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+          <div className="flex items-start gap-3">
+            <ArrowUpRight size={15} className="text-gray-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-gray-700 mb-1">Auto-Task Integration</p>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                When a ticket is assigned to a team member and linked to a project, GravHub can automatically create a corresponding task inside that project — keeping client requests and delivery in sync. Ticket threads remain in the client portal; tasks appear on the internal project board.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {selected && <TicketPanel ticket={selected} onClose={() => setSelected(null)} />}
+    </>
+  )
+}

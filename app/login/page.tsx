@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import { Eye, EyeOff, Lock, Mail, AlertCircle, ArrowRight, Shield } from 'lucide-react'
+import { Eye, EyeOff, Lock, Mail, AlertCircle, ArrowRight } from 'lucide-react'
 
 // Minimal type shim for Google Identity Services
 declare global {
@@ -49,35 +49,49 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const gisInitialized = useRef(false)
+  const googleBtnRef = useRef<HTMLDivElement>(null)
 
   // Redirect if already authenticated
   useEffect(() => {
     if (!loading && user) router.replace('/')
   }, [user, loading, router])
 
-  // Initialize Google Identity Services
+  // Stable callback ref so the GIS callback doesn't go stale
+  const handleGoogleCredential = useCallback(async ({ credential }: { credential: string }) => {
+    setGoogleLoading(true)
+    setError('')
+    const result = await loginWithGoogle(credential)
+    setGoogleLoading(false)
+    if (result.ok) {
+      router.push('/')
+    } else {
+      setError(result.error ?? 'Google sign-in failed. Ensure you are using a @gravissmarketing.com account.')
+    }
+  }, [loginWithGoogle, router])
+
+  // Initialize Google Identity Services and render the official button
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return
 
     const initGIS = () => {
-      if (gisInitialized.current || !window.google) return
+      if (gisInitialized.current || !window.google || !googleBtnRef.current) return
       gisInitialized.current = true
 
       window.google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
-        callback: async ({ credential }) => {
-          setGoogleLoading(true)
-          setError('')
-          const result = await loginWithGoogle(credential)
-          setGoogleLoading(false)
-          if (result.ok) {
-            router.push('/')
-          } else {
-            setError(result.error ?? 'Google sign-in failed.')
-          }
-        },
+        callback: handleGoogleCredential,
         auto_select: false,
         cancel_on_tap_outside: true,
+      })
+
+      // Render the official Google button inside our container div
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: 'outline',
+        size: 'large',
+        width: googleBtnRef.current.offsetWidth || 400,
+        text: 'signin_with',
+        shape: 'rectangular',
+        logo_alignment: 'left',
       })
     }
 
@@ -88,19 +102,7 @@ export default function LoginPage() {
       script?.addEventListener('load', initGIS)
       return () => script?.removeEventListener('load', initGIS)
     }
-  }, [loginWithGoogle, router])
-
-  const handleGoogleSignIn = () => {
-    if (!GOOGLE_CLIENT_ID) {
-      setError('Google Sign-In is not configured. Contact your administrator.')
-      return
-    }
-    if (!window.google) {
-      setError('Google Sign-In failed to load. Check your connection and try again.')
-      return
-    }
-    window.google.accounts.id.prompt()
-  }
+  }, [handleGoogleCredential])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -183,35 +185,24 @@ export default function LoginPage() {
               <p className="text-gray-500 text-sm">Access the Graviss Marketing operating system</p>
             </div>
 
-            {/* ── Google Sign-In ── */}
+            {/* ── Google Sign-In (official GIS rendered button) ── */}
             <div className="mb-5">
-              <button
-                type="button"
-                className="gsi-material-button"
-                onClick={handleGoogleSignIn}
-                disabled={googleLoading}
-              >
-                <div className="gsi-material-button-state" />
-                <div className="gsi-material-button-content-wrapper">
-                  {googleLoading ? (
-                    <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <div className="gsi-material-button-icon">
-                        <svg version="1.1" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
-                          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-                          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-                          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-                          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-                          <path fill="none" d="M0 0h48v48H0z"/>
-                        </svg>
-                      </div>
-                      <span className="gsi-material-button-contents">Sign in with Google</span>
-                      <span style={{ display: 'none' }}>Sign in with Google</span>
-                    </>
+              {!GOOGLE_CLIENT_ID ? (
+                <div className="flex items-center justify-center gap-2 w-full h-11 rounded-lg border border-gray-200 bg-gray-50 text-gray-400 text-sm">
+                  Google Sign-In not configured
+                </div>
+              ) : (
+                <div className="relative w-full">
+                  {/* GIS renders the official Google button here */}
+                  <div ref={googleBtnRef} className="w-full" style={{ minHeight: 44 }} />
+                  {/* Loading overlay while processing credential */}
+                  {googleLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-lg">
+                      <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                    </div>
                   )}
                 </div>
-              </button>
+              )}
             </div>
 
             {/* Divider */}
@@ -299,18 +290,6 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Admin badge */}
-            <div className="mt-6 pt-5 border-t border-gray-100">
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-100">
-                <Shield size={14} style={{ color: '#015035' }} className="flex-shrink-0" />
-                <div>
-                  <p className="text-xs font-semibold" style={{ color: '#015035' }}>Admin access enabled</p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">
-                    jonathan@gravissmarketing.com has full Super Admin privileges.
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
 
           <p className="text-center text-xs text-gray-400 mt-5">

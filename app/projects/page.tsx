@@ -8,7 +8,8 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import type { Project, ProjectStatus } from '@/lib/types'
 import {
   X, CheckCircle, Calendar, ChevronRight, LayoutList, KanbanSquare,
-  AlertTriangle, TrendingUp, StickyNote, Plus,
+  AlertTriangle, TrendingUp, StickyNote, Plus, Globe, BarChart2,
+  Share2, Mail, Palette, Wrench, ChevronDown,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -391,14 +392,177 @@ function ProjectDetailPanel({ project, onClose }: { project: Project; onClose: (
   )
 }
 
+// ─── Service Type Config ──────────────────────────────────────────────────────
+
+type ServiceTypeKey = 'Website' | 'SEO' | 'Social Media' | 'Branding' | 'Email Marketing' | 'Custom'
+
+const serviceTypeIcons: Record<ServiceTypeKey, React.ReactNode> = {
+  Website: <Globe size={18} />,
+  SEO: <BarChart2 size={18} />,
+  'Social Media': <Share2 size={18} />,
+  'Email Marketing': <Mail size={18} />,
+  Branding: <Palette size={18} />,
+  Custom: <Wrench size={18} />,
+}
+
+const serviceTypeAccent: Record<ServiceTypeKey, string> = {
+  Website: '#3b82f6',
+  SEO: '#015035',
+  'Social Media': '#ec4899',
+  'Email Marketing': '#f59e0b',
+  Branding: '#8b5cf6',
+  Custom: '#6b7280',
+}
+
+// ─── Project Row (list view within a service type group) ──────────────────────
+
+function ProjectRow({ project, onClick }: { project: Project; onClick: () => void }) {
+  const completedMs = project.milestones.filter(m => m.completed).length
+  const today = new Date().toISOString().split('T')[0]
+  const overdueTasks = project.tasks.filter(t => !t.completed && t.dueDate < today).length
+
+  return (
+    <tr
+      className="hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors group"
+      onClick={onClick}
+    >
+      <td className="py-3 px-4">
+        <p className="text-sm font-semibold text-gray-900">{project.company}</p>
+        <p className="text-xs text-gray-400">{project.id.toUpperCase()}</p>
+      </td>
+      <td className="py-3 px-4">
+        <StatusBadge label={project.status} colorClass={projectStatusColors[project.status]} />
+      </td>
+      <td className="py-3 px-4">
+        <div className="flex items-center gap-2">
+          <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-full rounded-full" style={{ width: `${project.progress}%`, background: '#015035' }} />
+          </div>
+          <span className="text-xs text-gray-600 font-semibold">{project.progress}%</span>
+        </div>
+      </td>
+      <td className="py-3 px-4">
+        <span className="text-xs text-gray-600 font-medium">{completedMs}/{project.milestones.length}</span>
+      </td>
+      <td className="py-3 px-4">
+        <span className="text-xs text-gray-500">{formatDate(project.launchDate)}</span>
+      </td>
+      <td className="py-3 px-4">
+        <div className="flex -space-x-1.5">
+          {project.assignedTeam.map((name, i) => (
+            <div
+              key={i}
+              className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold text-white"
+              style={{ background: i === 0 ? '#015035' : '#6b7280' }}
+              title={name}
+            >
+              {name.split(' ').map(n => n[0]).join('')}
+            </div>
+          ))}
+        </div>
+      </td>
+      <td className="py-3 px-4">
+        {overdueTasks > 0 ? (
+          <span className="text-[10px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full font-semibold">
+            {overdueTasks} overdue
+          </span>
+        ) : (
+          <span className="text-[10px] text-emerald-600">On track</span>
+        )}
+      </td>
+      <td className="py-3 px-4">
+        <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
+      </td>
+    </tr>
+  )
+}
+
+// ─── Service Type Group ───────────────────────────────────────────────────────
+
+function ServiceTypeGroup({
+  serviceType,
+  groupProjects,
+  onSelect,
+  defaultOpen = true,
+}: {
+  serviceType: ServiceTypeKey
+  groupProjects: Project[]
+  onSelect: (p: Project) => void
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  const icon = serviceTypeIcons[serviceType]
+  const accent = serviceTypeAccent[serviceType]
+  const avgPct = groupProjects.length > 0
+    ? Math.round(groupProjects.reduce((s, p) => s + p.progress, 0) / groupProjects.length)
+    : 0
+  const inProgress = groupProjects.filter(p => p.status === 'In Progress').length
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Group header */}
+      <button
+        className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors"
+        onClick={() => setOpen(v => !v)}
+      >
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${accent}18` }}>
+          <span style={{ color: accent }}>{icon}</span>
+        </div>
+        <div className="flex-1 text-left">
+          <span className="text-sm font-bold text-gray-800">{serviceType}</span>
+          <span className="ml-2 text-xs text-gray-400">{groupProjects.length} project{groupProjects.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+          {inProgress > 0 && (
+            <span className="flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              {inProgress} active
+            </span>
+          )}
+          <span className="font-semibold text-gray-700">{avgPct}% avg</span>
+        </div>
+        <ChevronDown
+          size={15}
+          className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* Project table */}
+      {open && (
+        <div className="border-t border-gray-100">
+          <table className="w-full">
+            <thead>
+              <tr className="text-[11px] text-gray-400 uppercase tracking-wide bg-gray-50 border-b border-gray-100">
+                <th className="text-left py-2 px-4 font-semibold">Company</th>
+                <th className="text-left py-2 px-4 font-semibold">Status</th>
+                <th className="text-left py-2 px-4 font-semibold">Progress</th>
+                <th className="text-left py-2 px-4 font-semibold">Milestones</th>
+                <th className="text-left py-2 px-4 font-semibold">Launch</th>
+                <th className="text-left py-2 px-4 font-semibold">Team</th>
+                <th className="text-left py-2 px-4 font-semibold">Tasks</th>
+                <th className="py-2 px-4" />
+              </tr>
+            </thead>
+            <tbody>
+              {groupProjects.map(p => (
+                <ProjectRow key={p.id} project={p} onClick={() => onSelect(p)} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ProjectsPage() {
   const [selected, setSelected] = useState<Project | null>(null)
-  const [view, setView] = useState<'kanban' | 'list'>('kanban')
+  const [serviceFilter, setServiceFilter] = useState<ServiceTypeKey | 'All'>('All')
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'All'>('All')
+  const [view, setView] = useState<'grouped' | 'kanban'>('grouped')
 
-  const filtered = statusFilter === 'All' ? projects : projects.filter(p => p.status === statusFilter)
   const today = new Date().toISOString().split('T')[0]
 
   // Metrics
@@ -407,11 +571,22 @@ export default function ProjectsPage() {
   const allOverdue = projects.flatMap(p => p.tasks.filter(t => !t.completed && t.dueDate < today))
   const launched = projects.filter(p => ['Launched', 'In Maintenance', 'Completed'].includes(p.status))
 
+  // Active service types (ones with projects)
+  const activeServiceTypes = (Object.keys(serviceTypeIcons) as ServiceTypeKey[])
+    .filter(st => projects.some(p => p.serviceType === st))
+
+  // Apply filters
+  const filtered = projects.filter(p => {
+    if (serviceFilter !== 'All' && p.serviceType !== serviceFilter) return false
+    if (statusFilter !== 'All' && p.status !== statusFilter) return false
+    return true
+  })
+
   const visibleStatuses = statusFilter === 'All' ? statusOrder : [statusFilter]
 
   return (
     <>
-      <Header title="Project Management" subtitle="Track delivery across all service lines" action={{ label: 'New Project' }} />
+      <Header title="Projects" subtitle="Track delivery across all service lines" action={{ label: 'New Project' }} />
       <div className="p-6 flex-1">
 
         {/* Summary Metrics */}
@@ -433,22 +608,58 @@ export default function ProjectsPage() {
           ))}
         </div>
 
-        {/* Filters & View Toggle */}
+        {/* Service Type Hub Tiles */}
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-5">
+          <button
+            onClick={() => setServiceFilter('All')}
+            className={`metric-card text-left p-3 transition-all ${serviceFilter === 'All' ? 'ring-2 ring-green-800 ring-offset-1' : ''}`}
+          >
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: '#f3f4f6' }}>
+              <KanbanSquare size={15} className="text-gray-500" />
+            </div>
+            <p className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{projects.length}</p>
+            <p className="text-[10px] font-semibold text-gray-500 mt-0.5">All Types</p>
+          </button>
+
+          {activeServiceTypes.map(st => {
+            const count = projects.filter(p => p.serviceType === st).length
+            const accent = serviceTypeAccent[st]
+            const inProg = projects.filter(p => p.serviceType === st && p.status === 'In Progress').length
+            return (
+              <button
+                key={st}
+                onClick={() => setServiceFilter(st)}
+                className={`metric-card text-left p-3 transition-all ${serviceFilter === st ? 'ring-2 ring-offset-1' : ''}`}
+                style={serviceFilter === st ? { outlineColor: accent } : {}}
+              >
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: `${accent}18` }}>
+                  <span style={{ color: accent }}>{serviceTypeIcons[st]}</span>
+                </div>
+                <p className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{count}</p>
+                <p className="text-[10px] font-semibold text-gray-500 mt-0.5">{st}</p>
+                {inProg > 0 && (
+                  <p className="text-[10px] text-blue-500 mt-0.5">{inProg} active</p>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Filter bar */}
         <div className="flex items-center gap-3 mb-5 flex-wrap">
           <div className="flex gap-1">
+            <button onClick={() => setView('grouped')} className={`tab-btn ${view === 'grouped' ? 'active' : ''}`}>
+              <span className="flex items-center gap-1.5"><LayoutList size={13} /> Grouped</span>
+            </button>
             <button onClick={() => setView('kanban')} className={`tab-btn ${view === 'kanban' ? 'active' : ''}`}>
               <span className="flex items-center gap-1.5"><KanbanSquare size={13} /> Kanban</span>
             </button>
-            <button onClick={() => setView('list')} className={`tab-btn ${view === 'list' ? 'active' : ''}`}>
-              <span className="flex items-center gap-1.5"><LayoutList size={13} /> List</span>
-            </button>
           </div>
           <div className="h-4 w-px bg-gray-200" />
-          <button onClick={() => setStatusFilter('All')} className={`tab-btn ${statusFilter === 'All' ? 'active' : ''}`}>
-            All ({projects.length})
-          </button>
+          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Status:</span>
+          <button onClick={() => setStatusFilter('All')} className={`tab-btn ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
           {statusOrder.map(s => {
-            const count = projects.filter(p => p.status === s).length
+            const count = filtered.filter(p => p.status === s).length
             return (
               <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn ${statusFilter === s ? 'active' : ''}`}>
                 {s} {count > 0 && <span className="ml-1 opacity-60">({count})</span>}
@@ -458,7 +669,38 @@ export default function ProjectsPage() {
           <span className="ml-auto text-sm text-gray-500">{filtered.length} projects</span>
         </div>
 
-        {/* Kanban View */}
+        {/* Grouped View — service type sections */}
+        {view === 'grouped' && (
+          <div className="flex flex-col gap-4">
+            {serviceFilter === 'All' ? (
+              activeServiceTypes
+                .filter(st => filtered.some(p => p.serviceType === st))
+                .map(st => (
+                  <ServiceTypeGroup
+                    key={st}
+                    serviceType={st}
+                    groupProjects={filtered.filter(p => p.serviceType === st)}
+                    onSelect={setSelected}
+                  />
+                ))
+            ) : (
+              <ServiceTypeGroup
+                serviceType={serviceFilter}
+                groupProjects={filtered}
+                onSelect={setSelected}
+                defaultOpen
+              />
+            )}
+            {filtered.length === 0 && (
+              <div className="py-16 text-center text-gray-400">
+                <KanbanSquare size={32} className="mx-auto mb-3 text-gray-200" />
+                <p className="text-sm">No projects match this filter</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Kanban View — status columns */}
         {view === 'kanban' && (
           <div className="flex gap-4 overflow-x-auto pb-4">
             {visibleStatuses.map(status => {
@@ -488,79 +730,6 @@ export default function ProjectsPage() {
                 </div>
               )
             })}
-          </div>
-        )}
-
-        {/* List View */}
-        {view === 'list' && (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
-                  <th className="text-left py-2.5 px-4 font-semibold">Company</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Status</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Service</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Progress</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Launch Date</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Milestones</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Team</th>
-                  <th className="text-left py-2.5 px-4 font-semibold" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(p => {
-                  const cMs = p.milestones.filter(m => m.completed).length
-                  return (
-                    <tr
-                      key={p.id}
-                      className="hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors"
-                      onClick={() => setSelected(p)}
-                    >
-                      <td className="py-3 px-4">
-                        <p className="text-sm font-semibold text-gray-900">{p.company}</p>
-                      </td>
-                      <td className="py-3 px-4">
-                        <StatusBadge label={p.status} colorClass={projectStatusColors[p.status]} />
-                      </td>
-                      <td className="py-3 px-4">
-                        <StatusBadge label={p.serviceType} colorClass={serviceTypeColors[p.serviceType]} />
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${p.progress}%`, background: '#015035' }} />
-                          </div>
-                          <span className="text-xs text-gray-600 font-medium">{p.progress}%</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-xs text-gray-500">{formatDate(p.launchDate)}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-xs text-gray-600 font-medium">{cMs}/{p.milestones.length}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex -space-x-1.5">
-                          {p.assignedTeam.map((name, i) => (
-                            <div
-                              key={i}
-                              className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold text-white"
-                              style={{ background: i === 0 ? '#015035' : '#6b7280' }}
-                              title={name}
-                            >
-                              {name.split(' ').map(n => n[0]).join('')}
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <ChevronRight size={14} className="text-gray-300" />
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
           </div>
         )}
       </div>

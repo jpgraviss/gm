@@ -7,7 +7,7 @@ import { useUI } from '@/contexts/UIContext'
 import {
   LayoutDashboard, Users, FileText, ScrollText, CreditCard,
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
-  Settings, ChevronRight, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail,
+  Settings, ChevronRight, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare,
 } from 'lucide-react'
 
 interface NavItem {
@@ -58,6 +58,7 @@ const navigation: NavSection[] = [
     section: 'Clients',
     items: [
       { label: 'Client Portal', href: '/portal', icon: <Globe size={15} /> },
+      { label: 'Tickets', href: '/tickets', icon: <MessageSquare size={15} /> },
     ],
   },
   {

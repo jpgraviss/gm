@@ -388,25 +388,6 @@ export default function ProposalsPage() {
           ))}
         </div>
 
-        {/* Status filter tiles */}
-        <div className="grid grid-cols-5 gap-3 mb-5">
-          {statusOrder.map(s => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(statusFilter === s ? 'All' : s)}
-              className={`metric-card text-left transition-all ${statusFilter === s ? 'ring-2 ring-green-800 ring-offset-1' : ''}`}
-            >
-              <div className="flex items-center gap-2 mb-2" style={{ color: '#015035' }}>
-                {statusIcons[s]}
-                <span className="text-xs font-semibold text-gray-500">{s}</span>
-              </div>
-              <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
-                {counts[s]}
-              </p>
-            </button>
-          ))}
-        </div>
-
         {/* Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">

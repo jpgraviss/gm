@@ -215,6 +215,26 @@ export interface RevenueMonth {
 export type CompanyStatus = 'Prospect' | 'Active Client' | 'Past Client' | 'Partner' | 'Churned'
 export type CompanySize = '1-10' | '11-50' | '51-200' | '201-500' | '500+'
 export type ActivityType = 'call' | 'email' | 'meeting' | 'note' | 'task' | 'deal' | 'contract' | 'invoice' | 'proposal'
+export type ContactTaskType = 'follow_up' | 'call' | 'email' | 'meeting' | 'reschedule' | 'proposal' | 'demo' | 'other'
+export type ContactTaskPriority = 'high' | 'medium' | 'low'
+
+export interface ContactNote {
+  id: string
+  body: string
+  date: string
+  author: string
+}
+
+export interface ContactTask {
+  id: string
+  title: string
+  taskType: ContactTaskType
+  dueDate: string
+  completed: boolean
+  priority: ContactTaskPriority
+  assignedTo: string
+  notes?: string
+}
 
 export interface CRMContact {
   id: string
@@ -228,10 +248,13 @@ export interface CRMContact {
   phone: string
   mobile?: string
   linkedIn?: string
+  website?: string
   isPrimary: boolean
   owner: string
   tags: string[]
   notes?: string
+  contactNotes?: ContactNote[]
+  contactTasks?: ContactTask[]
   createdDate: string
   lastActivity?: string
 }

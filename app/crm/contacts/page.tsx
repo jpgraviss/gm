@@ -10,11 +10,12 @@ import {
   contractStatusColors, projectStatusColors,
 } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import type { CRMContact, CRMActivity, ActivityType } from '@/lib/types'
+import type { CRMContact, CRMActivity, ActivityType, ContactTask } from '@/lib/types'
 import {
   X, Phone, Mail, Building2, User, Search, Plus, ScrollText,
   ChevronRight, Linkedin, PhoneCall, Video, StickyNote, CheckSquare,
-  TrendingUp, DollarSign, FileText, Clock, FolderKanban,
+  TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
+  CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
 } from 'lucide-react'
 
 // ─── CRM Sub-Nav ──────────────────────────────────────────────────────────────
@@ -52,6 +53,23 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   )
 }
 
+const taskTypeConfig: Record<ContactTask['taskType'], { icon: React.ReactNode; label: string; color: string }> = {
+  follow_up:  { icon: <Clock size={13} />,         label: 'Follow Up',       color: '#f97316' },
+  call:       { icon: <PhoneCall size={13} />,      label: 'Scheduled Call',  color: '#3b82f6' },
+  email:      { icon: <Mail size={13} />,           label: 'Send Email',      color: '#f59e0b' },
+  meeting:    { icon: <Video size={13} />,          label: 'Meeting',         color: '#8b5cf6' },
+  reschedule: { icon: <RefreshCw size={13} />,      label: 'Reschedule',      color: '#6b7280' },
+  proposal:   { icon: <FileText size={13} />,       label: 'Send Proposal',   color: '#6366f1' },
+  demo:       { icon: <Presentation size={13} />,   label: 'Demo',            color: '#10b981' },
+  other:      { icon: <CheckSquare size={13} />,    label: 'Task',            color: '#6b7280' },
+}
+
+const taskPriorityConfig: Record<ContactTask['priority'], { label: string; color: string; bg: string }> = {
+  high:   { label: 'High',   color: '#dc2626', bg: '#fef2f2' },
+  medium: { label: 'Medium', color: '#d97706', bg: '#fffbeb' },
+  low:    { label: 'Low',    color: '#6b7280', bg: '#f9fafb' },
+}
+
 const activityConfig: Record<ActivityType, { icon: React.ReactNode; color: string }> = {
   call:     { icon: <PhoneCall size={14} />,   color: '#3b82f6' },
   email:    { icon: <Mail size={14} />,         color: '#f59e0b' },
@@ -67,7 +85,10 @@ const activityConfig: Record<ActivityType, { icon: React.ReactNode; color: strin
 // ─── Contact Detail Panel ─────────────────────────────────────────────────────
 
 function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () => void }) {
-  const [tab, setTab] = useState<'overview' | 'pipeline' | 'contracts' | 'activity'>('overview')
+  const [tab, setTab] = useState<'overview' | 'pipeline' | 'contracts' | 'notes' | 'tasks' | 'activity'>('overview')
+  const [taskDone, setTaskDone] = useState<Set<string>>(
+    new Set((contact.contactTasks ?? []).filter(t => t.completed).map(t => t.id))
+  )
 
   // Cross-linked data
   const company = crmCompanies.find(c => c.id === contact.companyId)
@@ -160,9 +181,17 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0">
-          {(['overview', 'pipeline', 'contracts', 'activity'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize ${tab === t ? 'active' : ''}`}>{t}</button>
+        <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
+          {([ 'overview', 'pipeline', 'contracts', 'notes', 'tasks', 'activity'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}
+            >
+              {t === 'notes' && contact.contactNotes?.length ? (
+                <span className="flex items-center gap-1">{t}<span className="w-4 h-4 rounded-full bg-blue-100 text-blue-600 text-[9px] font-bold flex items-center justify-center">{contact.contactNotes.length}</span></span>
+              ) : t === 'tasks' && (contact.contactTasks ?? []).filter(tk => !taskDone.has(tk.id)).length > 0 ? (
+                <span className="flex items-center gap-1">{t}<span className="w-4 h-4 rounded-full bg-orange-100 text-orange-600 text-[9px] font-bold flex items-center justify-center">{(contact.contactTasks ?? []).filter(tk => !taskDone.has(tk.id)).length}</span></span>
+              ) : t}
+            </button>
           ))}
         </div>
 
@@ -180,19 +209,17 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
                   } />
                   <InfoRow icon={<Phone size={14} />} label="Phone" value={contact.phone} />
                   {contact.mobile && <InfoRow icon={<Phone size={14} />} label="Mobile" value={contact.mobile} />}
+                  {contact.website && (
+                    <InfoRow icon={<Globe size={14} />} label="Website" value={
+                      <a href={`https://${contact.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">{contact.website}</a>
+                    } />
+                  )}
                   <InfoRow icon={<User size={14} />} label="Owner" value={contact.owner} />
                   {contact.lastActivity && (
                     <InfoRow icon={<Clock size={14} />} label="Last Activity" value={contact.lastActivity} />
                   )}
                 </div>
               </div>
-
-              {contact.notes && (
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Notes</p>
-                  <p className="text-sm text-gray-700 leading-relaxed">{contact.notes}</p>
-                </div>
-              )}
 
               {contact.tags.length > 0 && (
                 <div className="p-4 bg-gray-50 rounded-xl">
@@ -312,6 +339,114 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
               >
                 View all contracts <ChevronRight size={13} />
               </Link>
+            </div>
+          )}
+
+          {/* ── Notes ── */}
+          {tab === 'notes' && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-gray-400">{(contact.contactNotes ?? []).length} note{(contact.contactNotes ?? []).length !== 1 ? 's' : ''}</p>
+                <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: '#015035' }}>
+                  <Plus size={12} /> Add Note
+                </button>
+              </div>
+              {(contact.contactNotes ?? []).length === 0 ? (
+                <div className="text-center py-12">
+                  <StickyNote size={24} className="text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No notes yet. Add your first note.</p>
+                </div>
+              ) : (
+                [...(contact.contactNotes ?? [])].reverse().map(note => (
+                  <div key={note.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                          {note.author.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <span className="text-xs font-semibold text-gray-700">{note.author}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] text-gray-400">
+                        <Calendar size={11} />
+                        {new Date(note.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{note.body}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* ── Tasks ── */}
+          {tab === 'tasks' && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-gray-400">
+                  {(contact.contactTasks ?? []).filter(t => !taskDone.has(t.id)).length} open · {taskDone.size} done
+                </p>
+                <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: '#015035' }}>
+                  <Plus size={12} /> Add Task
+                </button>
+              </div>
+              {(contact.contactTasks ?? []).length === 0 ? (
+                <div className="text-center py-12">
+                  <CheckSquare size={24} className="text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No tasks yet for this contact.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {(contact.contactTasks ?? []).map(task => {
+                    const done = taskDone.has(task.id)
+                    const cfg = taskTypeConfig[task.taskType]
+                    const pri = taskPriorityConfig[task.priority]
+                    const isOverdue = !done && new Date(task.dueDate) < new Date()
+                    return (
+                      <div key={task.id} className={`p-3.5 rounded-xl border transition-all ${done ? 'bg-gray-50 border-gray-100 opacity-60' : 'bg-white border-gray-200'}`}>
+                        <div className="flex items-start gap-3">
+                          <button
+                            onClick={() => setTaskDone(prev => {
+                              const next = new Set(prev)
+                              if (next.has(task.id)) next.delete(task.id)
+                              else next.add(task.id)
+                              return next
+                            })}
+                            className="mt-0.5 flex-shrink-0"
+                          >
+                            {done
+                              ? <CheckCircle2 size={18} className="text-emerald-500" />
+                              : <Circle size={18} className="text-gray-300 hover:text-gray-400" />
+                            }
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium ${done ? 'line-through text-gray-400' : 'text-gray-900'}`}>{task.title}</p>
+                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                              <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium"
+                                style={{ background: `${cfg.color}15`, color: cfg.color }}>
+                                {cfg.icon}{cfg.label}
+                              </span>
+                              <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold"
+                                style={{ background: pri.bg, color: pri.color }}>
+                                {pri.label}
+                              </span>
+                              <span className={`flex items-center gap-1 text-[11px] ${isOverdue ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                                {isOverdue && <AlertCircle size={11} />}
+                                <Calendar size={11} />
+                                {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                {isOverdue && ' · Overdue'}
+                              </span>
+                              <span className="text-[11px] text-gray-400 ml-auto">{task.assignedTo.split(' ')[0]}</span>
+                            </div>
+                            {task.notes && !done && (
+                              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{task.notes}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 

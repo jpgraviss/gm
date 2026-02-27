@@ -292,19 +292,164 @@ export const revenueByMonth: RevenueMonth[] = [
 // ─── Full CRM Data ──────────────────────────────────────────────────────────
 
 export const crmContacts: CRMContact[] = [
-  { id: 'cc1', companyId: 'comp1', companyName: 'Apex Solutions', firstName: 'Marcus', lastName: 'Rivera', fullName: 'Marcus Rivera', title: 'CEO', email: 'marcus@apex.com', phone: '555-0101', isPrimary: true, owner: 'Sarah Chen', tags: ['Decision Maker', 'Executive'], createdDate: '2026-01-15', lastActivity: '2 days ago' },
-  { id: 'cc2', companyId: 'comp1', companyName: 'Apex Solutions', firstName: 'Lisa', lastName: 'Park', fullName: 'Lisa Park', title: 'Marketing Director', email: 'lisa@apex.com', phone: '555-0102', isPrimary: false, owner: 'Sarah Chen', tags: ['Marketing'], createdDate: '2026-01-20', lastActivity: '1 week ago' },
-  { id: 'cc3', companyId: 'comp2', companyName: 'BlueStar Logistics', firstName: 'Kelly', lastName: 'Shaw', fullName: 'Kelly Shaw', title: 'VP Marketing', email: 'kelly@bluestar.com', phone: '555-0202', isPrimary: true, owner: 'Marcus Webb', tags: ['Decision Maker', 'Signed Client'], createdDate: '2025-11-10', lastActivity: '1 day ago' },
-  { id: 'cc4', companyId: 'comp2', companyName: 'BlueStar Logistics', firstName: 'Tom', lastName: 'Briggs', fullName: 'Tom Briggs', title: 'CEO', email: 'tom@bluestar.com', phone: '555-0203', isPrimary: false, owner: 'Marcus Webb', tags: ['Executive', 'Decision Maker'], createdDate: '2025-11-10', lastActivity: '2 weeks ago' },
-  { id: 'cc5', companyId: 'comp3', companyName: 'Meridian Healthcare', firstName: 'Dr. Nina', lastName: 'Okafor', fullName: 'Dr. Nina Okafor', title: 'Chief Marketing Officer', email: 'nina@meridian.com', phone: '555-0303', isPrimary: true, owner: 'Sarah Chen', tags: ['Warm Lead', 'Healthcare'], createdDate: '2026-01-28', lastActivity: '3 days ago' },
-  { id: 'cc6', companyId: 'comp4', companyName: 'TechFlow Inc', firstName: 'Sam', lastName: 'Torres', fullName: 'Sam Torres', title: 'Founder & CEO', email: 'sam@techflow.com', phone: '555-0404', isPrimary: true, owner: 'Marcus Webb', tags: ['Startup', 'New Lead'], createdDate: '2026-02-10', lastActivity: '1 week ago' },
-  { id: 'cc7', companyId: 'comp5', companyName: 'Coastal Realty', firstName: 'Dana', lastName: 'Kim', fullName: 'Dana Kim', title: 'Owner', email: 'dana@coastalrealty.com', phone: '555-0505', isPrimary: true, owner: 'Sarah Chen', tags: ['Active Client', 'Real Estate'], createdDate: '2025-10-05', lastActivity: 'Today' },
-  { id: 'cc8', companyId: 'comp6', companyName: 'Harvest Foods', firstName: 'Frank', lastName: 'Lopez', fullName: 'Frank Lopez', title: 'Marketing Director', email: 'frank@harvestfoods.com', phone: '555-0606', isPrimary: true, owner: 'Marcus Webb', tags: ['Active Client', 'Upsell Opportunity'], createdDate: '2025-09-15', lastActivity: '3 days ago' },
-  { id: 'cc9', companyId: 'comp7', companyName: 'Summit Capital', firstName: 'Robert', lastName: 'Ng', fullName: 'Robert Ng', title: 'CTO', email: 'robert@summitcap.com', phone: '555-0707', isPrimary: true, owner: 'Sarah Chen', tags: ['High Value', 'Tech'], createdDate: '2026-02-01', lastActivity: '4 days ago' },
-  { id: 'cc10', companyId: 'comp7', companyName: 'Summit Capital', firstName: 'Angela', lastName: 'Ross', fullName: 'Angela Ross', title: 'CEO', email: 'angela@summitcap.com', phone: '555-0708', isPrimary: false, owner: 'Sarah Chen', tags: ['Decision Maker', 'Executive'], createdDate: '2026-02-05', lastActivity: '1 week ago' },
-  { id: 'cc11', companyId: 'comp8', companyName: 'GreenLeaf Organics', firstName: 'Olivia', lastName: 'Grant', fullName: 'Olivia Grant', title: 'Chief Marketing Officer', email: 'olivia@greenleaf.com', phone: '555-0808', isPrimary: true, owner: 'Marcus Webb', tags: ['Qualified Lead', 'Organic'], createdDate: '2026-02-12', lastActivity: '6 days ago' },
-  { id: 'cc12', companyId: 'comp9', companyName: 'NovaBuild Corp', firstName: 'Derek', lastName: 'Santos', fullName: 'Derek Santos', title: 'VP Operations', email: 'derek@novabuild.com', phone: '555-0909', isPrimary: true, owner: 'Sarah Chen', tags: ['Renewal Due', 'Construction'], createdDate: '2025-04-10', lastActivity: '2 weeks ago' },
-  { id: 'cc13', companyId: 'comp10', companyName: 'ClearPath Media', firstName: 'Jenna', lastName: 'Holt', fullName: 'Jenna Holt', title: 'CEO', email: 'jenna@clearpth.com', phone: '555-1010', isPrimary: true, owner: 'Marcus Webb', tags: ['Renewal Due', 'Media'], createdDate: '2025-05-01', lastActivity: '1 week ago' },
+  {
+    id: 'cc1', companyId: 'comp1', companyName: 'Apex Solutions',
+    firstName: 'Marcus', lastName: 'Rivera', fullName: 'Marcus Rivera',
+    title: 'CEO', email: 'marcus@apex.com', phone: '555-0101',
+    website: 'apexsolutions.com',
+    isPrimary: true, owner: 'Sarah Chen', tags: ['Decision Maker', 'Executive'],
+    createdDate: '2026-01-15', lastActivity: '2 days ago',
+    contactNotes: [
+      { id: 'cn1a', body: 'Discovery call went really well. Marcus confirmed $15K budget for site redesign. Very enthusiastic about e-commerce functionality. He mentioned they\'ve worked with 2 other agencies before and were disappointed with results. We need to differentiate on deliverables and communication.', date: '2026-02-24', author: 'Sarah Chen' },
+      { id: 'cn1b', body: 'Follow-up on proposal. Marcus says he\'s sharing with the board before making a final decision. Asked if we could add a phase breakdown so the board can see incremental milestones. Will update proposal and resend by EOD.', date: '2026-02-26', author: 'Sarah Chen' },
+    ],
+    contactTasks: [
+      { id: 'ct1a', title: 'Send updated proposal with phase breakdown', taskType: 'proposal', dueDate: '2026-02-28', completed: false, priority: 'high', assignedTo: 'Sarah Chen', notes: 'Marcus asked for milestone-based breakdown for board review' },
+      { id: 'ct1b', title: 'Follow up if no response by March 3', taskType: 'follow_up', dueDate: '2026-03-03', completed: false, priority: 'medium', assignedTo: 'Sarah Chen' },
+    ],
+  },
+  {
+    id: 'cc2', companyId: 'comp1', companyName: 'Apex Solutions',
+    firstName: 'Lisa', lastName: 'Park', fullName: 'Lisa Park',
+    title: 'Marketing Director', email: 'lisa@apex.com', phone: '555-0102',
+    website: 'apexsolutions.com',
+    isPrimary: false, owner: 'Sarah Chen', tags: ['Marketing'],
+    createdDate: '2026-01-20', lastActivity: '1 week ago',
+  },
+  {
+    id: 'cc3', companyId: 'comp2', companyName: 'BlueStar Logistics',
+    firstName: 'Kelly', lastName: 'Shaw', fullName: 'Kelly Shaw',
+    title: 'VP Marketing', email: 'kelly@bluestar.com', phone: '555-0202',
+    website: 'bluestarlogistics.com',
+    isPrimary: true, owner: 'Marcus Webb', tags: ['Decision Maker', 'Signed Client'],
+    createdDate: '2025-11-10', lastActivity: '1 day ago',
+    contactNotes: [
+      { id: 'cn3a', body: 'Contract meeting at BlueStar HQ. Kelly was great — very clear on what she wants. Primary concern is brand consistency across all deliverables. She wants bi-weekly check-ins via Zoom, not just status emails. Very detail-oriented person.', date: '2026-02-17', author: 'Marcus Webb' },
+      { id: 'cn3b', body: 'SEO campaign kickoff notes (from Granola): Discussed target keyword clusters, competitor gap analysis plan, and content calendar structure. Kelly approved 10 pillar pages as foundation. She also mentioned a trade show in April where updated site needs to be live.', date: '2026-02-25', author: 'Marcus Webb' },
+    ],
+    contactTasks: [
+      { id: 'ct3a', title: 'Schedule bi-weekly Zoom — first one by March 5', taskType: 'meeting', dueDate: '2026-03-01', completed: false, priority: 'high', assignedTo: 'Marcus Webb', notes: 'Kelly prefers Tuesdays or Thursdays at 10am CST' },
+      { id: 'ct3b', title: 'Send onboarding checklist and brand intake form', taskType: 'email', dueDate: '2026-02-28', completed: true, priority: 'medium', assignedTo: 'Marcus Webb' },
+    ],
+  },
+  {
+    id: 'cc4', companyId: 'comp2', companyName: 'BlueStar Logistics',
+    firstName: 'Tom', lastName: 'Briggs', fullName: 'Tom Briggs',
+    title: 'CEO', email: 'tom@bluestar.com', phone: '555-0203',
+    isPrimary: false, owner: 'Marcus Webb', tags: ['Executive', 'Decision Maker'],
+    createdDate: '2025-11-10', lastActivity: '2 weeks ago',
+  },
+  {
+    id: 'cc5', companyId: 'comp3', companyName: 'Meridian Healthcare',
+    firstName: 'Dr. Nina', lastName: 'Okafor', fullName: 'Dr. Nina Okafor',
+    title: 'Chief Marketing Officer', email: 'nina@meridian.com', phone: '555-0303',
+    website: 'meridianhc.com',
+    isPrimary: true, owner: 'Sarah Chen', tags: ['Warm Lead', 'Healthcare'],
+    createdDate: '2026-01-28', lastActivity: '3 days ago',
+    contactNotes: [
+      { id: 'cn5a', body: 'Cold outreach call — Dr. Okafor was very receptive. She mentioned they\'ve been unhappy with their current branding which looks "dated and clinical." She wants the brand to feel modern and approachable. They\'re interviewing 3 agencies. Key differentiator we should lean into: our healthcare case studies.', date: '2026-02-22', author: 'Sarah Chen' },
+    ],
+    contactTasks: [
+      { id: 'ct5a', title: 'Send healthcare credentials deck + 2 case studies', taskType: 'email', dueDate: '2026-02-28', completed: false, priority: 'high', assignedTo: 'Sarah Chen', notes: 'Nina asked specifically for healthcare brand work examples' },
+      { id: 'ct5b', title: 'Schedule follow-up discovery call', taskType: 'call', dueDate: '2026-03-05', completed: false, priority: 'high', assignedTo: 'Sarah Chen' },
+    ],
+  },
+  {
+    id: 'cc6', companyId: 'comp4', companyName: 'TechFlow Inc',
+    firstName: 'Sam', lastName: 'Torres', fullName: 'Sam Torres',
+    title: 'Founder & CEO', email: 'sam@techflow.com', phone: '555-0404',
+    website: 'techflowinc.com',
+    isPrimary: true, owner: 'Marcus Webb', tags: ['Startup', 'New Lead'],
+    createdDate: '2026-02-10', lastActivity: '1 week ago',
+    contactTasks: [
+      { id: 'ct6a', title: 'Third follow-up — try different approach', taskType: 'follow_up', dueDate: '2026-03-01', completed: false, priority: 'medium', assignedTo: 'Marcus Webb', notes: 'No response to 2 emails. Try LinkedIn DM or call.' },
+    ],
+  },
+  {
+    id: 'cc7', companyId: 'comp5', companyName: 'Coastal Realty',
+    firstName: 'Dana', lastName: 'Kim', fullName: 'Dana Kim',
+    title: 'Owner', email: 'dana@coastalrealty.com', phone: '555-0505',
+    website: 'coastalrealty.com',
+    isPrimary: true, owner: 'Sarah Chen', tags: ['Active Client', 'Real Estate'],
+    createdDate: '2025-10-05', lastActivity: 'Today',
+    contactNotes: [
+      { id: 'cn7a', body: 'Project kick-off — Dana is very engaged and excited. She wants to be involved in every major design decision. Prefers to communicate via text for quick questions and email for formal updates. Stressed that the site must look "luxury" — competing against high-end coastal brokerages.', date: '2026-02-20', author: 'Jordan Ellis' },
+    ],
+    contactTasks: [
+      { id: 'ct7a', title: 'Deliver wireframes for review', taskType: 'other', dueDate: '2026-03-05', completed: false, priority: 'high', assignedTo: 'Jordan Ellis', notes: 'Homepage + Property Listing page wireframes' },
+      { id: 'ct7b', title: 'Weekly check-in call — every Tuesday', taskType: 'call', dueDate: '2026-03-04', completed: false, priority: 'medium', assignedTo: 'Sarah Chen' },
+    ],
+  },
+  {
+    id: 'cc8', companyId: 'comp6', companyName: 'Harvest Foods',
+    firstName: 'Frank', lastName: 'Lopez', fullName: 'Frank Lopez',
+    title: 'Marketing Director', email: 'frank@harvestfoods.com', phone: '555-0606',
+    website: 'harvestfoods.com',
+    isPrimary: true, owner: 'Marcus Webb', tags: ['Active Client', 'Upsell Opportunity'],
+    createdDate: '2025-09-15', lastActivity: '3 days ago',
+    contactNotes: [
+      { id: 'cn8a', body: 'Monthly check-in. Email open rates up 22% — Frank is thrilled. He casually mentioned they\'ve been thinking about SEO but "don\'t know where to start." This is a clear upsell opportunity. Need to put together a brief SEO pitch deck tailored to F&B.', date: '2026-02-23', author: 'Marcus Webb' },
+    ],
+    contactTasks: [
+      { id: 'ct8a', title: 'Prepare SEO upsell deck for Harvest Foods', taskType: 'proposal', dueDate: '2026-03-07', completed: false, priority: 'medium', assignedTo: 'Marcus Webb', notes: 'Focus on local SEO and Google Business Profile for food brands' },
+    ],
+  },
+  {
+    id: 'cc9', companyId: 'comp7', companyName: 'Summit Capital',
+    firstName: 'Robert', lastName: 'Ng', fullName: 'Robert Ng',
+    title: 'CTO', email: 'robert@summitcap.com', phone: '555-0707',
+    website: 'summitcap.com',
+    isPrimary: true, owner: 'Sarah Chen', tags: ['High Value', 'Tech'],
+    createdDate: '2026-02-01', lastActivity: '4 days ago',
+    contactNotes: [
+      { id: 'cn9a', body: 'Notes from Granola: Robert confirmed 3 core needs — investor portal (secure login, doc management, reporting dashboard), full rebrand (they want to move away from the "stuffy finance" look), and marketing automation stack (HubSpot preferred). He has final say on tech but Angela Ross (CEO) has final budget approval. Need to loop Angela in for proposal presentation.', date: '2026-02-23', author: 'Sarah Chen' },
+      { id: 'cn9b', body: 'Robert opened the proposal — tracking shows 12 min of review time. He hasn\'t responded yet. I expect he\'s passing it to Angela. Will wait until Monday before following up.', date: '2026-02-25', author: 'Sarah Chen' },
+    ],
+    contactTasks: [
+      { id: 'ct9a', title: 'Follow up with Robert — proposal response', taskType: 'follow_up', dueDate: '2026-03-03', completed: false, priority: 'high', assignedTo: 'Sarah Chen', notes: 'He\'s been reviewing proposal — give him until Monday before pushing' },
+      { id: 'ct9b', title: 'Schedule joint call with Robert + Angela Ross', taskType: 'meeting', dueDate: '2026-03-10', completed: false, priority: 'high', assignedTo: 'Sarah Chen', notes: 'Angela has budget authority — get her in the room for proposal walkthrough' },
+    ],
+  },
+  {
+    id: 'cc10', companyId: 'comp7', companyName: 'Summit Capital',
+    firstName: 'Angela', lastName: 'Ross', fullName: 'Angela Ross',
+    title: 'CEO', email: 'angela@summitcap.com', phone: '555-0708',
+    isPrimary: false, owner: 'Sarah Chen', tags: ['Decision Maker', 'Executive'],
+    createdDate: '2026-02-05', lastActivity: '1 week ago',
+  },
+  {
+    id: 'cc11', companyId: 'comp8', companyName: 'GreenLeaf Organics',
+    firstName: 'Olivia', lastName: 'Grant', fullName: 'Olivia Grant',
+    title: 'Chief Marketing Officer', email: 'olivia@greenleaf.com', phone: '555-0808',
+    website: 'greenleaforganics.com',
+    isPrimary: true, owner: 'Marcus Webb', tags: ['Qualified Lead', 'Organic'],
+    createdDate: '2026-02-12', lastActivity: '6 days ago',
+    contactTasks: [
+      { id: 'ct11a', title: 'Send intro email and schedule discovery call', taskType: 'email', dueDate: '2026-03-01', completed: false, priority: 'medium', assignedTo: 'Marcus Webb' },
+    ],
+  },
+  {
+    id: 'cc12', companyId: 'comp9', companyName: 'NovaBuild Corp',
+    firstName: 'Derek', lastName: 'Santos', fullName: 'Derek Santos',
+    title: 'VP Operations', email: 'derek@novabuild.com', phone: '555-0909',
+    website: 'novabuild.com',
+    isPrimary: true, owner: 'Sarah Chen', tags: ['Renewal Due', 'Construction'],
+    createdDate: '2025-04-10', lastActivity: '2 weeks ago',
+    contactTasks: [
+      { id: 'ct12a', title: 'Send renewal proposal before contract lapses', taskType: 'proposal', dueDate: '2026-03-01', completed: false, priority: 'high', assignedTo: 'Sarah Chen', notes: 'Contract expires March 15 — must act before then' },
+    ],
+  },
+  {
+    id: 'cc13', companyId: 'comp10', companyName: 'ClearPath Media',
+    firstName: 'Jenna', lastName: 'Holt', fullName: 'Jenna Holt',
+    title: 'CEO', email: 'jenna@clearpth.com', phone: '555-1010',
+    website: 'clearpth.com',
+    isPrimary: true, owner: 'Marcus Webb', tags: ['Renewal Due', 'Media'],
+    createdDate: '2025-05-01', lastActivity: '1 week ago',
+    contactTasks: [
+      { id: 'ct13a', title: 'Schedule renewal discussion call', taskType: 'call', dueDate: '2026-03-03', completed: false, priority: 'high', assignedTo: 'Marcus Webb', notes: 'Contract ends April 1 — need 30 day notice. Call this week.' },
+    ],
+  },
 ]
 
 export const crmCompanies: CRMCompany[] = [

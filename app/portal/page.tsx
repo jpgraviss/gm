@@ -169,7 +169,7 @@ export default function PortalPage() {
                     <p className="text-sm font-semibold text-gray-900">{client.company}</p>
                   </td>
                   <td className="py-3 px-4">
-                    <StatusBadge label={client.service} colorClass={serviceTypeColors[client.service as keyof typeof serviceTypeColors]} />
+                    <StatusBadge label={client.service} colorClass={serviceTypeColors[client.service as keyof typeof serviceTypeColors] ?? 'bg-gray-100 text-gray-600'} />
                   </td>
                   <td className="py-3 px-4">
                     <StatusBadge

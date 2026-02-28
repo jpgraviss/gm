@@ -1,38 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import Header from '@/components/layout/Header'
-import { crmCompanies, crmContacts, deals } from '@/lib/data'
+import { deals, crmContacts } from '@/lib/data'
 import { serviceTypeColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
+import CRMSubNav from '@/components/crm/CRMSubNav'
 import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronRight, MoreHorizontal, Edit2, Copy, Trash2, TrendingUp,
   AlertCircle, Eye, MousePointerClick,
 } from 'lucide-react'
-
-// ─── CRM Sub-Nav ──────────────────────────────────────────────────────────────
-
-function CRMSubNav() {
-  const pathname = usePathname()
-  const tabs = [
-    { label: 'Pipeline', href: '/crm/pipeline' },
-    { label: `Companies (${crmCompanies.length})`, href: '/crm/companies' },
-    { label: `Contacts (${crmContacts.length})`, href: '/crm/contacts' },
-    { label: 'Sequences', href: '/crm/sequences' },
-  ]
-  return (
-    <div className="flex gap-1 border-b border-gray-200 px-6 pt-2 bg-white -mt-2 mb-5">
-      {tabs.map(t => (
-        <Link key={t.href} href={t.href} className={`tab-btn ${pathname === t.href ? 'active' : ''}`}>
-          {t.label}
-        </Link>
-      ))}
-    </div>
-  )
-}
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 

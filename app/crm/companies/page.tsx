@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { crmCompanies, crmContacts, deals, contracts, invoices, projects, crmActivities } from '@/lib/data'
 import {
@@ -10,34 +9,15 @@ import {
   projectStatusColors, invoiceStatusColors,
 } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import type { CRMCompany, CRMActivity, ActivityType, CompanyStatus } from '@/lib/types'
+import CRMSubNav from '@/components/crm/CRMSubNav'
+import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
+import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
+import type { CRMCompany, CompanyStatus } from '@/lib/types'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight,
-  ExternalLink, PhoneCall, Video, StickyNote, CheckSquare, TrendingUp,
-  FolderKanban, Clock,
+  ExternalLink, TrendingUp, FolderKanban,
 } from 'lucide-react'
-
-// ─── CRM Sub-Nav ──────────────────────────────────────────────────────────────
-
-function CRMSubNav() {
-  const pathname = usePathname()
-  const tabs = [
-    { label: 'Pipeline', href: '/crm/pipeline' },
-    { label: `Companies (${crmCompanies.length})`, href: '/crm/companies' },
-    { label: `Contacts (${crmContacts.length})`, href: '/crm/contacts' },
-    { label: 'Sequences', href: '/crm/sequences' },
-  ]
-  return (
-    <div className="flex gap-1 border-b border-gray-200 px-6 pt-2 bg-white -mt-2 mb-5">
-      {tabs.map(t => (
-        <Link key={t.href} href={t.href} className={`tab-btn ${pathname === t.href ? 'active' : ''}`}>
-          {t.label}
-        </Link>
-      ))}
-    </div>
-  )
-}
 
 // ─── Status colors ────────────────────────────────────────────────────────────
 
@@ -51,36 +31,32 @@ const companyStatusColors: Record<CompanyStatus, string> = {
 
 const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned']
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-2">
-      <span className="text-gray-400 mt-0.5 flex-shrink-0">{icon}</span>
-      <div>
-        {label && <p className="text-[11px] text-gray-400">{label}</p>}
-        <div className="text-sm text-gray-800">{value}</div>
-      </div>
-    </div>
-  )
-}
-
-const activityConfig: Record<ActivityType, { icon: React.ReactNode; color: string }> = {
-  call:     { icon: <PhoneCall size={14} />,   color: '#3b82f6' },
-  email:    { icon: <Mail size={14} />,         color: '#f59e0b' },
-  meeting:  { icon: <Video size={14} />,        color: '#8b5cf6' },
-  note:     { icon: <StickyNote size={14} />,   color: '#6b7280' },
-  task:     { icon: <CheckSquare size={14} />,  color: '#10b981' },
-  deal:     { icon: <TrendingUp size={14} />,   color: '#015035' },
-  contract: { icon: <ScrollText size={14} />,   color: '#f97316' },
-  invoice:  { icon: <DollarSign size={14} />,   color: '#ef4444' },
-  proposal: { icon: <FileText size={14} />,     color: '#6366f1' },
-}
-
 // ─── Company Detail Panel ─────────────────────────────────────────────────────
 
 function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () => void }) {
   const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'activity'>('overview')
+  const [loggingActivity, setLoggingActivity] = useState(false)
+  const [localActivities, setLocalActivities] = useState(
+    () => crmActivities.filter(a => a.companyId === company.id)
+  )
+
+  function handleSaveActivity(activity: LoggedActivity) {
+    setLocalActivities(prev => [{
+      id: activity.id,
+      type: activity.type,
+      title: activity.title,
+      body: activity.body,
+      outcome: activity.outcome || undefined,
+      nextStep: activity.nextStep || undefined,
+      user: activity.user,
+      timestamp: activity.timestamp,
+      duration: activity.duration,
+      companyId: company.id,
+      companyName: company.name,
+    }, ...prev])
+    setLoggingActivity(false)
+    setTab('activity')
+  }
 
   // Cross-linked data
   const companyContacts = crmContacts.filter(c => c.companyId === company.id)
@@ -88,7 +64,6 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
   const companyContracts = contracts.filter(c => c.company === company.name)
   const companyInvoices = invoices.filter(i => i.company === company.name)
   const companyProject = projects.find(p => p.company === company.name)
-  const activities = crmActivities.filter(a => a.companyId === company.id)
 
   const totalInvoiced = companyInvoices.reduce((s, i) => s + i.amount, 0)
   const totalPaid = companyInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0)
@@ -377,72 +352,30 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
 
           {/* ── Activity ── */}
           {tab === 'activity' && (
-            <div>
-              <button className="mb-4 flex items-center gap-2 text-sm font-medium text-white px-3 py-2 rounded-lg hover:opacity-90" style={{ background: '#015035' }}>
-                <Plus size={14} /> Log Activity
-              </button>
-              {activities.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-8">No activities logged.</p>
-              ) : (
-                <div className="flex flex-col">
-                  {activities.map((act, idx) => {
-                    const cfg = activityConfig[act.type]
-                    return (
-                      <div key={act.id} className="flex gap-3 group">
-                        <div className="flex flex-col items-center">
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-1"
-                            style={{ background: `${cfg.color}15`, color: cfg.color }}>
-                            {cfg.icon}
-                          </div>
-                          {idx < activities.length - 1 && <div className="w-px flex-1 bg-gray-100 my-1" />}
-                        </div>
-                        <div className="flex-1 pb-5">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-medium text-gray-900">{act.title}</p>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {act.duration && (
-                                <span className="text-[10px] text-gray-400 flex items-center gap-1">
-                                  <Clock size={10} />{act.duration}m
-                                </span>
-                              )}
-                              <span className="text-[11px] text-gray-400">
-                                {new Date(act.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                              </span>
-                            </div>
-                          </div>
-                          {act.body && <p className="text-sm text-gray-600 mt-1 leading-relaxed">{act.body}</p>}
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {act.outcome && (
-                              <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">
-                                Outcome: {act.outcome}
-                              </span>
-                            )}
-                            {act.nextStep && (
-                              <span className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
-                                Next: {act.nextStep}
-                              </span>
-                            )}
-                            <span className="text-[11px] text-gray-400">by {act.user}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+            <ActivityTimeline activities={localActivities} />
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
-          <button className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: '#015035' }}>
-            Log Activity
-          </button>
-          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
-            Close
-          </button>
-        </div>
+        {/* Log Activity form or footer */}
+        {loggingActivity ? (
+          <LogActivityForm
+            onSave={handleSaveActivity}
+            onCancel={() => setLoggingActivity(false)}
+          />
+        ) : (
+          <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
+            <button
+              onClick={() => setLoggingActivity(true)}
+              className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2"
+              style={{ background: '#015035' }}
+            >
+              <Plus size={14} /> Log Activity
+            </button>
+            <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+              Close
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

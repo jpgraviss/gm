@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { crmContacts, crmCompanies, deals, contracts, projects, crmActivities } from '@/lib/data'
 import {
@@ -10,48 +9,19 @@ import {
   contractStatusColors, projectStatusColors,
 } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import type { CRMContact, CRMActivity, ActivityType, ContactTask } from '@/lib/types'
+import CRMSubNav from '@/components/crm/CRMSubNav'
+import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
+import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
+import type { CRMContact, ContactNote, ContactTask } from '@/lib/types'
 import {
-  X, Phone, Mail, Building2, User, Search, Plus, ScrollText,
-  ChevronRight, Linkedin, PhoneCall, Video, StickyNote, CheckSquare,
+  X, Phone, Mail, User, Search, Plus, ScrollText,
+  ChevronRight, Linkedin, StickyNote, CheckSquare,
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
+  PhoneCall, Video,
 } from 'lucide-react'
 
-// ─── CRM Sub-Nav ──────────────────────────────────────────────────────────────
-
-function CRMSubNav() {
-  const pathname = usePathname()
-  const tabs = [
-    { label: 'Pipeline', href: '/crm/pipeline' },
-    { label: `Companies (${crmCompanies.length})`, href: '/crm/companies' },
-    { label: `Contacts (${crmContacts.length})`, href: '/crm/contacts' },
-    { label: 'Sequences', href: '/crm/sequences' },
-  ]
-  return (
-    <div className="flex gap-1 border-b border-gray-200 px-6 pt-2 bg-white -mt-2 mb-5">
-      {tabs.map(t => (
-        <Link key={t.href} href={t.href} className={`tab-btn ${pathname === t.href ? 'active' : ''}`}>
-          {t.label}
-        </Link>
-      ))}
-    </div>
-  )
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-2">
-      <span className="text-gray-400 mt-0.5 flex-shrink-0">{icon}</span>
-      <div>
-        {label && <p className="text-[11px] text-gray-400">{label}</p>}
-        <div className="text-sm text-gray-800">{value}</div>
-      </div>
-    </div>
-  )
-}
 
 const taskTypeConfig: Record<ContactTask['taskType'], { icon: React.ReactNode; label: string; color: string }> = {
   follow_up:  { icon: <Clock size={13} />,         label: 'Follow Up',       color: '#f97316' },
@@ -70,18 +40,6 @@ const taskPriorityConfig: Record<ContactTask['priority'], { label: string; color
   low:    { label: 'Low',    color: '#6b7280', bg: '#f9fafb' },
 }
 
-const activityConfig: Record<ActivityType, { icon: React.ReactNode; color: string }> = {
-  call:     { icon: <PhoneCall size={14} />,   color: '#3b82f6' },
-  email:    { icon: <Mail size={14} />,         color: '#f59e0b' },
-  meeting:  { icon: <Video size={14} />,        color: '#8b5cf6' },
-  note:     { icon: <StickyNote size={14} />,   color: '#6b7280' },
-  task:     { icon: <CheckSquare size={14} />,  color: '#10b981' },
-  deal:     { icon: <TrendingUp size={14} />,   color: '#015035' },
-  contract: { icon: <ScrollText size={14} />,   color: '#f97316' },
-  invoice:  { icon: <DollarSign size={14} />,   color: '#ef4444' },
-  proposal: { icon: <FileText size={14} />,     color: '#6366f1' },
-}
-
 // ─── Contact Detail Panel ─────────────────────────────────────────────────────
 
 function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () => void }) {
@@ -89,16 +47,77 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
   const [taskDone, setTaskDone] = useState<Set<string>>(
     new Set((contact.contactTasks ?? []).filter(t => t.completed).map(t => t.id))
   )
+  const [localNotes, setLocalNotes] = useState<ContactNote[]>(contact.contactNotes ?? [])
+  const [localTasks, setLocalTasks] = useState<ContactTask[]>(contact.contactTasks ?? [])
+  const [addingNote, setAddingNote] = useState(false)
+  const [newNoteBody, setNewNoteBody] = useState('')
+  const [addingTask, setAddingTask] = useState(false)
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskType, setNewTaskType] = useState<ContactTask['taskType']>('follow_up')
+  const [newTaskPriority, setNewTaskPriority] = useState<ContactTask['priority']>('medium')
+  const [newTaskDue, setNewTaskDue] = useState('')
+  const [loggingActivity, setLoggingActivity] = useState(false)
+  const [localActivities, setLocalActivities] = useState(
+    () => crmActivities.filter(a => a.contactId === contact.id || a.companyId === contact.companyId)
+  )
+
+  function handleAddNote() {
+    if (!newNoteBody.trim()) return
+    const note: ContactNote = {
+      id: `cn-${Date.now()}`,
+      body: newNoteBody.trim(),
+      date: new Date().toISOString().split('T')[0],
+      author: 'You',
+    }
+    setLocalNotes(prev => [note, ...prev])
+    setNewNoteBody('')
+    setAddingNote(false)
+  }
+
+  function handleAddTask() {
+    if (!newTaskTitle.trim() || !newTaskDue) return
+    const task: ContactTask = {
+      id: `ct-${Date.now()}`,
+      title: newTaskTitle.trim(),
+      taskType: newTaskType,
+      dueDate: newTaskDue,
+      completed: false,
+      priority: newTaskPriority,
+      assignedTo: 'You',
+    }
+    setLocalTasks(prev => [task, ...prev])
+    setNewTaskTitle('')
+    setNewTaskDue('')
+    setNewTaskType('follow_up')
+    setNewTaskPriority('medium')
+    setAddingTask(false)
+  }
+
+  function handleSaveActivity(activity: LoggedActivity) {
+    setLocalActivities(prev => [{
+      id: activity.id,
+      type: activity.type,
+      title: activity.title,
+      body: activity.body,
+      outcome: activity.outcome || undefined,
+      nextStep: activity.nextStep || undefined,
+      user: activity.user,
+      timestamp: activity.timestamp,
+      duration: activity.duration,
+      contactId: contact.id,
+      contactName: contact.fullName,
+      companyId: contact.companyId,
+      companyName: contact.companyName,
+    }, ...prev])
+    setLoggingActivity(false)
+    setTab('activity')
+  }
 
   // Cross-linked data
   const company = crmCompanies.find(c => c.id === contact.companyId)
   const contactDeals = deals.filter(d => d.company === contact.companyName)
   const contactContracts = contracts.filter(c => c.company === contact.companyName)
   const companyProject = projects.find(p => p.company === contact.companyName)
-  const activities = crmActivities.filter(
-    a => a.contactId === contact.id || a.companyId === contact.companyId
-  )
-
   const activeDeal = contactDeals.find(d => !d.stage.startsWith('Closed'))
   const executedContract = contactContracts.find(c => c.status === 'Fully Executed')
 
@@ -182,14 +201,14 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
 
         {/* Tabs */}
         <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
-          {([ 'overview', 'pipeline', 'contracts', 'notes', 'tasks', 'activity'] as const).map(t => (
+          {(['overview', 'pipeline', 'contracts', 'notes', 'tasks', 'activity'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}
             >
-              {t === 'notes' && contact.contactNotes?.length ? (
-                <span className="flex items-center gap-1">{t}<span className="w-4 h-4 rounded-full bg-blue-100 text-blue-600 text-[9px] font-bold flex items-center justify-center">{contact.contactNotes.length}</span></span>
-              ) : t === 'tasks' && (contact.contactTasks ?? []).filter(tk => !taskDone.has(tk.id)).length > 0 ? (
-                <span className="flex items-center gap-1">{t}<span className="w-4 h-4 rounded-full bg-orange-100 text-orange-600 text-[9px] font-bold flex items-center justify-center">{(contact.contactTasks ?? []).filter(tk => !taskDone.has(tk.id)).length}</span></span>
+              {t === 'notes' && localNotes.length > 0 ? (
+                <span className="flex items-center gap-1">{t}<span className="w-4 h-4 rounded-full bg-blue-100 text-blue-600 text-[9px] font-bold flex items-center justify-center">{localNotes.length}</span></span>
+              ) : t === 'tasks' && localTasks.filter(tk => !taskDone.has(tk.id)).length > 0 ? (
+                <span className="flex items-center gap-1">{t}<span className="w-4 h-4 rounded-full bg-orange-100 text-orange-600 text-[9px] font-bold flex items-center justify-center">{localTasks.filter(tk => !taskDone.has(tk.id)).length}</span></span>
               ) : t}
             </button>
           ))}
@@ -346,23 +365,50 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
           {tab === 'notes' && (
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-gray-400">{(contact.contactNotes ?? []).length} note{(contact.contactNotes ?? []).length !== 1 ? 's' : ''}</p>
-                <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: '#015035' }}>
-                  <Plus size={12} /> Add Note
+                <p className="text-xs text-gray-400">{localNotes.length} note{localNotes.length !== 1 ? 's' : ''}</p>
+                <button
+                  onClick={() => setAddingNote(v => !v)}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white"
+                  style={{ background: addingNote ? '#6b7280' : '#015035' }}
+                >
+                  <Plus size={12} /> {addingNote ? 'Cancel' : 'Add Note'}
                 </button>
               </div>
-              {(contact.contactNotes ?? []).length === 0 ? (
+
+              {/* Inline add form */}
+              {addingNote && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex flex-col gap-2">
+                  <textarea
+                    value={newNoteBody}
+                    onChange={e => setNewNoteBody(e.target.value)}
+                    placeholder="Write your note here... (Granola meeting notes, call recap, etc.)"
+                    className="w-full text-sm border border-blue-200 rounded-lg p-2.5 bg-white outline-none resize-none leading-relaxed"
+                    rows={4}
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleAddNote}
+                    disabled={!newNoteBody.trim()}
+                    className="py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40"
+                    style={{ background: '#015035' }}
+                  >
+                    Save Note
+                  </button>
+                </div>
+              )}
+
+              {localNotes.length === 0 && !addingNote ? (
                 <div className="text-center py-12">
                   <StickyNote size={24} className="text-gray-300 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">No notes yet. Add your first note.</p>
                 </div>
               ) : (
-                [...(contact.contactNotes ?? [])].reverse().map(note => (
+                localNotes.map(note => (
                   <div key={note.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
-                          {note.author.split(' ').map(n => n[0]).join('')}
+                          {note.author.split(' ').map((n: string) => n[0]).join('')}
                         </div>
                         <span className="text-xs font-semibold text-gray-700">{note.author}</span>
                       </div>
@@ -383,20 +429,72 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-gray-400">
-                  {(contact.contactTasks ?? []).filter(t => !taskDone.has(t.id)).length} open · {taskDone.size} done
+                  {localTasks.filter(t => !taskDone.has(t.id)).length} open · {taskDone.size} done
                 </p>
-                <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: '#015035' }}>
-                  <Plus size={12} /> Add Task
+                <button
+                  onClick={() => setAddingTask(v => !v)}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white"
+                  style={{ background: addingTask ? '#6b7280' : '#015035' }}
+                >
+                  <Plus size={12} /> {addingTask ? 'Cancel' : 'Add Task'}
                 </button>
               </div>
-              {(contact.contactTasks ?? []).length === 0 ? (
+
+              {/* Inline add task form */}
+              {addingTask && (
+                <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl flex flex-col gap-2">
+                  <input
+                    value={newTaskTitle}
+                    onChange={e => setNewTaskTitle(e.target.value)}
+                    placeholder="Task title (e.g. Follow up, Reschedule call...)"
+                    className="text-sm border border-orange-200 rounded-lg px-2.5 py-2 bg-white outline-none w-full"
+                    autoFocus
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={newTaskType}
+                      onChange={e => setNewTaskType(e.target.value as ContactTask['taskType'])}
+                      className="text-xs border border-orange-200 rounded-lg px-2 py-1.5 bg-white outline-none text-gray-700"
+                    >
+                      {Object.entries(taskTypeConfig).map(([key, cfg]) => (
+                        <option key={key} value={key}>{cfg.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={newTaskPriority}
+                      onChange={e => setNewTaskPriority(e.target.value as ContactTask['priority'])}
+                      className="text-xs border border-orange-200 rounded-lg px-2 py-1.5 bg-white outline-none text-gray-700"
+                    >
+                      <option value="high">High Priority</option>
+                      <option value="medium">Medium Priority</option>
+                      <option value="low">Low Priority</option>
+                    </select>
+                  </div>
+                  <input
+                    type="date"
+                    value={newTaskDue}
+                    onChange={e => setNewTaskDue(e.target.value)}
+                    className="text-xs border border-orange-200 rounded-lg px-2.5 py-1.5 bg-white outline-none text-gray-700 w-full"
+                  />
+                  <button
+                    onClick={handleAddTask}
+                    disabled={!newTaskTitle.trim() || !newTaskDue}
+                    className="py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40"
+                    style={{ background: '#015035' }}
+                  >
+                    Save Task
+                  </button>
+                </div>
+              )}
+
+              {localTasks.length === 0 && !addingTask ? (
                 <div className="text-center py-12">
                   <CheckSquare size={24} className="text-gray-300 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">No tasks yet for this contact.</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {(contact.contactTasks ?? []).map(task => {
+                  {localTasks.map(task => {
                     const done = taskDone.has(task.id)
                     const cfg = taskTypeConfig[task.taskType]
                     const pri = taskPriorityConfig[task.priority]
@@ -408,7 +506,7 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
                             onClick={() => setTaskDone(prev => {
                               const next = new Set(prev)
                               if (next.has(task.id)) next.delete(task.id)
-                              else next.add(task.id)
+                              else { next.add(task.id); setLocalTasks(ts => ts.map(t => t.id === task.id ? { ...t, completed: true } : t)) }
                               return next
                             })}
                             className="mt-0.5 flex-shrink-0"
@@ -452,74 +550,32 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
 
           {/* ── Activity ── */}
           {tab === 'activity' && (
-            <div>
-              {activities.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-8">No activities logged.</p>
-              ) : (
-                <div className="flex flex-col">
-                  {activities.map((act, idx) => {
-                    const cfg = activityConfig[act.type]
-                    return (
-                      <div key={act.id} className="flex gap-3">
-                        <div className="flex flex-col items-center">
-                          <div
-                            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-1"
-                            style={{ background: `${cfg.color}15`, color: cfg.color }}
-                          >
-                            {cfg.icon}
-                          </div>
-                          {idx < activities.length - 1 && (
-                            <div className="w-px flex-1 bg-gray-100 my-1" />
-                          )}
-                        </div>
-                        <div className="flex-1 pb-5">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-medium text-gray-900">{act.title}</p>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {act.duration && (
-                                <span className="text-[10px] text-gray-400 flex items-center gap-1">
-                                  <Clock size={10} />{act.duration}m
-                                </span>
-                              )}
-                              <span className="text-[11px] text-gray-400">
-                                {new Date(act.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                              </span>
-                            </div>
-                          </div>
-                          {act.body && (
-                            <p className="text-sm text-gray-600 mt-1 leading-relaxed">{act.body}</p>
-                          )}
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {act.outcome && (
-                              <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">
-                                Outcome: {act.outcome}
-                              </span>
-                            )}
-                            {act.nextStep && (
-                              <span className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
-                                Next: {act.nextStep}
-                              </span>
-                            )}
-                            <span className="text-[11px] text-gray-400">by {act.user}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+            <ActivityTimeline activities={localActivities} />
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
-          <button className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: '#015035' }}>
-            Log Activity
-          </button>
-          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
-            Close
-          </button>
+        <div className="p-4 border-t border-gray-100 flex-shrink-0">
+          {loggingActivity ? (
+            <LogActivityForm
+              onSave={handleSaveActivity}
+              onCancel={() => setLoggingActivity(false)}
+              authorName="You"
+            />
+          ) : (
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setLoggingActivity(true); setTab('activity') }}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold"
+                style={{ background: '#015035' }}
+              >
+                Log Activity
+              </button>
+              <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+                Close
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

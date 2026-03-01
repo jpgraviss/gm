@@ -10,6 +10,7 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
+import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
 import type { Deal } from '@/lib/types'
 import {
   X, Phone, Mail, Calendar, TrendingUp, DollarSign,
@@ -701,6 +702,7 @@ export default function PipelinePage() {
   const [selectedDeal, setSelectedDeal] = useState<LocalDeal | null>(null)
   const [filterRep, setFilterRep] = useState('All')
   const [managingPipeline, setManagingPipeline] = useState(false)
+  const [creatingDeal, setCreatingDeal] = useState(false)
 
   const activePipeline = pipelines.find(p => p.id === activePipelineId) ?? pipelines[0]
   const activeStages = activePipeline.stages
@@ -722,6 +724,30 @@ export default function PipelinePage() {
     setSelectedDeal(prev => prev?.id === draggableId ? { ...prev, stage: newStageName } : prev)
   }
 
+  function handleNewDeal(data: NewDealData) {
+    const newDeal: LocalDeal = {
+      id: `deal-${Date.now()}`,
+      company: data.company,
+      contact: {
+        id: `contact-${Date.now()}`,
+        name: data.contactName,
+        email: data.contactEmail,
+        phone: data.contactPhone,
+        title: data.contactTitle,
+      },
+      stage: data.stage,
+      value: Number(data.value) || 0,
+      serviceType: data.serviceType,
+      closeDate: data.closeDate,
+      assignedRep: data.assignedRep,
+      probability: Number(data.probability) || 20,
+      notes: data.notes ? [data.notes] : [],
+      lastActivity: new Date().toISOString().split('T')[0],
+    }
+    setLocalDeals(prev => [newDeal, ...prev])
+    setCreatingDeal(false)
+  }
+
   function handleAdvanceStage(dealId: string, newStage: string) {
     setLocalDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage } : d))
   }
@@ -731,7 +757,7 @@ export default function PipelinePage() {
       <Header
         title="CRM & Pipeline"
         subtitle="Companies · Contacts · Deals · Activity"
-        action={{ label: 'New Deal' }}
+        action={{ label: 'New Deal', onClick: () => setCreatingDeal(true) }}
       />
       <div className="p-4 md:p-6 flex-1 flex flex-col">
         <CRMSubNav />
@@ -845,6 +871,10 @@ export default function PipelinePage() {
           onClose={() => setSelectedDeal(null)}
           onAdvanceStage={handleAdvanceStage}
         />
+      )}
+
+      {creatingDeal && (
+        <NewDealPanel onSave={handleNewDeal} onClose={() => setCreatingDeal(false)} />
       )}
 
       {managingPipeline && (

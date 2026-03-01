@@ -12,6 +12,7 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
+import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
 import type { CRMContact, ContactNote, ContactTask } from '@/lib/types'
 import {
   X, Phone, Mail, User, Search, Plus, ScrollText,
@@ -587,8 +588,37 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
 export default function ContactsPage() {
   const [search, setSearch] = useState('')
   const [selectedContact, setSelectedContact] = useState<CRMContact | null>(null)
+  const [localContacts, setLocalContacts] = useState<CRMContact[]>(crmContacts)
+  const [creatingContact, setCreatingContact] = useState(false)
 
-  const filtered = crmContacts.filter(c =>
+  function handleNewContact(data: NewContactFormData) {
+    const company = crmCompanies.find(c => c.name === data.companyName)
+    const newContact: CRMContact = {
+      id: `contact-${Date.now()}`,
+      companyId: company?.id ?? `co-${Date.now()}`,
+      companyName: data.companyName,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      fullName: `${data.firstName} ${data.lastName}`,
+      title: data.title,
+      email: data.email,
+      phone: data.phone,
+      mobile: data.mobile || undefined,
+      linkedIn: data.linkedIn || undefined,
+      website: data.website || undefined,
+      isPrimary: false,
+      owner: data.owner,
+      tags: [],
+      notes: data.notes || undefined,
+      contactNotes: [],
+      contactTasks: [],
+      createdDate: new Date().toISOString().split('T')[0],
+    }
+    setLocalContacts(prev => [newContact, ...prev])
+    setCreatingContact(false)
+  }
+
+  const filtered = localContacts.filter(c =>
     c.fullName.toLowerCase().includes(search.toLowerCase()) ||
     c.companyName.toLowerCase().includes(search.toLowerCase()) ||
     c.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -597,7 +627,7 @@ export default function ContactsPage() {
 
   return (
     <>
-      <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" action={{ label: 'New Contact' }} />
+      <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" action={{ label: 'New Contact', onClick: () => setCreatingContact(true) }} />
       <div className="p-4 md:p-6 flex-1 flex flex-col">
         <CRMSubNav />
 
@@ -723,6 +753,7 @@ export default function ContactsPage() {
       </div>
 
       {selectedContact && <ContactPanel contact={selectedContact} onClose={() => setSelectedContact(null)} />}
+      {creatingContact && <NewContactPanel onSave={handleNewContact} onClose={() => setCreatingContact(false)} />}
     </>
   )
 }

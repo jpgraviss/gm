@@ -12,6 +12,7 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
+import NewCompanyPanel, { type NewCompanyFormData } from '@/components/crm/NewCompanyPanel'
 import type { CRMCompany, CompanyStatus } from '@/lib/types'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
@@ -387,8 +388,33 @@ export default function CompaniesPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('All')
   const [selectedCompany, setSelectedCompany] = useState<CRMCompany | null>(null)
+  const [localCompanies, setLocalCompanies] = useState<CRMCompany[]>(crmCompanies)
+  const [creatingCompany, setCreatingCompany] = useState(false)
 
-  const filtered = crmCompanies.filter(c => {
+  function handleNewCompany(data: NewCompanyFormData) {
+    const newCompany: CRMCompany = {
+      id: `co-${Date.now()}`,
+      name: data.name,
+      industry: data.industry,
+      website: data.website || undefined,
+      phone: data.phone || undefined,
+      hq: data.hq,
+      size: data.size,
+      annualRevenue: data.annualRevenue ? Number(data.annualRevenue) : undefined,
+      status: data.status,
+      owner: data.owner,
+      description: data.description || undefined,
+      tags: [],
+      contactIds: [],
+      dealIds: [],
+      createdDate: new Date().toISOString().split('T')[0],
+      totalDealValue: 0,
+    }
+    setLocalCompanies(prev => [newCompany, ...prev])
+    setCreatingCompany(false)
+  }
+
+  const filtered = localCompanies.filter(c => {
     const matchSearch =
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.industry.toLowerCase().includes(search.toLowerCase()) ||
@@ -399,14 +425,14 @@ export default function CompaniesPage() {
 
   return (
     <>
-      <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" action={{ label: 'New Company' }} />
+      <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" action={{ label: 'New Company', onClick: () => setCreatingCompany(true) }} />
       <div className="p-4 md:p-6 flex-1 flex flex-col">
         <CRMSubNav />
 
         {/* Summary metrics */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
           {(['All', ...companyStatuses] as const).map(s => {
-            const count = s === 'All' ? crmCompanies.length : crmCompanies.filter(c => c.status === s).length
+            const count = s === 'All' ? localCompanies.length : localCompanies.filter(c => c.status === s).length
             return (
               <button
                 key={s}
@@ -555,6 +581,7 @@ export default function CompaniesPage() {
       </div>
 
       {selectedCompany && <CompanyPanel company={selectedCompany} onClose={() => setSelectedCompany(null)} />}
+      {creatingCompany && <NewCompanyPanel onSave={handleNewCompany} onClose={() => setCreatingCompany(false)} />}
     </>
   )
 }

@@ -194,7 +194,11 @@ input, select, textarea {
     font-size: 14px;
   }
   .metric-card {
-    padding: 16px;
+    padding: 14px;
+  }
+  /* Reduce metric card grid to 2 cols on mobile */
+  .metric-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -204,6 +208,11 @@ input, select, textarea {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }
+
+/* Responsive side panel drawers */
+.side-panel-sm  { width: min(400px, 100vw); }
+.side-panel-md  { width: min(440px, 100vw); }
+.side-panel-lg  { width: min(480px, 100vw); }
 
 ::-webkit-scrollbar {
   width: 6px;

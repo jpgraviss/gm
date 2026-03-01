@@ -47,7 +47,7 @@ export default function ReportsPage() {
   return (
     <>
       <Header title="Reports & Analytics" subtitle="Revenue, sales, operations, and retention metrics" />
-      <div className="p-6 flex-1">
+      <div className="p-3 sm:p-6 flex-1">
 
         {/* Top KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">

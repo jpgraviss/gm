@@ -447,7 +447,7 @@ export default function PortalPage() {
   return (
     <>
       <Header title="Client Portal" subtitle="Client-facing view configuration and access" action={{ label: 'Invite Client' }} />
-      <div className="p-6 flex-1">
+      <div className="p-3 sm:p-6 flex-1">
 
         {/* View as Client panel */}
         <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200 shadow-sm mb-6">

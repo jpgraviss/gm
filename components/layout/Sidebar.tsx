@@ -7,7 +7,7 @@ import { useUI } from '@/contexts/UIContext'
 import {
   LayoutDashboard, Users, FileText, ScrollText, CreditCard,
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
-  Settings, ChevronRight, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare,
+  Settings, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare,
 } from 'lucide-react'
 
 interface NavItem {
@@ -26,53 +26,53 @@ const navigation: NavSection[] = [
   {
     section: 'Overview',
     items: [
-      { label: 'Dashboard', href: '/', icon: <LayoutDashboard size={15} /> },
+      { label: 'Dashboard', href: '/', icon: <LayoutDashboard size={16} /> },
     ],
   },
   {
     section: 'CRM',
     items: [
-      { label: 'Pipeline', href: '/crm/pipeline', icon: <TrendingUp size={15} /> },
-      { label: 'Companies', href: '/crm/companies', icon: <Building2 size={15} /> },
-      { label: 'Contacts', href: '/crm/contacts', icon: <Users size={15} /> },
-      { label: 'Sequences', href: '/crm/sequences', icon: <Mail size={15} /> },
+      { label: 'Pipeline', href: '/crm/pipeline', icon: <TrendingUp size={16} /> },
+      { label: 'Companies', href: '/crm/companies', icon: <Building2 size={16} /> },
+      { label: 'Contacts', href: '/crm/contacts', icon: <Users size={16} /> },
+      { label: 'Sequences', href: '/crm/sequences', icon: <Mail size={16} /> },
     ],
   },
   {
     section: 'Revenue',
     items: [
-      { label: 'Proposals', href: '/proposals', icon: <FileText size={15} /> },
-      { label: 'Contracts', href: '/contracts', icon: <ScrollText size={15} /> },
-      { label: 'Billing', href: '/billing', icon: <CreditCard size={15} /> },
+      { label: 'Proposals', href: '/proposals', icon: <FileText size={16} /> },
+      { label: 'Contracts', href: '/contracts', icon: <ScrollText size={16} /> },
+      { label: 'Billing', href: '/billing', icon: <CreditCard size={16} /> },
     ],
   },
   {
     section: 'Delivery',
     items: [
-      { label: 'Projects', href: '/projects', icon: <FolderKanban size={15} /> },
-      { label: 'Maintenance', href: '/maintenance', icon: <Wrench size={15} /> },
-      { label: 'Renewals', href: '/renewals', icon: <RefreshCw size={15} /> },
+      { label: 'Projects', href: '/projects', icon: <FolderKanban size={16} /> },
+      { label: 'Maintenance', href: '/maintenance', icon: <Wrench size={16} /> },
+      { label: 'Renewals', href: '/renewals', icon: <RefreshCw size={16} /> },
     ],
   },
   {
     section: 'Clients',
     items: [
-      { label: 'Client Portal', href: '/portal', icon: <Globe size={15} /> },
-      { label: 'Tickets', href: '/tickets', icon: <MessageSquare size={15} /> },
+      { label: 'Client Portal', href: '/portal', icon: <Globe size={16} /> },
+      { label: 'Tickets', href: '/tickets', icon: <MessageSquare size={16} /> },
     ],
   },
   {
     section: 'Intel',
     items: [
-      { label: 'Reports', href: '/reports', icon: <BarChart3 size={15} /> },
-      { label: 'Automation', href: '/automation', icon: <Zap size={15} /> },
+      { label: 'Reports', href: '/reports', icon: <BarChart3 size={16} /> },
+      { label: 'Automation', href: '/automation', icon: <Zap size={16} /> },
     ],
   },
   {
     section: 'System',
     items: [
-      { label: 'Admin Panel', href: '/admin', icon: <ShieldCheck size={15} />, adminOnly: true },
-      { label: 'Settings', href: '/settings', icon: <Settings size={15} /> },
+      { label: 'Admin Panel', href: '/admin', icon: <ShieldCheck size={16} />, adminOnly: true },
+      { label: 'Settings', href: '/settings', icon: <Settings size={16} /> },
     ],
   },
 ]
@@ -89,43 +89,36 @@ export default function Sidebar() {
 
   return (
     <aside
-      style={{ background: '#012b1e', width: 230, minHeight: '100vh' }}
-      className="flex flex-col flex-shrink-0 border-r border-white/5 h-screen sticky top-0"
+      style={{ background: '#012b1e' }}
+      className="group flex flex-col flex-shrink-0 border-r border-white/5 h-screen sticky top-0
+                 w-[230px] lg:w-14 lg:hover:w-[230px] transition-[width] duration-200 overflow-hidden"
     >
-      {/* Logo + mobile close */}
-      <div className="px-4 py-4 border-b border-white/8 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: '#015035' }}
-          >
-            <span
-              className="text-white text-xs font-bold"
-              style={{ fontFamily: 'var(--font-heading)' }}
-            >
-              G
-            </span>
-          </div>
-          <div>
-            <span
-              className="text-white text-sm font-bold tracking-widest"
-              style={{ fontFamily: 'var(--font-heading)' }}
-            >
-              GravHub
-            </span>
-            <p className="text-white/40 text-[10px] tracking-wider mt-0.5">Graviss Marketing</p>
-          </div>
+      {/* Logo */}
+      <div className="px-3 py-4 border-b border-white/[0.08] flex items-center gap-2.5 min-w-0 flex-shrink-0">
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ background: '#015035' }}
+        >
+          <span className="text-white text-xs font-bold" style={{ fontFamily: 'var(--font-heading)' }}>G</span>
         </div>
+        {/* Logo text — always visible mobile, fades in on desktop hover */}
+        <div className="flex-1 min-w-0 overflow-hidden whitespace-nowrap lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
+          <span className="text-white text-sm font-bold tracking-widest block" style={{ fontFamily: 'var(--font-heading)' }}>
+            GravHub
+          </span>
+          <p className="text-white/40 text-[10px] tracking-wider">Graviss Marketing</p>
+        </div>
+        {/* Mobile close button */}
         <button
           onClick={closeSidebar}
-          className="p-1.5 rounded-lg hover:bg-white/10 transition-colors lg:hidden"
+          className="p-1.5 rounded-lg hover:bg-white/10 transition-colors lg:hidden flex-shrink-0"
         >
           <X size={16} className="text-white/60" />
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto">
+      <nav className="flex-1 px-2 py-3 overflow-y-auto overflow-x-hidden">
         {navigation.map((group) => {
           const visibleItems = group.items.filter(
             (item) => !item.adminOnly || user?.isAdmin
@@ -133,10 +126,14 @@ export default function Sidebar() {
           if (visibleItems.length === 0) return null
 
           return (
-            <div key={group.section} className="mb-5">
-              <p className="text-white/30 text-[10px] font-semibold tracking-widest uppercase px-3 mb-1.5">
+            <div key={group.section} className="mb-3">
+              {/* Section label: visible on mobile, visible on desktop hover */}
+              <p className="block lg:hidden lg:group-hover:block text-white/30 text-[10px] font-semibold tracking-widest uppercase px-3 mb-1.5 whitespace-nowrap overflow-hidden">
                 {group.section}
               </p>
+              {/* Divider shown only in collapsed desktop mode */}
+              <div className="hidden lg:block lg:group-hover:hidden h-px bg-white/[0.06] mx-2 mb-2" />
+
               <div className="flex flex-col gap-0.5">
                 {visibleItems.map((item) => {
                   const isActive =
@@ -147,19 +144,23 @@ export default function Sidebar() {
                       key={item.href}
                       href={item.href}
                       onClick={closeSidebar}
-                      className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
+                      title={item.label}
+                      className={`sidebar-nav-item ${isActive ? 'active' : ''} justify-start`}
                     >
-                      <span className={isActive ? 'text-white' : 'text-white/50'}>
+                      <span className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-white/50'}`}>
                         {item.icon}
                       </span>
-                      <span className="flex-1 text-[13px]">{item.label}</span>
+                      {/* Label */}
+                      <span className="flex-1 text-[13px] whitespace-nowrap overflow-hidden
+                                       lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
+                        {item.label}
+                      </span>
+                      {/* Admin badge */}
                       {item.adminOnly && (
-                        <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full font-semibold">
+                        <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap
+                                         lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
                           ADMIN
                         </span>
-                      )}
-                      {isActive && !item.adminOnly && (
-                        <ChevronRight size={12} className="text-white/30" />
                       )}
                     </Link>
                   )
@@ -170,8 +171,8 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* User */}
-      <div className="px-3 py-3 border-t border-white/8">
+      {/* User footer */}
+      <div className="px-2 py-3 border-t border-white/[0.08] flex-shrink-0">
         {user && (
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg">
             <div
@@ -180,15 +181,15 @@ export default function Sidebar() {
             >
               {user.initials}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-medium truncate">{user.name}</p>
-              <p className="text-white/40 text-[10px] truncate">
-                {user.isAdmin ? '★ Super Admin' : user.role}
-              </p>
+            <div className="flex-1 min-w-0 overflow-hidden whitespace-nowrap
+                           lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
+              <p className="text-white text-xs font-medium">{user.name}</p>
+              <p className="text-white/40 text-[10px]">{user.isAdmin ? '★ Super Admin' : user.role}</p>
             </div>
             <button
               onClick={handleLogout}
-              className="p-1 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0"
+              className="p-1 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0
+                         lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150"
               title="Sign out"
             >
               <LogOut size={13} className="text-white/40 hover:text-white/70" />

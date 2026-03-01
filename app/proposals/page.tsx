@@ -46,7 +46,7 @@ function ProposalPanel({ proposal, onClose, onUpdateStatus }: { proposal: Propos
       <div className="flex-1" onClick={onClose} style={{ pointerEvents: 'auto' }} />
       <div
         className="pointer-events-auto flex flex-col shadow-2xl border-l border-gray-200 bg-white"
-        style={{ width: 440, height: '100vh' }}
+        style={{ width: 'min(440px, 100vw)', height: '100vh' }}
       >
         {/* Dark green header */}
         <div className="flex-shrink-0 p-5 border-b border-white/10" style={{ background: '#012b1e' }}>
@@ -442,7 +442,7 @@ export default function ProposalsPage() {
   return (
     <>
       <Header title="Proposals" subtitle="Manage quotes and scope of work" action={{ label: 'New Proposal', onClick: () => setCreatingProposal(true) }} />
-      <div className="p-6 flex-1">
+      <div className="p-3 sm:p-6 flex-1">
 
         {/* Metric cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">

@@ -34,7 +34,7 @@ function InvoicePanel({ invoice, onClose, onUpdateStatus }: { invoice: Invoice; 
       <div className="flex-1" onClick={onClose} style={{ pointerEvents: 'auto' }} />
       <div
         className="pointer-events-auto flex flex-col shadow-2xl border-l border-gray-200 bg-white"
-        style={{ width: 400, height: '100vh' }}
+        style={{ width: 'min(400px, 100vw)', height: '100vh' }}
       >
         {/* Dark green header */}
         <div className="flex-shrink-0 p-5 border-b border-white/10" style={{ background: '#012b1e' }}>
@@ -228,7 +228,7 @@ export default function BillingPage() {
   return (
     <>
       <Header title="Billing & Revenue" subtitle="Invoices, payments, and revenue tracking" action={{ label: 'Create Invoice', onClick: () => setCreatingInvoice(true) }} />
-      <div className="p-6 flex-1">
+      <div className="p-3 sm:p-6 flex-1">
 
         {/* Metric cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">

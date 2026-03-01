@@ -198,7 +198,7 @@ function TicketPanel({
       <div className="flex-1" onClick={onClose} style={{ pointerEvents: 'auto' }} />
       <div
         className="pointer-events-auto flex flex-col shadow-2xl border-l border-gray-200 bg-white"
-        style={{ width: 480, height: '100vh' }}
+        style={{ width: 'min(480px, 100vw)', height: '100vh' }}
       >
         {/* Header */}
         <div className="flex-shrink-0 p-5 border-b border-white/10" style={{ background: '#012b1e' }}>
@@ -434,7 +434,7 @@ export default function TicketsPage() {
         subtitle="Client requests and support conversations"
         action={{ label: 'New Ticket', onClick: () => setCreatingTicket(true) }}
       />
-      <div className="p-6 flex-1">
+      <div className="p-3 sm:p-6 flex-1">
 
         {/* Info banner — Tickets concept */}
         <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl mb-5">

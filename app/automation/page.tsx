@@ -271,7 +271,7 @@ export default function AutomationPage() {
         subtitle="Triggers, actions, and workflow automation"
         action={{ label: 'New Automation', onClick: () => setCreatingAutomation(true) }}
       />
-      <div className="p-6 flex-1">
+      <div className="p-3 sm:p-6 flex-1">
 
         {/* Summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

@@ -587,7 +587,7 @@ export default function ProjectsPage() {
   return (
     <>
       <Header title="Projects" subtitle="Track delivery across all service lines" action={{ label: 'New Project' }} />
-      <div className="p-6 flex-1">
+      <div className="p-3 sm:p-6 flex-1">
 
         {/* Summary Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { invoices, contracts, revenueByMonth } from '@/lib/data'
+import { invoices as seedInvoices, contracts, revenueByMonth } from '@/lib/data'
 import { formatCurrency, invoiceStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
+import NewInvoicePanel, { type NewInvoiceFormData } from '@/components/crm/NewInvoicePanel'
 import type { Invoice, InvoiceStatus } from '@/lib/types'
 import {
   DollarSign, AlertCircle, CheckCircle, Clock, Send, RefreshCw,
@@ -21,9 +22,9 @@ const statusIcons: Record<InvoiceStatus, React.ReactNode> = {
   Paid: <CheckCircle size={14} className="text-emerald-500" />,
 }
 
-function InvoicePanel({ invoice, onClose }: { invoice: Invoice; onClose: () => void }) {
+function InvoicePanel({ invoice, onClose, onUpdateStatus }: { invoice: Invoice; onClose: () => void; onUpdateStatus: (id: string, status: InvoiceStatus) => void }) {
   const linkedContract = contracts.find(c => c.id === invoice.contractId)
-  const relatedInvoices = invoices.filter(i => i.contractId === invoice.contractId && i.id !== invoice.id)
+  const relatedInvoices = seedInvoices.filter(i => i.contractId === invoice.contractId && i.id !== invoice.id)
   const isOverdue = invoice.status === 'Overdue'
   const isPaid = invoice.status === 'Paid'
 
@@ -129,17 +130,29 @@ function InvoicePanel({ invoice, onClose }: { invoice: Invoice; onClose: () => v
         {/* Footer */}
         <div className="flex-shrink-0 p-4 border-t border-gray-100 flex gap-2">
           {invoice.status === 'Pending' && (
-            <button className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
+            <button
+              onClick={() => onUpdateStatus(invoice.id, 'Sent')}
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              style={{ background: '#015035' }}
+            >
               Send Invoice
             </button>
           )}
           {invoice.status === 'Sent' && (
-            <button className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
+            <button
+              onClick={() => onUpdateStatus(invoice.id, 'Paid')}
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              style={{ background: '#015035' }}
+            >
               Mark as Paid
             </button>
           )}
           {invoice.status === 'Overdue' && (
-            <button className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#ef4444' }}>
+            <button
+              onClick={() => onUpdateStatus(invoice.id, 'Sent')}
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              style={{ background: '#ef4444' }}
+            >
               Send Reminder
             </button>
           )}
@@ -158,32 +171,62 @@ function InvoicePanel({ invoice, onClose }: { invoice: Invoice; onClose: () => v
 }
 
 export default function BillingPage() {
+  const [localInvoices, setLocalInvoices] = useState<Invoice[]>(seedInvoices)
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'All'>('All')
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
+  const [creatingInvoice, setCreatingInvoice] = useState(false)
 
-  const filtered = statusFilter === 'All' ? invoices : invoices.filter(i => i.status === statusFilter)
+  function updateInvoiceStatus(id: string, status: InvoiceStatus) {
+    const today = new Date().toISOString().split('T')[0]
+    setLocalInvoices(prev => prev.map(i => {
+      if (i.id !== id) return i
+      return { ...i, status, ...(status === 'Paid' ? { paidDate: today } : {}) }
+    }))
+    setSelectedInvoice(prev => {
+      if (!prev || prev.id !== id) return prev
+      return { ...prev, status, ...(status === 'Paid' ? { paidDate: today } : {}) }
+    })
+  }
+
+  function handleNewInvoice(data: NewInvoiceFormData) {
+    const today = new Date().toISOString().split('T')[0]
+    const newInvoice: Invoice = {
+      id: `inv-${Date.now()}`,
+      contractId: data.contractId || `ct-standalone-${Date.now()}`,
+      company: data.company,
+      amount: Number(data.amount),
+      status: 'Pending',
+      dueDate: data.dueDate,
+      issuedDate: today,
+      serviceType: data.serviceType,
+    }
+    setLocalInvoices(prev => [newInvoice, ...prev])
+    setCreatingInvoice(false)
+  }
+
+  const filtered = statusFilter === 'All' ? localInvoices : localInvoices.filter(i => i.status === statusFilter)
   const maxRevenue = Math.max(...revenueByMonth.map(r => r.revenue))
 
   const metrics = {
     awaitingInvoice: contracts.filter(c => c.status === 'Fully Executed').length,
-    sent: invoices.filter(i => i.status === 'Sent').length,
-    overdue: invoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + i.amount, 0),
-    collected: invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0),
-    outstanding: invoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0),
+    sent: localInvoices.filter(i => i.status === 'Sent').length,
+    overdue: localInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + i.amount, 0),
+    collected: localInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0),
+    outstanding: localInvoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0),
     mrr: 3417,
   }
 
   // Revenue by service breakdown (computed from invoices)
   const serviceBreakdown = [
-    { service: 'Website', amount: invoices.filter(i => i.serviceType === 'Website' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
-    { service: 'SEO', amount: invoices.filter(i => i.serviceType === 'SEO' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
-    { service: 'Email Marketing', amount: invoices.filter(i => i.serviceType === 'Email Marketing' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
+    { service: 'Website', amount: localInvoices.filter(i => i.serviceType === 'Website' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
+    { service: 'SEO', amount: localInvoices.filter(i => i.serviceType === 'SEO' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
+    { service: 'Email Marketing', amount: localInvoices.filter(i => i.serviceType === 'Email Marketing' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
   ].filter(s => s.amount > 0)
   const maxService = Math.max(...serviceBreakdown.map(s => s.amount))
 
   return (
     <>
-      <Header title="Billing & Revenue" subtitle="Invoices, payments, and revenue tracking" action={{ label: 'Create Invoice' }} />
+      <Header title="Billing & Revenue" subtitle="Invoices, payments, and revenue tracking" action={{ label: 'Create Invoice', onClick: () => setCreatingInvoice(true) }} />
       <div className="p-6 flex-1">
 
         {/* Metric cards */}
@@ -350,13 +393,22 @@ export default function BillingPage() {
                     <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                       <div className="flex gap-1.5">
                         {inv.status === 'Pending' && (
-                          <button className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors">Send</button>
+                          <button
+                            onClick={() => updateInvoiceStatus(inv.id, 'Sent')}
+                            className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors"
+                          >Send</button>
                         )}
                         {inv.status === 'Sent' && (
-                          <button className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md hover:bg-emerald-100 transition-colors">Mark Paid</button>
+                          <button
+                            onClick={() => updateInvoiceStatus(inv.id, 'Paid')}
+                            className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md hover:bg-emerald-100 transition-colors"
+                          >Mark Paid</button>
                         )}
                         {inv.status === 'Overdue' && (
-                          <button className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-md hover:bg-red-100 transition-colors">Send Reminder</button>
+                          <button
+                            onClick={() => updateInvoiceStatus(inv.id, 'Sent')}
+                            className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-md hover:bg-red-100 transition-colors"
+                          >Send Reminder</button>
                         )}
                         {inv.status === 'Paid' && (
                           <span className="text-xs text-emerald-600 flex items-center gap-1">
@@ -376,7 +428,16 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {selectedInvoice && <InvoicePanel invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} />}
+      {selectedInvoice && (
+        <InvoicePanel
+          invoice={selectedInvoice}
+          onClose={() => setSelectedInvoice(null)}
+          onUpdateStatus={updateInvoiceStatus}
+        />
+      )}
+      {creatingInvoice && (
+        <NewInvoicePanel onSave={handleNewInvoice} onClose={() => setCreatingInvoice(false)} />
+      )}
     </>
   )
 }

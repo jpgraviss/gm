@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { proposals, deals, contracts } from '@/lib/data'
+import { proposals as seedProposals, deals, contracts } from '@/lib/data'
 import { formatCurrency, proposalStatusColors, serviceTypeColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
+import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
 import type { Proposal, ProposalStatus } from '@/lib/types'
 import {
   Eye, Send, CheckCircle, XCircle, FileText, DollarSign, Calendar, User, X,
@@ -22,7 +23,7 @@ const statusIcons: Record<ProposalStatus, React.ReactNode> = {
   Declined: <XCircle size={13} />,
 }
 
-function ProposalPanel({ proposal, onClose }: { proposal: Proposal; onClose: () => void }) {
+function ProposalPanel({ proposal, onClose, onUpdateStatus }: { proposal: Proposal; onClose: () => void; onUpdateStatus: (id: string, status: ProposalStatus) => void }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'scope' | 'activity'>('overview')
 
   const deal = deals.find(d => d.id === proposal.dealId)
@@ -312,28 +313,55 @@ function ProposalPanel({ proposal, onClose }: { proposal: Proposal; onClose: () 
         {/* Footer actions */}
         <div className="flex-shrink-0 p-4 border-t border-gray-100 flex gap-2">
           {proposal.status === 'Draft' && (
-            <button className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
+            <button
+              onClick={() => onUpdateStatus(proposal.id, 'Sent')}
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              style={{ background: '#015035' }}
+            >
               Send to Client
             </button>
           )}
-          {proposal.status === 'Viewed' && (
-            <button className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
-              Send Follow-Up
+          {proposal.status === 'Sent' && (
+            <button
+              onClick={() => onUpdateStatus(proposal.id, 'Viewed')}
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              style={{ background: '#3b82f6' }}
+            >
+              Mark as Viewed
             </button>
           )}
+          {proposal.status === 'Viewed' && (
+            <>
+              <button
+                onClick={() => onUpdateStatus(proposal.id, 'Accepted')}
+                className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+                style={{ background: '#015035' }}
+              >
+                Mark Accepted
+              </button>
+              <button
+                onClick={() => onUpdateStatus(proposal.id, 'Declined')}
+                className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+                style={{ background: '#ef4444' }}
+              >
+                Mark Declined
+              </button>
+            </>
+          )}
           {proposal.status === 'Accepted' && !linkedContract && (
-            <button className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
-              Generate Contract
-            </button>
+            <Link
+              href="/contracts"
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold text-center transition-opacity hover:opacity-90"
+              style={{ background: '#015035' }}
+            >
+              Go to Contracts →
+            </Link>
           )}
           {proposal.status === 'Accepted' && linkedContract && (
             <Link href="/contracts" className="flex-1 py-2 rounded-xl text-white text-xs font-semibold text-center transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
               View Contract
             </Link>
           )}
-          <button className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors">
-            Edit
-          </button>
           <button onClick={onClose} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors">
             Close
           </button>
@@ -344,26 +372,68 @@ function ProposalPanel({ proposal, onClose }: { proposal: Proposal; onClose: () 
 }
 
 export default function ProposalsPage() {
+  const [localProposals, setLocalProposals] = useState<Proposal[]>(seedProposals)
   const [selected, setSelected] = useState<Proposal | null>(null)
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'All'>('All')
+  const [creatingProposal, setCreatingProposal] = useState(false)
 
-  const filtered = statusFilter === 'All' ? proposals : proposals.filter(p => p.status === statusFilter)
+  function updateProposalStatus(id: string, status: ProposalStatus) {
+    const today = new Date().toISOString().split('T')[0]
+    setLocalProposals(prev => prev.map(p => {
+      if (p.id !== id) return p
+      return {
+        ...p,
+        status,
+        ...(status === 'Sent' ? { sentDate: today } : {}),
+        ...(status === 'Viewed' ? { viewedDate: today } : {}),
+        ...(['Accepted', 'Declined'].includes(status) ? { respondedDate: today } : {}),
+      }
+    }))
+    setSelected(prev => {
+      if (!prev || prev.id !== id) return prev
+      return {
+        ...prev,
+        status,
+        ...(status === 'Sent' ? { sentDate: today } : {}),
+        ...(status === 'Viewed' ? { viewedDate: today } : {}),
+        ...(['Accepted', 'Declined'].includes(status) ? { respondedDate: today } : {}),
+      }
+    })
+  }
+
+  function handleNewProposal(data: NewProposalFormData) {
+    const newProposal: Proposal = {
+      id: `prop-${Date.now()}`,
+      dealId: '',
+      company: data.company,
+      status: 'Draft',
+      value: Number(data.value),
+      serviceType: data.serviceType,
+      assignedRep: data.assignedRep,
+      createdDate: new Date().toISOString().split('T')[0],
+      items: [],
+    }
+    setLocalProposals(prev => [newProposal, ...prev])
+    setCreatingProposal(false)
+  }
+
+  const filtered = statusFilter === 'All' ? localProposals : localProposals.filter(p => p.status === statusFilter)
 
   const counts = statusOrder.reduce((acc, s) => {
-    acc[s] = proposals.filter(p => p.status === s).length
+    acc[s] = localProposals.filter(p => p.status === s).length
     return acc
   }, {} as Record<ProposalStatus, number>)
 
-  const pipelineValue = proposals
+  const pipelineValue = localProposals
     .filter(p => !['Accepted', 'Declined'].includes(p.status))
     .reduce((s, p) => s + p.value, 0)
 
-  const acceptedValue = proposals
+  const acceptedValue = localProposals
     .filter(p => p.status === 'Accepted')
     .reduce((s, p) => s + p.value, 0)
 
   const metrics = [
-    { label: 'Total Proposals', value: proposals.length.toString(), icon: <FileText size={16} />, color: '#6b7280', sub: 'All time' },
+    { label: 'Total Proposals', value: localProposals.length.toString(), icon: <FileText size={16} />, color: '#6b7280', sub: 'All time' },
     { label: 'Open Pipeline', value: formatCurrency(pipelineValue), icon: <TrendingUp size={16} />, color: '#3b82f6', sub: 'Draft + Sent + Viewed' },
     { label: 'Accepted Value', value: formatCurrency(acceptedValue), icon: <CheckCircle size={16} />, color: '#22c55e', sub: 'Ready for contract' },
     { label: 'Needs Follow-Up', value: counts['Viewed'].toString(), icon: <AlertTriangle size={16} />, color: '#f59e0b', sub: 'Client has viewed' },
@@ -371,7 +441,7 @@ export default function ProposalsPage() {
 
   return (
     <>
-      <Header title="Proposals" subtitle="Manage quotes and scope of work" action={{ label: 'New Proposal' }} />
+      <Header title="Proposals" subtitle="Manage quotes and scope of work" action={{ label: 'New Proposal', onClick: () => setCreatingProposal(true) }} />
       <div className="p-6 flex-1">
 
         {/* Metric cards */}
@@ -448,7 +518,10 @@ export default function ProposalsPage() {
                   <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
                       {p.status === 'Draft' && (
-                        <button className="text-xs font-medium text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors">
+                        <button
+                          onClick={() => updateProposalStatus(p.id, 'Sent')}
+                          className="text-xs font-medium text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                        >
                           Send
                         </button>
                       )}
@@ -456,14 +529,17 @@ export default function ProposalsPage() {
                         <span className="text-xs text-gray-400">Awaiting view</span>
                       )}
                       {p.status === 'Viewed' && (
-                        <span className="text-xs text-orange-500 font-medium flex items-center gap-1">
-                          <AlertTriangle size={11} /> Follow up!
-                        </span>
+                        <button
+                          onClick={() => updateProposalStatus(p.id, 'Accepted')}
+                          className="text-xs font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-md hover:bg-emerald-50 transition-colors"
+                        >
+                          Accept
+                        </button>
                       )}
                       {p.status === 'Accepted' && (
-                        <button className="text-xs font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-md hover:bg-emerald-50 transition-colors">
-                          Create Contract
-                        </button>
+                        <Link href="/contracts" className="text-xs font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-md hover:bg-emerald-50 transition-colors">
+                          Contract →
+                        </Link>
                       )}
                       {p.status === 'Declined' && (
                         <span className="text-xs text-gray-400">Closed</span>
@@ -480,7 +556,16 @@ export default function ProposalsPage() {
         </div>
       </div>
 
-      {selected && <ProposalPanel proposal={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <ProposalPanel
+          proposal={selected}
+          onClose={() => setSelected(null)}
+          onUpdateStatus={updateProposalStatus}
+        />
+      )}
+      {creatingProposal && (
+        <NewProposalPanel onSave={handleNewProposal} onClose={() => setCreatingProposal(false)} />
+      )}
     </>
   )
 }

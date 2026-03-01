@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { projects, crmContacts } from '@/lib/data'
+import { projects } from '@/lib/data'
+import NewTicketPanel, { type NewTicketFormData } from '@/components/crm/NewTicketPanel'
 import { formatDate } from '@/lib/utils'
 import {
   MessageSquare, CheckCircle, Clock, AlertTriangle, X, ExternalLink,
@@ -171,13 +172,26 @@ const allStatuses: TicketStatus[] = ['Open', 'In Progress', 'Waiting on Client',
 
 // ─── Ticket Panel ─────────────────────────────────────────────────────────────
 
-function TicketPanel({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
+function TicketPanel({
+  ticket, onClose, onSendReply, onUpdateStatus,
+}: {
+  ticket: Ticket
+  onClose: () => void
+  onSendReply: (id: string, body: string, isInternal: boolean) => void
+  onUpdateStatus: (id: string, status: TicketStatus) => void
+}) {
   const [reply, setReply] = useState('')
   const [showInternal, setShowInternal] = useState(true)
 
   const linkedProject = ticket.projectId ? projects.find(p => p.id === ticket.projectId) : null
   const cfg = statusConfig[ticket.status]
   const priCfg = priorityConfig[ticket.priority]
+
+  function handleSend(isInternal: boolean) {
+    if (!reply.trim()) return
+    onSendReply(ticket.id, reply.trim(), isInternal)
+    setReply('')
+  }
 
   return (
     <div className="pointer-events-none fixed inset-0 z-40 flex">
@@ -316,17 +330,28 @@ function TicketPanel({ ticket, onClose }: { ticket: Ticket; onClose: () => void 
           </div>
           <div className="flex items-center gap-2 mt-2">
             <button
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              onClick={() => handleSend(false)}
+              disabled={!reply.trim()}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-40"
               style={{ background: '#015035' }}
             >
               <Send size={12} /> Send Reply
             </button>
-            <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-300 text-amber-700 bg-amber-50 text-xs font-semibold hover:bg-amber-100 transition-colors">
+            <button
+              onClick={() => handleSend(true)}
+              disabled={!reply.trim()}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-300 text-amber-700 bg-amber-50 text-xs font-semibold hover:bg-amber-100 transition-colors disabled:opacity-40"
+            >
               Add Internal Note
             </button>
-            <button className="ml-auto flex items-center gap-1 px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors">
-              <CheckCircle size={12} /> Resolve
-            </button>
+            {ticket.status !== 'Resolved' && ticket.status !== 'Closed' && (
+              <button
+                onClick={() => onUpdateStatus(ticket.id, 'Resolved')}
+                className="ml-auto flex items-center gap-1 px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors"
+              >
+                <CheckCircle size={12} /> Resolve
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -337,25 +362,77 @@ function TicketPanel({ ticket, onClose }: { ticket: Ticket; onClose: () => void 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TicketsPage() {
+  const [localTickets, setLocalTickets] = useState<Ticket[]>(tickets)
   const [selected, setSelected] = useState<Ticket | null>(null)
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'All'>('All')
+  const [creatingTicket, setCreatingTicket] = useState(false)
 
-  const filtered = statusFilter === 'All' ? tickets : tickets.filter(t => t.status === statusFilter)
+  function sendReply(id: string, body: string, isInternal: boolean) {
+    const now = new Date()
+    const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
+    const newMsg: TicketMessage = {
+      id: `m-${Date.now()}`,
+      author: 'You',
+      isInternal,
+      body,
+      timestamp,
+    }
+    setLocalTickets(prev => prev.map(t =>
+      t.id === id ? { ...t, messages: [...t.messages, newMsg], updatedDate: now.toISOString().split('T')[0] } : t
+    ))
+    setSelected(prev => prev?.id === id ? { ...prev, messages: [...prev.messages, newMsg] } : prev)
+  }
+
+  function updateTicketStatus(id: string, status: TicketStatus) {
+    setLocalTickets(prev => prev.map(t => t.id === id ? { ...t, status } : t))
+    setSelected(prev => prev?.id === id ? { ...prev, status } : prev)
+  }
+
+  function handleNewTicket(data: NewTicketFormData) {
+    const today = new Date().toISOString().split('T')[0]
+    const timestamp = new Date().toLocaleString('en-CA', { hour12: false }).replace(',', '').slice(0, 16)
+    const newTicket: Ticket = {
+      id: `tkt-${String(localTickets.length + 1).padStart(3, '0')}`,
+      subject: data.subject,
+      company: data.company,
+      contactName: data.contactName,
+      contactEmail: data.contactEmail,
+      status: 'Open',
+      priority: data.priority,
+      source: 'Internal',
+      serviceType: data.serviceType,
+      createdDate: today,
+      updatedDate: today,
+      assignedTo: data.assignedTo || undefined,
+      tags: [],
+      messages: data.body ? [{
+        id: `m-${Date.now()}`,
+        author: data.contactName,
+        isInternal: false,
+        body: data.body,
+        timestamp,
+      }] : [],
+    }
+    setLocalTickets(prev => [newTicket, ...prev])
+    setCreatingTicket(false)
+  }
+
+  const filtered = statusFilter === 'All' ? localTickets : localTickets.filter(t => t.status === statusFilter)
 
   const counts = allStatuses.reduce((acc, s) => {
-    acc[s] = tickets.filter(t => t.status === s).length
+    acc[s] = localTickets.filter(t => t.status === s).length
     return acc
   }, {} as Record<TicketStatus, number>)
 
-  const openUrgent = tickets.filter(t => t.status === 'Open' && t.priority === 'Urgent').length
-  const unassigned = tickets.filter(t => !t.assignedTo && t.status !== 'Resolved' && t.status !== 'Closed').length
+  const openUrgent = localTickets.filter(t => t.status === 'Open' && t.priority === 'Urgent').length
+  const unassigned = localTickets.filter(t => !t.assignedTo && t.status !== 'Resolved' && t.status !== 'Closed').length
 
   return (
     <>
       <Header
         title="Tickets"
         subtitle="Client requests and support conversations"
-        action={{ label: 'New Ticket' }}
+        action={{ label: 'New Ticket', onClick: () => setCreatingTicket(true) }}
       />
       <div className="p-6 flex-1">
 
@@ -373,7 +450,7 @@ export default function TicketsPage() {
         {/* Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
           {[
-            { label: 'All', value: tickets.length, color: '#6b7280', icon: <MessageSquare size={14} /> },
+            { label: 'All', value: localTickets.length, color: '#6b7280', icon: <MessageSquare size={14} /> },
             { label: 'Open', value: counts['Open'], color: '#3b82f6', icon: <Circle size={14} /> },
             { label: 'In Progress', value: counts['In Progress'], color: '#f59e0b', icon: <Clock size={14} /> },
             { label: 'Waiting on Client', value: counts['Waiting on Client'], color: '#8b5cf6', icon: <User size={14} /> },
@@ -413,7 +490,7 @@ export default function TicketsPage() {
 
         {/* Filter tabs */}
         <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <button onClick={() => setStatusFilter('All')} className={`tab-btn ${statusFilter === 'All' ? 'active' : ''}`}>All ({tickets.length})</button>
+          <button onClick={() => setStatusFilter('All')} className={`tab-btn ${statusFilter === 'All' ? 'active' : ''}`}>All ({localTickets.length})</button>
           {allStatuses.map(s => (
             <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn ${statusFilter === s ? 'active' : ''}`}>
               {s} ({counts[s]})
@@ -507,7 +584,17 @@ export default function TicketsPage() {
         </div>
       </div>
 
-      {selected && <TicketPanel ticket={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <TicketPanel
+          ticket={selected}
+          onClose={() => setSelected(null)}
+          onSendReply={sendReply}
+          onUpdateStatus={updateTicketStatus}
+        />
+      )}
+      {creatingTicket && (
+        <NewTicketPanel onSave={handleNewTicket} onClose={() => setCreatingTicket(false)} />
+      )}
     </>
   )
 }

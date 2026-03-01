@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { contracts, invoices, projects, proposals } from '@/lib/data'
+import { contracts as seedContracts, invoices, projects, proposals } from '@/lib/data'
 import { formatCurrency, contractStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
+import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
 import type { Contract, ContractStatus } from '@/lib/types'
 import {
   X, CheckCircle, Clock, AlertCircle, ScrollText, Calendar, DollarSign, User,
@@ -16,7 +17,7 @@ const allStatuses: ContractStatus[] = [
   'Draft', 'Sent', 'Viewed', 'Signed by Client', 'Countersign Needed', 'Fully Executed', 'Expired',
 ]
 
-function ContractPanel({ contract, onClose }: { contract: Contract; onClose: () => void }) {
+function ContractPanel({ contract, onClose, onUpdateStatus }: { contract: Contract; onClose: () => void; onUpdateStatus: (id: string, status: ContractStatus) => void }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'project'>('overview')
 
   const linkedInvoices = invoices.filter(i => i.contractId === contract.id)
@@ -328,24 +329,42 @@ function ContractPanel({ contract, onClose }: { contract: Contract; onClose: () 
 
         {/* Footer actions */}
         <div className="flex-shrink-0 p-4 border-t border-gray-100 flex gap-2">
-          {contract.status === 'Countersign Needed' && (
-            <button className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
-              Countersign Now
-            </button>
-          )}
-          {contract.status === 'Fully Executed' && (
-            <button className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
-              Generate Invoice
-            </button>
-          )}
           {contract.status === 'Draft' && (
-            <button className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
+            <button
+              onClick={() => onUpdateStatus(contract.id, 'Sent')}
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              style={{ background: '#015035' }}
+            >
               Send for Signature
             </button>
           )}
-          <button className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors">
-            Edit
-          </button>
+          {contract.status === 'Sent' && (
+            <button
+              onClick={() => onUpdateStatus(contract.id, 'Signed by Client')}
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              style={{ background: '#3b82f6' }}
+            >
+              Mark Client Signed
+            </button>
+          )}
+          {(contract.status === 'Signed by Client' || contract.status === 'Countersign Needed') && (
+            <button
+              onClick={() => onUpdateStatus(contract.id, 'Fully Executed')}
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              style={{ background: '#015035' }}
+            >
+              Countersign & Execute
+            </button>
+          )}
+          {contract.status === 'Fully Executed' && (
+            <Link
+              href="/billing"
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold text-center transition-opacity hover:opacity-90"
+              style={{ background: '#015035' }}
+            >
+              Go to Billing →
+            </Link>
+          )}
           <button onClick={onClose} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors">
             Close
           </button>
@@ -356,30 +375,76 @@ function ContractPanel({ contract, onClose }: { contract: Contract; onClose: () 
 }
 
 export default function ContractsPage() {
+  const [localContracts, setLocalContracts] = useState<Contract[]>(seedContracts)
   const [selected, setSelected] = useState<Contract | null>(null)
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'All'>('All')
+  const [creatingContract, setCreatingContract] = useState(false)
 
-  const filtered = statusFilter === 'All' ? contracts : contracts.filter(c => c.status === statusFilter)
+  function updateContractStatus(id: string, status: ContractStatus) {
+    const today = new Date().toISOString().split('T')[0]
+    setLocalContracts(prev => prev.map(c => {
+      if (c.id !== id) return c
+      return {
+        ...c,
+        status,
+        ...(status === 'Signed by Client' ? { clientSigned: today } : {}),
+        ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
+      }
+    }))
+    setSelected(prev => {
+      if (!prev || prev.id !== id) return prev
+      return {
+        ...prev,
+        status,
+        ...(status === 'Signed by Client' ? { clientSigned: today } : {}),
+        ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
+      }
+    })
+  }
+
+  function handleNewContract(data: NewContractFormData) {
+    const startDate = data.startDate
+    const renewalDate = (() => {
+      const d = new Date(startDate)
+      d.setMonth(d.getMonth() + Number(data.duration))
+      return d.toISOString().split('T')[0]
+    })()
+    const newContract: Contract = {
+      id: `ct-${Date.now()}`,
+      company: data.company,
+      status: 'Draft',
+      value: Number(data.value),
+      serviceType: data.serviceType,
+      assignedRep: data.assignedRep,
+      billingStructure: data.billingStructure,
+      duration: Number(data.duration),
+      startDate,
+      renewalDate,
+    }
+    setLocalContracts(prev => [newContract, ...prev])
+    setCreatingContract(false)
+  }
+
+  const filtered = statusFilter === 'All' ? localContracts : localContracts.filter(c => c.status === statusFilter)
 
   const statusCounts = allStatuses.reduce((acc, s) => {
-    acc[s] = contracts.filter(c => c.status === s).length
+    acc[s] = localContracts.filter(c => c.status === s).length
     return acc
   }, {} as Record<ContractStatus, number>)
 
-  const activeValue = contracts.filter(c => c.status === 'Fully Executed').reduce((s, c) => s + c.value, 0)
-  const pendingSig = contracts.filter(c => ['Sent', 'Viewed', 'Signed by Client', 'Countersign Needed'].includes(c.status)).length
-  const mrr = invoices.filter(i => i.status !== 'Overdue').reduce((s, i) => s + (i.amount < 5000 ? i.amount : 0), 0)
+  const activeValue = localContracts.filter(c => c.status === 'Fully Executed').reduce((s, c) => s + c.value, 0)
+  const pendingSig = localContracts.filter(c => ['Sent', 'Viewed', 'Signed by Client', 'Countersign Needed'].includes(c.status)).length
 
   const metrics = [
     { label: 'Active Contracts', value: statusCounts['Fully Executed'].toString(), icon: <Shield size={16} />, color: '#22c55e', sub: 'Fully executed' },
     { label: 'Pending Signature', value: pendingSig.toString(), icon: <ScrollText size={16} />, color: '#f59e0b', sub: 'Awaiting sig' },
-    { label: 'Total Contract Value', value: formatCurrency(contracts.reduce((s, c) => s + c.value, 0)), icon: <DollarSign size={16} />, color: '#015035', sub: 'All contracts' },
+    { label: 'Total Contract Value', value: formatCurrency(localContracts.reduce((s, c) => s + c.value, 0)), icon: <DollarSign size={16} />, color: '#015035', sub: 'All contracts' },
     { label: 'Executed Value', value: formatCurrency(activeValue), icon: <CheckCircle size={16} />, color: '#3b82f6', sub: 'Fully executed' },
   ]
 
   return (
     <>
-      <Header title="Contracts" subtitle="Track agreements and e-signatures" action={{ label: 'New Contract' }} />
+      <Header title="Contracts" subtitle="Track agreements and e-signatures" action={{ label: 'New Contract', onClick: () => setCreatingContract(true) }} />
       <div className="p-6 flex-1">
 
         {/* Metric cards */}
@@ -457,25 +522,34 @@ export default function ContractsPage() {
                       <span className="text-sm text-gray-500">{c.assignedRep}</span>
                     </td>
                     <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
-                      {c.status === 'Countersign Needed' && (
-                        <button className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded-md hover:bg-orange-100 transition-colors">
-                          Sign Now
+                      {c.status === 'Draft' && (
+                        <button
+                          onClick={() => updateContractStatus(c.id, 'Sent')}
+                          className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors"
+                        >
+                          Send
+                        </button>
+                      )}
+                      {c.status === 'Sent' && (
+                        <button
+                          onClick={() => updateContractStatus(c.id, 'Signed by Client')}
+                          className="text-xs font-medium text-blue-500 bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors"
+                        >
+                          Client Signed
+                        </button>
+                      )}
+                      {(c.status === 'Signed by Client' || c.status === 'Countersign Needed') && (
+                        <button
+                          onClick={() => updateContractStatus(c.id, 'Fully Executed')}
+                          className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded-md hover:bg-orange-100 transition-colors"
+                        >
+                          Countersign
                         </button>
                       )}
                       {c.status === 'Fully Executed' && (
                         <span className="flex items-center gap-1 text-xs text-emerald-600">
                           <CheckCircle size={12} /> Executed
                         </span>
-                      )}
-                      {c.status === 'Sent' && (
-                        <span className="flex items-center gap-1 text-xs text-blue-500">
-                          <Clock size={12} /> Awaiting
-                        </span>
-                      )}
-                      {c.status === 'Draft' && (
-                        <button className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors">
-                          Send
-                        </button>
                       )}
                     </td>
                   </tr>
@@ -489,7 +563,16 @@ export default function ContractsPage() {
         </div>
       </div>
 
-      {selected && <ContractPanel contract={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <ContractPanel
+          contract={selected}
+          onClose={() => setSelected(null)}
+          onUpdateStatus={updateContractStatus}
+        />
+      )}
+      {creatingContract && (
+        <NewContractPanel onSave={handleNewContract} onClose={() => setCreatingContract(false)} />
+      )}
     </>
   )
 }

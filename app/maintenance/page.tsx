@@ -329,7 +329,8 @@ export default function MaintenancePage() {
           <div className="px-4 py-3 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-gray-800">All Maintenance Records</h3>
           </div>
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px]">
             <thead>
               <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
                 <th className="text-left py-2.5 px-4 font-semibold">Company</th>
@@ -382,6 +383,7 @@ export default function MaintenancePage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 

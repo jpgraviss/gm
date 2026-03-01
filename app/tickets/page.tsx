@@ -489,10 +489,10 @@ export default function TicketsPage() {
         )}
 
         {/* Filter tabs */}
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <button onClick={() => setStatusFilter('All')} className={`tab-btn ${statusFilter === 'All' ? 'active' : ''}`}>All ({localTickets.length})</button>
+        <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-0.5">
+          <button onClick={() => setStatusFilter('All')} className={`tab-btn flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All ({localTickets.length})</button>
           {allStatuses.map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn ${statusFilter === s ? 'active' : ''}`}>
+            <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>
               {s} ({counts[s]})
             </button>
           ))}
@@ -500,16 +500,17 @@ export default function TicketsPage() {
 
         {/* Ticket list */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px]">
             <thead>
               <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
                 <th className="text-left py-2.5 px-4 font-semibold">Subject</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Company</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Company</th>
                 <th className="text-left py-2.5 px-4 font-semibold">Status</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Priority</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Assigned</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Service</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Created</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Priority</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Assigned</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Service</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Created</th>
                 <th className="py-2.5 px-4" />
               </tr>
             </thead>
@@ -527,7 +528,7 @@ export default function TicketsPage() {
                       <p className="text-sm font-semibold text-gray-900 leading-snug">{t.subject}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{t.id.toUpperCase()} · {t.source} · {t.messages.length} msg{t.messages.length !== 1 ? 's' : ''}</p>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden sm:table-cell">
                       <p className="text-sm text-gray-700 font-medium">{t.company}</p>
                       <p className="text-xs text-gray-400">{t.contactName}</p>
                     </td>
@@ -539,22 +540,22 @@ export default function TicketsPage() {
                         {cfg.icon} {t.status}
                       </span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden sm:table-cell">
                       <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: priCfg.color }}>
                         ● {t.priority}
                       </span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden md:table-cell">
                       {t.assignedTo ? (
                         <span className="text-xs text-gray-600">{t.assignedTo}</span>
                       ) : (
                         <span className="text-xs text-amber-500 font-medium">Unassigned</span>
                       )}
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden md:table-cell">
                       <span className="text-xs text-gray-500">{t.serviceType}</span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden lg:table-cell">
                       <span className="text-xs text-gray-400">{formatDate(t.createdDate)}</span>
                     </td>
                     <td className="py-3 px-4">
@@ -565,6 +566,7 @@ export default function TicketsPage() {
               })}
             </tbody>
           </table>
+          </div>
           {filtered.length === 0 && (
             <div className="py-12 text-center text-gray-400 text-sm">No tickets in this status</div>
           )}

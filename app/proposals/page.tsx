@@ -460,62 +460,63 @@ export default function ProposalsPage() {
 
         {/* Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <div className="flex items-center gap-2">
-              <button onClick={() => setStatusFilter('All')} className={`tab-btn ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 gap-3">
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
+              <button onClick={() => setStatusFilter('All')} className={`tab-btn flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
               {statusOrder.map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn ${statusFilter === s ? 'active' : ''}`}>{s}</button>
+                <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>{s}</button>
               ))}
             </div>
-            <span className="text-xs text-gray-400">
-              {filtered.length} proposals · {formatCurrency(filtered.reduce((s, p) => s + p.value, 0))}
+            <span className="text-xs text-gray-400 flex-shrink-0">
+              {filtered.length} · {formatCurrency(filtered.reduce((s, p) => s + p.value, 0))}
             </span>
           </div>
-          <table className="w-full">
-            <thead>
-              <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
-                <th className="text-left py-2.5 px-4 font-semibold">Company</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Status</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Service</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Value</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Rep</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Created</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(p => (
-                <tr
-                  key={p.id}
-                  className="hover:bg-gray-50 cursor-pointer transition-colors border-b border-gray-100 last:border-0"
-                  onClick={() => setSelected(p)}
-                >
-                  <td className="py-3 px-4">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{p.company}</p>
-                      <p className="text-xs text-gray-400">{p.id.toUpperCase()}</p>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <StatusBadge label={p.status} colorClass={proposalStatusColors[p.status]} />
-                  </td>
-                  <td className="py-3 px-4">
-                    <StatusBadge label={p.serviceType} colorClass={serviceTypeColors[p.serviceType]} />
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
-                      {formatCurrency(p.value)}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-sm text-gray-600">{p.assignedRep}</span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-xs text-gray-400">
-                      {new Date(p.createdDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px]">
+              <thead>
+                <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
+                  <th className="text-left py-2.5 px-4 font-semibold">Company</th>
+                  <th className="text-left py-2.5 px-4 font-semibold">Status</th>
+                  <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Service</th>
+                  <th className="text-left py-2.5 px-4 font-semibold">Value</th>
+                  <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Rep</th>
+                  <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Created</th>
+                  <th className="text-left py-2.5 px-4 font-semibold">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(p => (
+                  <tr
+                    key={p.id}
+                    className="hover:bg-gray-50 cursor-pointer transition-colors border-b border-gray-100 last:border-0"
+                    onClick={() => setSelected(p)}
+                  >
+                    <td className="py-3 px-4">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{p.company}</p>
+                        <p className="text-xs text-gray-400">{p.id.toUpperCase()}</p>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <StatusBadge label={p.status} colorClass={proposalStatusColors[p.status]} />
+                    </td>
+                    <td className="py-3 px-4 hidden sm:table-cell">
+                      <StatusBadge label={p.serviceType} colorClass={serviceTypeColors[p.serviceType]} />
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
+                        {formatCurrency(p.value)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 hidden md:table-cell">
+                      <span className="text-sm text-gray-600">{p.assignedRep}</span>
+                    </td>
+                    <td className="py-3 px-4 hidden lg:table-cell">
+                      <span className="text-xs text-gray-400">
+                        {new Date(p.createdDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
                       {p.status === 'Draft' && (
                         <button
@@ -548,8 +549,9 @@ export default function ProposalsPage() {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+                </tbody>
+            </table>
+          </div>
           {filtered.length === 0 && (
             <div className="py-12 text-center text-gray-400 text-sm">No proposals in this status</div>
           )}

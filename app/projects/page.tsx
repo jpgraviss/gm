@@ -609,7 +609,7 @@ export default function ProjectsPage() {
         </div>
 
         {/* Service Type Hub Tiles */}
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-5">
           <button
             onClick={() => setServiceFilter('All')}
             className={`metric-card text-left p-3 transition-all ${serviceFilter === 'All' ? 'ring-2 ring-green-800 ring-offset-1' : ''}`}
@@ -646,7 +646,7 @@ export default function ProjectsPage() {
         </div>
 
         {/* Filter bar */}
-        <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1">
           <div className="flex gap-1">
             <button onClick={() => setView('grouped')} className={`tab-btn ${view === 'grouped' ? 'active' : ''}`}>
               <span className="flex items-center gap-1.5"><LayoutList size={13} /> Grouped</span>

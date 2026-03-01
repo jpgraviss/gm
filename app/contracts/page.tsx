@@ -638,28 +638,28 @@ export default function ContractsPage() {
 
         {/* Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button onClick={() => setStatusFilter('All')} className={`tab-btn ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 gap-3">
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
+              <button onClick={() => setStatusFilter('All')} className={`tab-btn flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
               {allStatuses.map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn ${statusFilter === s ? 'active' : ''}`}>{s}</button>
+                <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>{s}</button>
               ))}
             </div>
             <span className="text-xs text-gray-400 flex-shrink-0">
-              {filtered.length} contracts · {formatCurrency(filtered.reduce((s, c) => s + c.value, 0))}
+              {filtered.length} · {formatCurrency(filtered.reduce((s, c) => s + c.value, 0))}
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[560px]">
               <thead>
                 <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
                   <th className="text-left py-2.5 px-4 font-semibold">Company</th>
                   <th className="text-left py-2.5 px-4 font-semibold">Status</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Service</th>
+                  <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Service</th>
                   <th className="text-left py-2.5 px-4 font-semibold">Value</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Billing</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Renewal</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Rep</th>
+                  <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Billing</th>
+                  <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Renewal</th>
+                  <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Rep</th>
                   <th className="text-left py-2.5 px-4 font-semibold">Action</th>
                 </tr>
               </thead>
@@ -679,7 +679,7 @@ export default function ContractsPage() {
                     <td className="py-3 px-4">
                       <StatusBadge label={c.status} colorClass={contractStatusColors[c.status]} />
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden sm:table-cell">
                       <StatusBadge label={c.serviceType} colorClass={serviceTypeColors[c.serviceType]} />
                     </td>
                     <td className="py-3 px-4">
@@ -687,13 +687,13 @@ export default function ContractsPage() {
                         {formatCurrency(c.value)}
                       </span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden md:table-cell">
                       <span className="text-sm text-gray-600">{c.billingStructure}</span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden md:table-cell">
                       <span className="text-xs text-gray-500">{formatDate(c.renewalDate)}</span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden lg:table-cell">
                       <span className="text-sm text-gray-500">{c.assignedRep}</span>
                     </td>
                     <td className="py-3 px-4" onClick={e => e.stopPropagation()}>

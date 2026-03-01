@@ -390,32 +390,32 @@ export default function BillingPage() {
 
         {/* Invoice Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <button onClick={() => setStatusFilter('All')} className={`tab-btn ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
-                {statuses.map(s => (
-                  <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn ${statusFilter === s ? 'active' : ''}`}>
-                    <span className="flex items-center gap-1.5">
-                      {statusIcons[s]} {s}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <span className="text-xs text-gray-400">
-                {filtered.length} invoices · {formatCurrency(filtered.reduce((s, i) => s + i.amount, 0))}
-              </span>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 gap-3">
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
+              <button onClick={() => setStatusFilter('All')} className={`tab-btn flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
+              {statuses.map(s => (
+                <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>
+                  <span className="flex items-center gap-1.5">
+                    {statusIcons[s]} {s}
+                  </span>
+                </button>
+              ))}
             </div>
-            <table className="w-full">
+            <span className="text-xs text-gray-400 flex-shrink-0">
+              {filtered.length} · {formatCurrency(filtered.reduce((s, i) => s + i.amount, 0))}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px]">
               <thead>
                 <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
                   <th className="text-left py-2.5 px-4 font-semibold">Company</th>
                   <th className="text-left py-2.5 px-4 font-semibold">Status</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Service</th>
+                  <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Service</th>
                   <th className="text-left py-2.5 px-4 font-semibold">Amount</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Issued</th>
+                  <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Issued</th>
                   <th className="text-left py-2.5 px-4 font-semibold">Due</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Paid</th>
+                  <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Paid</th>
                   <th className="text-left py-2.5 px-4 font-semibold">Action</th>
                 </tr>
               </thead>
@@ -435,7 +435,7 @@ export default function BillingPage() {
                     <td className="py-3 px-4">
                       <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden sm:table-cell">
                       <StatusBadge label={inv.serviceType} colorClass={serviceTypeColors[inv.serviceType]} />
                     </td>
                     <td className="py-3 px-4">
@@ -443,7 +443,7 @@ export default function BillingPage() {
                         {formatCurrency(inv.amount)}
                       </span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden md:table-cell">
                       <span className="text-xs text-gray-500">{formatDate(inv.issuedDate)}</span>
                     </td>
                     <td className="py-3 px-4">
@@ -451,7 +451,7 @@ export default function BillingPage() {
                         {formatDate(inv.dueDate)}
                       </span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden md:table-cell">
                       {inv.paidDate
                         ? <span className="text-xs text-emerald-600">{formatDate(inv.paidDate)}</span>
                         : <span className="text-xs text-gray-300">—</span>}

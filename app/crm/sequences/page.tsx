@@ -447,37 +447,11 @@ export default function SequencesPage() {
 
   const filtered = statusFilter === 'All' ? sequences : sequences.filter(s => s.status === statusFilter)
 
-  const totalEnrolled = sequences.reduce((s, q) => s + q.enrolledCount, 0)
-  const avgOpenRate = Math.round(
-    sequences.filter(s => s.enrolledCount > 0).reduce((s, q) => s + q.openRate, 0) /
-    sequences.filter(s => s.enrolledCount > 0).length
-  )
-  const active = sequences.filter(s => s.status === 'Active').length
-
   return (
     <>
       <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" action={{ label: 'New Sequence' }} />
       <div className="p-4 md:p-6 flex-1 flex flex-col">
         <CRMSubNav />
-
-        {/* Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {[
-            { label: 'Active Sequences', value: active.toString(), icon: <Play size={16} />, color: '#015035', sub: 'Running now' },
-            { label: 'Total Enrolled', value: totalEnrolled.toString(), icon: <Users size={16} />, color: '#3b82f6', sub: 'Contacts in sequences' },
-            { label: 'Avg Open Rate', value: `${avgOpenRate}%`, icon: <Eye size={16} />, color: '#8b5cf6', sub: 'Industry avg: 21%' },
-            { label: 'Sequences', value: sequences.length.toString(), icon: <Zap size={16} />, color: '#f59e0b', sub: `${sequences.filter(s => s.status === 'Draft').length} drafts` },
-          ].map(m => (
-            <div key={m.label} className="metric-card">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ background: `${m.color}18` }}>
-                <span style={{ color: m.color }}>{m.icon}</span>
-              </div>
-              <p className="text-xl font-bold text-gray-900 mb-0.5" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{m.value}</p>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{m.label}</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">{m.sub}</p>
-            </div>
-          ))}
-        </div>
 
         {/* Filters */}
         <div className="flex items-center gap-3 mb-4 flex-wrap">

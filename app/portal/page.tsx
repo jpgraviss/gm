@@ -56,7 +56,7 @@ function ClientPortalView({ company, onExit }: { company: string; onExit: () => 
       </div>
 
       {/* Client portal header */}
-      <div className="flex-shrink-0 px-6 py-4 flex items-center justify-between shadow-sm" style={{ background: '#012b1e' }}>
+      <div className="flex-shrink-0 px-3 py-3 sm:px-6 sm:py-4 flex items-center justify-between shadow-sm" style={{ background: '#012b1e' }}>
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white" style={{ background: '#015035' }}>
             {company[0]}
@@ -84,7 +84,7 @@ function ClientPortalView({ company, onExit }: { company: string; onExit: () => 
       </div>
 
       {/* Nav tabs */}
-      <div className="flex-shrink-0 flex gap-1 px-6 pt-3 pb-0 border-b border-gray-200 bg-white">
+      <div className="flex-shrink-0 flex gap-1 px-3 sm:px-6 pt-3 pb-0 border-b border-gray-200 bg-white overflow-x-auto">
         {([
           { id: 'overview', label: 'Overview', icon: <Globe size={13} /> },
           { id: 'project',  label: 'My Project', icon: <FolderKanban size={13} /> },
@@ -107,7 +107,7 @@ function ClientPortalView({ company, onExit }: { company: string; onExit: () => 
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6">
 
         {/* ── Overview ── */}
         {activeTab === 'overview' && (
@@ -450,9 +450,9 @@ export default function PortalPage() {
       <div className="p-3 sm:p-6 flex-1">
 
         {/* View as Client panel */}
-        <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
+        <div className="flex items-center justify-between gap-3 flex-wrap p-4 bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#e6f0ec' }}>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e6f0ec' }}>
               <Eye size={16} style={{ color: '#015035' }} />
             </div>
             <div>
@@ -504,14 +504,15 @@ export default function PortalPage() {
           <div className="px-4 py-3 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-gray-800">Client Portal Accounts</h3>
           </div>
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px]">
             <thead>
               <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
                 <th className="text-left py-2.5 px-4 font-semibold">Company</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Contact</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Service</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Contact</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Service</th>
                 <th className="text-left py-2.5 px-4 font-semibold">Portal Access</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Last Login</th>
+                <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Last Login</th>
                 <th className="text-left py-2.5 px-4 font-semibold">Action</th>
               </tr>
             </thead>
@@ -526,10 +527,10 @@ export default function PortalPage() {
                       <p className="text-sm font-semibold text-gray-900">{client.company}</p>
                     </div>
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 hidden sm:table-cell">
                     <p className="text-sm text-gray-600">{client.contact}</p>
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 hidden sm:table-cell">
                     <StatusBadge label={client.service} colorClass={serviceTypeColors[client.service as keyof typeof serviceTypeColors] ?? 'bg-gray-100 text-gray-600'} />
                   </td>
                   <td className="py-3 px-4">
@@ -542,7 +543,7 @@ export default function PortalPage() {
                       }
                     />
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 hidden md:table-cell">
                     <span className="text-xs text-gray-500">{client.lastLogin}</span>
                   </td>
                   <td className="py-3 px-4">
@@ -567,6 +568,7 @@ export default function PortalPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </>

@@ -182,7 +182,7 @@ function SequencePanel({ seq, onClose }: { seq: EmailSequence; onClose: () => vo
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
-      <div className="w-[580px] bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200">
+      <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(580px, 100vw)' }}>
 
         {/* Header */}
         <div className="p-6 flex-shrink-0" style={{ background: '#012b1e' }}>
@@ -454,13 +454,13 @@ export default function SequencesPage() {
         <CRMSubNav />
 
         {/* Filters */}
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
-          <div className="flex gap-1">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="flex gap-1 overflow-x-auto pb-0.5 flex-1 min-w-0">
             {(['All', 'Active', 'Paused', 'Draft', 'Completed'] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
-                className={`tab-btn ${statusFilter === s ? 'active' : ''}`}
+                className={`tab-btn flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}
               >
                 {s}
                 {s !== 'All' && (
@@ -469,7 +469,7 @@ export default function SequencesPage() {
               </button>
             ))}
           </div>
-          <span className="ml-auto text-sm text-gray-500">{filtered.length} sequences</span>
+          <span className="text-sm text-gray-500 flex-shrink-0">{filtered.length} sequences</span>
         </div>
 
         {/* Sequence Cards */}

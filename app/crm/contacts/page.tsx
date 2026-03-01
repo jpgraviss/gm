@@ -125,7 +125,7 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
-      <div className="w-[520px] bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200">
+      <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(520px, 100vw)' }}>
 
         {/* Header */}
         <div className="p-6 flex-shrink-0" style={{ background: '#012b1e' }}>
@@ -647,7 +647,8 @@ export default function ContactsPage() {
 
         {/* Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px]">
             <thead>
               <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
                 <th className="text-left py-2.5 px-4 font-semibold">Name</th>
@@ -749,6 +750,7 @@ export default function ContactsPage() {
               <p className="text-sm text-gray-400">No contacts match your search.</p>
             </div>
           )}
+          </div>
         </div>
       </div>
 

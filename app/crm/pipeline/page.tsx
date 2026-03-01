@@ -183,7 +183,7 @@ function DealPanel({
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
-      <div className="w-[540px] bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200">
+      <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(540px, 100vw)' }}>
 
         {/* Header */}
         <div className="p-6 border-b border-gray-100 flex-shrink-0">
@@ -514,7 +514,7 @@ function ManagePipelinesPanel({
   return (
     <div className="fixed inset-0 z-[60] flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
-      <div className="w-[480px] bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200">
+      <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(480px, 100vw)' }}>
 
         {/* Header */}
         <div className="p-5 border-b border-gray-100 flex items-center justify-between flex-shrink-0" style={{ background: '#012b1e' }}>
@@ -763,7 +763,7 @@ export default function PipelinePage() {
         <CRMSubNav />
 
         {/* Pipeline summary */}
-        <div className="grid grid-cols-3 gap-4 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
           {[
             { label: 'Open Pipeline', value: formatCurrency(totalPipeline), sub: `${openDeals.length} deals` },
             { label: 'Weighted Value', value: formatCurrency(Math.round(weightedValue)), sub: 'Probability-adjusted' },
@@ -781,27 +781,29 @@ export default function PipelinePage() {
 
         {/* Toolbar */}
         <div className="flex items-center gap-2 mb-5 flex-wrap">
-          {pipelines.length > 1 && (
-            <select
-              value={activePipelineId}
-              onChange={e => setActivePipelineId(e.target.value)}
-              className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          )}
-          {reps.map(rep => (
-            <button key={rep} onClick={() => setFilterRep(rep)} className={`tab-btn ${filterRep === rep ? 'active' : ''}`}>
-              {rep}
-            </button>
-          ))}
+          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
+            {pipelines.length > 1 && (
+              <select
+                value={activePipelineId}
+                onChange={e => setActivePipelineId(e.target.value)}
+                className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 flex-shrink-0"
+              >
+                {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            )}
+            {reps.map(rep => (
+              <button key={rep} onClick={() => setFilterRep(rep)} className={`tab-btn flex-shrink-0 ${filterRep === rep ? 'active' : ''}`}>
+                {rep}
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => setManagingPipeline(true)}
-            className="ml-auto flex items-center gap-1.5 text-sm text-gray-500 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50"
+            className="flex items-center gap-1.5 text-sm text-gray-500 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 flex-shrink-0"
           >
             <Settings size={13} /> Manage Stages
           </button>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 flex-shrink-0">
             <span className="font-semibold text-gray-900">{filteredDeals.length}</span> deals ·{' '}
             <span className="font-semibold" style={{ color: '#015035' }}>
               {formatCurrency(filteredDeals.reduce((s, d) => s + d.value, 0))}

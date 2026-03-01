@@ -65,7 +65,7 @@ export default function NewProposalPanel({ onSave, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
-      <div className="w-[480px] bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200">
+      <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(480px, 100vw)' }}>
 
         {/* Header */}
         <div className="p-6 flex-shrink-0 flex items-start justify-between" style={{ background: '#012b1e' }}>

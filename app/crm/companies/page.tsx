@@ -73,7 +73,7 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
-      <div className="w-[560px] bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200">
+      <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(560px, 100vw)' }}>
 
         {/* Header */}
         <div className="p-6 flex-shrink-0" style={{ background: '#012b1e' }}>
@@ -440,13 +440,13 @@ export default function CompaniesPage() {
               className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-full"
             />
           </div>
-          <div className="flex items-center gap-1">
-            <Filter size={13} className="text-gray-400" />
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+            <Filter size={13} className="text-gray-400 flex-shrink-0" />
             {(['All', ...companyStatuses] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
-                className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors flex-shrink-0 ${
                   statusFilter === s ? 'text-white' : 'text-gray-500 hover:bg-gray-100'
                 }`}
                 style={statusFilter === s ? { background: '#015035' } : {}}
@@ -460,7 +460,8 @@ export default function CompaniesPage() {
 
         {/* Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px]">
             <thead>
               <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
                 <th className="text-left py-2.5 px-4 font-semibold">Company</th>
@@ -558,6 +559,7 @@ export default function CompaniesPage() {
               <p className="text-sm text-gray-400">No companies match your search.</p>
             </div>
           )}
+          </div>
         </div>
       </div>
 

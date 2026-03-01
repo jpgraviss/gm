@@ -10,15 +10,39 @@ import NewContractPanel, { type NewContractFormData } from '@/components/crm/New
 import type { Contract, ContractStatus } from '@/lib/types'
 import {
   X, CheckCircle, Clock, AlertCircle, ScrollText, Calendar, DollarSign, User,
-  ExternalLink, FileText, FolderKanban, Send, RefreshCw, Shield,
+  ExternalLink, FileText, FolderKanban, Send, RefreshCw, Shield, Plus, FilePlus2,
 } from 'lucide-react'
 
 const allStatuses: ContractStatus[] = [
   'Draft', 'Sent', 'Viewed', 'Signed by Client', 'Countersign Needed', 'Fully Executed', 'Expired',
 ]
 
-function ContractPanel({ contract, onClose, onUpdateStatus }: { contract: Contract; onClose: () => void; onUpdateStatus: (id: string, status: ContractStatus) => void }) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'project'>('overview')
+interface Addendum {
+  id: string
+  contractId: string
+  title: string
+  description: string
+  status: 'Draft' | 'Sent' | 'Accepted' | 'Declined'
+  createdDate: string
+  sentDate?: string
+}
+
+function ContractPanel({
+  contract, onClose, onUpdateStatus, addendums, onAddAddendum, onUpdateAddendumStatus,
+}: {
+  contract: Contract
+  onClose: () => void
+  onUpdateStatus: (id: string, status: ContractStatus) => void
+  addendums: Addendum[]
+  onAddAddendum: (contractId: string, title: string, description: string) => void
+  onUpdateAddendumStatus: (id: string, status: Addendum['status']) => void
+}) {
+  const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'project' | 'addendums'>('overview')
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [newDesc, setNewDesc] = useState('')
+
+  const contractAddendums = addendums.filter(a => a.contractId === contract.id)
 
   const linkedInvoices = invoices.filter(i => i.contractId === contract.id)
   const linkedProject = projects.find(p => p.contractId === contract.id)
@@ -80,7 +104,7 @@ function ContractPanel({ contract, onClose, onUpdateStatus }: { contract: Contra
 
         {/* Tabs */}
         <div className="flex-shrink-0 flex border-b border-gray-100 px-4 pt-3 gap-5">
-          {(['overview', 'invoices', 'project'] as const).map(tab => (
+          {(['overview', 'invoices', 'project', 'addendums'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -88,7 +112,9 @@ function ContractPanel({ contract, onClose, onUpdateStatus }: { contract: Contra
                 activeTab === tab ? 'border-green-800 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'
               }`}
             >
-              {tab === 'invoices' ? `Invoices (${linkedInvoices.length})` : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === 'invoices' ? `Invoices (${linkedInvoices.length})`
+               : tab === 'addendums' ? `Addendums${contractAddendums.length > 0 ? ` (${contractAddendums.length})` : ''}`
+               : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
           ))}
         </div>
@@ -325,6 +351,135 @@ function ContractPanel({ contract, onClose, onUpdateStatus }: { contract: Contra
               )}
             </div>
           )}
+
+          {activeTab === 'addendums' && (
+            <div className="flex flex-col gap-3">
+              {/* New addendum button */}
+              {!showAddForm && (
+                <button
+                  onClick={() => setShowAddForm(true)}
+                  className="flex items-center gap-2 text-xs font-semibold px-3 py-2.5 rounded-xl border border-dashed border-gray-300 text-gray-500 hover:border-green-700 hover:text-green-700 transition-colors w-full justify-center"
+                >
+                  <Plus size={13} /> New Addendum
+                </button>
+              )}
+
+              {/* Inline creation form */}
+              {showAddForm && (
+                <div className="p-3 border border-gray-200 rounded-xl bg-gray-50 flex flex-col gap-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title</label>
+                    <input
+                      placeholder="e.g. Scope Extension — Additional Landing Pages"
+                      value={newTitle}
+                      onChange={e => setNewTitle(e.target.value)}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description of Changes</label>
+                    <textarea
+                      placeholder="Describe the changes being added to the original agreement..."
+                      rows={4}
+                      value={newDesc}
+                      onChange={e => setNewDesc(e.target.value)}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none bg-white"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (newTitle.trim() && newDesc.trim()) {
+                          onAddAddendum(contract.id, newTitle.trim(), newDesc.trim())
+                          setNewTitle('')
+                          setNewDesc('')
+                          setShowAddForm(false)
+                        }
+                      }}
+                      disabled={!newTitle.trim() || !newDesc.trim()}
+                      className="flex-1 py-2 rounded-lg text-white text-xs font-semibold disabled:opacity-40 transition-opacity hover:opacity-90"
+                      style={{ background: '#015035' }}
+                    >
+                      Save as Draft
+                    </button>
+                    <button
+                      onClick={() => { setShowAddForm(false); setNewTitle(''); setNewDesc('') }}
+                      className="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-100 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Addendum list */}
+              {contractAddendums.length === 0 && !showAddForm ? (
+                <div className="py-10 text-center">
+                  <FilePlus2 size={28} className="text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No addendums yet</p>
+                  <p className="text-xs text-gray-300 mt-1">Add contract changes to send to the client</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {contractAddendums.map(a => (
+                    <div key={a.id} className="p-3 rounded-xl border border-gray-200 bg-white">
+                      <div className="flex items-start justify-between mb-1.5">
+                        <div className="flex-1 min-w-0 mr-2">
+                          <p className="text-xs font-semibold text-gray-800">{a.title}</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5">Created {formatDate(a.createdDate)}{a.sentDate ? ` · Sent ${formatDate(a.sentDate)}` : ''}</p>
+                        </div>
+                        <StatusBadge
+                          label={a.status}
+                          colorClass={
+                            a.status === 'Accepted' ? 'bg-emerald-100 text-emerald-700'
+                            : a.status === 'Sent' ? 'bg-blue-100 text-blue-700'
+                            : a.status === 'Declined' ? 'bg-red-100 text-red-700'
+                            : 'bg-gray-100 text-gray-600'
+                          }
+                        />
+                      </div>
+                      <p className="text-[11px] text-gray-500 leading-relaxed mb-2.5 line-clamp-2">{a.description}</p>
+                      <div className="flex gap-2 items-center">
+                        {a.status === 'Draft' && (
+                          <button
+                            onClick={() => onUpdateAddendumStatus(a.id, 'Sent')}
+                            className="flex items-center gap-1 text-[11px] font-semibold text-white px-2.5 py-1 rounded-lg transition-opacity hover:opacity-90"
+                            style={{ background: '#015035' }}
+                          >
+                            <Send size={10} /> Send to Client
+                          </button>
+                        )}
+                        {a.status === 'Sent' && (
+                          <>
+                            <button
+                              onClick={() => onUpdateAddendumStatus(a.id, 'Accepted')}
+                              className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg hover:bg-emerald-100 transition-colors"
+                            >
+                              Mark Accepted
+                            </button>
+                            <button
+                              onClick={() => onUpdateAddendumStatus(a.id, 'Declined')}
+                              className="text-[11px] font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg hover:bg-red-100 transition-colors"
+                            >
+                              Mark Declined
+                            </button>
+                          </>
+                        )}
+                        {a.status === 'Accepted' && (
+                          <span className="flex items-center gap-1 text-[11px] text-emerald-600">
+                            <CheckCircle size={11} /> Client accepted
+                          </span>
+                        )}
+                        {a.status === 'Declined' && (
+                          <span className="text-[11px] text-red-500">Declined by client</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer actions */}
@@ -379,6 +534,26 @@ export default function ContractsPage() {
   const [selected, setSelected] = useState<Contract | null>(null)
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'All'>('All')
   const [creatingContract, setCreatingContract] = useState(false)
+  const [localAddendums, setLocalAddendums] = useState<Addendum[]>([])
+
+  function addAddendum(contractId: string, title: string, description: string) {
+    const today = new Date().toISOString().split('T')[0]
+    setLocalAddendums(prev => [...prev, {
+      id: `add-${Date.now()}`,
+      contractId,
+      title,
+      description,
+      status: 'Draft',
+      createdDate: today,
+    }])
+  }
+
+  function updateAddendumStatus(id: string, status: Addendum['status']) {
+    const today = new Date().toISOString().split('T')[0]
+    setLocalAddendums(prev => prev.map(a =>
+      a.id === id ? { ...a, status, ...(status === 'Sent' ? { sentDate: today } : {}) } : a
+    ))
+  }
 
   function updateContractStatus(id: string, status: ContractStatus) {
     const today = new Date().toISOString().split('T')[0]
@@ -568,6 +743,9 @@ export default function ContractsPage() {
           contract={selected}
           onClose={() => setSelected(null)}
           onUpdateStatus={updateContractStatus}
+          addendums={localAddendums}
+          onAddAddendum={addAddendum}
+          onUpdateAddendumStatus={updateAddendumStatus}
         />
       )}
       {creatingContract && (

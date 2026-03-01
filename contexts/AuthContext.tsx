@@ -35,6 +35,18 @@ const USERS: Record<string, { password: string; user: AuthUser }> = {
       isAdmin: true,
     },
   },
+  'jgraviss@gravissmarketing.com': {
+    password: '3asy2c0nn3ct',
+    user: {
+      id: 'u7',
+      email: 'jgraviss@gravissmarketing.com',
+      name: 'J. Graviss',
+      role: 'Super Admin',
+      initials: 'JG',
+      unit: 'Leadership/Admin',
+      isAdmin: true,
+    },
+  },
   'amanda@gravissmarketing.com': {
     password: 'Amanda123!',
     user: {

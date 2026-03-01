@@ -10,7 +10,8 @@ import NewInvoicePanel, { type NewInvoiceFormData } from '@/components/crm/NewIn
 import type { Invoice, InvoiceStatus } from '@/lib/types'
 import {
   DollarSign, AlertCircle, CheckCircle, Clock, Send, RefreshCw,
-  X, ExternalLink, ScrollText, Calendar,
+  X, ExternalLink, ScrollText, Calendar, Zap, ArrowDownToLine,
+  RotateCcw, Link2,
 } from 'lucide-react'
 
 const statuses: InvoiceStatus[] = ['Pending', 'Sent', 'Overdue', 'Paid']
@@ -311,14 +312,79 @@ export default function BillingPage() {
               </div>
             </div>
 
-            {/* QuickBooks sync status */}
-            <div className="mt-4 p-2.5 bg-gray-50 rounded-lg flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
+            {/* QuickBooks mini status */}
+            <div className="mt-4 p-2.5 bg-gray-50 rounded-lg flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0 animate-pulse" />
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-700">QuickBooks Online</p>
+                  <p className="text-[10px] text-gray-400">Last pull: 2 hours ago</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {}}
+                className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
+              >
+                <RotateCcw size={10} /> Sync
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* QuickBooks Integration Banner */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#2CA01C18' }}>
+                <Link2 size={16} style={{ color: '#2CA01C' }} />
+              </div>
               <div>
-                <p className="text-[11px] font-semibold text-gray-700">QuickBooks Synced</p>
-                <p className="text-[10px] text-gray-400">Last sync: 2 hours ago</p>
+                <p className="text-sm font-semibold text-gray-800">QuickBooks Online Integration</p>
+                <p className="text-xs text-gray-500">Billing data pulled directly from your QuickBooks account</p>
               </div>
             </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[11px] font-semibold text-emerald-700">Connected</span>
+              </div>
+              <button className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                <ArrowDownToLine size={12} /> Pull Latest Data
+              </button>
+              <button className="text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                Settings
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-100">
+            {[
+              { label: 'QB Customers Synced', value: '8', icon: <Zap size={13} className="text-green-600" />, note: 'Matched to CRM' },
+              { label: 'Last Pull', value: '2h ago', icon: <RotateCcw size={13} className="text-blue-500" />, note: 'Auto-syncs every 6h' },
+              { label: 'Unmatched Invoices', value: '0', icon: <CheckCircle size={13} className="text-emerald-500" />, note: 'All reconciled' },
+              { label: 'QB Account', value: 'gravissmarketing', icon: <Link2 size={13} className="text-gray-400" />, note: 'quickbooks.com' },
+            ].map(item => (
+              <div key={item.label} className="px-5 py-3.5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  {item.icon}
+                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{item.label}</span>
+                </div>
+                <p className="text-sm font-bold text-gray-900">{item.value}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">{item.note}</p>
+              </div>
+            ))}
+          </div>
+          <div className="px-5 py-3 bg-blue-50 border-t border-blue-100 flex items-center justify-between">
+            <p className="text-xs text-blue-700">
+              <strong>Read-only integration:</strong> Invoice creation and payment status flow from QuickBooks into GravHub. Full accounting features remain in QuickBooks.
+            </p>
+            <a
+              href="https://quickbooks.intuit.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 flex-shrink-0 ml-4"
+            >
+              Open QuickBooks <ExternalLink size={11} />
+            </a>
           </div>
         </div>
 

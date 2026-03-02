@@ -811,7 +811,7 @@ export default function AdminPage() {
                   { label: 'Platform URL', value: 'gravhub.gravissmarketing.com' },
                   { label: 'Fiscal Year Start', value: 'January' },
                   { label: 'Default Currency', value: 'USD ($)' },
-                  { label: 'Timezone', value: 'America/New_York (EST)' },
+                  { label: 'Timezone', value: 'America/New_York (ET)' },
                 ].map(f => (
                   <div key={f.label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{f.label}</span>

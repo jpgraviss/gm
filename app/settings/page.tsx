@@ -174,7 +174,7 @@ export default function SettingsPage() {
               <FieldRow label="Primary Email" value="info@gravissmarketing.com" />
               <FieldRow label="Phone" value="+1 (830) 326-0320" />
               <FieldRow label="Website" value="www.gravissmarketing.com" />
-              <FieldRow label="Timezone" value="America/Chicago (CT)" />
+              <FieldRow label="Timezone" value="America/New_York (ET)" />
               <FieldRow label="Fiscal Year Start" value="January 1" />
               <FieldRow label="Default Currency" value="USD ($)" />
             </div>

@@ -44,9 +44,10 @@ function FieldRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Toggle({ enabled }: { enabled: boolean }) {
+function Toggle({ enabled, onChange }: { enabled: boolean; onChange?: () => void }) {
   return (
     <button
+      onClick={onChange}
       className="rounded-full relative flex items-center px-0.5 transition-colors flex-shrink-0"
       style={{ background: enabled ? '#015035' : '#d1d5db', width: '40px', height: '22px' }}
     >
@@ -58,8 +59,71 @@ function Toggle({ enabled }: { enabled: boolean }) {
   )
 }
 
+const NOTIF_DEFAULTS = [
+  { label: 'Contract requires signature', enabled: true, category: 'Contracts' },
+  { label: 'Contract fully executed', enabled: true, category: 'Contracts' },
+  { label: 'Invoice overdue by 3+ days', enabled: true, category: 'Billing' },
+  { label: 'Payment received', enabled: true, category: 'Billing' },
+  { label: 'Renewal within 90 days', enabled: true, category: 'Renewals' },
+  { label: 'Renewal within 30 days', enabled: true, category: 'Renewals' },
+  { label: 'New deal created', enabled: false, category: 'CRM' },
+  { label: 'Proposal viewed by client', enabled: true, category: 'Proposals' },
+  { label: 'Proposal accepted / declined', enabled: true, category: 'Proposals' },
+  { label: 'Project milestone completed', enabled: true, category: 'Projects' },
+  { label: 'New client ticket submitted', enabled: true, category: 'Tickets' },
+  { label: 'Ticket unresponded for 24h', enabled: true, category: 'Tickets' },
+  { label: 'Client portal login', enabled: false, category: 'Portal' },
+]
+
+const QB_SYNC_DEFAULTS = [
+  { label: 'Sync new invoices to QuickBooks automatically', enabled: true },
+  { label: 'Pull payment updates from QuickBooks', enabled: true },
+  { label: 'Match QB customers to GravHub companies', enabled: true },
+  { label: 'Sync overdue flags from QuickBooks', enabled: true },
+  { label: 'Create QB invoice when GravHub invoice is sent', enabled: false },
+]
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Company')
+  const [notifications, setNotifications] = useState(NOTIF_DEFAULTS)
+  const [qbSync, setQbSync] = useState(QB_SYNC_DEFAULTS)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [editingMember, setEditingMember] = useState<string | null>(null)
+  const [savedTab, setSavedTab] = useState<Tab | null>(null)
+  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'Team Member', unit: 'Sales' })
+  const [members, setMembers] = useState(teamMembers)
+
+  function showSaved(tab: Tab) {
+    setSavedTab(tab)
+    setTimeout(() => setSavedTab(null), 2000)
+  }
+
+  function toggleNotif(label: string) {
+    setNotifications(prev => prev.map(n => n.label === label ? { ...n, enabled: !n.enabled } : n))
+  }
+
+  function toggleQb(label: string) {
+    setQbSync(prev => prev.map(n => n.label === label ? { ...n, enabled: !n.enabled } : n))
+  }
+
+  function submitInvite() {
+    if (!inviteForm.name || !inviteForm.email) return
+    const initials = inviteForm.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    setMembers(prev => [...prev, {
+      id: `tm${Date.now()}`,
+      name: inviteForm.name,
+      email: inviteForm.email,
+      role: inviteForm.role as typeof teamMembers[0]['role'],
+      unit: inviteForm.unit as typeof teamMembers[0]['unit'],
+      initials,
+    }])
+    setInviteForm({ name: '', email: '', role: 'Team Member', unit: 'Sales' })
+    setInviteOpen(false)
+  }
+
+  function removeMember(id: string) {
+    setMembers(prev => prev.filter(m => m.id !== id))
+  }
 
   return (
     <>
@@ -109,65 +173,160 @@ export default function SettingsPage() {
               <FieldRow label="State" value="Texas" />
               <FieldRow label="ZIP" value="78028" />
             </div>
-            <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
-              Save Changes
+            <button onClick={() => showSaved('Company')} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+              {savedTab === 'Company' ? <><CheckCircle size={14} /> Saved!</> : 'Save Changes'}
             </button>
           </div>
         )}
 
         {/* ── Team ── */}
         {activeTab === 'Team' && (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Team Members</h3>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
-                <Plus size={13} /> Invite Member
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[600px]">
-                <thead>
-                  <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
-                    <th className="text-left py-2.5 px-5 font-semibold">Member</th>
-                    <th className="text-left py-2.5 px-4 font-semibold">Role</th>
-                    <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Unit</th>
-                    <th className="text-left py-2.5 px-4 font-semibold">Status</th>
-                    <th className="text-left py-2.5 px-4 font-semibold">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {teamMembers.map(member => (
-                    <tr key={member.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
-                      <td className="py-3 px-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
-                            {member.initials}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">{member.name}</p>
-                            <p className="text-xs text-gray-400">{member.email}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`status-badge ${membershipColors[member.role]}`}>{member.role}</span>
-                      </td>
-                      <td className="py-3 px-4 hidden sm:table-cell"><span className="text-sm text-gray-600">{member.unit}</span></td>
-                      <td className="py-3 px-4">
-                        <span className="flex items-center gap-1 text-xs text-emerald-600">
-                          <CheckCircle size={11} /> Active
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-2">
-                          <button className="text-xs text-blue-600 hover:text-blue-700 font-medium">Edit</button>
-                          <button className="text-xs text-gray-400 hover:text-red-500 font-medium">Remove</button>
-                        </div>
-                      </td>
+          <div className="flex flex-col gap-4">
+            {/* Invite form */}
+            {inviteOpen && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-bold text-gray-800">Invite New Member</h4>
+                  <button onClick={() => setInviteOpen(false)} className="text-gray-400 hover:text-gray-600"><AlertCircle size={14} /></button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Full Name</label>
+                    <input value={inviteForm.name} onChange={e => setInviteForm(p => ({ ...p, name: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" placeholder="First Last" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Email</label>
+                    <input value={inviteForm.email} onChange={e => setInviteForm(p => ({ ...p, email: e.target.value }))}
+                      type="email" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" placeholder="email@gravissmarketing.com" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
+                    <select value={inviteForm.role} onChange={e => setInviteForm(p => ({ ...p, role: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700">
+                      <option>Team Member</option>
+                      <option>Department Manager</option>
+                      <option>Leadership</option>
+                      <option>Contractor</option>
+                      <option>Client</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Unit</label>
+                    <select value={inviteForm.unit} onChange={e => setInviteForm(p => ({ ...p, unit: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700">
+                      <option>Sales</option>
+                      <option>Delivery/Operations</option>
+                      <option>Billing/Finance</option>
+                      <option>Leadership/Admin</option>
+                      <option>Contractors</option>
+                      <option>Client</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={submitInvite} className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+                    Add Member
+                  </button>
+                  <button onClick={() => setInviteOpen(false)} className="px-4 py-2 text-gray-600 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Team Members ({members.length})</h3>
+                <button onClick={() => setInviteOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
+                  <Plus size={13} /> Invite Member
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px]">
+                  <thead>
+                    <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
+                      <th className="text-left py-2.5 px-5 font-semibold">Member</th>
+                      <th className="text-left py-2.5 px-4 font-semibold">Role</th>
+                      <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Unit</th>
+                      <th className="text-left py-2.5 px-4 font-semibold">Status</th>
+                      <th className="text-left py-2.5 px-4 font-semibold">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {members.map(member => (
+                      <>
+                        <tr key={member.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
+                          <td className="py-3 px-5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                                {member.initials}
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">{member.name}</p>
+                                <p className="text-xs text-gray-400">{member.email}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`status-badge ${membershipColors[member.role] ?? 'bg-gray-100 text-gray-600'}`}>{member.role}</span>
+                          </td>
+                          <td className="py-3 px-4 hidden sm:table-cell"><span className="text-sm text-gray-600">{member.unit}</span></td>
+                          <td className="py-3 px-4">
+                            <span className="flex items-center gap-1 text-xs text-emerald-600">
+                              <CheckCircle size={11} /> Active
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex gap-2">
+                              <button onClick={() => setEditingMember(editingMember === member.id ? null : member.id)} className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+                                {editingMember === member.id ? 'Done' : 'Edit'}
+                              </button>
+                              <button onClick={() => removeMember(member.id)} className="text-xs text-gray-400 hover:text-red-500 font-medium">Remove</button>
+                            </div>
+                          </td>
+                        </tr>
+                        {editingMember === member.id && (
+                          <tr key={`edit-${member.id}`} className="bg-blue-50/40 border-b border-blue-100">
+                            <td colSpan={5} className="px-5 py-3">
+                              <div className="flex flex-wrap items-center gap-3">
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
+                                  <select
+                                    defaultValue={member.role}
+                                    onChange={e => setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: e.target.value as typeof member.role } : m))}
+                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                  >
+                                    <option>Team Member</option>
+                                    <option>Department Manager</option>
+                                    <option>Leadership</option>
+                                    <option>Contractor</option>
+                                    <option>Client</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Unit</label>
+                                  <select
+                                    defaultValue={member.unit}
+                                    onChange={e => setMembers(prev => prev.map(m => m.id === member.id ? { ...m, unit: e.target.value as typeof member.unit } : m))}
+                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                  >
+                                    <option>Sales</option>
+                                    <option>Delivery/Operations</option>
+                                    <option>Billing/Finance</option>
+                                    <option>Leadership/Admin</option>
+                                    <option>Contractors</option>
+                                    <option>Client</option>
+                                  </select>
+                                </div>
+                                <button onClick={() => setEditingMember(null)} className="mt-4 px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>Save</button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -258,32 +417,24 @@ export default function SettingsPage() {
         {/* ── Notifications ── */}
         {activeTab === 'Notifications' && (
           <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
-            <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Notification Preferences</h3>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Notification Preferences</h3>
+              {savedTab === 'Notifications' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+            </div>
             <div className="flex flex-col gap-1">
-              {[
-                { label: 'Contract requires signature', enabled: true, category: 'Contracts' },
-                { label: 'Contract fully executed', enabled: true, category: 'Contracts' },
-                { label: 'Invoice overdue by 3+ days', enabled: true, category: 'Billing' },
-                { label: 'Payment received', enabled: true, category: 'Billing' },
-                { label: 'Renewal within 90 days', enabled: true, category: 'Renewals' },
-                { label: 'Renewal within 30 days', enabled: true, category: 'Renewals' },
-                { label: 'New deal created', enabled: false, category: 'CRM' },
-                { label: 'Proposal viewed by client', enabled: true, category: 'Proposals' },
-                { label: 'Proposal accepted / declined', enabled: true, category: 'Proposals' },
-                { label: 'Project milestone completed', enabled: true, category: 'Projects' },
-                { label: 'New client ticket submitted', enabled: true, category: 'Tickets' },
-                { label: 'Ticket unresponded for 24h', enabled: true, category: 'Tickets' },
-                { label: 'Client portal login', enabled: false, category: 'Portal' },
-              ].map(n => (
+              {notifications.map(n => (
                 <div key={n.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0 gap-3">
                   <div className="min-w-0">
                     <span className="text-sm text-gray-700">{n.label}</span>
                     <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{n.category}</span>
                   </div>
-                  <Toggle enabled={n.enabled} />
+                  <Toggle enabled={n.enabled} onChange={() => toggleNotif(n.label)} />
                 </div>
               ))}
             </div>
+            <button onClick={() => showSaved('Notifications')} className="flex items-center gap-2 mt-5 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+              {savedTab === 'Notifications' ? <><CheckCircle size={14} /> Saved!</> : 'Save Preferences'}
+            </button>
           </div>
         )}
 
@@ -433,16 +584,10 @@ export default function SettingsPage() {
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Sync Settings</h3>
               <div className="flex flex-col gap-1">
-                {[
-                  { label: 'Sync new invoices to QuickBooks automatically', enabled: true },
-                  { label: 'Pull payment updates from QuickBooks', enabled: true },
-                  { label: 'Match QB customers to GravHub companies', enabled: true },
-                  { label: 'Sync overdue flags from QuickBooks', enabled: true },
-                  { label: 'Create QB invoice when GravHub invoice is sent', enabled: false },
-                ].map(item => (
+                {qbSync.map(item => (
                   <div key={item.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0 gap-3">
                     <span className="text-sm text-gray-700">{item.label}</span>
-                    <Toggle enabled={item.enabled} />
+                    <Toggle enabled={item.enabled} onChange={() => toggleQb(item.label)} />
                   </div>
                 ))}
               </div>
@@ -458,8 +603,8 @@ export default function SettingsPage() {
                 <FieldRow label="Late Fee %" value="1.5% / month" />
                 <FieldRow label="Send Reminders" value="3 days before due" />
               </div>
-              <button className="mt-4 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
-                Save Invoice Settings
+              <button onClick={() => showSaved('Billing')} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+                {savedTab === 'Billing' ? <><CheckCircle size={14} /> Saved!</> : 'Save Invoice Settings'}
               </button>
             </div>
           </div>

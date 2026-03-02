@@ -1,7 +1,13 @@
+'use client'
+
+import { useState } from 'react'
 import Header from '@/components/layout/Header'
 import { deals, invoices, projects, renewals, revenueByMonth } from '@/lib/data'
 import { formatCurrency } from '@/lib/utils'
-import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw } from 'lucide-react'
+import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download } from 'lucide-react'
+
+type DateRange = '3M' | '6M' | '12M'
+type RepFilter = 'All' | 'Sarah Chen' | 'Marcus Webb'
 
 const closedWon = deals.filter(d => d.stage === 'Closed Won')
 const closedLost = deals.filter(d => d.stage === 'Closed Lost')
@@ -28,12 +34,18 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
 }
 
 export default function ReportsPage() {
-  const maxRevenue = Math.max(...revenueByMonth.map(r => r.revenue))
+  const [dateRange, setDateRange] = useState<DateRange>('6M')
+  const [repFilter, setRepFilter] = useState<RepFilter>('All')
 
-  const repStats = [
+  const monthsToShow = dateRange === '3M' ? 3 : dateRange === '6M' ? 6 : revenueByMonth.length
+  const visibleMonths = revenueByMonth.slice(-monthsToShow)
+  const maxRevenue = Math.max(...visibleMonths.map(r => r.revenue))
+
+  const allRepStats = [
     { name: 'Sarah Chen', deals: 4, revenue: 123000, winRate: 75 },
     { name: 'Marcus Webb', deals: 4, revenue: 56000, winRate: 50 },
   ]
+  const repStats = repFilter === 'All' ? allRepStats : allRepStats.filter(r => r.name === repFilter)
 
   const serviceRevenue = [
     { service: 'Website', revenue: 50000, deals: 3, color: '#6366f1' },
@@ -48,6 +60,38 @@ export default function ReportsPage() {
     <>
       <Header title="Reports & Analytics" subtitle="Revenue, sales, operations, and retention metrics" />
       <div className="p-3 sm:p-6 flex-1">
+
+        {/* Filter Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Period:</span>
+            <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
+              {(['3M', '6M', '12M'] as DateRange[]).map(r => (
+                <button
+                  key={r}
+                  onClick={() => setDateRange(r)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${dateRange === r ? 'text-white' : 'text-gray-500 hover:text-gray-700'}`}
+                  style={{ background: dateRange === r ? '#015035' : undefined }}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide ml-2">Rep:</span>
+            <select
+              value={repFilter}
+              onChange={e => setRepFilter(e.target.value as RepFilter)}
+              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700"
+            >
+              <option>All</option>
+              <option>Sarah Chen</option>
+              <option>Marcus Webb</option>
+            </select>
+          </div>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            <Download size={12} /> Export CSV
+          </button>
+        </div>
 
         {/* Top KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
@@ -82,13 +126,13 @@ export default function ReportsPage() {
               </div>
               <div className="text-right">
                 <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-syncopate), sans-serif', color: '#015035' }}>
-                  {formatCurrency(revenueByMonth.reduce((s, r) => s + r.revenue, 0))}
+                  {formatCurrency(visibleMonths.reduce((s, r) => s + r.revenue, 0))}
                 </p>
-                <p className="text-xs text-gray-400">6-month total</p>
+                <p className="text-xs text-gray-400">{dateRange} total</p>
               </div>
             </div>
             <div className="flex items-end gap-3 h-32">
-              {revenueByMonth.map(d => (
+              {visibleMonths.map(d => (
                 <div key={d.month} className="flex-1 flex flex-col items-center gap-1">
                   <span className="text-[10px] text-gray-400 font-medium">{formatCurrency(d.revenue).replace('$', '')}</span>
                   <div className="w-full flex flex-col">

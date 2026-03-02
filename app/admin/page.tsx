@@ -167,6 +167,31 @@ export default function AdminPage() {
   const [tab, setTab] = useState<AdminTab>('overview')
   const [showAddUser, setShowAddUser] = useState(false)
   const [editingUser, setEditingUser] = useState<string | null>(null)
+  const [users, setUsers] = useState(allUsers)
+  const [addForm, setAddForm] = useState({ name: '', email: '', password: '', role: 'Team Member', unit: 'Sales' })
+  const [resetConfirm, setResetConfirm] = useState<string | null>(null)
+
+  function submitAddUser() {
+    if (!addForm.name || !addForm.email) return
+    const initials = addForm.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
+    setUsers(prev => [...prev, {
+      id: `u${Date.now()}`,
+      name: addForm.name,
+      email: addForm.email,
+      role: addForm.role,
+      unit: addForm.unit,
+      status: 'Active',
+      lastLogin: 'Never',
+      initials,
+      isAdmin: false,
+    }])
+    setAddForm({ name: '', email: '', password: '', role: 'Team Member', unit: 'Sales' })
+    setShowAddUser(false)
+  }
+
+  function deactivateUser(id: string) {
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'Active' ? 'Inactive' : 'Active' } : u))
+  }
 
   // Guard: only Super Admin
   if (!user?.isAdmin) {
@@ -318,22 +343,25 @@ export default function AdminPage() {
                   <button onClick={() => setShowAddUser(false)} className="text-gray-400 hover:text-gray-600">✕</button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {[
-                    { label: 'Full Name', placeholder: 'First Last' },
-                    { label: 'Email', placeholder: 'email@gravissmarketing.com' },
-                    { label: 'Temp Password', placeholder: 'Temporary password' },
-                  ].map(f => (
-                    <div key={f.label}>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{f.label}</label>
-                      <input
-                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
-                        placeholder={f.placeholder}
-                      />
-                    </div>
-                  ))}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Full Name</label>
+                    <input value={addForm.name} onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" placeholder="First Last" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Email</label>
+                    <input value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))}
+                      type="email" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" placeholder="email@gravissmarketing.com" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Temp Password</label>
+                    <input value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))}
+                      type="password" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" placeholder="Temporary password" />
+                  </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
-                    <select className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700">
+                    <select value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700">
                       <option>Team Member</option>
                       <option>Department Manager</option>
                       <option>Leadership</option>
@@ -342,7 +370,8 @@ export default function AdminPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Unit</label>
-                    <select className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700">
+                    <select value={addForm.unit} onChange={e => setAddForm(p => ({ ...p, unit: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700">
                       <option>Sales</option>
                       <option>Delivery/Operations</option>
                       <option>Billing/Finance</option>
@@ -352,8 +381,8 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 mt-4">
-                  <button className="px-4 py-2 text-white text-sm font-medium rounded-lg" style={{ background: '#015035' }}>
-                    Send Invitation
+                  <button onClick={submitAddUser} className="px-4 py-2 text-white text-sm font-medium rounded-lg" style={{ background: '#015035' }}>
+                    Add User
                   </button>
                   <button onClick={() => setShowAddUser(false)} className="px-4 py-2 text-gray-600 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
                     Cancel
@@ -364,7 +393,7 @@ export default function AdminPage() {
 
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <h3 className="text-sm font-bold text-gray-800">All Platform Users ({allUsers.length})</h3>
+                <h3 className="text-sm font-bold text-gray-800">All Platform Users ({users.length})</h3>
                 <button
                   onClick={() => setShowAddUser(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-medium rounded-lg"
@@ -386,68 +415,128 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {allUsers.map(u => (
-                      <tr key={u.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
-                        <td className="py-3 px-5">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                              style={{ background: u.isAdmin ? '#f59e0b' : '#015035' }}
-                            >
-                              {u.initials}
+                    {users.map(u => (
+                      <>
+                        <tr key={u.id} className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors ${u.status === 'Inactive' ? 'opacity-50' : ''}`}>
+                          <td className="py-3 px-5">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                                style={{ background: u.isAdmin ? '#f59e0b' : '#015035' }}
+                              >
+                                {u.initials}
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">{u.name}</p>
+                                <p className="text-xs text-gray-400">{u.email}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm font-semibold text-gray-900">{u.name}</p>
-                              <p className="text-xs text-gray-400">{u.email}</p>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`status-badge ${membershipColors[u.role] || 'bg-gray-100 text-gray-600'}`}>{u.role}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-sm text-gray-600">{u.unit}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`status-badge ${u.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{u.status}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                              <Clock size={11} />
+                              {u.lastLogin}
                             </div>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className={`status-badge ${membershipColors[u.role] || 'bg-gray-100 text-gray-600'}`}>{u.role}</span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="text-sm text-gray-600">{u.unit}</span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="status-badge bg-green-100 text-green-700">{u.status}</span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                            <Clock size={11} />
-                            {u.lastLogin}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-1.5">
-                            {u.id !== 'u0' && (
-                              <>
-                                <button
-                                  onClick={() => setEditingUser(u.id)}
-                                  className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500 transition-colors"
-                                  title="Edit user"
-                                >
-                                  <Pencil size={13} />
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-1.5">
+                              {u.id !== 'u0' && (
+                                <>
+                                  <button
+                                    onClick={() => setEditingUser(editingUser === u.id ? null : u.id)}
+                                    className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500 transition-colors"
+                                    title="Edit user"
+                                  >
+                                    <Pencil size={13} />
+                                  </button>
+                                  <button
+                                    onClick={() => setResetConfirm(resetConfirm === u.id ? null : u.id)}
+                                    className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-500 transition-colors"
+                                    title="Reset password"
+                                  >
+                                    <Key size={13} />
+                                  </button>
+                                  <button
+                                    onClick={() => deactivateUser(u.id)}
+                                    className={`p-1.5 rounded-lg transition-colors ${u.status === 'Active' ? 'hover:bg-red-50 text-red-400' : 'hover:bg-green-50 text-green-500'}`}
+                                    title={u.status === 'Active' ? 'Deactivate user' : 'Reactivate user'}
+                                  >
+                                    {u.status === 'Active' ? <Trash2 size={13} /> : <CheckCircle size={13} />}
+                                  </button>
+                                </>
+                              )}
+                              {u.id === 'u0' && (
+                                <span className="text-xs text-amber-600 font-semibold">Owner</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {editingUser === u.id && (
+                          <tr key={`edit-${u.id}`} className="bg-blue-50/40 border-b border-blue-100">
+                            <td colSpan={6} className="px-5 py-3">
+                              <div className="flex flex-wrap items-end gap-3">
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
+                                  <select
+                                    defaultValue={u.role}
+                                    onChange={e => setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: e.target.value } : x))}
+                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                  >
+                                    <option>Team Member</option>
+                                    <option>Department Manager</option>
+                                    <option>Leadership</option>
+                                    <option>Contractor</option>
+                                    <option>Client</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Unit</label>
+                                  <select
+                                    defaultValue={u.unit}
+                                    onChange={e => setUsers(prev => prev.map(x => x.id === u.id ? { ...x, unit: e.target.value } : x))}
+                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                  >
+                                    <option>Sales</option>
+                                    <option>Delivery/Operations</option>
+                                    <option>Billing/Finance</option>
+                                    <option>Leadership/Admin</option>
+                                    <option>Contractors</option>
+                                  </select>
+                                </div>
+                                <button onClick={() => setEditingUser(null)} className="px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>
+                                  Save Changes
                                 </button>
-                                <button
-                                  className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-500 transition-colors"
-                                  title="Reset password"
-                                >
-                                  <Key size={13} />
+                                <button onClick={() => setEditingUser(null)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+                                  Cancel
                                 </button>
-                                <button
-                                  className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 transition-colors"
-                                  title="Deactivate user"
-                                >
-                                  <Trash2 size={13} />
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {resetConfirm === u.id && (
+                          <tr key={`reset-${u.id}`} className="bg-amber-50/40 border-b border-amber-100">
+                            <td colSpan={6} className="px-5 py-3">
+                              <div className="flex items-center gap-3">
+                                <AlertTriangle size={14} className="text-amber-500 flex-shrink-0" />
+                                <span className="text-xs text-gray-700">Send password reset email to <strong>{u.email}</strong>?</span>
+                                <button onClick={() => setResetConfirm(null)} className="px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#f59e0b' }}>
+                                  Send Reset Email
                                 </button>
-                              </>
-                            )}
-                            {u.id === 'u0' && (
-                              <span className="text-xs text-amber-600 font-semibold">Owner</span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                                <button onClick={() => setResetConfirm(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     ))}
                   </tbody>
                 </table>

@@ -210,6 +210,26 @@ export interface RevenueMonth {
   recurring: number
 }
 
+// ─── Standalone Task (App-wide task management) ──────────────────────────────
+
+export type AppTaskCategory = 'Deal' | 'Contract' | 'Billing' | 'Renewal' | 'Project' | 'Ticket' | 'General'
+export type AppTaskStatus = 'Pending' | 'In Progress' | 'Completed'
+
+export interface AppTask {
+  id: string
+  title: string
+  description?: string
+  category: AppTaskCategory
+  priority: TaskPriority
+  status: AppTaskStatus
+  company?: string
+  assignedTo: string
+  dueDate: string
+  createdDate: string
+  completedDate?: string
+  linkedId?: string
+}
+
 // ─── Full CRM Types ──────────────────────────────────────────────────────────
 
 export type CompanyStatus = 'Prospect' | 'Active Client' | 'Past Client' | 'Partner' | 'Churned'

@@ -7,7 +7,7 @@ import { useUI } from '@/contexts/UIContext'
 import {
   LayoutDashboard, Users, FileText, ScrollText, CreditCard,
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
-  Settings, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare,
+  Settings, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare, CheckSquare,
 } from 'lucide-react'
 
 interface NavItem {
@@ -27,6 +27,7 @@ const navigation: NavSection[] = [
     section: 'Overview',
     items: [
       { label: 'Dashboard', href: '/', icon: <LayoutDashboard size={16} /> },
+      { label: 'Tasks', href: '/tasks', icon: <CheckSquare size={16} /> },
     ],
   },
   {

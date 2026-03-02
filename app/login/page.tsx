@@ -42,8 +42,10 @@ export default function LoginPage() {
   const { login, loginWithGoogle, user, loading } = useAuth()
   const router = useRouter()
 
+  const [mode, setMode] = useState<'login' | 'forgot' | 'sent'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [forgotEmail, setForgotEmail] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -121,6 +123,24 @@ export default function LoginPage() {
     }
   }
 
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!forgotEmail) return
+    setSubmitting(true)
+    setError('')
+    try {
+      await fetch('/api/email/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+      })
+    } catch {
+      // Fail silently — always show confirmation
+    }
+    setSubmitting(false)
+    setMode('sent')
+  }
+
   if (loading) return null
 
   return (
@@ -177,118 +197,189 @@ export default function LoginPage() {
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
-            <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-1"
-                style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em' }}>
-                SIGN IN
-              </h2>
-              <p className="text-gray-500 text-sm">Access the Graviss Marketing operating system</p>
-            </div>
 
-            {/* ── Google Sign-In (official GIS rendered button) ── */}
-            <div className="mb-5">
-              {!GOOGLE_CLIENT_ID ? (
-                <div className="flex items-center justify-center gap-2 w-full h-11 rounded-lg border border-gray-200 bg-gray-50 text-gray-400 text-sm">
-                  Google Sign-In not configured
+            {/* ── Forgot Password: email entry ── */}
+            {mode === 'forgot' && (
+              <>
+                <button
+                  onClick={() => { setMode('login'); setError(''); setForgotEmail('') }}
+                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mb-6 transition-colors"
+                >
+                  ← Back to Sign In
+                </button>
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold text-gray-900 mb-1"
+                    style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em' }}>
+                    RESET PASSWORD
+                  </h2>
+                  <p className="text-gray-500 text-sm">Enter your email and we'll send a reset link.</p>
                 </div>
-              ) : (
-                <div className="relative w-full">
-                  {/* GIS renders the official Google button here */}
-                  <div ref={googleBtnRef} className="w-full" style={{ minHeight: 44 }} />
-                  {/* Loading overlay while processing credential */}
-                  {googleLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-lg">
-                      <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                <form onSubmit={handleForgotSubmit} className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Email Address</label>
+                    <div className="relative">
+                      <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="email"
+                        value={forgotEmail}
+                        onChange={e => setForgotEmail(e.target.value)}
+                        placeholder="you@gravissmarketing.com"
+                        className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                        autoFocus
+                        disabled={submitting}
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={submitting || !forgotEmail}
+                    className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-semibold transition-opacity disabled:opacity-50"
+                    style={{ background: '#015035' }}
+                  >
+                    {submitting ? (
+                      <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Sending…</>
+                    ) : (
+                      <>Send Reset Link <ArrowRight size={15} /></>
+                    )}
+                  </button>
+                </form>
+              </>
+            )}
+
+            {/* ── Forgot Password: confirmation ── */}
+            {mode === 'sent' && (
+              <div className="text-center py-4">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: '#e6f0ec' }}>
+                  <Mail size={24} style={{ color: '#015035' }} />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 mb-2"
+                  style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em' }}>
+                  CHECK YOUR EMAIL
+                </h2>
+                <p className="text-gray-500 text-sm mb-2">
+                  If <strong>{forgotEmail}</strong> has a GravHub account, a reset link is on its way.
+                </p>
+                <p className="text-gray-400 text-xs mb-6">The link expires in 24 hours. Check your spam folder if it doesn't arrive.</p>
+                <button
+                  onClick={() => { setMode('login'); setForgotEmail('') }}
+                  className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-semibold"
+                  style={{ background: '#015035' }}
+                >
+                  Back to Sign In
+                </button>
+              </div>
+            )}
+
+            {/* ── Normal login ── */}
+            {mode === 'login' && (
+              <>
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold text-gray-900 mb-1"
+                    style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em' }}>
+                    SIGN IN
+                  </h2>
+                  <p className="text-gray-500 text-sm">Access the Graviss Marketing operating system</p>
+                </div>
+
+                {/* ── Google Sign-In (official GIS rendered button) ── */}
+                <div className="mb-5">
+                  {!GOOGLE_CLIENT_ID ? (
+                    <div className="flex items-center justify-center gap-2 w-full h-11 rounded-lg border border-gray-200 bg-gray-50 text-gray-400 text-sm">
+                      Google Sign-In not configured
+                    </div>
+                  ) : (
+                    <div className="relative w-full">
+                      <div ref={googleBtnRef} className="w-full" style={{ minHeight: 44 }} />
+                      {googleLoading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-lg">
+                          <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
 
-            {/* Divider */}
-            <div className="flex items-center gap-3 mb-5">
-              <div className="flex-1 h-px bg-gray-200" />
-              <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">or sign in with email</span>
-              <div className="flex-1 h-px bg-gray-200" />
-            </div>
-
-            {/* ── Email/password form ── */}
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              {/* Email */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="you@gravissmarketing.com"
-                    className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
-                    autoComplete="email"
-                    autoFocus
-                    disabled={submitting}
-                  />
+                {/* Divider */}
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">or sign in with email</span>
+                  <div className="flex-1 h-px bg-gray-200" />
                 </div>
-              </div>
 
-              {/* Password */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide">Password</label>
-                  <button type="button" className="text-xs text-blue-600 hover:text-blue-700 font-medium">
-                    Forgot password?
-                  </button>
-                </div>
-                <div className="relative">
-                  <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••••"
-                    className="w-full pl-9 pr-10 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
-                    autoComplete="current-password"
-                    disabled={submitting}
-                  />
+                {/* ── Email/password form ── */}
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Email Address</label>
+                    <div className="relative">
+                      <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        placeholder="you@gravissmarketing.com"
+                        className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                        autoComplete="email"
+                        autoFocus
+                        disabled={submitting}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide">Password</label>
+                      <button
+                        type="button"
+                        onClick={() => { setMode('forgot'); setForgotEmail(email); setError('') }}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="••••••••••"
+                        className="w-full pl-9 pr-10 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                        autoComplete="current-password"
+                        disabled={submitting}
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                        onClick={() => setShowPassword(v => !v)}
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {error && (
+                    <div className="flex items-center gap-2.5 px-3 py-2.5 bg-red-50 border border-red-200 rounded-xl">
+                      <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
+                      <p className="text-sm text-red-700">{error}</p>
+                    </div>
+                  )}
+
                   <button
-                    type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                    onClick={() => setShowPassword(v => !v)}
-                    tabIndex={-1}
+                    type="submit"
+                    disabled={submitting}
+                    className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-semibold transition-opacity mt-1"
+                    style={{ background: submitting ? '#6b7280' : '#015035' }}
                   >
-                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    {submitting ? (
+                      <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Signing in...</>
+                    ) : (
+                      <>Sign In to GravHub <ArrowRight size={15} /></>
+                    )}
                   </button>
-                </div>
-              </div>
-
-              {/* Error */}
-              {error && (
-                <div className="flex items-center gap-2.5 px-3 py-2.5 bg-red-50 border border-red-200 rounded-xl">
-                  <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
-              )}
-
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-semibold transition-opacity mt-1"
-                style={{ background: submitting ? '#6b7280' : '#015035' }}
-              >
-                {submitting ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  <>Sign In to GravHub <ArrowRight size={15} /></>
-                )}
-              </button>
-            </form>
+                </form>
+              </>
+            )}
 
           </div>
 

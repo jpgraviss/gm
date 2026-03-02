@@ -13,12 +13,12 @@ import {
 
 // ─── Client data ──────────────────────────────────────────────────────────────
 
-const CLIENT_ACCOUNTS = [
-  { company: 'Coastal Realty',    service: 'Website',        access: 'Active',    lastLogin: '2 days ago',  contact: 'Dana Kim' },
-  { company: 'BlueStar Logistics', service: 'SEO',            access: 'Active',    lastLogin: '1 week ago',  contact: 'Kelly Shaw' },
-  { company: 'Harvest Foods',     service: 'Email Marketing', access: 'Active',    lastLogin: '3 days ago',  contact: 'Frank Lopez' },
-  { company: 'Apex Solutions',    service: 'Website',         access: 'Invited',   lastLogin: 'Never',       contact: 'Marcus Rivera' },
-  { company: 'Summit Capital',    service: 'Custom',          access: 'Not Setup', lastLogin: 'Never',       contact: 'Tanya Reeves' },
+const CLIENT_ACCOUNTS_SEED = [
+  { company: 'Coastal Realty',    service: 'Website',        access: 'Active',    lastLogin: '2 days ago',  contact: 'Dana Kim',       email: 'dana@coastalrealty.com' },
+  { company: 'BlueStar Logistics', service: 'SEO',           access: 'Active',    lastLogin: '1 week ago',  contact: 'Kelly Shaw',     email: 'kelly@bluestarlogistics.com' },
+  { company: 'Harvest Foods',     service: 'Email Marketing', access: 'Active',   lastLogin: '3 days ago',  contact: 'Frank Lopez',    email: 'frank@harvestfoods.com' },
+  { company: 'Apex Solutions',    service: 'Website',         access: 'Invited',  lastLogin: 'Never',       contact: 'Marcus Rivera',  email: 'marcus@apexsolutions.com' },
+  { company: 'Summit Capital',    service: 'Custom',          access: 'Not Setup', lastLogin: 'Never',      contact: 'Tanya Reeves',   email: 'tanya@summitcapital.com' },
 ]
 
 function getClientData(company: string) {
@@ -34,7 +34,7 @@ function getClientData(company: string) {
 function ClientPortalView({ company, onExit }: { company: string; onExit: () => void }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files'>('overview')
   const { project, contract, renewal, invoices: clientInvoices } = getClientData(company)
-  const accountInfo = CLIENT_ACCOUNTS.find(c => c.company === company)
+  const accountInfo = CLIENT_ACCOUNTS_SEED.find(c => c.company === company)
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
 
@@ -440,7 +440,34 @@ function ClientPortalView({ company, onExit }: { company: string; onExit: () => 
 
 export default function PortalPage() {
   const [viewAsClient, setViewAsClient] = useState(false)
-  const [previewCompany, setPreviewCompany] = useState(CLIENT_ACCOUNTS[0].company)
+  const [clients, setClients] = useState(CLIENT_ACCOUNTS_SEED)
+  const [previewCompany, setPreviewCompany] = useState(CLIENT_ACCOUNTS_SEED[0].company)
+  const [inviteStatus, setInviteStatus] = useState<Record<string, 'sending' | 'sent' | 'error'>>({})
+
+  async function sendPortalInvite(client: typeof CLIENT_ACCOUNTS_SEED[0], isResend = false) {
+    setInviteStatus(prev => ({ ...prev, [client.company]: 'sending' }))
+    try {
+      const res = await fetch('/api/email/portal-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: client.company,
+          contactName: client.contact,
+          email: client.email,
+          service: client.service,
+          isResend,
+        }),
+      })
+      const ok = res.ok
+      setInviteStatus(prev => ({ ...prev, [client.company]: ok ? 'sent' : 'error' }))
+      if (ok && client.access === 'Not Setup') {
+        setClients(prev => prev.map(c => c.company === client.company ? { ...c, access: 'Invited' } : c))
+      }
+      setTimeout(() => setInviteStatus(prev => { const n = { ...prev }; delete n[client.company]; return n }), 4000)
+    } catch {
+      setInviteStatus(prev => ({ ...prev, [client.company]: 'error' }))
+    }
+  }
 
   if (viewAsClient) {
     return <ClientPortalView company={previewCompany} onExit={() => setViewAsClient(false)} />
@@ -468,7 +495,7 @@ export default function PortalPage() {
               onChange={e => setPreviewCompany(e.target.value)}
               className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
             >
-              {CLIENT_ACCOUNTS.filter(c => c.access === 'Active').map(c => (
+              {clients.filter(c => c.access === 'Active').map(c => (
                 <option key={c.company} value={c.company}>{c.company}</option>
               ))}
             </select>
@@ -485,9 +512,9 @@ export default function PortalPage() {
         {/* Portal Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {[
-            { label: 'Active Client Accounts', value: CLIENT_ACCOUNTS.filter(c => c.access === 'Active').length.toString(), icon: <Globe size={16} />, color: '#015035' },
+            { label: 'Active Client Accounts', value: clients.filter(c => c.access === 'Active').length.toString(), icon: <Globe size={16} />, color: '#015035' },
             { label: 'Portal Logins This Month', value: '12', icon: <Eye size={16} />, color: '#3b82f6' },
-            { label: 'Invitations Pending', value: CLIENT_ACCOUNTS.filter(c => c.access === 'Invited').length.toString(), icon: <Lock size={16} />, color: '#f59e0b' },
+            { label: 'Invitations Pending', value: clients.filter(c => c.access === 'Invited').length.toString(), icon: <Lock size={16} />, color: '#f59e0b' },
           ].map(m => (
             <div key={m.label} className="metric-card flex items-center gap-4">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${m.color}18` }}>
@@ -519,7 +546,7 @@ export default function PortalPage() {
               </tr>
             </thead>
             <tbody>
-              {CLIENT_ACCOUNTS.map(client => (
+              {clients.map(client => (
                 <tr key={client.company} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2">
@@ -550,19 +577,49 @@ export default function PortalPage() {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2">
-                      {client.access === 'Active' && (
-                        <button
-                          onClick={() => { setPreviewCompany(client.company); setViewAsClient(true) }}
-                          className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                        >
-                          <Eye size={11} /> Preview
-                        </button>
+                      {inviteStatus[client.company] === 'sending' && (
+                        <span className="text-xs text-gray-400 flex items-center gap-1">
+                          <div className="w-3 h-3 border border-gray-300 border-t-gray-600 rounded-full animate-spin" /> Sending…
+                        </span>
                       )}
-                      {client.access === 'Invited' && (
-                        <button className="text-xs text-orange-600 hover:text-orange-700 font-medium">Resend Invite</button>
+                      {inviteStatus[client.company] === 'sent' && (
+                        <span className="text-xs text-emerald-600 flex items-center gap-1">
+                          <CheckCircle size={11} /> Sent!
+                        </span>
                       )}
-                      {client.access === 'Not Setup' && (
-                        <button className="text-xs text-gray-600 hover:text-gray-700 font-medium">Setup Access</button>
+                      {inviteStatus[client.company] === 'error' && (
+                        <span className="text-xs text-red-500 flex items-center gap-1">
+                          <AlertTriangle size={11} /> Failed
+                        </span>
+                      )}
+                      {!inviteStatus[client.company] && (
+                        <>
+                          {client.access === 'Active' && (
+                            <button
+                              onClick={() => { setPreviewCompany(client.company); setViewAsClient(true) }}
+                              className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                            >
+                              <Eye size={11} /> Preview
+                            </button>
+                          )}
+                          {client.access === 'Invited' && (
+                            <button
+                              onClick={() => sendPortalInvite(client, true)}
+                              className="text-xs text-orange-600 hover:text-orange-700 font-medium"
+                            >
+                              Resend Invite
+                            </button>
+                          )}
+                          {client.access === 'Not Setup' && (
+                            <button
+                              onClick={() => sendPortalInvite(client, false)}
+                              className="text-xs font-medium px-2.5 py-1 rounded-lg text-white"
+                              style={{ background: '#015035' }}
+                            >
+                              Send Invite
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>

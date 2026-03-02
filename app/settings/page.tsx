@@ -106,7 +106,7 @@ export default function SettingsPage() {
     setQbSync(prev => prev.map(n => n.label === label ? { ...n, enabled: !n.enabled } : n))
   }
 
-  function submitInvite() {
+  async function submitInvite() {
     if (!inviteForm.name || !inviteForm.email) return
     const initials = inviteForm.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     setMembers(prev => [...prev, {
@@ -117,6 +117,18 @@ export default function SettingsPage() {
       unit: inviteForm.unit as typeof teamMembers[0]['unit'],
       initials,
     }])
+    // Send invite email
+    fetch('/api/email/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: inviteForm.name,
+        email: inviteForm.email,
+        role: inviteForm.role,
+        unit: inviteForm.unit,
+        invitedBy: 'the GravHub admin',
+      }),
+    }).catch(() => {/* non-blocking */})
     setInviteForm({ name: '', email: '', role: 'Team Member', unit: 'Sales' })
     setInviteOpen(false)
   }

@@ -170,11 +170,41 @@ export default function AdminPage() {
   const [users, setUsers] = useState(allUsers)
   const [addForm, setAddForm] = useState({ name: '', email: '', password: '', role: 'Team Member', unit: 'Sales' })
   const [resetConfirm, setResetConfirm] = useState<string | null>(null)
+  const [emailStatus, setEmailStatus] = useState<Record<string, 'sending' | 'sent' | 'error'>>({})
 
-  function submitAddUser() {
+  async function sendInviteEmail(name: string, email: string, role: string, unit: string, tempPassword: string) {
+    try {
+      const res = await fetch('/api/email/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, role, unit, invitedBy: user?.name, tempPassword }),
+      })
+      return res.ok
+    } catch {
+      return false
+    }
+  }
+
+  async function sendResetEmail(targetUser: typeof allUsers[0]) {
+    setEmailStatus(prev => ({ ...prev, [targetUser.id]: 'sending' }))
+    try {
+      const res = await fetch('/api/email/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: targetUser.name, email: targetUser.email, resetBy: user?.name }),
+      })
+      setEmailStatus(prev => ({ ...prev, [targetUser.id]: res.ok ? 'sent' : 'error' }))
+      setTimeout(() => setEmailStatus(prev => { const n = { ...prev }; delete n[targetUser.id]; return n }), 4000)
+    } catch {
+      setEmailStatus(prev => ({ ...prev, [targetUser.id]: 'error' }))
+    }
+    setResetConfirm(null)
+  }
+
+  async function submitAddUser() {
     if (!addForm.name || !addForm.email) return
     const initials = addForm.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
-    setUsers(prev => [...prev, {
+    const newUser = {
       id: `u${Date.now()}`,
       name: addForm.name,
       email: addForm.email,
@@ -184,7 +214,12 @@ export default function AdminPage() {
       lastLogin: 'Never',
       initials,
       isAdmin: false,
-    }])
+    }
+    setUsers(prev => [...prev, newUser])
+    // Send invite email in background
+    if (addForm.email) {
+      sendInviteEmail(addForm.name, addForm.email, addForm.role, addForm.unit, addForm.password || 'Welcome1!')
+    }
     setAddForm({ name: '', email: '', password: '', role: 'Team Member', unit: 'Sales' })
     setShowAddUser(false)
   }
@@ -381,8 +416,8 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 mt-4">
-                  <button onClick={submitAddUser} className="px-4 py-2 text-white text-sm font-medium rounded-lg" style={{ background: '#015035' }}>
-                    Add User
+                  <button onClick={() => submitAddUser()} className="px-4 py-2 text-white text-sm font-medium rounded-lg" style={{ background: '#015035' }}>
+                    Add User &amp; Send Invite Email
                   </button>
                   <button onClick={() => setShowAddUser(false)} className="px-4 py-2 text-gray-600 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
                     Cancel
@@ -525,14 +560,37 @@ export default function AdminPage() {
                         {resetConfirm === u.id && (
                           <tr key={`reset-${u.id}`} className="bg-amber-50/40 border-b border-amber-100">
                             <td colSpan={6} className="px-5 py-3">
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-3 flex-wrap">
                                 <AlertTriangle size={14} className="text-amber-500 flex-shrink-0" />
                                 <span className="text-xs text-gray-700">Send password reset email to <strong>{u.email}</strong>?</span>
-                                <button onClick={() => setResetConfirm(null)} className="px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#f59e0b' }}>
-                                  Send Reset Email
+                                <button
+                                  onClick={() => sendResetEmail(u)}
+                                  disabled={emailStatus[u.id] === 'sending'}
+                                  className="px-3 py-1.5 text-xs font-medium text-white rounded-lg disabled:opacity-60"
+                                  style={{ background: '#f59e0b' }}
+                                >
+                                  {emailStatus[u.id] === 'sending' ? 'Sending…' : 'Send Reset Email'}
                                 </button>
                                 <button onClick={() => setResetConfirm(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
                               </div>
+                            </td>
+                          </tr>
+                        )}
+                        {emailStatus[u.id] === 'sent' && (
+                          <tr key={`sent-${u.id}`} className="bg-green-50/40 border-b border-green-100">
+                            <td colSpan={6} className="px-5 py-2">
+                              <span className="flex items-center gap-2 text-xs text-green-700 font-medium">
+                                <CheckCircle size={12} /> Reset email sent to {u.email}
+                              </span>
+                            </td>
+                          </tr>
+                        )}
+                        {emailStatus[u.id] === 'error' && (
+                          <tr key={`err-${u.id}`} className="bg-red-50/40 border-b border-red-100">
+                            <td colSpan={6} className="px-5 py-2">
+                              <span className="flex items-center gap-2 text-xs text-red-600 font-medium">
+                                <AlertTriangle size={12} /> Failed to send email — check RESEND_API_KEY in .env.local
+                              </span>
                             </td>
                           </tr>
                         )}

@@ -136,7 +136,8 @@ export default function ReportsPage() {
           {/* Rep Performance */}
           <div className="metric-card">
             <h3 className="font-semibold text-gray-800 text-sm mb-4">Sales Rep Performance</h3>
-            <table className="w-full">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[320px]">
               <thead>
                 <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100">
                   <th className="text-left pb-2 font-semibold">Rep</th>
@@ -175,6 +176,7 @@ export default function ReportsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* Operational */}
@@ -190,7 +192,7 @@ export default function ReportsPage() {
                 { label: 'MRR Growth', value: '+14%', bar: 0.14, color: '#8b5cf6' },
               ].map(m => (
                 <div key={m.label} className="flex items-center gap-3">
-                  <span className="text-xs text-gray-600 w-36 flex-shrink-0">{m.label}</span>
+                  <span className="text-xs text-gray-600 w-24 sm:w-36 flex-shrink-0">{m.label}</span>
                   <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${m.bar * 100}%`, background: m.color }} />
                   </div>
@@ -203,9 +205,9 @@ export default function ReportsPage() {
 
         {/* Retention */}
         <div className="metric-card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-800 text-sm">Retention & Renewal Forecast</h3>
-            <div className="flex items-center gap-4 text-xs text-gray-500">
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+            <h3 className="font-semibold text-gray-800 text-sm flex-shrink-0">Retention & Renewal Forecast</h3>
+            <div className="flex items-center gap-3 text-xs text-gray-500 flex-shrink-0">
               <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ background: '#015035' }} /> Renewed</div>
               <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-yellow-400" /> In Progress</div>
               <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-gray-200" /> Upcoming</div>
@@ -214,7 +216,7 @@ export default function ReportsPage() {
           <div className="flex flex-col gap-2">
             {renewals.map(r => (
               <div key={r.id} className="flex items-center gap-3">
-                <span className="text-xs text-gray-600 w-36 font-medium truncate">{r.company}</span>
+                <span className="text-xs text-gray-600 w-24 sm:w-36 font-medium truncate">{r.company}</span>
                 <div className="flex-1 relative h-6 bg-gray-100 rounded-lg overflow-hidden">
                   <div
                     className="absolute left-0 top-0 h-full rounded-lg flex items-center px-2"
@@ -228,7 +230,7 @@ export default function ReportsPage() {
                     <span className="text-[10px] font-semibold text-gray-700 z-10">{r.daysUntilExpiry}d until renewal</span>
                   </div>
                 </div>
-                <span className="text-xs font-bold text-gray-700 w-20 text-right">{formatCurrency(r.renewalValue)}</span>
+                <span className="text-xs font-bold text-gray-700 w-14 sm:w-20 text-right">{formatCurrency(r.renewalValue)}</span>
               </div>
             ))}
           </div>

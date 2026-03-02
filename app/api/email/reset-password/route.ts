@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await resend.emails.send({
       from: 'GravHub <noreply@gravissmarketing.com>',
+      replyTo: 'info@gravissmarketing.com',
       to: [email],
       subject: 'GravHub — Password Reset',
       html: resetEmailHtml({ name, resetUrl, resetBy: resetBy ?? 'an administrator', expiryHours: 24 }),

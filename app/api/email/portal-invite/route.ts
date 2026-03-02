@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await resend.emails.send({
       from: 'GravHub <noreply@gravissmarketing.com>',
+      replyTo: 'info@gravissmarketing.com',
       to: [email],
       subject: isResend
         ? `Reminder: Your ${company} client portal is ready`

@@ -103,12 +103,12 @@ function ContractPanel({
         </div>
 
         {/* Tabs */}
-        <div className="flex-shrink-0 flex border-b border-gray-100 px-4 pt-3 gap-5">
+        <div className="flex-shrink-0 flex border-b border-gray-100 px-4 pt-3 gap-5 overflow-x-auto">
           {(['overview', 'invoices', 'project', 'addendums'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`pb-2.5 text-xs font-semibold capitalize border-b-2 transition-colors ${
+              className={`pb-2.5 text-xs font-semibold capitalize border-b-2 transition-colors flex-shrink-0 ${
                 activeTab === tab ? 'border-green-800 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'
               }`}
             >

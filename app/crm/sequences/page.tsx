@@ -243,9 +243,9 @@ function SequencePanel({ seq, onClose }: { seq: EmailSequence; onClose: () => vo
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0">
+        <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
           {(['steps', 'stats', 'enrolled'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize ${tab === t ? 'active' : ''}`}>{t}</button>
+            <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}>{t}</button>
           ))}
         </div>
 

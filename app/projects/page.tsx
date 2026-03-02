@@ -172,9 +172,9 @@ function ProjectDetailPanel({ project, onClose }: { project: Project; onClose: (
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0">
+        <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
           {(['overview', 'milestones', 'tasks', 'notes'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize ${tab === t ? 'active' : ''}`}>
+            <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}>
               {t}
             </button>
           ))}

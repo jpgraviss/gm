@@ -42,7 +42,7 @@ function ClientPortalView({ company, onExit }: { company: string; onExit: () => 
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: '#f8fafc' }}>
 
       {/* Admin preview banner */}
-      <div className="flex items-center justify-between px-4 py-2 text-xs font-semibold text-amber-800 bg-amber-100 border-b border-amber-300 flex-shrink-0">
+      <div className="flex items-center justify-between gap-2 flex-wrap px-4 py-2 text-xs font-semibold text-amber-800 bg-amber-100 border-b border-amber-300 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Eye size={13} className="text-amber-600" />
           <span>Previewing client portal as <strong>{company}</strong> — this is what your client sees</span>
@@ -95,7 +95,7 @@ function ClientPortalView({ company, onExit }: { company: string; onExit: () => 
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-3 pb-2.5 text-xs font-semibold border-b-2 transition-colors ${
+            className={`flex items-center gap-1.5 px-3 pb-2.5 text-xs font-semibold border-b-2 transition-colors flex-shrink-0 whitespace-nowrap ${
               activeTab === tab.id
                 ? 'border-green-800 text-gray-900'
                 : 'border-transparent text-gray-400 hover:text-gray-600'
@@ -316,21 +316,23 @@ function ClientPortalView({ company, onExit }: { company: string; onExit: () => 
               {clientInvoices.length > 0 ? (
                 <div className="flex flex-col divide-y divide-gray-100">
                   {clientInvoices.map(inv => (
-                    <div key={inv.id} className="flex items-center gap-4 px-5 py-3.5">
-                      <div className="flex-1">
+                    <div key={inv.id} className="flex items-center gap-3 px-5 py-3.5 flex-wrap">
+                      <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800">{inv.id.toUpperCase()}</p>
                         <p className="text-xs text-gray-400">Issued {formatDate(inv.issuedDate)} · Due {formatDate(inv.dueDate)}</p>
                       </div>
-                      <p className="text-sm font-bold text-gray-900">{formatCurrency(inv.amount)}</p>
-                      <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
-                      {inv.status !== 'Paid' && (
-                        <button className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors">
-                          Pay
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <p className="text-sm font-bold text-gray-900">{formatCurrency(inv.amount)}</p>
+                        <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
+                        {inv.status !== 'Paid' && (
+                          <button className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors">
+                            Pay
+                          </button>
+                        )}
+                        <button className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                          <Download size={13} />
                         </button>
-                      )}
-                      <button className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                        <Download size={13} />
-                      </button>
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Header from '@/components/layout/Header'
 import { teamMembers } from '@/lib/data'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   Users, Shield, Bell, Palette, Building, Plus, Pencil, Link2,
   CheckCircle, AlertCircle, RefreshCw, Plug, Globe, Tag,
@@ -84,6 +85,7 @@ const QB_SYNC_DEFAULTS = [
 ]
 
 export default function SettingsPage() {
+  const { gmailToken, gmailEmail, connectGmail, disconnectGmail } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('Company')
   const [notifications, setNotifications] = useState(NOTIF_DEFAULTS)
   const [qbSync, setQbSync] = useState(QB_SYNC_DEFAULTS)
@@ -455,6 +457,40 @@ export default function SettingsPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
             <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Connected Integrations</h3>
             <div className="flex flex-col gap-3">
+              {/* Gmail — live connect/disconnect */}
+              <div className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
+                <div className="text-2xl flex-shrink-0">✉️</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800">Gmail</p>
+                  <p className="text-xs text-gray-500">Read your inbox and log emails directly as CRM activities</p>
+                  {gmailEmail && (
+                    <p className="text-[11px] text-gray-400 mt-0.5">Connected as: {gmailEmail}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <span className={`text-[11px] font-semibold hidden sm:flex items-center gap-0.5 ${gmailToken ? 'text-emerald-600' : 'text-gray-400'}`}>
+                    {gmailToken ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+                    {gmailToken ? 'Connected' : 'Not Connected'}
+                  </span>
+                  {gmailToken ? (
+                    <button
+                      onClick={disconnectGmail}
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-200 transition-colors"
+                    >
+                      Disconnect
+                    </button>
+                  ) : (
+                    <button
+                      onClick={connectGmail}
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg text-white transition-colors"
+                      style={{ background: '#015035' }}
+                    >
+                      Connect
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {[
                 { name: 'QuickBooks Online', description: 'Sync invoices, payments, and client accounts', status: 'connected', statusLabel: 'Connected', lastSync: '2 hours ago', icon: '🟢', action: 'Manage' },
                 { name: 'Google Workspace', description: 'Single sign-on and calendar integration', status: 'connected', statusLabel: 'Active', lastSync: 'Continuous', icon: '🔵', action: 'Manage' },

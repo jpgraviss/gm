@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 
 export interface AuthUser {
   id: string
@@ -19,6 +19,11 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   loginWithGoogle: (credential: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
+  // Gmail
+  gmailToken: string | null
+  gmailEmail: string | null
+  connectGmail: () => void
+  disconnectGmail: () => void
 }
 
 // Registered platform users
@@ -102,12 +107,19 @@ const AuthContext = createContext<AuthContextType | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [gmailToken, setGmailToken] = useState<string | null>(null)
+  const [gmailEmail, setGmailEmail] = useState<string | null>(null)
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem('gravhub_session')
       if (stored) {
         setUser(JSON.parse(stored))
+      }
+      const storedGmailEmail = localStorage.getItem('gravhub_gmail_email')
+      if (storedGmailEmail) {
+        setGmailEmail(storedGmailEmail)
+        // Note: access tokens expire — token itself is not persisted; user reconnects if expired
       }
     } catch {
       // ignore parse errors
@@ -172,11 +184,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem('gravhub_session')
+    localStorage.removeItem('gravhub_gmail_email')
     setUser(null)
+    setGmailToken(null)
+    setGmailEmail(null)
   }
 
+  const connectGmail = useCallback(() => {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+    if (!clientId) return
+
+    const g = (window as unknown as { google?: { accounts?: { oauth2?: { initTokenClient: (cfg: object) => { requestAccessToken: () => void } } } } }).google
+    if (!g?.accounts?.oauth2) {
+      console.error('Google Identity Services not loaded')
+      return
+    }
+
+    const tokenClient = g.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: [
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.send',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ].join(' '),
+      callback: (resp: { access_token?: string; error?: string }) => {
+        if (resp.error || !resp.access_token) return
+        setGmailToken(resp.access_token)
+        // Fetch the connected email address
+        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${resp.access_token}` },
+        })
+          .then(r => r.json())
+          .then((info: { email?: string }) => {
+            if (info.email) {
+              setGmailEmail(info.email)
+              localStorage.setItem('gravhub_gmail_email', info.email)
+            }
+          })
+          .catch(() => {/* non-blocking */})
+      },
+    })
+
+    tokenClient.requestAccessToken()
+  }, [])
+
+  const disconnectGmail = useCallback(() => {
+    const g = (window as unknown as { google?: { accounts?: { oauth2?: { revoke: (token: string, cb: () => void) => void } } } }).google
+    if (gmailToken && g?.accounts?.oauth2) {
+      g.accounts.oauth2.revoke(gmailToken, () => {/* revoked */})
+    }
+    setGmailToken(null)
+    setGmailEmail(null)
+    localStorage.removeItem('gravhub_gmail_email')
+  }, [gmailToken])
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout, gmailToken, gmailEmail, connectGmail, disconnectGmail }}>
       {children}
     </AuthContext.Provider>
   )

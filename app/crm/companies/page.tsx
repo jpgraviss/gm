@@ -13,7 +13,8 @@ import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewCompanyPanel, { type NewCompanyFormData } from '@/components/crm/NewCompanyPanel'
-import type { CRMCompany, CompanyStatus } from '@/lib/types'
+import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
+import type { CRMCompany, CRMContact, CompanyStatus } from '@/lib/types'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight,
@@ -37,9 +38,36 @@ const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Cli
 function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () => void }) {
   const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'activity'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
+  const [addingContact, setAddingContact] = useState(false)
+  const [extraContacts, setExtraContacts] = useState<CRMContact[]>([])
   const [localActivities, setLocalActivities] = useState(
     () => crmActivities.filter(a => a.companyId === company.id)
   )
+
+  function handleAddContact(data: NewContactFormData) {
+    const newContact: CRMContact = {
+      id: `contact-${Date.now()}`,
+      companyId: company.id,
+      companyName: company.name,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      fullName: `${data.firstName} ${data.lastName}`,
+      title: data.title,
+      email: data.email,
+      phone: data.phone,
+      mobile: data.mobile || undefined,
+      linkedIn: data.linkedIn || undefined,
+      website: data.website || undefined,
+      isPrimary: false,
+      owner: data.owner,
+      tags: [],
+      contactNotes: [],
+      contactTasks: [],
+      createdDate: new Date().toISOString().split('T')[0],
+    }
+    setExtraContacts(prev => [...prev, newContact])
+    setAddingContact(false)
+  }
 
   function handleSaveActivity(activity: LoggedActivity) {
     setLocalActivities(prev => [{
@@ -71,6 +99,7 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
   const openDeals = companyDeals.filter(d => !d.stage.startsWith('Closed'))
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
       <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(560px, 100vw)' }}>
@@ -227,7 +256,7 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
           {/* ── Contacts ── */}
           {tab === 'contacts' && (
             <div className="flex flex-col gap-3">
-              {companyContacts.map(c => (
+              {[...companyContacts, ...extraContacts].map(c => (
                 <div key={c.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
                   <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
                     {c.firstName[0]}{c.lastName[0]}
@@ -254,10 +283,13 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
                   </div>
                 </div>
               ))}
-              {companyContacts.length === 0 && (
+              {companyContacts.length === 0 && extraContacts.length === 0 && (
                 <p className="text-sm text-gray-400 text-center py-8">No contacts linked to this company.</p>
               )}
-              <button className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5">
+              <button
+                onClick={() => setAddingContact(true)}
+                className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+              >
                 <Plus size={14} /> Add Contact
               </button>
             </div>
@@ -379,6 +411,13 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
         )}
       </div>
     </div>
+    {addingContact && (
+      <NewContactPanel
+        onSave={handleAddContact}
+        onClose={() => setAddingContact(false)}
+      />
+    )}
+    </>
   )
 }
 
@@ -565,6 +604,7 @@ export default function CompaniesPage() {
 
       {selectedCompany && <CompanyPanel company={selectedCompany} onClose={() => setSelectedCompany(null)} />}
       {creatingCompany && <NewCompanyPanel onSave={handleNewCompany} onClose={() => setCreatingCompany(false)} />}
+      {/* addingContact is managed inside CompanyPanel via its own NewContactPanel render */}
     </>
   )
 }

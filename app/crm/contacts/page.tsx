@@ -19,7 +19,7 @@ import {
   ChevronRight, Linkedin, StickyNote, CheckSquare,
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
-  PhoneCall, Video,
+  PhoneCall, Video, Pencil, Trash2,
 } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -39,6 +39,227 @@ const taskPriorityConfig: Record<ContactTask['priority'], { label: string; color
   high:   { label: 'High',   color: '#dc2626', bg: '#fef2f2' },
   medium: { label: 'Medium', color: '#d97706', bg: '#fffbeb' },
   low:    { label: 'Low',    color: '#6b7280', bg: '#f9fafb' },
+}
+
+// ─── Edit Contact Panel ───────────────────────────────────────────────────────
+
+const REPS = ['Sarah Chen', 'Marcus Webb']
+
+function EditContactPanel({
+  contact,
+  onSave,
+  onDelete,
+  onClose,
+}: {
+  contact: CRMContact
+  onSave: (updated: CRMContact) => void
+  onDelete: (id: string) => void
+  onClose: () => void
+}) {
+  const [form, setForm] = useState({
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    title: contact.title,
+    email: contact.email,
+    phone: contact.phone,
+    mobile: contact.mobile ?? '',
+    linkedIn: contact.linkedIn ?? '',
+    website: contact.website ?? '',
+    owner: contact.owner,
+    notes: contact.notes ?? '',
+  })
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  function set(field: keyof typeof form, value: string) {
+    setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  function handleSave() {
+    onSave({
+      ...contact,
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      fullName: `${form.firstName.trim()} ${form.lastName.trim()}`,
+      title: form.title.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      mobile: form.mobile.trim() || undefined,
+      linkedIn: form.linkedIn.trim() || undefined,
+      website: form.website.trim() || undefined,
+      owner: form.owner,
+      notes: form.notes.trim() || undefined,
+    })
+  }
+
+  const canSave = form.firstName.trim() && form.lastName.trim() && form.email.trim()
+
+  return (
+    <div className="fixed inset-0 z-[60] flex pointer-events-none">
+      <div className="flex-1 pointer-events-auto" onClick={onClose} />
+      <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(520px, 100vw)' }}>
+
+        {/* Header */}
+        <div className="p-6 flex-shrink-0 flex items-start justify-between" style={{ background: '#012b1e' }}>
+          <div>
+            <h2 className="text-white font-bold text-base">Edit Contact</h2>
+            <p className="text-white/50 text-xs mt-0.5">{contact.fullName} · {contact.companyName}</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10">
+            <X size={16} className="text-white/70" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Name</label>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                placeholder="First name"
+                value={form.firstName}
+                onChange={e => set('firstName', e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <input
+                placeholder="Last name"
+                value={form.lastName}
+                onChange={e => set('lastName', e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title / Role</label>
+            <input
+              placeholder="e.g. Marketing Director"
+              value={form.title}
+              onChange={e => set('title', e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Contact Info</label>
+            <div className="flex flex-col gap-2">
+              <input
+                type="email"
+                placeholder="Email address"
+                value={form.email}
+                onChange={e => set('email', e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="tel"
+                  placeholder="Direct phone"
+                  value={form.phone}
+                  onChange={e => set('phone', e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <input
+                  type="tel"
+                  placeholder="Mobile"
+                  value={form.mobile}
+                  onChange={e => set('mobile', e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Online Presence</label>
+            <div className="flex flex-col gap-2">
+              <input
+                type="url"
+                placeholder="Website URL"
+                value={form.website}
+                onChange={e => set('website', e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <input
+                type="url"
+                placeholder="LinkedIn URL"
+                value={form.linkedIn}
+                onChange={e => set('linkedIn', e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Owner</label>
+            <select
+              value={form.owner}
+              onChange={e => set('owner', e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+            >
+              {REPS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Notes</label>
+            <textarea
+              placeholder="Background context, how you met, key interests..."
+              rows={3}
+              value={form.notes}
+              onChange={e => set('notes', e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+            />
+          </div>
+
+          {/* Delete section */}
+          <div className="pt-2 border-t border-gray-200">
+            {confirmDelete ? (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                <p className="text-sm font-semibold text-red-700 mb-1">Delete this contact?</p>
+                <p className="text-xs text-red-500 mb-3">This action cannot be undone.</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => onDelete(contact.id)}
+                    className="flex-1 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700"
+                  >
+                    Yes, Delete
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="flex items-center gap-2 text-sm text-red-500 hover:text-red-700 font-medium py-1"
+              >
+                <Trash2 size={14} /> Delete Contact
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
+          <button
+            onClick={handleSave}
+            disabled={!canSave}
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 hover:opacity-90"
+            style={{ background: '#015035' }}
+          >
+            Save Changes
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ─── Contact Detail Panel ─────────────────────────────────────────────────────
@@ -195,7 +416,11 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
               <Linkedin size={13} /> LinkedIn
             </a>
           )}
-          <button className="ml-auto flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-white hover:opacity-90" style={{ background: '#015035' }}>
+          <button
+            onClick={() => { setLoggingActivity(true); setTab('activity') }}
+            className="ml-auto flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-white hover:opacity-90"
+            style={{ background: '#015035' }}
+          >
             <Plus size={13} /> Log Activity
           </button>
         </div>
@@ -588,8 +813,21 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
 export default function ContactsPage() {
   const [search, setSearch] = useState('')
   const [selectedContact, setSelectedContact] = useState<CRMContact | null>(null)
+  const [editingContact, setEditingContact] = useState<CRMContact | null>(null)
   const [localContacts, setLocalContacts] = useState<CRMContact[]>(crmContacts)
   const [creatingContact, setCreatingContact] = useState(false)
+
+  function handleEditSave(updated: CRMContact) {
+    setLocalContacts(prev => prev.map(c => c.id === updated.id ? updated : c))
+    setEditingContact(null)
+    if (selectedContact?.id === updated.id) setSelectedContact(updated)
+  }
+
+  function handleDelete(id: string) {
+    setLocalContacts(prev => prev.filter(c => c.id !== id))
+    setEditingContact(null)
+    if (selectedContact?.id === id) setSelectedContact(null)
+  }
 
   function handleNewContact(data: NewContactFormData) {
     const company = crmCompanies.find(c => c.name === data.companyName)
@@ -737,6 +975,13 @@ export default function ContactsPage() {
                             <Linkedin size={13} />
                           </a>
                         )}
+                        <button
+                          onClick={() => setEditingContact(contact)}
+                          className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+                          title="Edit contact"
+                        >
+                          <Pencil size={13} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -756,6 +1001,14 @@ export default function ContactsPage() {
 
       {selectedContact && <ContactPanel contact={selectedContact} onClose={() => setSelectedContact(null)} />}
       {creatingContact && <NewContactPanel onSave={handleNewContact} onClose={() => setCreatingContact(false)} />}
+      {editingContact && (
+        <EditContactPanel
+          contact={editingContact}
+          onSave={handleEditSave}
+          onDelete={handleDelete}
+          onClose={() => setEditingContact(null)}
+        />
+      )}
     </>
   )
 }

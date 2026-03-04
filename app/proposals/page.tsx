@@ -6,7 +6,7 @@ import Header from '@/components/layout/Header'
 import { proposals as seedProposals, deals, contracts } from '@/lib/data'
 import { formatCurrency, proposalStatusColors, serviceTypeColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
+import ProposalBuilderPanel from '@/components/crm/ProposalBuilderPanel'
 import type { Proposal, ProposalStatus } from '@/lib/types'
 import {
   Eye, Send, CheckCircle, XCircle, FileText, DollarSign, Calendar, User, X,
@@ -401,17 +401,12 @@ export default function ProposalsPage() {
     })
   }
 
-  function handleNewProposal(data: NewProposalFormData) {
+  function handleNewProposal(data: Omit<Proposal, 'id' | 'dealId' | 'createdDate'>) {
     const newProposal: Proposal = {
       id: `prop-${Date.now()}`,
       dealId: '',
-      company: data.company,
-      status: 'Draft',
-      value: Number(data.value),
-      serviceType: data.serviceType,
-      assignedRep: data.assignedRep,
       createdDate: new Date().toISOString().split('T')[0],
-      items: [],
+      ...data,
     }
     setLocalProposals(prev => [newProposal, ...prev])
     setCreatingProposal(false)
@@ -566,7 +561,7 @@ export default function ProposalsPage() {
         />
       )}
       {creatingProposal && (
-        <NewProposalPanel onSave={handleNewProposal} onClose={() => setCreatingProposal(false)} />
+        <ProposalBuilderPanel onSave={handleNewProposal} onClose={() => setCreatingProposal(false)} />
       )}
     </>
   )

@@ -14,11 +14,13 @@ import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewCompanyPanel, { type NewCompanyFormData } from '@/components/crm/NewCompanyPanel'
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
+import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
+import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMCompany, CRMContact, CompanyStatus } from '@/lib/types'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight,
-  ExternalLink, TrendingUp, FolderKanban,
+  ExternalLink, TrendingUp, FolderKanban, Pencil, Tag,
 } from 'lucide-react'
 
 // ─── Status colors ────────────────────────────────────────────────────────────
@@ -35,14 +37,30 @@ const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Cli
 
 // ─── Company Detail Panel ─────────────────────────────────────────────────────
 
-function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () => void }) {
+function CompanyPanel({ company, onClose, onEdit }: { company: CRMCompany; onClose: () => void; onEdit?: () => void }) {
   const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'activity'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
+  const [creatingProposal, setCreatingProposal] = useState(false)
   const [extraContacts, setExtraContacts] = useState<CRMContact[]>([])
+  const [localTags, setLocalTags] = useState<string[]>(company.tags)
+  const [newTag, setNewTag] = useState('')
+  const [addingTag, setAddingTag] = useState(false)
   const [localActivities, setLocalActivities] = useState(
     () => crmActivities.filter(a => a.companyId === company.id)
   )
+
+  function handleAddTag() {
+    const tag = newTag.trim()
+    if (!tag || localTags.includes(tag)) return
+    setLocalTags(prev => [...prev, tag])
+    setNewTag('')
+    setAddingTag(false)
+  }
+
+  function handleRemoveTag(tag: string) {
+    setLocalTags(prev => prev.filter(t => t !== tag))
+  }
 
   function handleAddContact(data: NewContactFormData) {
     const newContact: CRMContact = {
@@ -123,9 +141,16 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
                 </div>
               </div>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0">
-              <X size={18} className="text-white/60" />
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {onEdit && (
+                <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0" title="Edit company">
+                  <Pencil size={15} className="text-white/60" />
+                </button>
+              )}
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0">
+                <X size={18} className="text-white/60" />
+              </button>
+            </div>
           </div>
 
           {/* Metrics */}
@@ -215,6 +240,23 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
                 </div>
               ))}
 
+              {/* AI Insights */}
+              <AiInsightsPanel
+                type="company"
+                name={company.name}
+                context={[
+                  `Industry: ${company.industry}`,
+                  `Status: ${company.status}`,
+                  `HQ: ${company.hq}`,
+                  `Size: ${company.size} employees`,
+                  company.annualRevenue ? `Annual Revenue: $${company.annualRevenue.toLocaleString()}` : '',
+                  `Owner: ${company.owner}`,
+                  `Open Deals: ${openDeals.length}`,
+                  `Total Deal Value: $${company.totalDealValue.toLocaleString()}`,
+                  company.description ? `Description: ${company.description}` : '',
+                ].filter(Boolean).join('\n')}
+              />
+
               {/* Active project */}
               {companyProject && (
                 <div className="p-4 bg-gray-50 rounded-xl">
@@ -240,16 +282,46 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
                 </div>
               )}
 
-              {company.tags.length > 0 && (
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tags</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {company.tags.map(tag => (
-                      <span key={tag} className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">{tag}</span>
-                    ))}
-                  </div>
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tags</p>
+                  <button
+                    onClick={() => setAddingTag(v => !v)}
+                    className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900"
+                  >
+                    <Plus size={12} /> Add Tag
+                  </button>
                 </div>
-              )}
+                {addingTag && (
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      value={newTag}
+                      onChange={e => setNewTag(e.target.value)}
+                      placeholder="New tag..."
+                      className="flex-1 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      autoFocus
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleAddTag()
+                        if (e.key === 'Escape') setAddingTag(false)
+                      }}
+                    />
+                    <button onClick={handleAddTag} className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium">Add</button>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-1.5">
+                  {localTags.map(tag => (
+                    <span key={tag} className="flex items-center gap-1 text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full group">
+                      {tag}
+                      <button onClick={() => handleRemoveTag(tag)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 transition-opacity">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                  {localTags.length === 0 && !addingTag && (
+                    <span className="text-xs text-gray-400">No tags yet</span>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -324,6 +396,12 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
               {companyDeals.length === 0 && (
                 <p className="text-sm text-gray-400 text-center py-8">No deals linked to this company.</p>
               )}
+              <button
+                onClick={() => setCreatingProposal(true)}
+                className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Plus size={14} /> New Proposal
+              </button>
             </div>
           )}
 
@@ -417,7 +495,160 @@ function CompanyPanel({ company, onClose }: { company: CRMCompany; onClose: () =
         onClose={() => setAddingContact(false)}
       />
     )}
+    {creatingProposal && (
+      <NewProposalPanel
+        onSave={(_data: NewProposalFormData) => setCreatingProposal(false)}
+        onClose={() => setCreatingProposal(false)}
+      />
+    )}
     </>
+  )
+}
+
+// ─── Edit Company Panel ───────────────────────────────────────────────────────
+
+function EditCompanyPanel({
+  company,
+  onSave,
+  onClose,
+}: {
+  company: CRMCompany
+  onSave: (updated: CRMCompany) => void
+  onClose: () => void
+}) {
+  const [form, setForm] = useState({
+    name: company.name,
+    industry: company.industry,
+    hq: company.hq,
+    size: company.size,
+    phone: company.phone ?? '',
+    website: company.website ?? '',
+    annualRevenue: company.annualRevenue ? String(company.annualRevenue) : '',
+    owner: company.owner,
+    description: company.description ?? '',
+    status: company.status as CompanyStatus,
+  })
+
+  function set(field: keyof typeof form, value: string) {
+    setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  function handleSave() {
+    onSave({
+      ...company,
+      name: form.name.trim(),
+      industry: form.industry.trim(),
+      hq: form.hq.trim(),
+      size: form.size,
+      phone: form.phone.trim() || undefined,
+      website: form.website.trim() || undefined,
+      annualRevenue: form.annualRevenue ? Number(form.annualRevenue) : undefined,
+      owner: form.owner,
+      description: form.description.trim() || undefined,
+      status: form.status,
+    })
+  }
+
+  const canSave = form.name.trim() && form.industry.trim() && form.hq.trim()
+
+  return (
+    <div className="fixed inset-0 z-[60] flex pointer-events-none">
+      <div className="flex-1 pointer-events-auto" onClick={onClose} />
+      <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(520px, 100vw)' }}>
+        <div className="p-6 flex-shrink-0 flex items-start justify-between" style={{ background: '#012b1e' }}>
+          <div>
+            <h2 className="text-white font-bold text-base">Edit Company</h2>
+            <p className="text-white/50 text-xs mt-0.5">{company.name}</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10">
+            <X size={16} className="text-white/70" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company Name</label>
+            <input value={form.name} onChange={e => set('name', e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Industry</label>
+              <input value={form.industry} onChange={e => set('industry', e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</label>
+              <select value={form.status} onChange={e => set('status', e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                {companyStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">HQ / Location</label>
+              <input value={form.hq} onChange={e => set('hq', e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Employees</label>
+              <input type="number" value={form.size} onChange={e => set('size', e.target.value)} min="1"
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Phone</label>
+              <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Annual Revenue</label>
+              <input type="number" value={form.annualRevenue} onChange={e => set('annualRevenue', e.target.value)} min="0"
+                placeholder="0"
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Website</label>
+            <input value={form.website} onChange={e => set('website', e.target.value)} placeholder="gravissmarketing.com"
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Owner / Account Rep</label>
+            <input value={form.owner} onChange={e => set('owner', e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
+            <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={4}
+              placeholder="About this company..."
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none" />
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
+          <button
+            onClick={handleSave}
+            disabled={!canSave}
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 hover:opacity-90"
+            style={{ background: '#015035' }}
+          >
+            Save Changes
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -427,8 +658,15 @@ export default function CompaniesPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('All')
   const [selectedCompany, setSelectedCompany] = useState<CRMCompany | null>(null)
+  const [editingCompany, setEditingCompany] = useState<CRMCompany | null>(null)
   const [localCompanies, setLocalCompanies] = useState<CRMCompany[]>(crmCompanies)
   const [creatingCompany, setCreatingCompany] = useState(false)
+
+  function handleEditCompany(updated: CRMCompany) {
+    setLocalCompanies(prev => prev.map(c => c.id === updated.id ? updated : c))
+    setEditingCompany(null)
+    if (selectedCompany?.id === updated.id) setSelectedCompany(updated)
+  }
 
   function handleNewCompany(data: NewCompanyFormData) {
     const newCompany: CRMCompany = {
@@ -602,9 +840,21 @@ export default function CompaniesPage() {
         </div>
       </div>
 
-      {selectedCompany && <CompanyPanel company={selectedCompany} onClose={() => setSelectedCompany(null)} />}
+      {selectedCompany && (
+        <CompanyPanel
+          company={localCompanies.find(c => c.id === selectedCompany.id) ?? selectedCompany}
+          onClose={() => setSelectedCompany(null)}
+          onEdit={() => setEditingCompany(localCompanies.find(c => c.id === selectedCompany.id) ?? selectedCompany)}
+        />
+      )}
+      {editingCompany && (
+        <EditCompanyPanel
+          company={editingCompany}
+          onSave={handleEditCompany}
+          onClose={() => setEditingCompany(null)}
+        />
+      )}
       {creatingCompany && <NewCompanyPanel onSave={handleNewCompany} onClose={() => setCreatingCompany(false)} />}
-      {/* addingContact is managed inside CompanyPanel via its own NewContactPanel render */}
     </>
   )
 }

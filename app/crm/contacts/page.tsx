@@ -13,6 +13,7 @@ import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
+import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMContact, ContactNote, ContactTask } from '@/lib/types'
 import {
   X, Phone, Mail, User, Search, Plus, ScrollText,
@@ -264,7 +265,7 @@ function EditContactPanel({
 
 // ─── Contact Detail Panel ─────────────────────────────────────────────────────
 
-function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () => void }) {
+function ContactPanel({ contact, onClose, onEdit }: { contact: CRMContact; onClose: () => void; onEdit?: () => void }) {
   const [tab, setTab] = useState<'overview' | 'pipeline' | 'contracts' | 'notes' | 'tasks' | 'activity'>('overview')
   const [taskDone, setTaskDone] = useState<Set<string>>(
     new Set((contact.contactTasks ?? []).filter(t => t.completed).map(t => t.id))
@@ -282,6 +283,11 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
   const [localActivities, setLocalActivities] = useState(
     () => crmActivities.filter(a => a.contactId === contact.id || a.companyId === contact.companyId)
   )
+  const [localTags, setLocalTags] = useState<string[]>(contact.tags ?? [])
+  const [newTag, setNewTag] = useState('')
+  const [addingTag, setAddingTag] = useState(false)
+  const [addingToDeal, setAddingToDeal] = useState(false)
+  const [dealSearch, setDealSearch] = useState('')
 
   function handleAddNote() {
     if (!newNoteBody.trim()) return
@@ -335,6 +341,18 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
     setTab('activity')
   }
 
+  function handleAddTag() {
+    const tag = newTag.trim()
+    if (!tag || localTags.includes(tag)) return
+    setLocalTags(prev => [...prev, tag])
+    setNewTag('')
+    setAddingTag(false)
+  }
+
+  function handleRemoveTag(tag: string) {
+    setLocalTags(prev => prev.filter(t => t !== tag))
+  }
+
   // Cross-linked data
   const company = crmCompanies.find(c => c.id === contact.companyId)
   const contactDeals = deals.filter(d => d.company === contact.companyName)
@@ -367,9 +385,16 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
                 )}
               </div>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0">
-              <X size={18} className="text-white/60" />
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {onEdit && (
+                <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-white/10" title="Edit contact">
+                  <Pencil size={15} className="text-white/60" />
+                </button>
+              )}
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10">
+                <X size={18} className="text-white/60" />
+              </button>
+            </div>
           </div>
 
           {/* Company link + action buttons */}
@@ -466,16 +491,62 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
                 </div>
               </div>
 
-              {contact.tags.length > 0 && (
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tags</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {contact.tags.map(tag => (
-                      <span key={tag} className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">{tag}</span>
-                    ))}
-                  </div>
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tags</p>
+                  <button
+                    onClick={() => setAddingTag(v => !v)}
+                    className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900"
+                  >
+                    <Plus size={12} /> Add Tag
+                  </button>
                 </div>
-              )}
+                {addingTag && (
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      value={newTag}
+                      onChange={e => setNewTag(e.target.value)}
+                      placeholder="New tag..."
+                      className="flex-1 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      autoFocus
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleAddTag()
+                        if (e.key === 'Escape') setAddingTag(false)
+                      }}
+                    />
+                    <button onClick={handleAddTag} className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium">Add</button>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-1.5">
+                  {localTags.map(tag => (
+                    <span key={tag} className="flex items-center gap-1 text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full group">
+                      {tag}
+                      <button onClick={() => handleRemoveTag(tag)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 transition-opacity">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                  {localTags.length === 0 && !addingTag && (
+                    <span className="text-xs text-gray-400">No tags yet</span>
+                  )}
+                </div>
+              </div>
+
+              {/* AI Insights */}
+              <AiInsightsPanel
+                type="contact"
+                name={contact.fullName}
+                context={[
+                  `Title: ${contact.title}`,
+                  `Company: ${contact.companyName}`,
+                  `Owner: ${contact.owner}`,
+                  activeDeal ? `Stage: ${activeDeal.stage}` : '',
+                  activeDeal ? `Deal Value: $${activeDeal.value.toLocaleString()}` : 'No active deal',
+                  executedContract ? 'Contract: Active' : contactContracts.length > 0 ? 'Contract: Pending' : 'Contract: None',
+                  localTags.length > 0 ? `Tags: ${localTags.join(', ')}` : '',
+                  contact.notes ? `Notes: ${contact.notes}` : '',
+                ].filter(Boolean).join('\n')}
+              />
 
               {/* Active project */}
               {companyProject && (
@@ -530,11 +601,59 @@ function ContactPanel({ contact, onClose }: { contact: CRMContact; onClose: () =
                 </div>
               ))}
               {contactDeals.length === 0 && (
-                <div className="text-center py-12">
+                <div className="text-center py-8">
                   <TrendingUp size={24} className="text-gray-300 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">No pipeline deals linked.</p>
                 </div>
               )}
+
+              {/* Add to Deal */}
+              {addingToDeal ? (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-gray-700">Find a Deal</p>
+                    <button onClick={() => { setAddingToDeal(false); setDealSearch('') }} className="text-gray-400 hover:text-gray-600">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <input
+                    value={dealSearch}
+                    onChange={e => setDealSearch(e.target.value)}
+                    placeholder="Search deals by company..."
+                    className="text-sm border border-blue-200 rounded-lg px-3 py-2 bg-white outline-none w-full"
+                    autoFocus
+                  />
+                  <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                    {deals
+                      .filter(d => d.company.toLowerCase().includes(dealSearch.toLowerCase()))
+                      .slice(0, 8)
+                      .map(d => (
+                        <button
+                          key={d.id}
+                          onClick={() => { setAddingToDeal(false); setDealSearch('') }}
+                          className="flex items-center justify-between text-left px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{d.company}</p>
+                            <p className="text-xs text-gray-500">{d.stage} · {d.serviceType}</p>
+                          </div>
+                          <span className="text-xs font-semibold text-emerald-700">{formatCurrency(d.value)}</span>
+                        </button>
+                      ))}
+                    {deals.filter(d => d.company.toLowerCase().includes(dealSearch.toLowerCase())).length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-4">No deals found</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAddingToDeal(true)}
+                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} /> Add to Deal
+                </button>
+              )}
+
               <Link
                 href="/crm/pipeline"
                 className="flex items-center justify-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 py-2"
@@ -999,7 +1118,13 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {selectedContact && <ContactPanel contact={selectedContact} onClose={() => setSelectedContact(null)} />}
+      {selectedContact && (
+        <ContactPanel
+          contact={localContacts.find(c => c.id === selectedContact.id) ?? selectedContact}
+          onClose={() => setSelectedContact(null)}
+          onEdit={() => setEditingContact(localContacts.find(c => c.id === selectedContact.id) ?? selectedContact)}
+        />
+      )}
       {creatingContact && <NewContactPanel onSave={handleNewContact} onClose={() => setCreatingContact(false)} />}
       {editingContact && (
         <EditContactPanel

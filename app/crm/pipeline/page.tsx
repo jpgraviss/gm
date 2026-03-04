@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
@@ -11,6 +11,7 @@ import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
+import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
 import type { Deal } from '@/lib/types'
 import {
   X, Phone, Mail, Calendar, TrendingUp, DollarSign,
@@ -18,6 +19,8 @@ import {
   CheckCircle2, Circle, AlertCircle, Settings,
   GripVertical, Pencil, Trash2, Check,
 } from 'lucide-react'
+
+const ALL_REPS = ['Sarah Chen', 'Marcus Webb', 'Priya Patel', 'Amanda Foster', 'Jonathan Graviss']
 
 // ─── Pipeline Config Types ────────────────────────────────────────────────────
 
@@ -134,14 +137,17 @@ function DealPanel({
   pipelineStages,
   onClose,
   onAdvanceStage,
+  onUpdateDeal,
 }: {
   deal: LocalDeal
   pipelineStages: PipelineStage[]
   onClose: () => void
   onAdvanceStage: (dealId: string, newStage: string) => void
+  onUpdateDeal?: (id: string, updates: Partial<LocalDeal>) => void
 }) {
   const [tab, setTab] = useState<'overview' | 'activity' | 'tasks'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
+  const [creatingProposal, setCreatingProposal] = useState(false)
   const [localActivities, setLocalActivities] = useState(
     () => crmActivities.filter(a => a.companyId === crmCompanies.find(c => c.name === deal.company)?.id).slice(0, 8)
   )
@@ -181,6 +187,7 @@ function DealPanel({
   }
 
   return (
+  <>
     <div className="fixed inset-0 z-50 flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
       <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(540px, 100vw)' }}>
@@ -253,7 +260,17 @@ function DealPanel({
                       <span className="text-sm font-semibold">{deal.probability}%</span>
                     </div>
                   } />
-                  <InfoRow icon={<User size={14} />} label="Assigned Rep" value={deal.assignedRep} />
+                  <InfoRow icon={<User size={14} />} label="Assigned Rep" value={
+                    onUpdateDeal ? (
+                      <select
+                        value={deal.assignedRep}
+                        onChange={e => onUpdateDeal(deal.id, { assignedRep: e.target.value })}
+                        className="text-sm border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                      >
+                        {ALL_REPS.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    ) : deal.assignedRep
+                  } />
                   <InfoRow icon={<Calendar size={14} />} label="Last Activity" value={deal.lastActivity} />
                 </div>
               </div>
@@ -412,13 +429,19 @@ function DealPanel({
           {loggingActivity ? (
             <LogActivityForm onSave={handleSaveActivity} onCancel={() => setLoggingActivity(false)} />
           ) : (
-            <div className="p-4 border-t border-gray-100 flex gap-2">
+            <div className="p-4 border-t border-gray-100 flex gap-2 flex-wrap">
               <button
                 onClick={() => { setLoggingActivity(true); setTab('activity') }}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 min-w-[120px]"
                 style={{ background: '#015035' }}
               >
                 <Plus size={14} /> Log Activity
+              </button>
+              <button
+                onClick={() => setCreatingProposal(true)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium flex items-center justify-center gap-2 hover:bg-gray-50 min-w-[120px]"
+              >
+                <FileText size={14} /> New Proposal
               </button>
               <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
                 Close
@@ -428,6 +451,13 @@ function DealPanel({
         </div>
       </div>
     </div>
+    {creatingProposal && (
+      <NewProposalPanel
+        onSave={(_data: NewProposalFormData) => setCreatingProposal(false)}
+        onClose={() => setCreatingProposal(false)}
+      />
+    )}
+  </>
   )
 }
 
@@ -696,6 +726,7 @@ function ManagePipelinesPanel({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PipelinePage() {
+  const [mounted, setMounted] = useState(false)
   const [pipelines, setPipelines] = useState<PipelineConfig[]>(initialPipelines)
   const [activePipelineId, setActivePipelineId] = useState('sales')
   const [localDeals, setLocalDeals] = useState<LocalDeal[]>(() => deals as LocalDeal[])
@@ -703,6 +734,8 @@ export default function PipelinePage() {
   const [filterRep, setFilterRep] = useState('All')
   const [managingPipeline, setManagingPipeline] = useState(false)
   const [creatingDeal, setCreatingDeal] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
 
   const activePipeline = pipelines.find(p => p.id === activePipelineId) ?? pipelines[0]
   const activeStages = activePipeline.stages
@@ -750,6 +783,10 @@ export default function PipelinePage() {
 
   function handleAdvanceStage(dealId: string, newStage: string) {
     setLocalDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage } : d))
+  }
+
+  function handleUpdateDeal(id: string, updates: Partial<LocalDeal>) {
+    setLocalDeals(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d))
   }
 
   return (
@@ -812,7 +849,7 @@ export default function PipelinePage() {
         </div>
 
         {/* Kanban Board */}
-        <DragDropContext onDragEnd={onDragEnd}>
+        {mounted ? <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-3 overflow-x-auto pb-4 flex-1 items-start">
             {activeStages.map(stage => {
               const stageDeals = filteredDeals.filter(d => d.stage === stage.name)
@@ -863,15 +900,30 @@ export default function PipelinePage() {
               )
             })}
           </div>
-        </DragDropContext>
+        </DragDropContext> : (
+          <div className="flex gap-3 overflow-x-auto pb-4 flex-1 items-start">
+            {activeStages.map(stage => (
+              <div key={stage.id} className="kanban-col flex-shrink-0" style={{ width: 220 }}>
+                <div className="flex items-center gap-2 mb-3 px-1">
+                  <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
+                  <span className="text-xs font-semibold text-gray-700">{stage.name}</span>
+                </div>
+                <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center min-h-[80px]">
+                  <p className="text-xs text-gray-400">Loading...</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {selectedDeal && (
         <DealPanel
-          deal={selectedDeal}
+          deal={localDeals.find(d => d.id === selectedDeal.id) ?? selectedDeal}
           pipelineStages={activeStages}
           onClose={() => setSelectedDeal(null)}
           onAdvanceStage={handleAdvanceStage}
+          onUpdateDeal={handleUpdateDeal}
         />
       )}
 

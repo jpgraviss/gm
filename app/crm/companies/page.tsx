@@ -685,7 +685,7 @@ export default function CompaniesPage() {
       contactIds: [],
       dealIds: [],
       createdDate: new Date().toISOString().split('T')[0],
-      totalDealValue: 0,
+      totalDealValue: data.proposal ? data.proposal.grandTotal : 0,
     }
     setLocalCompanies(prev => [newCompany, ...prev])
     setCreatingCompany(false)

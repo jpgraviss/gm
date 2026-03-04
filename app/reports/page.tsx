@@ -33,6 +33,19 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
   )
 }
 
+function exportCSV() {
+  const headers = ['ID', 'Company', 'Amount', 'Status', 'Due Date', 'Paid Date', 'Service Type']
+  const rows = invoices.map(i => [i.id, i.company, i.amount, i.status, i.dueDate, i.paidDate || '', i.serviceType])
+  const csv = [headers, ...rows].map(r => r.map(String).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'gravhub-revenue-export.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function ReportsPage() {
   const [dateRange, setDateRange] = useState<DateRange>('6M')
   const [repFilter, setRepFilter] = useState<RepFilter>('All')
@@ -59,7 +72,7 @@ export default function ReportsPage() {
   return (
     <>
       <Header title="Reports & Analytics" subtitle="Revenue, sales, operations, and retention metrics" />
-      <div className="p-3 sm:p-6 flex-1">
+      <div className="page-content">
 
         {/* Filter Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
@@ -88,28 +101,28 @@ export default function ReportsPage() {
               <option>Marcus Webb</option>
             </select>
           </div>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
             <Download size={12} /> Export CSV
           </button>
         </div>
 
         {/* Top KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           {[
-            { label: 'Conversion Rate', value: `${conversionRate}%`, icon: <TrendingUp size={16} />, color: '#3b82f6', sub: `${closedWon.length}/${totalDeals} deals` },
-            { label: 'Avg Deal Size', value: formatCurrency(avgDealSize), icon: <DollarSign size={16} />, color: '#015035', sub: 'Closed won' },
-            { label: 'Revenue Collected', value: formatCurrency(collected), icon: <CheckCircle size={16} />, color: '#22c55e', sub: 'All invoices' },
-            { label: 'Outstanding', value: formatCurrency(outstanding), icon: <DollarSign size={16} />, color: '#f59e0b', sub: 'Pending + overdue' },
-            { label: 'ARR', value: formatCurrency(arr), icon: <RefreshCw size={16} />, color: '#8b5cf6', sub: 'Annual recurring' },
-            { label: 'Renewal Rate', value: `${renewalRate || 78}%`, icon: <Users size={16} />, color: '#ec4899', sub: 'Client retention' },
+            { label: 'Conversion Rate',   value: `${conversionRate}%`,         icon: <TrendingUp size={16} />, color: '#3b82f6', sub: `${closedWon.length}/${totalDeals} deals` },
+            { label: 'Avg Deal Size',     value: formatCurrency(avgDealSize),   icon: <DollarSign size={16} />, color: '#015035', sub: 'Closed won' },
+            { label: 'Revenue Collected', value: formatCurrency(collected),     icon: <CheckCircle size={16} />,color: '#22c55e', sub: 'All invoices' },
+            { label: 'Outstanding',       value: formatCurrency(outstanding),   icon: <DollarSign size={16} />, color: '#f59e0b', sub: 'Pending + overdue' },
+            { label: 'ARR',              value: formatCurrency(arr),            icon: <RefreshCw size={16} />,  color: '#8b5cf6', sub: 'Annual recurring' },
+            { label: 'Renewal Rate',     value: `${renewalRate || 78}%`,        icon: <Users size={16} />,      color: '#ec4899', sub: 'Client retention' },
           ].map(m => (
-            <div key={m.label} className="metric-card">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ background: `${m.color}18` }}>
+            <div key={m.label} className="kpi-card" style={{ '--kpi-accent': m.color } as React.CSSProperties}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: `${m.color}15` }}>
                 <span style={{ color: m.color }}>{m.icon}</span>
               </div>
-              <p className="text-xl font-bold text-gray-900 mb-0.5" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{m.value}</p>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{m.label}</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">{m.sub}</p>
+              <p className="text-2xl font-bold text-gray-900 mb-0.5 tracking-tight">{m.value}</p>
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">{m.label}</p>
+              <p className="text-[11px] text-gray-400 mt-1">{m.sub}</p>
             </div>
           ))}
         </div>

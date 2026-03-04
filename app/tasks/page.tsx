@@ -406,30 +406,28 @@ export default function TasksPage() {
         subtitle="Action items across deals, billing, projects, and support"
         action={{ label: 'New Task', onClick: () => setCreatingTask(true) }}
       />
-      <div className="p-3 sm:p-6 flex-1">
+      <div className="page-content">
 
         {/* Summary metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: 'Overdue', value: overdueTasks.length, icon: <AlertCircle size={16} />, color: '#ef4444', tab: 'Overdue' as FilterTab },
-            { label: 'Due Today', value: dueTodayTasks.length, icon: <Clock size={16} />, color: '#f59e0b', tab: 'Due Today' as FilterTab },
-            { label: 'In Progress', value: inProgressTasks.length, icon: <CheckSquare size={16} />, color: '#3b82f6', tab: 'In Progress' as FilterTab },
-            { label: 'Completed', value: completedTasks.length, icon: <CheckCircle2 size={16} />, color: '#015035', tab: 'Completed' as FilterTab },
+            { label: 'Overdue',     value: overdueTasks.length,    icon: <AlertCircle size={16} />,  color: '#ef4444', tab: 'Overdue' as FilterTab },
+            { label: 'Due Today',   value: dueTodayTasks.length,   icon: <Clock size={16} />,         color: '#f59e0b', tab: 'Due Today' as FilterTab },
+            { label: 'In Progress', value: inProgressTasks.length, icon: <CheckSquare size={16} />,  color: '#3b82f6', tab: 'In Progress' as FilterTab },
+            { label: 'Completed',   value: completedTasks.length,  icon: <CheckCircle2 size={16} />, color: '#015035', tab: 'Completed' as FilterTab },
           ].map(m => (
             <button
               key={m.label}
               onClick={() => setFilterTab(filterTab === m.tab ? 'All' : m.tab)}
-              className={`metric-card flex items-center gap-3 text-left transition-all cursor-pointer ${filterTab === m.tab ? 'ring-2 ring-offset-1' : ''}`}
-              style={filterTab === m.tab ? { ringColor: m.color } as React.CSSProperties : {}}
+              className={`kpi-card flex items-center gap-3 text-left cursor-pointer w-full ${filterTab === m.tab ? 'outline outline-2 outline-offset-1' : ''}`}
+              style={{ '--kpi-accent': m.color, ...(filterTab === m.tab ? { outlineColor: m.color } : {}) } as React.CSSProperties}
             >
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${m.color}18` }}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${m.color}15` }}>
                 <span style={{ color: m.color }}>{m.icon}</span>
               </div>
               <div>
-                <p className="text-xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
-                  {m.value}
-                </p>
-                <p className="text-xs text-gray-500">{m.label}</p>
+                <p className="text-2xl font-bold text-gray-900 tracking-tight">{m.value}</p>
+                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{m.label}</p>
               </div>
             </button>
           ))}
@@ -443,7 +441,7 @@ export default function TasksPage() {
               <button
                 key={t}
                 onClick={() => setFilterTab(t)}
-                className={`tab-btn flex-shrink-0 ${filterTab === t ? 'active' : ''}`}
+                className={`filter-pill flex-shrink-0 ${filterTab === t ? 'active' : ''}`}
               >
                 {t}
               </button>

@@ -6,8 +6,6 @@ import type { CompanySize, CompanyStatus } from '@/lib/types'
 
 // ─── Pricing Constants ─────────────────────────────────────────────────────────
 
-const WEBSITE_BASE = 750
-const WEBSITE_PER_PAGE = 350
 const WEBSITE_MGMT_MONTHLY = 350
 const SEO_PRICES = { basic: 550, standard: 700, premium: 900 } as const
 
@@ -47,7 +45,7 @@ function fmt(val: number) {
 
 export interface ProposalDraft {
   websiteEnabled: boolean
-  websitePages: number
+  websiteFee: number
   enabledAddons: Record<string, { qty: number }>
   websiteMgmt: boolean
   seoPackage: SeoPackage
@@ -130,7 +128,7 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
   // ─── Proposal calculator state ────────────────────────────────────────────
   const [proposalOpen, setProposalOpen] = useState(false)
   const [websiteEnabled, setWebsiteEnabled] = useState(true)
-  const [websitePages, setWebsitePages]     = useState(5)
+  const [websiteFee, setWebsiteFee]         = useState<string>('3500')
   const [addons, setAddons] = useState<Record<string, { enabled: boolean; qty: number }>>(
     Object.fromEntries(SETUP_ADDONS.map(a => [a.id, { enabled: false, qty: a.defaultQty }]))
   )
@@ -139,7 +137,7 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
   const [contractMonths, setContractMonths] = useState(6)
 
   // ─── Calculations ─────────────────────────────────────────────────────────
-  const websiteSetupCost = websiteEnabled ? WEBSITE_BASE + WEBSITE_PER_PAGE * websitePages : 0
+  const websiteSetupCost = websiteEnabled ? (parseFloat(websiteFee) || 0) : 0
   const addonsCost = SETUP_ADDONS.reduce((sum, a) => {
     const s = addons[a.id]
     if (!s?.enabled) return sum
@@ -165,7 +163,7 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
     if (!canSave) return
     const proposal: ProposalDraft | undefined = proposalOpen ? {
       websiteEnabled,
-      websitePages,
+      websiteFee: parseFloat(websiteFee) || 0,
       enabledAddons: Object.fromEntries(
         SETUP_ADDONS
           .filter(a => addons[a.id]?.enabled)
@@ -332,30 +330,23 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
                     </button>
                   </div>
                   {websiteEnabled && (
-                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-800">Website Development</p>
-                        <p className="text-[11px] text-gray-400">${WEBSITE_BASE.toLocaleString()} base + ${WEBSITE_PER_PAGE}/page</p>
-                      </div>
+                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100">
+                      <p className="text-xs font-semibold text-gray-700 mb-2">Website Development Fee</p>
                       <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => setWebsitePages(p => Math.max(1, p - 1))}
-                            className="w-6 h-6 rounded bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100">
-                            <Minus size={10} />
-                          </button>
-                          <input
-                            type="number" value={websitePages}
-                            onChange={e => setWebsitePages(Math.max(1, Number(e.target.value)))}
-                            className="w-10 text-center rounded border border-gray-200 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                          />
-                          <button onClick={() => setWebsitePages(p => p + 1)}
-                            className="w-6 h-6 rounded bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100">
-                            <Plus size={10} />
-                          </button>
-                        </div>
-                        <span className="text-[11px] text-gray-500">pgs</span>
-                        <span className="text-sm font-bold text-emerald-700 w-20 text-right">{fmt(websiteSetupCost)}</span>
+                        <span className="text-sm font-bold text-gray-500">$</span>
+                        <input
+                          type="number"
+                          value={websiteFee}
+                          onChange={e => setWebsiteFee(e.target.value)}
+                          placeholder="0"
+                          min="0"
+                          className="flex-1 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        {websiteSetupCost > 0 && (
+                          <span className="text-sm font-bold text-emerald-700 flex-shrink-0">{fmt(websiteSetupCost)}</span>
+                        )}
                       </div>
+                      <p className="text-[11px] text-gray-400 mt-1.5">Enter the total website development fee for this project</p>
                     </div>
                   )}
                 </div>

@@ -23,6 +23,51 @@ const statusIcons: Record<InvoiceStatus, React.ReactNode> = {
   Paid: <CheckCircle size={14} className="text-emerald-500" />,
 }
 
+function downloadReceipt(invoice: Invoice) {
+  const w = window.open('', '_blank', 'width=600,height=700')
+  if (!w) return
+  w.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Receipt — ${invoice.id.toUpperCase()}</title>
+      <style>
+        body { font-family: 'Montserrat', Arial, sans-serif; margin: 40px; color: #1a1a1a; background: #fff; }
+        .header { background: #012b1e; color: #fff; padding: 28px 32px; border-radius: 10px 10px 0 0; }
+        .header h1 { margin: 0 0 4px; font-size: 20px; letter-spacing: 0.04em; }
+        .header p { margin: 0; font-size: 12px; opacity: 0.6; }
+        .body { border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px; padding: 28px 32px; }
+        .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+        .row:last-of-type { border-bottom: none; }
+        .label { color: #6b7280; }
+        .value { font-weight: 600; color: #111827; }
+        .amount { font-size: 28px; font-weight: 800; color: #015035; text-align: center; padding: 20px 0 10px; }
+        .stamp { text-align: center; margin: 16px 0 0; }
+        .stamp span { display: inline-block; border: 4px solid #015035; color: #015035; font-size: 28px; font-weight: 900; letter-spacing: 0.2em; padding: 6px 24px; border-radius: 6px; transform: rotate(-8deg); opacity: 0.85; }
+        @media print { body { margin: 0; } }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>GravHub Receipt</h1>
+        <p>${invoice.id.toUpperCase()}</p>
+      </div>
+      <div class="body">
+        <div class="amount">$${invoice.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+        <div class="row"><span class="label">Company</span><span class="value">${invoice.company}</span></div>
+        <div class="row"><span class="label">Service Type</span><span class="value">${invoice.serviceType}</span></div>
+        <div class="row"><span class="label">Issued Date</span><span class="value">${invoice.issuedDate}</span></div>
+        <div class="row"><span class="label">Paid Date</span><span class="value">${invoice.paidDate ?? '—'}</span></div>
+        <div class="row"><span class="label">Invoice ID</span><span class="value">${invoice.id.toUpperCase()}</span></div>
+        <div class="stamp"><span>PAID</span></div>
+      </div>
+      <script>window.onload = function() { window.print(); window.close(); }<\/script>
+    </body>
+    </html>
+  `)
+  w.document.close()
+}
+
 function InvoicePanel({ invoice, onClose, onUpdateStatus }: { invoice: Invoice; onClose: () => void; onUpdateStatus: (id: string, status: InvoiceStatus) => void }) {
   const linkedContract = contracts.find(c => c.id === invoice.contractId)
   const relatedInvoices = seedInvoices.filter(i => i.contractId === invoice.contractId && i.id !== invoice.id)
@@ -158,7 +203,7 @@ function InvoicePanel({ invoice, onClose, onUpdateStatus }: { invoice: Invoice; 
             </button>
           )}
           {invoice.status === 'Paid' && (
-            <button className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
+            <button onClick={() => downloadReceipt(invoice)} className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
               Download Receipt
             </button>
           )}
@@ -228,25 +273,25 @@ export default function BillingPage() {
   return (
     <>
       <Header title="Billing & Revenue" subtitle="Invoices, payments, and revenue tracking" action={{ label: 'Create Invoice', onClick: () => setCreatingInvoice(true) }} />
-      <div className="p-3 sm:p-6 flex-1">
+      <div className="page-content">
 
-        {/* Metric cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+        {/* KPI cards */}
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           {[
-            { label: 'Awaiting Invoice', value: metrics.awaitingInvoice.toString(), icon: <Clock size={16} />, color: '#6b7280', sub: 'Executed contracts' },
-            { label: 'Invoices Sent', value: metrics.sent.toString(), icon: <Send size={16} />, color: '#3b82f6', sub: 'Pending payment' },
-            { label: 'Overdue Amount', value: formatCurrency(metrics.overdue), icon: <AlertCircle size={16} />, color: '#ef4444', sub: 'Needs attention' },
-            { label: 'Revenue Collected', value: formatCurrency(metrics.collected), icon: <CheckCircle size={16} />, color: '#22c55e', sub: 'All time' },
-            { label: 'Outstanding', value: formatCurrency(metrics.outstanding), icon: <DollarSign size={16} />, color: '#f59e0b', sub: 'Sent + overdue' },
-            { label: 'MRR', value: formatCurrency(metrics.mrr), icon: <RefreshCw size={16} />, color: '#8b5cf6', sub: 'Recurring monthly' },
+            { label: 'Awaiting Invoice',  value: metrics.awaitingInvoice.toString(), icon: <Clock size={16} />,      color: '#6b7280', sub: 'Executed contracts' },
+            { label: 'Invoices Sent',     value: metrics.sent.toString(),            icon: <Send size={16} />,        color: '#3b82f6', sub: 'Pending payment' },
+            { label: 'Overdue Amount',    value: formatCurrency(metrics.overdue),    icon: <AlertCircle size={16} />, color: '#ef4444', sub: 'Needs attention' },
+            { label: 'Revenue Collected', value: formatCurrency(metrics.collected),  icon: <CheckCircle size={16} />, color: '#22c55e', sub: 'All time' },
+            { label: 'Outstanding',       value: formatCurrency(metrics.outstanding),icon: <DollarSign size={16} />,  color: '#f59e0b', sub: 'Sent + overdue' },
+            { label: 'MRR',              value: formatCurrency(metrics.mrr),        icon: <RefreshCw size={16} />,   color: '#8b5cf6', sub: 'Recurring monthly' },
           ].map(m => (
-            <div key={m.label} className="metric-card">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ background: `${m.color}18` }}>
+            <div key={m.label} className="kpi-card" style={{ '--kpi-accent': m.color } as React.CSSProperties}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: `${m.color}15` }}>
                 <span style={{ color: m.color }}>{m.icon}</span>
               </div>
-              <p className="text-xl font-bold text-gray-900 mb-0.5" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{m.value}</p>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{m.label}</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">{m.sub}</p>
+              <p className="text-2xl font-bold text-gray-900 mb-0.5 tracking-tight">{m.value}</p>
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">{m.label}</p>
+              <p className="text-[11px] text-gray-400 mt-1">{m.sub}</p>
             </div>
           ))}
         </div>
@@ -392,9 +437,9 @@ export default function BillingPage() {
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 gap-3">
             <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
-              <button onClick={() => setStatusFilter('All')} className={`tab-btn flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
+              <button onClick={() => setStatusFilter('All')} className={`filter-pill flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
               {statuses.map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>
+                <button key={s} onClick={() => setStatusFilter(s)} className={`filter-pill flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>
                   <span className="flex items-center gap-1.5">
                     {statusIcons[s]} {s}
                   </span>

@@ -437,81 +437,63 @@ export default function ProposalsPage() {
   return (
     <>
       <Header title="Proposals" subtitle="Manage quotes and scope of work" action={{ label: 'New Proposal', onClick: () => setCreatingProposal(true) }} />
-      <div className="p-3 sm:p-6 flex-1">
+      <div className="page-content">
 
         {/* Metric cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {metrics.map(m => (
-            <div key={m.label} className="metric-card">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ background: `${m.color}18` }}>
+            <div key={m.label} className="kpi-card" style={{ '--kpi-accent': m.color } as React.CSSProperties}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: `${m.color}15` }}>
                 <span style={{ color: m.color }}>{m.icon}</span>
               </div>
-              <p className="text-xl font-bold text-gray-900 mb-0.5" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{m.value}</p>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{m.label}</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">{m.sub}</p>
+              <p className="text-2xl font-bold text-gray-900 mb-0.5 tracking-tight">{m.value}</p>
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">{m.label}</p>
+              <p className="text-[11px] text-gray-400 mt-1">{m.sub}</p>
             </div>
           ))}
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 gap-3">
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 gap-3 bg-white">
             <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
-              <button onClick={() => setStatusFilter('All')} className={`tab-btn flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
+              <button onClick={() => setStatusFilter('All')} className={`filter-pill flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All <span className="ml-1 opacity-60">{localProposals.length}</span></button>
               {statusOrder.map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>{s}</button>
+                <button key={s} onClick={() => setStatusFilter(s)} className={`filter-pill flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>{s} <span className="ml-1 opacity-60">{counts[s]}</span></button>
               ))}
             </div>
-            <span className="text-xs text-gray-400 flex-shrink-0">
-              {filtered.length} · {formatCurrency(filtered.reduce((s, p) => s + p.value, 0))}
+            <span className="text-xs text-gray-400 font-semibold flex-shrink-0">
+              {formatCurrency(filtered.reduce((s, p) => s + p.value, 0))}
             </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px]">
+          <div className="overflow-x-auto table-scroll">
+            <table className="data-table min-w-[520px]">
               <thead>
-                <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
-                  <th className="text-left py-2.5 px-4 font-semibold">Company</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Status</th>
-                  <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Service</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Value</th>
-                  <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Rep</th>
-                  <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Created</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Action</th>
+                <tr>
+                  <th>Company</th>
+                  <th>Status</th>
+                  <th className="hidden sm:table-cell">Service</th>
+                  <th>Value</th>
+                  <th className="hidden md:table-cell">Rep</th>
+                  <th className="hidden lg:table-cell">Created</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(p => (
-                  <tr
-                    key={p.id}
-                    className="hover:bg-gray-50 cursor-pointer transition-colors border-b border-gray-100 last:border-0"
-                    onClick={() => setSelected(p)}
-                  >
-                    <td className="py-3 px-4">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">{p.company}</p>
-                        <p className="text-xs text-gray-400">{p.id.toUpperCase()}</p>
-                      </div>
+                  <tr key={p.id} onClick={() => setSelected(p)} className="cursor-pointer">
+                    <td>
+                      <p className="font-semibold text-gray-900">{p.company}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{p.id.toUpperCase()}</p>
                     </td>
-                    <td className="py-3 px-4">
-                      <StatusBadge label={p.status} colorClass={proposalStatusColors[p.status]} />
+                    <td><StatusBadge label={p.status} colorClass={proposalStatusColors[p.status]} /></td>
+                    <td className="hidden sm:table-cell"><StatusBadge label={p.serviceType} colorClass={serviceTypeColors[p.serviceType]} /></td>
+                    <td><span className="font-bold text-gray-900">{formatCurrency(p.value)}</span></td>
+                    <td className="hidden md:table-cell"><span className="text-gray-600">{p.assignedRep}</span></td>
+                    <td className="hidden lg:table-cell">
+                      <span className="text-gray-400">{new Date(p.createdDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                     </td>
-                    <td className="py-3 px-4 hidden sm:table-cell">
-                      <StatusBadge label={p.serviceType} colorClass={serviceTypeColors[p.serviceType]} />
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
-                        {formatCurrency(p.value)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 hidden md:table-cell">
-                      <span className="text-sm text-gray-600">{p.assignedRep}</span>
-                    </td>
-                    <td className="py-3 px-4 hidden lg:table-cell">
-                      <span className="text-xs text-gray-400">
-                        {new Date(p.createdDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
+                    <td onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
                       {p.status === 'Draft' && (
                         <button

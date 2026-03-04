@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Header from '@/components/layout/Header'
-import { projects } from '@/lib/data'
+import { projects as initialProjects } from '@/lib/data'
 import { projectStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import type { Project, ProjectStatus } from '@/lib/types'
@@ -121,12 +121,45 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
 
 // ─── Project Detail Panel ─────────────────────────────────────────────────────
 
-function ProjectDetailPanel({ project, onClose }: { project: Project; onClose: () => void }) {
+function ProjectDetailPanel({
+  project,
+  onClose,
+  onUpdateStatus,
+}: {
+  project: Project
+  onClose: () => void
+  onUpdateStatus: (id: string, status: ProjectStatus) => void
+}) {
   const [tab, setTab] = useState<'overview' | 'milestones' | 'tasks' | 'notes'>('overview')
+  const [showStatusPicker, setShowStatusPicker] = useState(false)
+  const [localTasks, setLocalTasks] = useState(project.tasks)
+  const [notes, setNotes] = useState<Array<{ id: string; text: string; date: string; author: string }>>([])
+  const [noteText, setNoteText] = useState('')
+  const [showNoteForm, setShowNoteForm] = useState(false)
+
   const today = new Date().toISOString().split('T')[0]
-  const overdueTasks = project.tasks.filter(t => !t.completed && t.dueDate < today)
+  const overdueTasks = localTasks.filter(t => !t.completed && t.dueDate < today)
   const daysLeft = Math.max(0, Math.ceil((new Date(project.launchDate).getTime() - Date.now()) / 86400000))
   const isFinished = ['Launched', 'In Maintenance', 'Completed'].includes(project.status)
+
+  const toggleTask = (taskId: string) => {
+    setLocalTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t))
+  }
+
+  const saveNote = () => {
+    if (!noteText.trim()) return
+    setNotes(prev => [
+      ...prev,
+      {
+        id: `note-${Date.now()}`,
+        text: noteText.trim(),
+        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        author: 'You',
+      },
+    ])
+    setNoteText('')
+    setShowNoteForm(false)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
@@ -160,7 +193,7 @@ function ProjectDetailPanel({ project, onClose }: { project: Project; onClose: (
           <div className="grid grid-cols-3 gap-2">
             {[
               { label: 'Milestones', value: `${project.milestones.filter(m => m.completed).length}/${project.milestones.length}` },
-              { label: 'Tasks', value: `${project.tasks.filter(t => t.completed).length}/${project.tasks.length}` },
+              { label: 'Tasks', value: `${localTasks.filter(t => t.completed).length}/${localTasks.length}` },
               { label: 'Days Left', value: isFinished ? '—' : daysLeft.toString() },
             ].map(s => (
               <div key={s.label} className="bg-white/10 rounded-xl p-3 text-center">
@@ -313,11 +346,11 @@ function ProjectDetailPanel({ project, onClose }: { project: Project; onClose: (
           {/* ── Tasks ── */}
           {tab === 'tasks' && (
             <div className="flex flex-col gap-4">
-              {project.tasks.length === 0 && (
+              {localTasks.length === 0 && (
                 <div className="py-12 text-center text-gray-400 text-sm">No tasks yet</div>
               )}
               {(['High', 'Medium', 'Low'] as const).map(priority => {
-                const priorityTasks = project.tasks.filter(t => t.priority === priority)
+                const priorityTasks = localTasks.filter(t => t.priority === priority)
                 if (priorityTasks.length === 0) return null
                 const dot = priority === 'High' ? '#ef4444' : priority === 'Medium' ? '#f59e0b' : '#9ca3af'
                 return (
@@ -337,9 +370,12 @@ function ProjectDetailPanel({ project, onClose }: { project: Project; onClose: (
                             task.completed ? 'bg-gray-50 border-gray-100' : 'bg-white border-gray-200'
                           }`}
                         >
-                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                            task.completed ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300'
-                          }`}>
+                          <div
+                            className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 cursor-pointer ${
+                              task.completed ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300 hover:border-emerald-400'
+                            }`}
+                            onClick={() => toggleTask(task.id)}
+                          >
                             {task.completed && <span className="text-white text-[8px] font-bold">✓</span>}
                           </div>
                           <span className={`text-sm flex-1 ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>
@@ -366,22 +402,96 @@ function ProjectDetailPanel({ project, onClose }: { project: Project; onClose: (
           {/* ── Notes ── */}
           {tab === 'notes' && (
             <div className="flex flex-col gap-3">
-              <div className="py-12 text-center">
-                <StickyNote size={24} className="text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">No project notes yet</p>
-                <p className="text-xs text-gray-300 mt-1">Notes and updates will appear here</p>
-              </div>
-              <button className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5">
-                <Plus size={14} /> Add Note
-              </button>
+              {notes.length === 0 && !showNoteForm && (
+                <div className="py-12 text-center">
+                  <StickyNote size={24} className="text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No project notes yet</p>
+                  <p className="text-xs text-gray-300 mt-1">Notes and updates will appear here</p>
+                </div>
+              )}
+
+              {notes.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {notes.map(note => (
+                    <div key={note.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{note.text}</p>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <span className="text-[10px] text-gray-400 font-semibold">{note.author}</span>
+                        <span className="text-[10px] text-gray-300">·</span>
+                        <span className="text-[10px] text-gray-400">{note.date}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {showNoteForm ? (
+                <div className="flex flex-col gap-2">
+                  <textarea
+                    className="w-full p-3 rounded-xl border border-gray-200 text-sm text-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-green-800/30 focus:border-green-800/40"
+                    rows={4}
+                    placeholder="Write a note..."
+                    value={noteText}
+                    onChange={e => setNoteText(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveNote}
+                      className="flex-1 py-2 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90"
+                      style={{ background: '#015035' }}
+                    >
+                      Save Note
+                    </button>
+                    <button
+                      onClick={() => { setShowNoteForm(false); setNoteText('') }}
+                      className="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowNoteForm(true)}
+                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} /> Add Note
+                </button>
+              )}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
-          <button className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: '#015035' }}>
+        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0 relative">
+          {showStatusPicker && (
+            <div className="absolute bottom-full left-4 mb-2 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-10 min-w-[180px]">
+              {statusOrder.map(s => (
+                <button
+                  key={s}
+                  onClick={() => {
+                    onUpdateStatus(project.id, s)
+                    setShowStatusPicker(false)
+                  }}
+                  className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 ${
+                    project.status === s ? 'font-semibold text-gray-900' : 'text-gray-700'
+                  }`}
+                >
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColumnColors[s] }} />
+                  {s}
+                  {project.status === s && <CheckCircle size={12} className="ml-auto text-emerald-500" />}
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={() => setShowStatusPicker(v => !v)}
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-1.5"
+            style={{ background: '#015035' }}
+          >
             Update Status
+            <ChevronDown size={14} className={`transition-transform ${showStatusPicker ? 'rotate-180' : ''}`} />
           </button>
           <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
             Close
@@ -558,6 +668,7 @@ function ServiceTypeGroup({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ProjectsPage() {
+  const [localProjects, setLocalProjects] = useState<Project[]>(initialProjects)
   const [selected, setSelected] = useState<Project | null>(null)
   const [serviceFilter, setServiceFilter] = useState<ServiceTypeKey | 'All'>('All')
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'All'>('All')
@@ -565,18 +676,23 @@ export default function ProjectsPage() {
 
   const today = new Date().toISOString().split('T')[0]
 
+  function updateProjectStatus(id: string, status: ProjectStatus) {
+    setLocalProjects(prev => prev.map(p => p.id === id ? { ...p, status } : p))
+    setSelected(prev => prev && prev.id === id ? { ...prev, status } : prev)
+  }
+
   // Metrics
-  const active = projects.filter(p => ['In Progress', 'Awaiting Client', 'Not Started'].includes(p.status))
-  const avgProgress = Math.round(projects.reduce((s, p) => s + p.progress, 0) / projects.length)
-  const allOverdue = projects.flatMap(p => p.tasks.filter(t => !t.completed && t.dueDate < today))
-  const launched = projects.filter(p => ['Launched', 'In Maintenance', 'Completed'].includes(p.status))
+  const active = localProjects.filter(p => ['In Progress', 'Awaiting Client', 'Not Started'].includes(p.status))
+  const avgProgress = Math.round(localProjects.reduce((s, p) => s + p.progress, 0) / localProjects.length)
+  const allOverdue = localProjects.flatMap(p => p.tasks.filter(t => !t.completed && t.dueDate < today))
+  const launched = localProjects.filter(p => ['Launched', 'In Maintenance', 'Completed'].includes(p.status))
 
   // Active service types (ones with projects)
   const activeServiceTypes = (Object.keys(serviceTypeIcons) as ServiceTypeKey[])
-    .filter(st => projects.some(p => p.serviceType === st))
+    .filter(st => localProjects.some(p => p.serviceType === st))
 
   // Apply filters
-  const filtered = projects.filter(p => {
+  const filtered = localProjects.filter(p => {
     if (serviceFilter !== 'All' && p.serviceType !== serviceFilter) return false
     if (statusFilter !== 'All' && p.status !== statusFilter) return false
     return true
@@ -587,23 +703,23 @@ export default function ProjectsPage() {
   return (
     <>
       <Header title="Projects" subtitle="Track delivery across all service lines" action={{ label: 'New Project' }} />
-      <div className="p-3 sm:p-6 flex-1">
+      <div className="page-content">
 
         {/* Summary Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: 'Active Projects', value: active.length.toString(), icon: <KanbanSquare size={16} />, color: '#015035', sub: 'In progress or queued' },
-            { label: 'Avg Completion', value: `${avgProgress}%`, icon: <TrendingUp size={16} />, color: '#3b82f6', sub: 'Across all projects' },
-            { label: 'Overdue Tasks', value: allOverdue.length.toString(), icon: <AlertTriangle size={16} />, color: allOverdue.length > 0 ? '#ef4444' : '#22c55e', sub: allOverdue.length > 0 ? 'Needs attention' : 'All on track' },
+            { label: 'Avg Completion',  value: `${avgProgress}%`,        icon: <TrendingUp size={16} />,  color: '#3b82f6', sub: 'Across all projects' },
+            { label: 'Overdue Tasks',   value: allOverdue.length.toString(), icon: <AlertTriangle size={16} />, color: allOverdue.length > 0 ? '#ef4444' : '#22c55e', sub: allOverdue.length > 0 ? 'Needs attention' : 'All on track' },
             { label: 'Launched / Done', value: launched.length.toString(), icon: <CheckCircle size={16} />, color: '#10b981', sub: 'Completed projects' },
           ].map(m => (
-            <div key={m.label} className="metric-card">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ background: `${m.color}18` }}>
+            <div key={m.label} className="kpi-card" style={{ '--kpi-accent': m.color } as React.CSSProperties}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: `${m.color}15` }}>
                 <span style={{ color: m.color }}>{m.icon}</span>
               </div>
-              <p className="text-xl font-bold text-gray-900 mb-0.5" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{m.value}</p>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{m.label}</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">{m.sub}</p>
+              <p className="text-2xl font-bold text-gray-900 mb-0.5 tracking-tight">{m.value}</p>
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">{m.label}</p>
+              <p className="text-[11px] text-gray-400 mt-1">{m.sub}</p>
             </div>
           ))}
         </div>
@@ -617,14 +733,14 @@ export default function ProjectsPage() {
             <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: '#f3f4f6' }}>
               <KanbanSquare size={15} className="text-gray-500" />
             </div>
-            <p className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{projects.length}</p>
+            <p className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{localProjects.length}</p>
             <p className="text-[10px] font-semibold text-gray-500 mt-0.5">All Types</p>
           </button>
 
           {activeServiceTypes.map(st => {
-            const count = projects.filter(p => p.serviceType === st).length
+            const count = localProjects.filter(p => p.serviceType === st).length
             const accent = serviceTypeAccent[st]
-            const inProg = projects.filter(p => p.serviceType === st && p.status === 'In Progress').length
+            const inProg = localProjects.filter(p => p.serviceType === st && p.status === 'In Progress').length
             return (
               <button
                 key={st}
@@ -734,7 +850,13 @@ export default function ProjectsPage() {
         )}
       </div>
 
-      {selected && <ProjectDetailPanel project={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <ProjectDetailPanel
+          project={selected}
+          onClose={() => setSelected(null)}
+          onUpdateStatus={updateProjectStatus}
+        />
+      )}
     </>
   )
 }

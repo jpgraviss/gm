@@ -6,8 +6,6 @@ import type { Proposal, ProposalLineItem, ServiceType } from '@/lib/types'
 
 // ─── Pricing Constants ────────────────────────────────────────────────────────
 
-const WEBSITE_BASE = 750
-const WEBSITE_PER_PAGE = 350
 const WEBSITE_MGMT_MONTHLY = 350
 const SEO_PRICES: Record<'basic' | 'standard' | 'premium', number> = {
   basic: 550,
@@ -324,7 +322,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
 
   // Website build
   const [websiteEnabled, setWebsiteEnabled] = useState(true)
-  const [websitePages, setWebsitePages]     = useState(5)
+  const [websiteFee, setWebsiteFee]         = useState<string>('3500')
 
   // Setup addons
   const [addons, setAddons] = useState<Record<string, AddonState>>(
@@ -346,7 +344,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
 
   // ─── Calculations ─────────────────────────────────────────────────────────
 
-  const websiteSetupCost = websiteEnabled ? WEBSITE_BASE + WEBSITE_PER_PAGE * websitePages : 0
+  const websiteSetupCost = websiteEnabled ? (parseFloat(websiteFee) || 0) : 0
 
   const addonsCost = SETUP_ADDONS.reduce((sum, addon) => {
     const state = addons[addon.id]
@@ -367,7 +365,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
   function getAutoSolutions(): string[] {
     const s: string[] = []
     if (websiteEnabled)
-      s.push(`Custom ${websitePages}-page website designed to convert visitors into clients`)
+      s.push(`Custom website designed to convert visitors into clients`)
     const active = SETUP_ADDONS.filter(a => addons[a.id]?.enabled)
     if (active.some(a => a.id === 'custom-design'))
       s.push('Custom visual design tailored to your brand identity and market positioning')
@@ -393,7 +391,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
     if (websiteEnabled) {
       phases.push({ phase: 'Phase 1 — Discovery & Strategy', duration: 'Week 1', tasks: 'Onboarding call, brand review, sitemap planning, content gathering' })
       phases.push({ phase: 'Phase 2 — Design',               duration: 'Weeks 2–3', tasks: 'Wireframes, visual mockups, client review and approval' })
-      phases.push({ phase: 'Phase 3 — Development',          duration: websitePages > 8 ? 'Weeks 4–7' : 'Weeks 4–6', tasks: 'Full build, responsive development, integrations and QA' })
+      phases.push({ phase: 'Phase 3 — Development',          duration: 'Weeks 4–6', tasks: 'Full build, responsive development, integrations and QA' })
       phases.push({ phase: 'Phase 4 — Launch',               duration: 'Final Week', tasks: 'Client review, revisions, go-live and DNS transfer' })
     }
     const monthlyTasks: string[] = []
@@ -411,7 +409,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
     let idx = 0
 
     if (websiteEnabled) {
-      items.push({ id: `item-${idx++}`, description: `Website Build (${websitePages} pages)`, type: 'one-time', quantity: 1, unitPrice: websiteSetupCost, total: websiteSetupCost })
+      items.push({ id: `item-${idx++}`, description: `Website Development`, type: 'one-time', quantity: 1, unitPrice: websiteSetupCost, total: websiteSetupCost })
     }
 
     SETUP_ADDONS.forEach(addon => {
@@ -594,29 +592,22 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
               </div>
               {websiteEnabled && (
                 <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">Website Development</p>
-                      <p className="text-xs text-gray-400">${WEBSITE_BASE.toLocaleString()} base + ${WEBSITE_PER_PAGE}/page</p>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">{fmt(websiteSetupCost)}</span>
+                  <p className="text-xs font-semibold text-gray-600 mb-2">Website Development Fee</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-400">$</span>
+                    <input
+                      type="number"
+                      value={websiteFee}
+                      onChange={e => setWebsiteFee(e.target.value)}
+                      placeholder="0"
+                      min="0"
+                      className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                    />
+                    {websiteSetupCost > 0 && (
+                      <span className="text-sm font-bold text-gray-900 flex-shrink-0">{fmt(websiteSetupCost)}</span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[11px] font-semibold text-gray-500 flex-1">Number of Pages</span>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setWebsitePages(p => Math.max(1, p - 1))}
-                        className="w-7 h-7 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100">
-                        <Minus size={12} />
-                      </button>
-                      <input type="number" value={websitePages}
-                        onChange={e => setWebsitePages(Math.max(1, Number(e.target.value)))}
-                        className="w-12 text-center rounded-lg border border-gray-200 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                      <button onClick={() => setWebsitePages(p => p + 1)}
-                        className="w-7 h-7 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100">
-                        <Plus size={12} />
-                      </button>
-                    </div>
-                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1.5">Enter the total website development fee for this project</p>
                 </div>
               )}
             </section>
@@ -754,7 +745,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
                 <div className="flex flex-col gap-1.5">
                   {websiteEnabled && (
                     <div className="flex justify-between text-xs">
-                      <span className="text-gray-600">Website ({websitePages} pages)</span>
+                      <span className="text-gray-600">Website Development</span>
                       <span className="font-semibold text-gray-800">{fmt(websiteSetupCost)}</span>
                     </div>
                   )}

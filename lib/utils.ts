@@ -42,6 +42,8 @@ export const stageColors: Record<string, string> = {
 
 export const proposalStatusColors: Record<string, string> = {
   Draft: 'bg-gray-100 text-gray-600',
+  'Pending Approval': 'bg-amber-100 text-amber-700',
+  Approved: 'bg-teal-100 text-teal-700',
   Sent: 'bg-blue-100 text-blue-700',
   Viewed: 'bg-purple-100 text-purple-700',
   Accepted: 'bg-green-100 text-green-700',

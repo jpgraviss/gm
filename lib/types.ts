@@ -6,7 +6,27 @@ export type DealStage =
   | 'Closed Won'
   | 'Closed Lost'
 
-export type ProposalStatus = 'Draft' | 'Sent' | 'Viewed' | 'Accepted' | 'Declined'
+export type ProposalStatus = 'Draft' | 'Pending Approval' | 'Approved' | 'Sent' | 'Viewed' | 'Accepted' | 'Declined'
+
+export type TeamServiceLine =
+  | 'Website'
+  | 'Development'
+  | 'SEO'
+  | 'Social Media'
+  | 'Marketing'
+  | 'Email Marketing'
+  | 'Content'
+  | 'Design'
+  | 'General'
+
+export interface AttachedDocument {
+  id: string
+  name: string
+  type: string
+  size: number
+  uploadedDate: string
+  dataUrl: string
+}
 
 export type ContractStatus =
   | 'Draft'
@@ -55,7 +75,7 @@ export type TaskPriority = 'Low' | 'Medium' | 'High'
 
 export type RenewalStatus = 'Upcoming' | 'In Progress' | 'Renewed' | 'Churned'
 
-export type MaintenanceStatus = 'Active' | 'Pending Cancellation' | 'Cancelled'
+export type MaintenanceStatus = 'Active' | 'Onboarding' | 'Pending Cancellation' | 'Cancelled' | 'Past'
 
 export interface Contact {
   id: string
@@ -101,6 +121,16 @@ export interface Proposal {
   respondedDate?: string
   assignedRep: string
   items: ProposalLineItem[]
+  // Approval workflow
+  submittedForApprovalDate?: string
+  approvedBy?: string
+  approvedDate?: string
+  rejectedBy?: string
+  rejectedDate?: string
+  // Renewal/internal
+  isRenewal?: boolean
+  internalOnly?: boolean
+  renewalNotes?: string
 }
 
 export interface Contract {
@@ -172,6 +202,7 @@ export interface MaintenanceRecord {
   cancellationWindow: number
   status: MaintenanceStatus
   nextBillingDate: string
+  documents?: AttachedDocument[]
 }
 
 export interface Renewal {
@@ -228,6 +259,7 @@ export interface AppTask {
   createdDate: string
   completedDate?: string
   linkedId?: string
+  teamServiceLine?: TeamServiceLine
 }
 
 // ─── Full CRM Types ──────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { X, Download, Save, FileText, Plus, Minus, Check } from 'lucide-react'
 import type { Proposal, ProposalLineItem, ServiceType } from '@/lib/types'
 
@@ -341,7 +341,6 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
 
   // UI state
   const [generating, setGenerating] = useState(false)
-  const pdfRef = useRef<HTMLDivElement>(null)
 
   // ─── Calculations ─────────────────────────────────────────────────────────
 
@@ -453,28 +452,398 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
     })
   }
 
-  // ─── PDF generation ───────────────────────────────────────────────────────
+  // ─── PDF generation (jsPDF native — no html2canvas) ──────────────────────
 
   async function handleDownloadPDF() {
-    if (!pdfRef.current) return
     setGenerating(true)
     try {
-      const html2canvas = (await import('html2canvas')).default
-      const { jsPDF }   = await import('jspdf')
+      const { jsPDF } = await import('jspdf')
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
-      const canvas = await html2canvas(pdfRef.current, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' })
-      const imgData = canvas.toDataURL('image/png')
+      const W  = 210
+      const H  = 297
+      const ML = 18
+      const MR = 18
+      const CW = W - ML - MR
 
-      const pdf       = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-      const pdfWidth  = pdf.internal.pageSize.getWidth()
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width
-      const pageH     = pdf.internal.pageSize.getHeight()
+      type RGB = [number, number, number]
+      const DARK:       RGB = [1, 43, 30]
+      const GREEN:      RGB = [1, 80, 53]
+      const ACCENT:     RGB = [74, 222, 128]
+      const WHITE:      RGB = [255, 255, 255]
+      const GRAY:       RGB = [107, 114, 128]
+      const DARK_TEXT:  RGB = [31, 41, 55]
+      const LIGHT_GRAY: RGB = [249, 250, 251]
+      const BORDER:     RGB = [229, 231, 235]
+      const PALE_GREEN: RGB = [240, 253, 244]
 
-      let yOffset = 0
-      while (yOffset < pdfHeight) {
-        if (yOffset > 0) pdf.addPage()
-        pdf.addImage(imgData, 'PNG', 0, -yOffset, pdfWidth, pdfHeight)
-        yOffset += pageH
+      let y = 0
+
+      function checkPage(needed: number) {
+        if (y + needed > H - 16) {
+          pdf.addPage()
+          y = 18
+        }
+      }
+
+      function sectionTitle(title: string) {
+        checkPage(18)
+        pdf.setFillColor(...GREEN)
+        pdf.rect(ML, y - 4, 2, 11, 'F')
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(8)
+        pdf.setTextColor(...DARK)
+        pdf.text(title.toUpperCase(), ML + 6, y + 3)
+        pdf.setDrawColor(...BORDER)
+        pdf.setLineWidth(0.3)
+        pdf.line(ML + 6, y + 5, W - MR, y + 5)
+        y += 13
+      }
+
+      // ── COVER ────────────────────────────────────────────────────────
+      const coverH = 90
+      pdf.setFillColor(...DARK)
+      pdf.rect(0, 0, W, coverH, 'F')
+
+      // Decorative circles
+      pdf.setDrawColor(255, 255, 255)
+      pdf.setLineWidth(0.3)
+      pdf.circle(W - 10, 10, 45, 'S')
+      pdf.circle(W - 2, 4, 28, 'S')
+
+      // Logo
+      y = 20
+      pdf.setTextColor(...WHITE)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(16)
+      pdf.text('GRAVISS', ML, y)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(7)
+      pdf.setTextColor(160, 160, 160)
+      pdf.text('MARKETING', ML, y + 5)
+
+      // Proposal label
+      y += 16
+      pdf.setTextColor(...ACCENT)
+      pdf.setFontSize(7.5)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('CUSTOM MARKETING PROPOSAL', ML, y)
+
+      // Company name
+      y += 10
+      pdf.setTextColor(...WHITE)
+      pdf.setFont('helvetica', 'bold')
+      const companyStr = (company || 'YOUR COMPANY').toUpperCase()
+      // Fit company name
+      let compSize = 28
+      while (pdf.getStringUnitWidth(companyStr) * compSize / pdf.internal.scaleFactor > CW - 10 && compSize > 14) compSize -= 2
+      pdf.setFontSize(compSize)
+      pdf.text(companyStr, ML, y)
+      y += 6
+
+      // Accent line
+      pdf.setFillColor(...ACCENT)
+      pdf.rect(ML, y, 50, 1, 'F')
+      y += 8
+
+      // Prepared for / by boxes
+      if (contactName || contactEmail) {
+        pdf.setFillColor(20, 60, 45)
+        pdf.rect(ML, y, 84, 14, 'F')
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(6.5)
+        pdf.setTextColor(140, 140, 140)
+        pdf.text('PREPARED FOR', ML + 3, y + 4.5)
+        if (contactName) {
+          pdf.setTextColor(...WHITE)
+          pdf.setFontSize(9)
+          pdf.setFont('helvetica', 'bold')
+          pdf.text(contactName, ML + 3, y + 9)
+        }
+        if (contactEmail) {
+          pdf.setFont('helvetica', 'normal')
+          pdf.setFontSize(7.5)
+          pdf.setTextColor(140, 140, 140)
+          pdf.text(contactEmail, ML + 3, y + 13)
+        }
+      }
+
+      // Prepared by — right aligned
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(6.5)
+      pdf.setTextColor(140, 140, 140)
+      pdf.text('PREPARED BY', W - MR, y + 4.5, { align: 'right' })
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(9)
+      pdf.setTextColor(...WHITE)
+      pdf.text(rep || 'Graviss Marketing', W - MR, y + 9, { align: 'right' })
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(7.5)
+      pdf.setTextColor(140, 140, 140)
+      pdf.text(today, W - MR, y + 13, { align: 'right' })
+
+      y = coverH + 14
+
+      // ── EXECUTIVE SUMMARY ─────────────────────────────────────────────
+      const summaryBody = execSummary ||
+        `Thank you for the opportunity to present this proposal to ${company || 'your company'}. At Graviss Marketing, we craft data-driven strategies tailored to your unique goals — delivering measurable growth, brand authority, and a stronger digital presence. This proposal outlines a comprehensive solution designed specifically for your business.`
+
+      sectionTitle('Executive Summary')
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9.5)
+      pdf.setTextColor(...GRAY)
+      const summaryLines = pdf.splitTextToSize(summaryBody, CW)
+      checkPage(summaryLines.length * 5 + 8)
+      pdf.text(summaryLines, ML, y)
+      y += summaryLines.length * 5 + 10
+
+      // ── GOALS & APPROACH ──────────────────────────────────────────────
+      if (clientGoals || solutions.length > 0) {
+        sectionTitle("Your Goals & Our Approach")
+
+        if (clientGoals) {
+          pdf.setFont('helvetica', 'normal')
+          pdf.setFontSize(9.5)
+          pdf.setTextColor(...GRAY)
+          const goalLines = pdf.splitTextToSize(clientGoals, CW)
+          checkPage(goalLines.length * 5 + 8)
+          pdf.text(goalLines, ML, y)
+          y += goalLines.length * 5 + 8
+        }
+
+        if (solutions.length > 0) {
+          const colW = (CW - 6) / 2
+          let col = 0
+          solutions.forEach((sol) => {
+            checkPage(14)
+            const xPos = ML + (col === 0 ? 0 : colW + 6)
+            pdf.setFillColor(...PALE_GREEN)
+            pdf.setDrawColor(187, 247, 208)
+            pdf.setLineWidth(0.3)
+            pdf.roundedRect(xPos, y, colW, 12, 2, 2, 'FD')
+            pdf.setFillColor(...GREEN)
+            pdf.circle(xPos + 5, y + 6, 3, 'F')
+            pdf.setTextColor(...WHITE)
+            pdf.setFontSize(7)
+            pdf.setFont('helvetica', 'bold')
+            pdf.text('✓', xPos + 3.3, y + 7.3)
+            pdf.setTextColor(22, 101, 52)
+            pdf.setFontSize(7.5)
+            pdf.setFont('helvetica', 'normal')
+            const solLine = pdf.splitTextToSize(sol, colW - 12)[0]
+            pdf.text(solLine, xPos + 10, y + 6.5)
+            col++
+            if (col === 2) { col = 0; y += 15 }
+          })
+          if (col === 1) y += 15
+          y += 8
+        }
+      }
+
+      // ── INVESTMENT OVERVIEW ───────────────────────────────────────────
+      sectionTitle('Investment Overview')
+
+      const lineItems    = buildLineItems()
+      const oneTimeItems = lineItems.filter(i => i.type === 'one-time')
+      const recurringItems = lineItems.filter(i => i.type === 'recurring')
+
+      function drawPricingTable(items: ProposalLineItem[], isRecurring: boolean) {
+        if (items.length === 0) return
+        checkPage(10)
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(7)
+        pdf.setTextColor(...GRAY)
+        pdf.text(isRecurring ? 'RECURRING SERVICES' : 'ONE-TIME SETUP', ML, y)
+        y += 5
+
+        const COL1 = 90; const COL2 = 22; const COL3 = 30
+        const COL4 = CW - COL1 - COL2 - COL3
+
+        checkPage(8)
+        pdf.setFillColor(...LIGHT_GRAY)
+        pdf.rect(ML, y, CW, 7, 'F')
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(7)
+        pdf.setTextColor(...GRAY)
+        pdf.text('DESCRIPTION', ML + 2, y + 4.5)
+        pdf.text('QTY', ML + COL1 + 2, y + 4.5)
+        pdf.text('UNIT', ML + COL1 + COL2 + 2, y + 4.5)
+        pdf.text('TOTAL', W - MR - 2, y + 4.5, { align: 'right' })
+        y += 7
+
+        items.forEach((item, i) => {
+          checkPage(8)
+          pdf.setFillColor(i % 2 === 0 ? 255 : 250, i % 2 === 0 ? 255 : 250, i % 2 === 0 ? 255 : 250)
+          pdf.rect(ML, y, CW, 7, 'F')
+          pdf.setDrawColor(...BORDER)
+          pdf.setLineWidth(0.2)
+          pdf.line(ML, y, ML + CW, y)
+          pdf.setFont('helvetica', 'normal')
+          pdf.setFontSize(8.5)
+          pdf.setTextColor(...DARK_TEXT)
+          pdf.text(item.description, ML + 2, y + 4.5)
+          pdf.setTextColor(...GRAY)
+          pdf.text(String(item.quantity), ML + COL1 + 2, y + 4.5)
+          pdf.text(isRecurring ? `${fmt(item.unitPrice)}/mo` : fmt(item.unitPrice), ML + COL1 + COL2 + 2, y + 4.5)
+          pdf.setFont('helvetica', 'bold')
+          pdf.setTextColor(...DARK_TEXT)
+          pdf.text(fmt(item.total), W - MR - 2, y + 4.5, { align: 'right' })
+          y += 7
+        })
+
+        checkPage(8)
+        pdf.setFillColor(...PALE_GREEN)
+        pdf.rect(ML, y, CW, 7, 'F')
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(8)
+        pdf.setTextColor(...GREEN)
+        const subLabel = isRecurring
+          ? `Monthly: ${fmt(monthlyTotal)}/mo × ${contractMonths} months`
+          : 'Setup Total'
+        const subVal = isRecurring ? fmt(monthlyTotal * contractMonths) : fmt(setupTotal)
+        pdf.text(subLabel, ML + 2, y + 4.5)
+        pdf.text(subVal, W - MR - 2, y + 4.5, { align: 'right' })
+        y += 7 + 8
+      }
+
+      drawPricingTable(oneTimeItems, false)
+      drawPricingTable(recurringItems, true)
+
+      // Grand total box
+      checkPage(22)
+      pdf.setFillColor(...DARK)
+      pdf.roundedRect(ML, y, CW, 18, 3, 3, 'F')
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(7)
+      pdf.setTextColor(150, 150, 150)
+      pdf.text('TOTAL INVESTMENT', ML + 5, y + 6)
+      if (discount > 0) {
+        pdf.setFontSize(8)
+        pdf.setTextColor(150, 150, 150)
+        pdf.text(`Subtotal: ${fmt(subtotal)}`, ML + 5, y + 10.5)
+        pdf.setTextColor(...ACCENT)
+        pdf.text(`Discount (${discount}%): −${fmt(discountAmount)}`, ML + 5, y + 14.5)
+      }
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(22)
+      pdf.setTextColor(...WHITE)
+      pdf.text(fmt(grandTotal), W - MR - 3, y + 13, { align: 'right' })
+      if (monthlyTotal > 0) {
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(7.5)
+        pdf.setTextColor(150, 150, 150)
+        pdf.text(`${fmt(setupTotal)} setup + ${fmt(monthlyTotal)}/mo × ${contractMonths} months`, W - MR - 3, y + 17, { align: 'right' })
+      }
+      y += 26
+
+      // ── PROJECT TIMELINE ───────────────────────────────────────────────
+      if (timeline.length > 0) {
+        sectionTitle('Project Timeline')
+        timeline.forEach((phase, i) => {
+          checkPage(18)
+          pdf.setFillColor(...GREEN)
+          pdf.circle(ML + 5, y + 4, 4, 'F')
+          pdf.setFont('helvetica', 'bold')
+          pdf.setFontSize(7)
+          pdf.setTextColor(...WHITE)
+          pdf.text(String(i + 1), ML + 3.5, y + 5.5)
+          pdf.setFont('helvetica', 'bold')
+          pdf.setFontSize(9)
+          pdf.setTextColor(...DARK_TEXT)
+          pdf.text(phase.phase, ML + 12, y + 4.5)
+          const durW = pdf.getStringUnitWidth(phase.duration) * 7.5 / pdf.internal.scaleFactor + 8
+          pdf.setFillColor(...PALE_GREEN)
+          pdf.setDrawColor(187, 247, 208)
+          pdf.setLineWidth(0.2)
+          pdf.roundedRect(W - MR - durW, y, durW, 7, 2, 2, 'FD')
+          pdf.setFont('helvetica', 'bold')
+          pdf.setFontSize(7.5)
+          pdf.setTextColor(...GREEN)
+          pdf.text(phase.duration, W - MR - durW / 2, y + 4.7, { align: 'center' })
+          pdf.setFont('helvetica', 'normal')
+          pdf.setFontSize(8)
+          pdf.setTextColor(...GRAY)
+          const taskLines = pdf.splitTextToSize(phase.tasks, CW - 14)
+          pdf.text(taskLines, ML + 12, y + 10)
+          if (i < timeline.length - 1) {
+            pdf.setDrawColor(...BORDER)
+            pdf.setLineWidth(0.5)
+            pdf.line(ML + 5, y + 8, ML + 5, y + 10 + taskLines.length * 4 + 4)
+          }
+          y += 10 + taskLines.length * 4 + 8
+        })
+        y += 4
+      }
+
+      // ── WHY GRAVISS ────────────────────────────────────────────────────
+      checkPage(36)
+      sectionTitle('Why Graviss Marketing')
+      const pillars = [
+        { title: 'Results-Driven', body: 'Every strategy is built around measurable KPIs and transparent reporting.' },
+        { title: 'Dedicated Team', body: 'A committed account team that knows your business inside and out.' },
+        { title: 'Full-Service', body: 'From design to SEO to content — everything under one roof.' },
+      ]
+      const pilW = (CW - 10) / 3
+      pdf.setFillColor(...LIGHT_GRAY)
+      pdf.setDrawColor(...BORDER)
+      pdf.setLineWidth(0.3)
+      pdf.roundedRect(ML, y, CW, 32, 3, 3, 'FD')
+      pillars.forEach((pil, i) => {
+        const px = ML + i * (pilW + 5)
+        pdf.setFillColor(...GREEN)
+        pdf.rect(px + 3, y + 4, pilW - 6, 1.5, 'F')
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(8.5)
+        pdf.setTextColor(...DARK)
+        pdf.text(pil.title, px + 3, y + 12)
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(7.5)
+        pdf.setTextColor(...GRAY)
+        const pilLines = pdf.splitTextToSize(pil.body, pilW - 6)
+        pdf.text(pilLines, px + 3, y + 18)
+      })
+      y += 40
+
+      // ── PROPOSAL ACCEPTANCE ────────────────────────────────────────────
+      checkPage(52)
+      sectionTitle('Proposal Acceptance')
+      const validity = 'This proposal is valid for 30 days from the date of issue. To proceed, please sign below and return a copy. Upon acceptance, we will send a formal contract and invoice for the initial payment.'
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(8.5)
+      pdf.setTextColor(...GRAY)
+      const valLines = pdf.splitTextToSize(validity, CW)
+      pdf.text(valLines, ML, y)
+      y += valLines.length * 4.5 + 16
+
+      const sigW = (CW - 10) / 2
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(6.5)
+      pdf.setTextColor(...GRAY)
+      pdf.text('CLIENT SIGNATURE', ML, y)
+      pdf.text('DATE', ML + sigW + 10, y)
+      y += 18
+      pdf.setDrawColor(...BORDER)
+      pdf.setLineWidth(0.4)
+      pdf.line(ML, y, ML + sigW, y)
+      pdf.line(ML + sigW + 10, y, ML + sigW + 10 + sigW, y)
+      pdf.setFontSize(7)
+      pdf.setTextColor(170, 170, 170)
+      pdf.text(`${contactName || 'Authorized Representative'} · ${company || ''}`, ML, y + 4)
+      pdf.text('Date of Acceptance', ML + sigW + 10, y + 4)
+      y += 16
+
+      // ── FOOTER on all pages ────────────────────────────────────────────
+      const totalPages = pdf.getNumberOfPages()
+      for (let p = 1; p <= totalPages; p++) {
+        pdf.setPage(p)
+        pdf.setFillColor(...DARK)
+        pdf.rect(0, H - 12, W, 12, 'F')
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(7)
+        pdf.setTextColor(150, 150, 150)
+        pdf.text('GRAVISS MARKETING', ML, H - 4.5)
+        pdf.text(`Confidential · ${today}`, W / 2, H - 4.5, { align: 'center' })
+        pdf.text(rep || 'Graviss Marketing', W - MR, H - 4.5, { align: 'right' })
       }
 
       pdf.save(`Graviss-Proposal-${(company || 'Draft').replace(/\s+/g, '-')}.pdf`)
@@ -844,32 +1213,6 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
         </div>
       </div>
 
-      {/* Hidden PDF template — captured by html2canvas */}
-      <div
-        ref={pdfRef}
-        style={{ position: 'fixed', left: '-9999px', top: 0, width: '816px', background: '#ffffff', pointerEvents: 'none' }}
-      >
-        <PdfTemplate
-          company={company}
-          contactName={contactName}
-          contactEmail={contactEmail}
-          rep={rep}
-          today={today}
-          execSummary={execSummary}
-          clientGoals={clientGoals}
-          solutions={solutions}
-          timeline={timeline}
-          oneTimeItems={buildLineItems().filter(i => i.type === 'one-time')}
-          recurringItems={buildLineItems().filter(i => i.type === 'recurring')}
-          setupTotal={setupTotal}
-          monthlyTotal={monthlyTotal}
-          contractMonths={contractMonths}
-          subtotal={subtotal}
-          discount={discount}
-          discountAmount={discountAmount}
-          grandTotal={grandTotal}
-        />
-      </div>
     </div>
   )
 }

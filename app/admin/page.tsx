@@ -337,7 +337,7 @@ export default function AdminPage() {
               <h3 className="text-sm font-bold text-gray-800 mb-3">Quick Admin Actions</h3>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: 'Add User', icon: <Plus size={14} />, action: () => setShowAddUser(true) },
+                  { label: 'Add User', icon: <Plus size={14} />, action: () => { setTab('users'); setShowAddUser(true) } },
                   { label: 'Export Data', icon: <Download size={14} />, action: () => setShowExportModal(true) },
                   { label: 'Import Data', icon: <Upload size={14} />, action: () => setShowImportModal(true) },
                   { label: 'Reset Passwords', icon: <Key size={14} />, action: () => setShowBulkResetModal(true) },

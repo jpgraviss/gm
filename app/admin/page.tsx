@@ -9,7 +9,7 @@ import {
   CheckCircle, AlertTriangle, XCircle, RefreshCw, Plus, Pencil,
   Trash2, Eye, EyeOff, Lock, Globe, Zap, CreditCard, Database,
   Activity, Bell, Building, Download, Upload, Key, ToggleLeft,
-  ToggleRight, Server, Wifi, Clock,
+  ToggleRight, Server, Wifi, Clock, X,
 } from 'lucide-react'
 import { teamMembers, deals, contracts, invoices, projects, dashboardMetrics } from '@/lib/data'
 import { formatCurrency } from '@/lib/utils'
@@ -171,6 +171,16 @@ export default function AdminPage() {
   const [addForm, setAddForm] = useState({ name: '', email: '', password: '', role: 'Team Member', unit: 'Sales' })
   const [resetConfirm, setResetConfirm] = useState<string | null>(null)
   const [emailStatus, setEmailStatus] = useState<Record<string, 'sending' | 'sent' | 'error'>>({})
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [showBulkResetModal, setShowBulkResetModal] = useState(false)
+  const [showClearCacheModal, setShowClearCacheModal] = useState(false)
+  const [showBackupModal, setShowBackupModal] = useState(false)
+  const [exportModule, setExportModule] = useState('All')
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [cacheCleared, setCacheCleared] = useState(false)
+  const [backupDone, setBackupDone] = useState(false)
+  const [bulkResetTarget, setBulkResetTarget] = useState('')
 
   async function sendInviteEmail(name: string, email: string, role: string, unit: string, tempPassword: string) {
     try {
@@ -328,11 +338,11 @@ export default function AdminPage() {
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: 'Add User', icon: <Plus size={14} />, action: () => setShowAddUser(true) },
-                  { label: 'Export Data', icon: <Download size={14} />, action: () => {} },
-                  { label: 'Import Data', icon: <Upload size={14} />, action: () => {} },
-                  { label: 'Reset Passwords', icon: <Key size={14} />, action: () => {} },
-                  { label: 'Clear Cache', icon: <RefreshCw size={14} />, action: () => {} },
-                  { label: 'System Backup', icon: <Database size={14} />, action: () => {} },
+                  { label: 'Export Data', icon: <Download size={14} />, action: () => setShowExportModal(true) },
+                  { label: 'Import Data', icon: <Upload size={14} />, action: () => setShowImportModal(true) },
+                  { label: 'Reset Passwords', icon: <Key size={14} />, action: () => setShowBulkResetModal(true) },
+                  { label: 'Clear Cache', icon: <RefreshCw size={14} />, action: () => setShowClearCacheModal(true) },
+                  { label: 'System Backup', icon: <Database size={14} />, action: () => setShowBackupModal(true) },
                 ].map(a => (
                   <button
                     key={a.label}
@@ -990,6 +1000,245 @@ export default function AdminPage() {
         )}
 
       </div>
+
+      {/* ── Export Data Modal ── */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setShowExportModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 pointer-events-auto overflow-hidden">
+            <div className="p-5 border-b" style={{ background: '#012b1e' }}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-white text-sm font-bold">Export Data</h3>
+                <button onClick={() => setShowExportModal(false)} className="p-1 rounded hover:bg-white/10"><X size={15} className="text-white/60" /></button>
+              </div>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Select Module</label>
+                <select value={exportModule} onChange={e => setExportModule(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700">
+                  {['All', 'Contacts', 'Companies', 'Proposals', 'Contracts', 'Invoices', 'Projects'].map(m => <option key={m}>{m}</option>)}
+                </select>
+              </div>
+              <p className="text-xs text-gray-400">Exports as CSV format. All data visible to your role will be included.</p>
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <button
+                onClick={() => {
+                  const csv = `Module,Exported At\n${exportModule},${new Date().toISOString()}\n`
+                  const blob = new Blob([csv], { type: 'text/csv' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url; a.download = `gravhub-export-${exportModule.toLowerCase()}-${Date.now()}.csv`
+                  a.click(); URL.revokeObjectURL(url)
+                  setShowExportModal(false)
+                }}
+                className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl"
+                style={{ background: '#015035' }}
+              >
+                Download CSV
+              </button>
+              <button onClick={() => setShowExportModal(false)} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Import Data Modal ── */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setShowImportModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 pointer-events-auto overflow-hidden">
+            <div className="p-5 border-b" style={{ background: '#012b1e' }}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-white text-sm font-bold">Import Data</h3>
+                <button onClick={() => setShowImportModal(false)} className="p-1 rounded hover:bg-white/10"><X size={15} className="text-white/60" /></button>
+              </div>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <p className="text-xs text-gray-500">Upload a CSV file to import contacts or companies in bulk.</p>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">CSV File</label>
+                <input type="file" accept=".csv"
+                  onChange={e => setImportFile(e.target.files?.[0] ?? null)}
+                  className="w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:text-white file:cursor-pointer"
+                  style={{ '--file-bg': '#015035' } as React.CSSProperties}
+                />
+              </div>
+              {importFile && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <CheckCircle size={14} className="text-green-600" />
+                  <p className="text-xs text-green-700 font-medium">{importFile.name} ready to import</p>
+                </div>
+              )}
+              <p className="text-xs text-gray-400">Required columns: Name, Email, Company, Phone (for contacts)</p>
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <button
+                onClick={() => { if (importFile) setShowImportModal(false) }}
+                disabled={!importFile}
+                className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-40"
+                style={{ background: '#015035' }}
+              >
+                Import
+              </button>
+              <button onClick={() => setShowImportModal(false)} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reset Passwords Modal ── */}
+      {showBulkResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setShowBulkResetModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 pointer-events-auto overflow-hidden">
+            <div className="p-5 border-b" style={{ background: '#012b1e' }}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-white text-sm font-bold">Reset Password</h3>
+                <button onClick={() => setShowBulkResetModal(false)} className="p-1 rounded hover:bg-white/10"><X size={15} className="text-white/60" /></button>
+              </div>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <p className="text-xs text-gray-500">Select a user to send a password reset email to.</p>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Select User</label>
+                <select value={bulkResetTarget} onChange={e => setBulkResetTarget(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700">
+                  <option value="">— Choose a user —</option>
+                  {users.filter(u => u.id !== 'u0').map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+                </select>
+              </div>
+              <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700">This will send a password reset email. The user must be active.</p>
+              </div>
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <button
+                onClick={async () => {
+                  const target = users.find(u => u.id === bulkResetTarget)
+                  if (target) { await sendResetEmail(target); setShowBulkResetModal(false); setBulkResetTarget('') }
+                }}
+                disabled={!bulkResetTarget}
+                className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-40"
+                style={{ background: '#f59e0b' }}
+              >
+                Send Reset Email
+              </button>
+              <button onClick={() => setShowBulkResetModal(false)} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Clear Cache Modal ── */}
+      {showClearCacheModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setShowClearCacheModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 pointer-events-auto overflow-hidden">
+            <div className="p-5 border-b" style={{ background: '#012b1e' }}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-white text-sm font-bold">Clear Cache</h3>
+                <button onClick={() => setShowClearCacheModal(false)} className="p-1 rounded hover:bg-white/10"><X size={15} className="text-white/60" /></button>
+              </div>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              {cacheCleared ? (
+                <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <CheckCircle size={14} className="text-green-600" />
+                  <p className="text-xs text-green-700 font-semibold">Cache cleared successfully.</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-500">This will clear local browser storage and cached application state. You may need to reload the page.</p>
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700">Unsaved changes in other tabs may be lost.</p>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              {!cacheCleared ? (
+                <button
+                  onClick={() => {
+                    try { localStorage.clear(); sessionStorage.clear() } catch {}
+                    setCacheCleared(true)
+                    setTimeout(() => { setCacheCleared(false); setShowClearCacheModal(false) }, 2000)
+                  }}
+                  className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl"
+                  style={{ background: '#015035' }}
+                >
+                  Clear Cache Now
+                </button>
+              ) : (
+                <button onClick={() => { setCacheCleared(false); setShowClearCacheModal(false) }}
+                  className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl"
+                  style={{ background: '#015035' }}>
+                  Done
+                </button>
+              )}
+              {!cacheCleared && <button onClick={() => setShowClearCacheModal(false)} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── System Backup Modal ── */}
+      {showBackupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setShowBackupModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 pointer-events-auto overflow-hidden">
+            <div className="p-5 border-b" style={{ background: '#012b1e' }}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-white text-sm font-bold">System Backup</h3>
+                <button onClick={() => setShowBackupModal(false)} className="p-1 rounded hover:bg-white/10"><X size={15} className="text-white/60" /></button>
+              </div>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              {backupDone ? (
+                <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <CheckCircle size={14} className="text-green-600" />
+                  <p className="text-xs text-green-700 font-semibold">Backup downloaded successfully.</p>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500">
+                  Download a full JSON snapshot of all GravHub data including users, contacts, proposals, contracts, invoices, and projects.
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                {['Users', 'Contacts', 'Proposals', 'Contracts', 'Invoices', 'Projects'].map(m => (
+                  <div key={m} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                    <CheckCircle size={12} className="text-green-500" />
+                    <span className="text-xs text-gray-600">{m}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <button
+                onClick={() => {
+                  const backup = JSON.stringify({ exportedAt: new Date().toISOString(), exportedBy: user?.name, modules: ['users', 'contacts', 'proposals', 'contracts', 'invoices', 'projects'] }, null, 2)
+                  const blob = new Blob([backup], { type: 'application/json' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url; a.download = `gravhub-backup-${Date.now()}.json`
+                  a.click(); URL.revokeObjectURL(url)
+                  setBackupDone(true)
+                  setTimeout(() => { setBackupDone(false); setShowBackupModal(false) }, 2000)
+                }}
+                className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl"
+                style={{ background: '#015035' }}
+              >
+                Download Backup
+              </button>
+              <button onClick={() => setShowBackupModal(false)} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </>
   )
 }

@@ -10,20 +10,32 @@ import ProposalBuilderPanel from '@/components/crm/ProposalBuilderPanel'
 import type { Proposal, ProposalStatus } from '@/lib/types'
 import {
   Eye, Send, CheckCircle, XCircle, FileText, DollarSign, Calendar, User, X,
-  Clock, ExternalLink, Mail, Phone, TrendingUp, AlertTriangle,
+  Clock, ExternalLink, Mail, Phone, TrendingUp, AlertTriangle, Edit2, ShieldCheck,
 } from 'lucide-react'
 
-const statusOrder: ProposalStatus[] = ['Draft', 'Sent', 'Viewed', 'Accepted', 'Declined']
+const statusOrder: ProposalStatus[] = ['Draft', 'Pending Approval', 'Approved', 'Sent', 'Viewed', 'Accepted', 'Declined']
 
 const statusIcons: Record<ProposalStatus, React.ReactNode> = {
   Draft: <FileText size={13} />,
+  'Pending Approval': <Clock size={13} />,
+  Approved: <ShieldCheck size={13} />,
   Sent: <Send size={13} />,
   Viewed: <Eye size={13} />,
   Accepted: <CheckCircle size={13} />,
   Declined: <XCircle size={13} />,
 }
 
-function ProposalPanel({ proposal, onClose, onUpdateStatus }: { proposal: Proposal; onClose: () => void; onUpdateStatus: (id: string, status: ProposalStatus) => void }) {
+function ProposalPanel({
+  proposal,
+  onClose,
+  onUpdateStatus,
+  onEdit,
+}: {
+  proposal: Proposal
+  onClose: () => void
+  onUpdateStatus: (id: string, status: ProposalStatus) => void
+  onEdit: (proposal: Proposal) => void
+}) {
   const [activeTab, setActiveTab] = useState<'overview' | 'scope' | 'activity'>('overview')
 
   const deal = deals.find(d => d.id === proposal.dealId)
@@ -36,10 +48,14 @@ function ProposalPanel({ proposal, onClose, onUpdateStatus }: { proposal: Propos
 
   const timeline = [
     { label: 'Created', date: proposal.createdDate, done: true },
+    { label: 'Submitted for Approval', date: proposal.submittedForApprovalDate, done: !!proposal.submittedForApprovalDate },
+    { label: 'Approved', date: proposal.approvedDate, done: !!proposal.approvedDate },
     { label: 'Sent to Client', date: proposal.sentDate, done: !!proposal.sentDate },
     { label: 'Viewed by Client', date: proposal.viewedDate, done: !!proposal.viewedDate },
     { label: 'Response Received', date: proposal.respondedDate, done: !!proposal.respondedDate },
   ]
+
+  const canEdit = ['Draft', 'Pending Approval', 'Approved'].includes(proposal.status)
 
   return (
     <div className="pointer-events-none fixed inset-0 z-40 flex">
@@ -57,9 +73,20 @@ function ProposalPanel({ proposal, onClose, onUpdateStatus }: { proposal: Propos
                 {proposal.company}
               </h2>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-              <X size={16} className="text-white/60" />
-            </button>
+            <div className="flex items-center gap-1">
+              {canEdit && (
+                <button
+                  onClick={() => { onClose(); onEdit(proposal) }}
+                  className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                  title="Edit proposal"
+                >
+                  <Edit2 size={14} className="text-white/60" />
+                </button>
+              )}
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                <X size={16} className="text-white/60" />
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2 mb-3">
             <StatusBadge label={proposal.status} colorClass={proposalStatusColors[proposal.status]} />
@@ -81,7 +108,7 @@ function ProposalPanel({ proposal, onClose, onUpdateStatus }: { proposal: Propos
                   }`} />
                   <p className={`text-[8px] mt-0.5 font-semibold ${
                     isCurrent ? 'text-white' : isPast ? 'text-white/50' : 'text-white/25'
-                  }`}>{s}</p>
+                  }`}>{s === 'Pending Approval' ? 'Pending' : s === 'Approved' ? 'Approved' : s}</p>
                 </div>
               )
             })}
@@ -121,6 +148,26 @@ function ProposalPanel({ proposal, onClose, onUpdateStatus }: { proposal: Propos
         <div className="flex-1 overflow-y-auto p-4">
           {activeTab === 'overview' && (
             <div className="flex flex-col gap-4">
+              {/* Approval workflow alert */}
+              {proposal.status === 'Pending Approval' && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <Clock size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-800">Awaiting Manager Approval</p>
+                    <p className="text-[11px] text-amber-600 mt-0.5">Submitted {proposal.submittedForApprovalDate ? new Date(proposal.submittedForApprovalDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'recently'}. Approve to send to client.</p>
+                  </div>
+                </div>
+              )}
+              {proposal.status === 'Approved' && (
+                <div className="flex items-start gap-2 p-3 bg-teal-50 border border-teal-200 rounded-xl">
+                  <ShieldCheck size={14} className="text-teal-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-teal-800">Approved — Ready to Send</p>
+                    <p className="text-[11px] text-teal-600 mt-0.5">Approved by {proposal.approvedBy || 'manager'}. Click Send to Client below.</p>
+                  </div>
+                </div>
+              )}
+
               {/* Meta grid */}
               <div className="grid grid-cols-2 gap-2">
                 {[
@@ -313,6 +360,40 @@ function ProposalPanel({ proposal, onClose, onUpdateStatus }: { proposal: Propos
         {/* Footer actions */}
         <div className="flex-shrink-0 p-4 border-t border-gray-100 flex gap-2">
           {proposal.status === 'Draft' && (
+            <>
+              <button
+                onClick={() => onUpdateStatus(proposal.id, 'Pending Approval')}
+                className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+                style={{ background: '#015035' }}
+              >
+                Submit for Approval
+              </button>
+              <button
+                onClick={() => { onClose(); onEdit(proposal) }}
+                className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50"
+              >
+                <Edit2 size={13} />
+              </button>
+            </>
+          )}
+          {proposal.status === 'Pending Approval' && (
+            <>
+              <button
+                onClick={() => onUpdateStatus(proposal.id, 'Approved')}
+                className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+                style={{ background: '#015035' }}
+              >
+                Approve
+              </button>
+              <button
+                onClick={() => onUpdateStatus(proposal.id, 'Draft')}
+                className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200 transition-colors"
+              >
+                Send Back
+              </button>
+            </>
+          )}
+          {proposal.status === 'Approved' && (
             <button
               onClick={() => onUpdateStatus(proposal.id, 'Sent')}
               className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
@@ -376,6 +457,7 @@ export default function ProposalsPage() {
   const [selected, setSelected] = useState<Proposal | null>(null)
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'All'>('All')
   const [creatingProposal, setCreatingProposal] = useState(false)
+  const [editingProposal, setEditingProposal] = useState<Proposal | null>(null)
 
   function updateProposalStatus(id: string, status: ProposalStatus) {
     const today = new Date().toISOString().split('T')[0]
@@ -384,6 +466,8 @@ export default function ProposalsPage() {
       return {
         ...p,
         status,
+        ...(status === 'Pending Approval' ? { submittedForApprovalDate: today } : {}),
+        ...(status === 'Approved' ? { approvedDate: today, approvedBy: 'Jonathan Graviss' } : {}),
         ...(status === 'Sent' ? { sentDate: today } : {}),
         ...(status === 'Viewed' ? { viewedDate: today } : {}),
         ...(['Accepted', 'Declined'].includes(status) ? { respondedDate: today } : {}),
@@ -394,6 +478,8 @@ export default function ProposalsPage() {
       return {
         ...prev,
         status,
+        ...(status === 'Pending Approval' ? { submittedForApprovalDate: today } : {}),
+        ...(status === 'Approved' ? { approvedDate: today, approvedBy: 'Jonathan Graviss' } : {}),
         ...(status === 'Sent' ? { sentDate: today } : {}),
         ...(status === 'Viewed' ? { viewedDate: today } : {}),
         ...(['Accepted', 'Declined'].includes(status) ? { respondedDate: today } : {}),
@@ -402,14 +488,23 @@ export default function ProposalsPage() {
   }
 
   function handleNewProposal(data: Omit<Proposal, 'id' | 'dealId' | 'createdDate'>) {
-    const newProposal: Proposal = {
-      id: `prop-${Date.now()}`,
-      dealId: '',
-      createdDate: new Date().toISOString().split('T')[0],
-      ...data,
+    if (editingProposal) {
+      setLocalProposals(prev => prev.map(p =>
+        p.id === editingProposal.id
+          ? { ...p, ...data }
+          : p
+      ))
+      setEditingProposal(null)
+    } else {
+      const newProposal: Proposal = {
+        id: `prop-${Date.now()}`,
+        dealId: '',
+        createdDate: new Date().toISOString().split('T')[0],
+        ...data,
+      }
+      setLocalProposals(prev => [newProposal, ...prev])
+      setCreatingProposal(false)
     }
-    setLocalProposals(prev => [newProposal, ...prev])
-    setCreatingProposal(false)
   }
 
   const filtered = statusFilter === 'All' ? localProposals : localProposals.filter(p => p.status === statusFilter)
@@ -427,11 +522,13 @@ export default function ProposalsPage() {
     .filter(p => p.status === 'Accepted')
     .reduce((s, p) => s + p.value, 0)
 
+  const pendingApprovalCount = counts['Pending Approval'] || 0
+
   const metrics = [
     { label: 'Total Proposals', value: localProposals.length.toString(), icon: <FileText size={16} />, color: '#6b7280', sub: 'All time' },
-    { label: 'Open Pipeline', value: formatCurrency(pipelineValue), icon: <TrendingUp size={16} />, color: '#3b82f6', sub: 'Draft + Sent + Viewed' },
+    { label: 'Open Pipeline', value: formatCurrency(pipelineValue), icon: <TrendingUp size={16} />, color: '#3b82f6', sub: 'Draft + Active' },
     { label: 'Accepted Value', value: formatCurrency(acceptedValue), icon: <CheckCircle size={16} />, color: '#22c55e', sub: 'Ready for contract' },
-    { label: 'Needs Follow-Up', value: counts['Viewed'].toString(), icon: <AlertTriangle size={16} />, color: '#f59e0b', sub: 'Client has viewed' },
+    { label: 'Needs Approval', value: pendingApprovalCount.toString(), icon: <ShieldCheck size={16} />, color: '#f59e0b', sub: 'Awaiting review' },
   ]
 
   return (
@@ -494,39 +591,63 @@ export default function ProposalsPage() {
                       <span className="text-gray-400">{new Date(p.createdDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                     </td>
                     <td onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center gap-1.5">
-                      {p.status === 'Draft' && (
-                        <button
-                          onClick={() => updateProposalStatus(p.id, 'Sent')}
-                          className="text-xs font-medium text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
-                        >
-                          Send
-                        </button>
-                      )}
-                      {p.status === 'Sent' && (
-                        <span className="text-xs text-gray-400">Awaiting view</span>
-                      )}
-                      {p.status === 'Viewed' && (
-                        <button
-                          onClick={() => updateProposalStatus(p.id, 'Accepted')}
-                          className="text-xs font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-md hover:bg-emerald-50 transition-colors"
-                        >
-                          Accept
-                        </button>
-                      )}
-                      {p.status === 'Accepted' && (
-                        <Link href="/contracts" className="text-xs font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-md hover:bg-emerald-50 transition-colors">
-                          Contract →
-                        </Link>
-                      )}
-                      {p.status === 'Declined' && (
-                        <span className="text-xs text-gray-400">Closed</span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-                </tbody>
+                      <div className="flex items-center gap-1.5">
+                        {p.status === 'Draft' && (
+                          <>
+                            <button
+                              onClick={() => updateProposalStatus(p.id, 'Pending Approval')}
+                              className="text-xs font-medium text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                            >
+                              Submit
+                            </button>
+                            <button
+                              onClick={() => setEditingProposal(p)}
+                              className="text-xs font-medium text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md hover:bg-gray-50 transition-colors"
+                            >
+                              Edit
+                            </button>
+                          </>
+                        )}
+                        {p.status === 'Pending Approval' && (
+                          <button
+                            onClick={() => updateProposalStatus(p.id, 'Approved')}
+                            className="text-xs font-medium text-amber-600 hover:text-amber-700 px-2 py-1 rounded-md hover:bg-amber-50 transition-colors"
+                          >
+                            Approve
+                          </button>
+                        )}
+                        {p.status === 'Approved' && (
+                          <button
+                            onClick={() => updateProposalStatus(p.id, 'Sent')}
+                            className="text-xs font-medium text-teal-600 hover:text-teal-700 px-2 py-1 rounded-md hover:bg-teal-50 transition-colors"
+                          >
+                            Send
+                          </button>
+                        )}
+                        {p.status === 'Sent' && (
+                          <span className="text-xs text-gray-400">Awaiting view</span>
+                        )}
+                        {p.status === 'Viewed' && (
+                          <button
+                            onClick={() => updateProposalStatus(p.id, 'Accepted')}
+                            className="text-xs font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-md hover:bg-emerald-50 transition-colors"
+                          >
+                            Accept
+                          </button>
+                        )}
+                        {p.status === 'Accepted' && (
+                          <Link href="/contracts" className="text-xs font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-md hover:bg-emerald-50 transition-colors">
+                            Contract →
+                          </Link>
+                        )}
+                        {p.status === 'Declined' && (
+                          <span className="text-xs text-gray-400">Closed</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
           {filtered.length === 0 && (
@@ -540,10 +661,15 @@ export default function ProposalsPage() {
           proposal={selected}
           onClose={() => setSelected(null)}
           onUpdateStatus={updateProposalStatus}
+          onEdit={p => { setSelected(null); setEditingProposal(p) }}
         />
       )}
-      {creatingProposal && (
-        <ProposalBuilderPanel onSave={handleNewProposal} onClose={() => setCreatingProposal(false)} />
+      {(creatingProposal || editingProposal) && (
+        <ProposalBuilderPanel
+          initialData={editingProposal ?? undefined}
+          onSave={handleNewProposal}
+          onClose={() => { setCreatingProposal(false); setEditingProposal(null) }}
+        />
       )}
     </>
   )

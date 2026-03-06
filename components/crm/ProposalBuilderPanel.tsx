@@ -49,6 +49,7 @@ interface Props {
   onClose: () => void
   initialCompany?: string
   initialRep?: string
+  initialData?: Proposal
 }
 
 const ALL_REPS = ['Jaycee Graviss', 'Alex Thompson', 'Maria Chen', 'Jordan Williams']
@@ -312,12 +313,12 @@ function PdfTemplate(p: PdfProps) {
 
 // ─── Main Builder Component ───────────────────────────────────────────────────
 
-export default function ProposalBuilderPanel({ onSave, onClose, initialCompany = '', initialRep = 'Jaycee Graviss' }: Props) {
+export default function ProposalBuilderPanel({ onSave, onClose, initialCompany = '', initialRep = 'Jaycee Graviss', initialData }: Props) {
   // Client info
-  const [company, setCompany]           = useState(initialCompany)
+  const [company, setCompany]           = useState(initialData?.company ?? initialCompany)
   const [contactName, setContactName]   = useState('')
   const [contactEmail, setContactEmail] = useState('')
-  const [rep, setRep]                   = useState(initialRep)
+  const [rep, setRep]                   = useState(initialData?.assignedRep ?? initialRep)
   const [discount, setDiscount]         = useState(0)
 
   // Website build

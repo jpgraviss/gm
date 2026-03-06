@@ -73,6 +73,19 @@ export type OccupationalUnit =
 
 export type TaskPriority = 'Low' | 'Medium' | 'High'
 
+export interface TimeEntry {
+  id: string
+  date: string
+  projectId?: string
+  projectName?: string
+  description: string
+  teamMember: string
+  serviceType: TeamServiceLine
+  hours: number
+  minutes: number
+  billable: boolean
+}
+
 export type RenewalStatus = 'Upcoming' | 'In Progress' | 'Renewed' | 'Churned'
 
 export type MaintenanceStatus = 'Active' | 'Onboarding' | 'Pending Cancellation' | 'Cancelled' | 'Past'

@@ -13,6 +13,7 @@ import type {
   CRMContact,
   CRMActivity,
   AppTask,
+  TimeEntry,
 } from './types'
 
 export const teamMembers: TeamMember[] = [
@@ -689,4 +690,23 @@ export const appTasks: AppTask[] = [
     createdDate: '2026-02-19',
     linkedId: 'd4',
   },
+]
+
+export const timeEntries: TimeEntry[] = [
+  // Today (2026-03-06)
+  { id: 'te1', date: '2026-03-06', projectId: 'pr1', projectName: 'Coastal Realty Website', description: 'Homepage wireframe design', teamMember: 'Jordan Ellis', serviceType: 'Website', hours: 2, minutes: 30, billable: true },
+  { id: 'te2', date: '2026-03-06', projectId: 'pr2', projectName: 'BlueStar Logistics SEO', description: 'Keyword research and competitor analysis', teamMember: 'Priya Patel', serviceType: 'SEO', hours: 1, minutes: 45, billable: true },
+  { id: 'te3', date: '2026-03-06', projectId: 'pr1', projectName: 'Coastal Realty Website', description: 'Client call — review requirements', teamMember: 'Jordan Ellis', serviceType: 'Website', hours: 0, minutes: 45, billable: false },
+  // Yesterday (2026-03-05)
+  { id: 'te4', date: '2026-03-05', projectId: 'pr2', projectName: 'BlueStar Logistics SEO', description: 'Technical SEO audit report', teamMember: 'Priya Patel', serviceType: 'SEO', hours: 3, minutes: 0, billable: true },
+  { id: 'te5', date: '2026-03-05', projectId: 'pr3', projectName: 'Harvest Foods Email', description: 'March campaign copy drafting', teamMember: 'Jordan Ellis', serviceType: 'Email Marketing', hours: 1, minutes: 30, billable: true },
+  { id: 'te6', date: '2026-03-05', description: 'Internal strategy meeting', teamMember: 'Sarah Chen', serviceType: 'General', hours: 1, minutes: 0, billable: false },
+  // This week (2026-03-04)
+  { id: 'te7', date: '2026-03-04', projectId: 'pr1', projectName: 'Coastal Realty Website', description: 'WordPress staging setup', teamMember: 'Priya Patel', serviceType: 'Website', hours: 2, minutes: 0, billable: true },
+  { id: 'te8', date: '2026-03-04', projectId: 'pr3', projectName: 'Harvest Foods Email', description: 'Email sequence automation build', teamMember: 'Jordan Ellis', serviceType: 'Email Marketing', hours: 2, minutes: 45, billable: true },
+  { id: 'te9', date: '2026-03-04', description: 'Sales pipeline review', teamMember: 'Marcus Webb', serviceType: 'General', hours: 0, minutes: 30, billable: false },
+  // Earlier this week (2026-03-03)
+  { id: 'te10', date: '2026-03-03', projectId: 'pr2', projectName: 'BlueStar Logistics SEO', description: 'On-page optimization — product pages', teamMember: 'Priya Patel', serviceType: 'SEO', hours: 4, minutes: 0, billable: true },
+  { id: 'te11', date: '2026-03-03', projectId: 'pr1', projectName: 'Coastal Realty Website', description: 'Design system and brand tokens', teamMember: 'Jordan Ellis', serviceType: 'Design', hours: 3, minutes: 15, billable: true },
+  { id: 'te12', date: '2026-03-03', description: 'New business proposal review', teamMember: 'Sarah Chen', serviceType: 'General', hours: 1, minutes: 0, billable: false },
 ]

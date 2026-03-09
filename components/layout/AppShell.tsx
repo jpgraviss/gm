@@ -14,13 +14,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
 
-  const isPublic = PUBLIC_ROUTES.includes(pathname)
+  // /book/* routes are public — clients book without logging in
+  const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/')
 
   useEffect(() => {
     if (loading) return
     if (!user && !isPublic) {
       router.replace('/login')
-    } else if (user && isPublic) {
+    } else if (user && isPublic && pathname === '/login') {
+      // Only redirect away from login, not from public /book pages
       router.replace('/')
     }
   }, [user, loading, isPublic, router, pathname])

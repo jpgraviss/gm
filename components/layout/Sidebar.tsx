@@ -8,6 +8,7 @@ import {
   LayoutDashboard, Users, FileText, ScrollText, CreditCard,
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
   Settings, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare, CheckSquare, Inbox,
+  CalendarDays, Clock,
 } from 'lucide-react'
 
 interface NavItem {
@@ -26,8 +27,10 @@ const navigation: NavSection[] = [
   {
     section: 'Overview',
     items: [
-      { label: 'Dashboard', href: '/', icon: <LayoutDashboard size={16} /> },
-      { label: 'Tasks', href: '/tasks', icon: <CheckSquare size={16} /> },
+      { label: 'Dashboard',   href: '/',         icon: <LayoutDashboard size={16} /> },
+      { label: 'Tasks',       href: '/tasks',     icon: <CheckSquare size={16} /> },
+      { label: 'Calendar',    href: '/calendar',  icon: <CalendarDays size={16} /> },
+      { label: 'Time Tracking', href: '/time-tracking', icon: <Clock size={16} /> },
     ],
   },
   {

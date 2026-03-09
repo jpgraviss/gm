@@ -39,12 +39,15 @@ declare global {
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''
 
 export default function LoginPage() {
-  const { login, loginWithGoogle, user, loading } = useAuth()
+  const { login, loginWithGoogle, user, loading, mustChangePassword, changePassword } = useAuth()
   const router = useRouter()
 
-  const [mode, setMode] = useState<'login' | 'forgot' | 'sent'>('login')
+  const [mode, setMode] = useState<'login' | 'forgot' | 'sent' | 'change-password'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showNewPw, setShowNewPw] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -106,6 +109,14 @@ export default function LoginPage() {
     }
   }, [handleGoogleCredential])
 
+  // If user is logged in and needs to change password, show that mode
+  useEffect(() => {
+    if (!loading && user && mustChangePassword) {
+      setEmail(user.email)
+      setMode('change-password')
+    }
+  }, [user, loading, mustChangePassword])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !password) {
@@ -116,11 +127,31 @@ export default function LoginPage() {
     setSubmitting(true)
     const result = await login(email, password)
     if (result.ok) {
-      router.push('/')
+      if (result.mustChangePassword) {
+        setMode('change-password')
+        setSubmitting(false)
+      } else {
+        router.push('/')
+      }
     } else {
       setError(result.error ?? 'Login failed.')
       setSubmitting(false)
     }
+  }
+
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newPassword || newPassword.length < 8) {
+      setError('Password must be at least 8 characters.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+    setError('')
+    changePassword(email, newPassword)
+    router.push('/')
   }
 
   const handleForgotSubmit = async (e: React.FormEvent) => {
@@ -268,6 +299,67 @@ export default function LoginPage() {
                   Back to Sign In
                 </button>
               </div>
+            )}
+
+            {/* ── Change Password (first login) ── */}
+            {mode === 'change-password' && (
+              <>
+                <div className="mb-6">
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ background: '#e6f0ec' }}>
+                    <Lock size={20} style={{ color: '#015035' }} />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-1"
+                    style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em' }}>
+                    SET YOUR PASSWORD
+                  </h2>
+                  <p className="text-gray-500 text-sm">Your account was created with a temporary password. Please set a new password to continue.</p>
+                </div>
+                <form onSubmit={handleChangePassword} className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">New Password</label>
+                    <div className="relative">
+                      <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type={showNewPw ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        placeholder="Minimum 8 characters"
+                        className="w-full pl-9 pr-10 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                        autoFocus
+                      />
+                      <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" onClick={() => setShowNewPw(v => !v)} tabIndex={-1}>
+                        {showNewPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Confirm Password</label>
+                    <div className="relative">
+                      <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type={showNewPw ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        placeholder="Re-enter new password"
+                        className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                      />
+                    </div>
+                  </div>
+                  {error && (
+                    <div className="flex items-center gap-2.5 px-3 py-2.5 bg-red-50 border border-red-200 rounded-xl">
+                      <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
+                      <p className="text-sm text-red-700">{error}</p>
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-semibold transition-opacity mt-1"
+                    style={{ background: '#015035' }}
+                  >
+                    Set Password & Continue <ArrowRight size={15} />
+                  </button>
+                </form>
+              </>
             )}
 
             {/* ── Normal login ── */}

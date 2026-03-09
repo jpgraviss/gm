@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
-import { teamMembers } from '@/lib/data'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   Users, Shield, Bell, Palette, Building, Plus, Pencil, Link2,
   CheckCircle, AlertCircle, RefreshCw, Plug, Globe, Tag,
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
+  Trash2, X, Eye, EyeOff,
 } from 'lucide-react'
 
 const membershipColors: Record<string, string> = {
@@ -33,18 +33,6 @@ const tabIcons: Record<Tab, React.ReactNode> = {
   Billing: <DollarSign size={15} />,
 }
 
-function FieldRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{label}</label>
-      <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg">
-        <span className="text-sm text-gray-800 flex-1">{value}</span>
-        <Pencil size={12} className="text-gray-300" />
-      </div>
-    </div>
-  )
-}
-
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange?: () => void }) {
   return (
     <button
@@ -58,6 +46,35 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange?: () => void
       />
     </button>
   )
+}
+
+function EditableField({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+      />
+    </div>
+  )
+}
+
+const COMPANY_DEFAULTS = {
+  name: 'Graviss Marketing, LLC',
+  industry: 'Marketing Agency',
+  email: 'info@gravissmarketing.com',
+  phone: '+1 (830) 326-0320',
+  website: 'www.gravissmarketing.com',
+  timezone: 'America/Chicago (CT)',
+  fiscalYear: 'January 1',
+  currency: 'USD ($)',
+  street: '',
+  city: 'Kerrville',
+  state: 'Texas',
+  zip: '78028',
 }
 
 const NOTIF_DEFAULTS = [
@@ -84,55 +101,137 @@ const QB_SYNC_DEFAULTS = [
   { label: 'Create QB invoice when GravHub invoice is sent', enabled: false },
 ]
 
+const INVOICE_DEFAULTS = {
+  paymentTerms: 'Net 7',
+  dueDays: '7',
+  prefix: 'INV-',
+  nextNumber: '00010',
+  lateFee: '1.5% / month',
+  reminders: '3 days before due',
+}
+
+const PIPELINE_STAGES_DEFAULT = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
+const SERVICE_TYPES_DEFAULT = ['Website', 'SEO', 'Social Media', 'Email Marketing', 'Branding', 'Custom']
+const CONTACT_TAGS_DEFAULT = ['Decision Maker', 'Executive', 'Signed Client', 'Warm Lead', 'Marketing', 'Healthcare', 'Partner']
+
+function loadLS<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : fallback
+  } catch { return fallback }
+}
+
 export default function SettingsPage() {
-  const { gmailToken, gmailEmail, connectGmail, disconnectGmail } = useAuth()
+  const { gmailToken, gmailEmail, connectGmail, disconnectGmail, addUser, members: authMembers } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('Company')
-  const [notifications, setNotifications] = useState(NOTIF_DEFAULTS)
-  const [qbSync, setQbSync] = useState(QB_SYNC_DEFAULTS)
+  const [saved, setSaved] = useState<string | null>(null)
+
+  // Company
+  const [company, setCompany] = useState(COMPANY_DEFAULTS)
+
+  // Team
+  const [members, setMembers] = useState(authMembers)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<string | null>(null)
-  const [savedTab, setSavedTab] = useState<Tab | null>(null)
-  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'Team Member', unit: 'Sales' })
-  const [members, setMembers] = useState(teamMembers)
+  const [showTempPw, setShowTempPw] = useState(false)
+  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'Team Member', unit: 'Sales', tempPassword: '' })
+  const [inviteSending, setInviteSending] = useState(false)
+  const [inviteError, setInviteError] = useState('')
 
-  function showSaved(tab: Tab) {
-    setSavedTab(tab)
-    setTimeout(() => setSavedTab(null), 2000)
+  // Notifications
+  const [notifications, setNotifications] = useState(NOTIF_DEFAULTS)
+
+  // QB Sync
+  const [qbSync, setQbSync] = useState(QB_SYNC_DEFAULTS)
+
+  // Invoice defaults
+  const [invoiceDefaults, setInvoiceDefaults] = useState(INVOICE_DEFAULTS)
+
+  // CRM Setup
+  const [pipelineStages, setPipelineStages] = useState(PIPELINE_STAGES_DEFAULT)
+  const [serviceTypes, setServiceTypes] = useState(SERVICE_TYPES_DEFAULT)
+  const [contactTags, setContactTags] = useState(CONTACT_TAGS_DEFAULT)
+  const [newStage, setNewStage] = useState('')
+  const [newService, setNewService] = useState('')
+  const [newTag, setNewTag] = useState('')
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
+    setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
+    setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
+    setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
+    setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
+    setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
+    setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
+  }, [])
+
+  // Keep members in sync with auth
+  useEffect(() => { setMembers(authMembers) }, [authMembers])
+
+  function flash(label: string) {
+    setSaved(label)
+    setTimeout(() => setSaved(null), 2500)
   }
 
-  function toggleNotif(label: string) {
-    setNotifications(prev => prev.map(n => n.label === label ? { ...n, enabled: !n.enabled } : n))
+  function saveCompany() {
+    localStorage.setItem('gravhub_company', JSON.stringify(company))
+    flash('Company')
   }
 
-  function toggleQb(label: string) {
-    setQbSync(prev => prev.map(n => n.label === label ? { ...n, enabled: !n.enabled } : n))
+  function saveNotifications() {
+    localStorage.setItem('gravhub_notifications', JSON.stringify(notifications))
+    flash('Notifications')
+  }
+
+  function saveInvoiceDefaults() {
+    localStorage.setItem('gravhub_invoice_defaults', JSON.stringify(invoiceDefaults))
+    flash('Billing')
+  }
+
+  function saveCRM() {
+    localStorage.setItem('gravhub_pipeline_stages', JSON.stringify(pipelineStages))
+    localStorage.setItem('gravhub_service_types', JSON.stringify(serviceTypes))
+    localStorage.setItem('gravhub_contact_tags', JSON.stringify(contactTags))
+    flash('CRM Setup')
   }
 
   async function submitInvite() {
-    if (!inviteForm.name || !inviteForm.email) return
-    const initials = inviteForm.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-    setMembers(prev => [...prev, {
-      id: `tm${Date.now()}`,
+    if (!inviteForm.name || !inviteForm.email) { setInviteError('Name and email are required.'); return }
+    if (!inviteForm.tempPassword) { setInviteError('Please set a temporary password for this user.'); return }
+    setInviteError('')
+    setInviteSending(true)
+
+    // Add user to auth system
+    addUser({
       name: inviteForm.name,
-      email: inviteForm.email,
-      role: inviteForm.role as typeof teamMembers[0]['role'],
-      unit: inviteForm.unit as typeof teamMembers[0]['unit'],
-      initials,
-    }])
+      email: inviteForm.email.toLowerCase().trim(),
+      role: inviteForm.role as 'Super Admin' | 'Leadership' | 'Department Manager' | 'Team Member' | 'Contractor' | 'Client',
+      unit: inviteForm.unit as 'Sales' | 'Billing/Finance' | 'Delivery/Operations' | 'Leadership/Admin' | 'Contractors' | 'Client',
+      password: inviteForm.tempPassword,
+    })
+
     // Send invite email
-    fetch('/api/email/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: inviteForm.name,
-        email: inviteForm.email,
-        role: inviteForm.role,
-        unit: inviteForm.unit,
-        invitedBy: 'the GravHub admin',
-      }),
-    }).catch(() => {/* non-blocking */})
-    setInviteForm({ name: '', email: '', role: 'Team Member', unit: 'Sales' })
+    try {
+      await fetch('/api/email/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: inviteForm.name,
+          email: inviteForm.email,
+          role: inviteForm.role,
+          unit: inviteForm.unit,
+          tempPassword: inviteForm.tempPassword,
+          invitedBy: 'Jonathan Graviss',
+        }),
+      })
+    } catch {/* non-blocking */}
+
+    setInviteSending(false)
+    setInviteForm({ name: '', email: '', role: 'Team Member', unit: 'Sales', tempPassword: '' })
     setInviteOpen(false)
+    flash('Team')
   }
 
   function removeMember(id: string) {
@@ -169,26 +268,29 @@ export default function SettingsPage() {
         {/* ── Company ── */}
         {activeTab === 'Company' && (
           <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
-            <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Company Information</h3>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Company Information</h3>
+              {saved === 'Company' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <FieldRow label="Company Name" value="Graviss Marketing" />
-              <FieldRow label="Industry" value="Marketing Agency" />
-              <FieldRow label="Primary Email" value="info@gravissmarketing.com" />
-              <FieldRow label="Phone" value="+1 (830) 326-0320" />
-              <FieldRow label="Website" value="www.gravissmarketing.com" />
-              <FieldRow label="Timezone" value="America/New_York (ET)" />
-              <FieldRow label="Fiscal Year Start" value="January 1" />
-              <FieldRow label="Default Currency" value="USD ($)" />
+              <EditableField label="Company Name"     value={company.name}       onChange={v => setCompany(p => ({ ...p, name: v }))} />
+              <EditableField label="Industry"          value={company.industry}   onChange={v => setCompany(p => ({ ...p, industry: v }))} />
+              <EditableField label="Primary Email"     value={company.email}      onChange={v => setCompany(p => ({ ...p, email: v }))} type="email" />
+              <EditableField label="Phone"             value={company.phone}      onChange={v => setCompany(p => ({ ...p, phone: v }))} />
+              <EditableField label="Website"           value={company.website}    onChange={v => setCompany(p => ({ ...p, website: v }))} />
+              <EditableField label="Timezone"          value={company.timezone}   onChange={v => setCompany(p => ({ ...p, timezone: v }))} />
+              <EditableField label="Fiscal Year Start" value={company.fiscalYear} onChange={v => setCompany(p => ({ ...p, fiscalYear: v }))} />
+              <EditableField label="Default Currency"  value={company.currency}   onChange={v => setCompany(p => ({ ...p, currency: v }))} />
             </div>
             <h4 className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wide">Address</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-              <FieldRow label="Street" value="123 Main St" />
-              <FieldRow label="City" value="Kerrville" />
-              <FieldRow label="State" value="Texas" />
-              <FieldRow label="ZIP" value="78028" />
+              <EditableField label="Street" value={company.street} onChange={v => setCompany(p => ({ ...p, street: v }))} />
+              <EditableField label="City"   value={company.city}   onChange={v => setCompany(p => ({ ...p, city: v }))} />
+              <EditableField label="State"  value={company.state}  onChange={v => setCompany(p => ({ ...p, state: v }))} />
+              <EditableField label="ZIP"    value={company.zip}    onChange={v => setCompany(p => ({ ...p, zip: v }))} />
             </div>
-            <button onClick={() => showSaved('Company')} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
-              {savedTab === 'Company' ? <><CheckCircle size={14} /> Saved!</> : 'Save Changes'}
+            <button onClick={saveCompany} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+              {saved === 'Company' ? <><CheckCircle size={14} /> Saved!</> : 'Save Changes'}
             </button>
           </div>
         )}
@@ -200,8 +302,8 @@ export default function SettingsPage() {
             {inviteOpen && (
               <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-sm font-bold text-gray-800">Invite New Member</h4>
-                  <button onClick={() => setInviteOpen(false)} className="text-gray-400 hover:text-gray-600"><AlertCircle size={14} /></button>
+                  <h4 className="text-sm font-bold text-gray-800">Add New Member</h4>
+                  <button onClick={() => { setInviteOpen(false); setInviteError('') }} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                   <div>
@@ -237,21 +339,46 @@ export default function SettingsPage() {
                       <option>Client</option>
                     </select>
                   </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Temporary Password</label>
+                    <div className="relative">
+                      <input
+                        value={inviteForm.tempPassword}
+                        onChange={e => setInviteForm(p => ({ ...p, tempPassword: e.target.value }))}
+                        type={showTempPw ? 'text' : 'password'}
+                        className="w-full px-3 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+                        placeholder="Set a temporary password — user will change on first login"
+                      />
+                      <button type="button" onClick={() => setShowTempPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        {showTempPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1">This will be included in the welcome email. The user must change it on first login.</p>
+                  </div>
                 </div>
+                {inviteError && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg mb-3">
+                    <AlertCircle size={13} className="text-red-500 flex-shrink-0" />
+                    <span className="text-xs text-red-700">{inviteError}</span>
+                  </div>
+                )}
                 <div className="flex gap-2">
-                  <button onClick={submitInvite} className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
-                    Add Member
+                  <button onClick={submitInvite} disabled={inviteSending} className="px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50" style={{ background: '#015035' }}>
+                    {inviteSending ? 'Sending…' : 'Add & Send Invite'}
                   </button>
-                  <button onClick={() => setInviteOpen(false)} className="px-4 py-2 text-gray-600 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                  <button onClick={() => { setInviteOpen(false); setInviteError('') }} className="px-4 py-2 text-gray-600 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
                 </div>
               </div>
             )}
 
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Team Members ({members.length})</h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Team Members ({members.length})</h3>
+                  {saved === 'Team' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Invite sent!</span>}
+                </div>
                 <button onClick={() => setInviteOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
-                  <Plus size={13} /> Invite Member
+                  <Plus size={13} /> Add Member
                 </button>
               </div>
               <div className="overflow-x-auto">
@@ -312,6 +439,7 @@ export default function SettingsPage() {
                                     <option>Team Member</option>
                                     <option>Department Manager</option>
                                     <option>Leadership</option>
+                                    <option>Super Admin</option>
                                     <option>Contractor</option>
                                     <option>Client</option>
                                   </select>
@@ -399,7 +527,7 @@ export default function SettingsPage() {
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Primary Color</label>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: '#015035' }} />
-                  <input className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50" defaultValue="#015035" />
+                  <input className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700" defaultValue="#015035" />
                   <span className="text-xs text-gray-500 hidden sm:inline">Deep Green</span>
                 </div>
               </div>
@@ -407,7 +535,7 @@ export default function SettingsPage() {
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Secondary Color</label>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: '#FFF3EA' }} />
-                  <input className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50" defaultValue="#FFF3EA" />
+                  <input className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700" defaultValue="#FFF3EA" />
                   <span className="text-xs text-gray-500 hidden sm:inline">Soft Tan</span>
                 </div>
               </div>
@@ -433,7 +561,7 @@ export default function SettingsPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Notification Preferences</h3>
-              {savedTab === 'Notifications' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+              {saved === 'Notifications' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
             </div>
             <div className="flex flex-col gap-1">
               {notifications.map(n => (
@@ -442,12 +570,12 @@ export default function SettingsPage() {
                     <span className="text-sm text-gray-700">{n.label}</span>
                     <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{n.category}</span>
                   </div>
-                  <Toggle enabled={n.enabled} onChange={() => toggleNotif(n.label)} />
+                  <Toggle enabled={n.enabled} onChange={() => setNotifications(prev => prev.map(x => x.label === n.label ? { ...x, enabled: !x.enabled } : x))} />
                 </div>
               ))}
             </div>
-            <button onClick={() => showSaved('Notifications')} className="flex items-center gap-2 mt-5 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
-              {savedTab === 'Notifications' ? <><CheckCircle size={14} /> Saved!</> : 'Save Preferences'}
+            <button onClick={saveNotifications} className="flex items-center gap-2 mt-5 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+              {saved === 'Notifications' ? <><CheckCircle size={14} /> Saved!</> : 'Save Preferences'}
             </button>
           </div>
         )}
@@ -463,9 +591,7 @@ export default function SettingsPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-800">Gmail</p>
                   <p className="text-xs text-gray-500">Read your inbox and log emails directly as CRM activities</p>
-                  {gmailEmail && (
-                    <p className="text-[11px] text-gray-400 mt-0.5">Connected as: {gmailEmail}</p>
-                  )}
+                  {gmailEmail && <p className="text-[11px] text-gray-400 mt-0.5">Connected as: {gmailEmail}</p>}
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
                   <span className={`text-[11px] font-semibold hidden sm:flex items-center gap-0.5 ${gmailToken ? 'text-emerald-600' : 'text-gray-400'}`}>
@@ -473,40 +599,26 @@ export default function SettingsPage() {
                     {gmailToken ? 'Connected' : 'Not Connected'}
                   </span>
                   {gmailToken ? (
-                    <button
-                      onClick={disconnectGmail}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-200 transition-colors"
-                    >
-                      Disconnect
-                    </button>
+                    <button onClick={disconnectGmail} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-200 transition-colors">Disconnect</button>
                   ) : (
-                    <button
-                      onClick={connectGmail}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg text-white transition-colors"
-                      style={{ background: '#015035' }}
-                    >
-                      Connect
-                    </button>
+                    <button onClick={connectGmail} className="text-xs font-medium px-3 py-1.5 rounded-lg text-white transition-colors" style={{ background: '#015035' }}>Connect</button>
                   )}
                 </div>
               </div>
 
               {[
-                { name: 'QuickBooks Online', description: 'Sync invoices, payments, and client accounts', status: 'connected', statusLabel: 'Connected', lastSync: '2 hours ago', icon: '🟢', action: 'Manage' },
-                { name: 'Google Workspace', description: 'Single sign-on and calendar integration', status: 'connected', statusLabel: 'Active', lastSync: 'Continuous', icon: '🔵', action: 'Manage' },
-                { name: 'DocuSign', description: 'E-signature workflow for proposals and contracts', status: 'not_connected', statusLabel: 'Not Connected', lastSync: null, icon: '⚪', action: 'Connect' },
-                { name: 'Slack', description: 'Team notifications for deals and project updates', status: 'not_connected', statusLabel: 'Not Connected', lastSync: null, icon: '⚪', action: 'Connect' },
-                { name: 'Stripe', description: 'Accept online invoice payments from clients', status: 'not_connected', statusLabel: 'Not Connected', lastSync: null, icon: '⚪', action: 'Connect' },
-                { name: 'Zapier', description: 'Connect GravHub to 5,000+ apps with automations', status: 'not_connected', statusLabel: 'Not Connected', lastSync: null, icon: '⚪', action: 'Connect' },
+                { name: 'QuickBooks Online', description: 'Sync invoices, payments, and client accounts', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
+                { name: 'Google Workspace', description: 'Single sign-on and calendar integration', status: 'connected', statusLabel: 'Active', icon: '🔵', action: 'Manage' },
+                { name: 'DocuSign', description: 'E-signature workflow for proposals and contracts', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
+                { name: 'Slack', description: 'Team notifications for deals and project updates', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
+                { name: 'Stripe', description: 'Accept online invoice payments from clients', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
+                { name: 'Zapier', description: 'Connect GravHub to 5,000+ apps with automations', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
               ].map(integration => (
                 <div key={integration.name} className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
                   <div className="text-2xl flex-shrink-0">{integration.icon}</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-800">{integration.name}</p>
                     <p className="text-xs text-gray-500">{integration.description}</p>
-                    {integration.lastSync && (
-                      <p className="text-[11px] text-gray-400 mt-0.5">Last sync: {integration.lastSync}</p>
-                    )}
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <span className={`text-[11px] font-semibold hidden sm:flex items-center gap-0.5 ${integration.status === 'connected' ? 'text-emerald-600' : 'text-gray-400'}`}>
@@ -533,60 +645,73 @@ export default function SettingsPage() {
         {/* ── CRM Setup ── */}
         {activeTab === 'CRM Setup' && (
           <div className="flex flex-col gap-4">
+            {/* Pipeline Stages */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Pipeline Stages</h3>
-                <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
-                  <Plus size={12} /> Add Stage
-                </button>
               </div>
-              <div className="flex flex-col gap-1.5">
-                {['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost'].map((stage, i) => (
+              <div className="flex flex-col gap-1.5 mb-3">
+                {pipelineStages.map((stage, i) => (
                   <div key={stage} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
                     <span className="text-xs text-gray-400 font-mono w-4">{i + 1}</span>
                     <span className="text-sm text-gray-800 flex-1 font-medium">{stage}</span>
-                    <div className="flex gap-1.5">
-                      <button className="text-xs text-gray-400 hover:text-blue-500 transition-colors">Edit</button>
-                      <button className="text-xs text-gray-400 hover:text-red-500 transition-colors">Remove</button>
-                    </div>
+                    <button onClick={() => setPipelineStages(prev => prev.filter(s => s !== stage))} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
                   </div>
                 ))}
               </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Service Types</h3>
-                <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
+              <div className="flex gap-2">
+                <input value={newStage} onChange={e => setNewStage(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newStage.trim()) { setPipelineStages(p => [...p, newStage.trim()]); setNewStage('') }}}
+                  placeholder="New stage name…" className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" />
+                <button onClick={() => { if (newStage.trim()) { setPipelineStages(p => [...p, newStage.trim()]); setNewStage('') }}} className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
                   <Plus size={12} /> Add
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {['Website', 'SEO', 'Social Media', 'Email Marketing', 'Branding', 'Custom'].map(s => (
+            </div>
+
+            {/* Service Types */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Service Types</h3>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {serviceTypes.map(s => (
                   <div key={s} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-full">
                     <span className="text-xs font-medium text-gray-700">{s}</span>
-                    <button className="text-gray-400 hover:text-gray-600"><ChevronRight size={10} /></button>
+                    <button onClick={() => setServiceTypes(prev => prev.filter(x => x !== s))} className="text-gray-400 hover:text-red-500"><X size={10} /></button>
                   </div>
                 ))}
+              </div>
+              <div className="flex gap-2">
+                <input value={newService} onChange={e => setNewService(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newService.trim()) { setServiceTypes(p => [...p, newService.trim()]); setNewService('') }}}
+                  placeholder="New service type…" className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" />
+                <button onClick={() => { if (newService.trim()) { setServiceTypes(p => [...p, newService.trim()]); setNewService('') }}} className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
+                  <Plus size={12} /> Add
+                </button>
               </div>
             </div>
 
+            {/* Contact Tags */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Contact Tags</h3>
-                <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
-                  <Plus size={12} /> Add Tag
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {['Decision Maker', 'Executive', 'Signed Client', 'Warm Lead', 'Marketing', 'Healthcare', 'Partner'].map(tag => (
+              <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Contact Tags</h3>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {contactTags.map(tag => (
                   <div key={tag} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-full">
                     <Tag size={10} className="text-blue-400" />
                     <span className="text-xs font-medium text-blue-700">{tag}</span>
+                    <button onClick={() => setContactTags(prev => prev.filter(x => x !== tag))} className="text-blue-300 hover:text-red-500"><X size={10} /></button>
                   </div>
                 ))}
               </div>
+              <div className="flex gap-2">
+                <input value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newTag.trim()) { setContactTags(p => [...p, newTag.trim()]); setNewTag('') }}}
+                  placeholder="New tag…" className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" />
+                <button onClick={() => { if (newTag.trim()) { setContactTags(p => [...p, newTag.trim()]); setNewTag('') }}} className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
+                  <Plus size={12} /> Add
+                </button>
+              </div>
             </div>
+
+            <button onClick={saveCRM} className="w-fit flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+              {saved === 'CRM Setup' ? <><CheckCircle size={14} /> Saved!</> : 'Save CRM Settings'}
+            </button>
           </div>
         )}
 
@@ -596,64 +721,49 @@ export default function SettingsPage() {
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex flex-wrap items-start gap-4 mb-5">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e8f5e9' }}>
-                  <span className="text-xl">🟢</span>
+                  <span className="text-xl">⚪</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-800">QuickBooks Online</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Graviss Marketing — Connected</p>
-                  <p className="flex items-center gap-1 text-[11px] text-emerald-600 mt-1">
-                    <CheckCircle size={11} /> Last synced 2 hours ago · Auto-sync every 15 min
+                  <p className="text-xs text-gray-500 mt-0.5">Not connected</p>
+                  <p className="flex items-center gap-1 text-[11px] text-gray-400 mt-1">
+                    <AlertCircle size={11} /> Connect QuickBooks to sync invoices and payments
                   </p>
                 </div>
-                <div className="flex gap-2 flex-shrink-0">
-                  <button className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
-                    <RefreshCw size={11} /> Sync Now
-                  </button>
-                  <button className="text-xs font-medium px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
-                    Disconnect
-                  </button>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { label: 'Clients Synced', value: '12', sub: 'QB customers' },
-                  { label: 'Invoices Synced', value: '7', sub: 'All statuses' },
-                  { label: 'Payments Synced', value: '5', sub: 'Paid invoices' },
-                ].map(stat => (
-                  <div key={stat.label} className="p-3 bg-gray-50 rounded-xl">
-                    <p className="text-xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{stat.value}</p>
-                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mt-0.5">{stat.label}</p>
-                    <p className="text-[11px] text-gray-400">{stat.sub}</p>
-                  </div>
-                ))}
+                <button className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg text-white flex-shrink-0" style={{ background: '#015035' }}>
+                  Connect QuickBooks
+                </button>
               </div>
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Sync Settings</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Invoice Defaults</h3>
+                {saved === 'Billing' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <EditableField label="Payment Terms"    value={invoiceDefaults.paymentTerms} onChange={v => setInvoiceDefaults(p => ({ ...p, paymentTerms: v }))} />
+                <EditableField label="Default Due Days" value={invoiceDefaults.dueDays}      onChange={v => setInvoiceDefaults(p => ({ ...p, dueDays: v }))} />
+                <EditableField label="Invoice Prefix"   value={invoiceDefaults.prefix}       onChange={v => setInvoiceDefaults(p => ({ ...p, prefix: v }))} />
+                <EditableField label="Next Invoice #"   value={invoiceDefaults.nextNumber}   onChange={v => setInvoiceDefaults(p => ({ ...p, nextNumber: v }))} />
+                <EditableField label="Late Fee %"       value={invoiceDefaults.lateFee}      onChange={v => setInvoiceDefaults(p => ({ ...p, lateFee: v }))} />
+                <EditableField label="Send Reminders"   value={invoiceDefaults.reminders}    onChange={v => setInvoiceDefaults(p => ({ ...p, reminders: v }))} />
+              </div>
+              <button onClick={saveInvoiceDefaults} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+                {saved === 'Billing' ? <><CheckCircle size={14} /> Saved!</> : 'Save Invoice Settings'}
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>QB Sync Settings</h3>
               <div className="flex flex-col gap-1">
                 {qbSync.map(item => (
                   <div key={item.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0 gap-3">
                     <span className="text-sm text-gray-700">{item.label}</span>
-                    <Toggle enabled={item.enabled} onChange={() => toggleQb(item.label)} />
+                    <Toggle enabled={item.enabled} onChange={() => setQbSync(prev => prev.map(x => x.label === item.label ? { ...x, enabled: !x.enabled } : x))} />
                   </div>
                 ))}
               </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Invoice Defaults</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FieldRow label="Payment Terms" value="Net 7" />
-                <FieldRow label="Default Due Days" value="7" />
-                <FieldRow label="Invoice Prefix" value="INV-" />
-                <FieldRow label="Next Invoice #" value="00008" />
-                <FieldRow label="Late Fee %" value="1.5% / month" />
-                <FieldRow label="Send Reminders" value="3 days before due" />
-              </div>
-              <button onClick={() => showSaved('Billing')} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
-                {savedTab === 'Billing' ? <><CheckCircle size={14} /> Saved!</> : 'Save Invoice Settings'}
-              </button>
             </div>
           </div>
         )}

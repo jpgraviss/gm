@@ -55,7 +55,7 @@ const BASE_USERS: Record<string, { password: string; mustChangePassword: boolean
     },
   },
   'jgraviss@gravissmarketing.com': {
-    password: '3asy2c0nn3ct',
+    password: '3asy2c0nn3xt',
     mustChangePassword: false,
     user: {
       id: 'u7',

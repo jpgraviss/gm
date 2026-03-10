@@ -35,26 +35,26 @@ create table if not exists crm_companies (
 
 -- ── CRM Contacts ──────────────────────────────────────────────────────────────
 create table if not exists crm_contacts (
-  id             text primary key,
-  company_id     text references crm_companies(id) on delete set null,
-  company_name   text,
-  first_name     text not null,
-  last_name      text not null,
-  full_name      text not null,
-  title          text,
-  email          text,
-  phone          text,
-  mobile         text,
-  linked_in      text,
-  website        text,
-  is_primary     boolean default false,
-  owner          text,
-  tags           text[] default '{}',
-  notes          text,
-  contact_notes  jsonb default '[]',
-  contact_tasks  jsonb default '[]',
-  created_at     timestamptz default now(),
-  last_activity  timestamptz
+  id               text primary key,
+  company_id       text references crm_companies(id) on delete set null,
+  company_name     text,
+  first_name       text not null,
+  last_name        text not null,
+  full_name        text not null,
+  title            text,
+  emails           text[] default '{}',
+  phones           text[] default '{}',
+  linked_in        text,
+  website          text,
+  is_primary       boolean default false,
+  lifecycle_stage  text,
+  owner            text,
+  tags             text[] default '{}',
+  notes            text,
+  contact_notes    jsonb default '[]',
+  contact_tasks    jsonb default '[]',
+  created_at       timestamptz default now(),
+  last_activity    timestamptz
 );
 
 -- ── Deals ─────────────────────────────────────────────────────────────────────

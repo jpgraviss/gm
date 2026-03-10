@@ -18,12 +18,7 @@ import type {
 
 export const teamMembers: TeamMember[] = [
   { id: 't0', name: 'Jonathan Graviss', email: 'jonathan@gravissmarketing.com', role: 'Super Admin', unit: 'Leadership/Admin', initials: 'JG' },
-  { id: 't6', name: 'Amanda Foster', email: 'amanda@gravissmarketing.com', role: 'Leadership', unit: 'Leadership/Admin', initials: 'AF' },
-  { id: 't1', name: 'Sarah Chen', email: 'sarah@gravissmarketing.com', role: 'Department Manager', unit: 'Sales', initials: 'SC' },
-  { id: 't2', name: 'Marcus Webb', email: 'marcus@gravissmarketing.com', role: 'Team Member', unit: 'Sales', initials: 'MW' },
-  { id: 't3', name: 'Jordan Ellis', email: 'jordan@gravissmarketing.com', role: 'Team Member', unit: 'Delivery/Operations', initials: 'JE' },
-  { id: 't4', name: 'Priya Patel', email: 'priya@gravissmarketing.com', role: 'Department Manager', unit: 'Delivery/Operations', initials: 'PP' },
-  { id: 't5', name: 'Tyler Ross', email: 'tyler@gravissmarketing.com', role: 'Team Member', unit: 'Billing/Finance', initials: 'TR' },
+  { id: 't6', name: 'JG Graviss', email: 'jgraviss@gravissmarketing.com', role: 'Super Admin', unit: 'Leadership/Admin', initials: 'JG' },
 ]
 
 // ─── Trailhead Media ──────────────────────────────────────────────────────────

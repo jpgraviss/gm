@@ -1,6 +1,8 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { teamMembers as defaultTeamMembers } from '@/lib/data'
+import type { TeamMember } from '@/lib/types'
 
 export interface AuthUser {
   id: string
@@ -13,23 +15,35 @@ export interface AuthUser {
   avatar?: string
 }
 
+interface DynamicUser {
+  password: string
+  mustChangePassword: boolean
+  user: AuthUser
+}
+
 interface AuthContextType {
   user: AuthUser | null
   loading: boolean
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  mustChangePassword: boolean
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean }>
   loginWithGoogle: (credential: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
+  changePassword: (email: string, newPassword: string) => void
+  addUser: (params: { name: string; email: string; role: AuthUser['role']; unit: AuthUser['unit']; password: string }) => void
   // Gmail
   gmailToken: string | null
   gmailEmail: string | null
   connectGmail: () => void
   disconnectGmail: () => void
+  // Team members
+  members: TeamMember[]
 }
 
-// Registered platform users
-const USERS: Record<string, { password: string; user: AuthUser }> = {
+// Hardcoded base users (Graviss Marketing leadership)
+const BASE_USERS: Record<string, { password: string; mustChangePassword: boolean; user: AuthUser }> = {
   'jonathan@gravissmarketing.com': {
     password: 'Gr@v!ss32603',
+    mustChangePassword: false,
     user: {
       id: 'u0',
       email: 'jonathan@gravissmarketing.com',
@@ -41,7 +55,8 @@ const USERS: Record<string, { password: string; user: AuthUser }> = {
     },
   },
   'jgraviss@gravissmarketing.com': {
-    password: '3asy2c0nn3ct',
+    password: '3asy2c0nn3xt',
+    mustChangePassword: false,
     user: {
       id: 'u7',
       email: 'jgraviss@gravissmarketing.com',
@@ -54,6 +69,7 @@ const USERS: Record<string, { password: string; user: AuthUser }> = {
   },
   'amanda@gravissmarketing.com': {
     password: 'Amanda123!',
+    mustChangePassword: false,
     user: {
       id: 'u6',
       email: 'amanda@gravissmarketing.com',
@@ -66,6 +82,7 @@ const USERS: Record<string, { password: string; user: AuthUser }> = {
   },
   'sarah@gravissmarketing.com': {
     password: 'Sarah123!',
+    mustChangePassword: false,
     user: {
       id: 'u1',
       email: 'sarah@gravissmarketing.com',
@@ -78,6 +95,7 @@ const USERS: Record<string, { password: string; user: AuthUser }> = {
   },
   'marcus@gravissmarketing.com': {
     password: 'Marcus123!',
+    mustChangePassword: false,
     user: {
       id: 'u2',
       email: 'marcus@gravissmarketing.com',
@@ -90,6 +108,7 @@ const USERS: Record<string, { password: string; user: AuthUser }> = {
   },
   'priya@gravissmarketing.com': {
     password: 'Priya123!',
+    mustChangePassword: false,
     user: {
       id: 'u4',
       email: 'priya@gravissmarketing.com',
@@ -102,63 +121,84 @@ const USERS: Record<string, { password: string; user: AuthUser }> = {
   },
 }
 
+const DYNAMIC_USERS_KEY = 'gravhub_dynamic_users'
+const SESSION_KEY = 'gravhub_session'
+const MUST_CHANGE_KEY = 'gravhub_must_change_pw'
+
+function loadDynamicUsers(): Record<string, DynamicUser> {
+  try {
+    const raw = localStorage.getItem(DYNAMIC_USERS_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
+function saveDynamicUsers(users: Record<string, DynamicUser>) {
+  localStorage.setItem(DYNAMIC_USERS_KEY, JSON.stringify(users))
+}
+
 const AuthContext = createContext<AuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [mustChangePassword, setMustChangePassword] = useState(false)
   const [gmailToken, setGmailToken] = useState<string | null>(null)
   const [gmailEmail, setGmailEmail] = useState<string | null>(null)
+  const [members, setMembers] = useState<TeamMember[]>(defaultTeamMembers)
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('gravhub_session')
-      if (stored) {
-        setUser(JSON.parse(stored))
-      }
+      const stored = localStorage.getItem(SESSION_KEY)
+      if (stored) setUser(JSON.parse(stored))
+      const mustChange = localStorage.getItem(MUST_CHANGE_KEY)
+      if (mustChange === 'true') setMustChangePassword(true)
       const storedGmailEmail = localStorage.getItem('gravhub_gmail_email')
-      if (storedGmailEmail) {
-        setGmailEmail(storedGmailEmail)
-        // Note: access tokens expire — token itself is not persisted; user reconnects if expired
-      }
-    } catch {
-      // ignore parse errors
-    }
+      if (storedGmailEmail) setGmailEmail(storedGmailEmail)
+    } catch {/* ignore */}
     setLoading(false)
   }, [])
 
-  const login = async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
-    const entry = USERS[email.toLowerCase().trim()]
-    if (!entry) {
-      return { ok: false, error: 'No account found with that email address.' }
-    }
-    if (entry.password !== password) {
-      return { ok: false, error: 'Incorrect password. Please try again.' }
-    }
-    localStorage.setItem('gravhub_session', JSON.stringify(entry.user))
+  function getAllUsers() {
+    return { ...BASE_USERS, ...loadDynamicUsers() }
+  }
+
+  const login = async (email: string, password: string): Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean }> => {
+    const all = getAllUsers()
+    const entry = all[email.toLowerCase().trim()]
+    if (!entry) return { ok: false, error: 'No account found with that email address.' }
+    if (entry.password !== password) return { ok: false, error: 'Incorrect password. Please try again.' }
+
+    localStorage.setItem(SESSION_KEY, JSON.stringify(entry.user))
     setUser(entry.user)
+
+    if (entry.mustChangePassword) {
+      localStorage.setItem(MUST_CHANGE_KEY, 'true')
+      setMustChangePassword(true)
+      return { ok: true, mustChangePassword: true }
+    }
+
+    localStorage.removeItem(MUST_CHANGE_KEY)
+    setMustChangePassword(false)
     return { ok: true }
   }
 
   const loginWithGoogle = async (credential: string): Promise<{ ok: boolean; error?: string }> => {
     try {
-      // Decode JWT payload (signature verification handled server-side in M2 with Supabase)
       const payloadB64 = credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
       const payload = JSON.parse(atob(payloadB64)) as {
         email: string; name: string; picture?: string; sub: string
       }
       const email = payload.email.toLowerCase()
 
-      // Match a known registered user first
-      const entry = USERS[email]
+      const all = getAllUsers()
+      const entry = all[email]
       if (entry) {
         const authedUser: AuthUser = { ...entry.user, avatar: payload.picture }
-        localStorage.setItem('gravhub_session', JSON.stringify(authedUser))
+        localStorage.setItem(SESSION_KEY, JSON.stringify(authedUser))
         setUser(authedUser)
         return { ok: true }
       }
 
-      // Allow any @gravissmarketing.com Google Workspace account
       if (email.endsWith('@gravissmarketing.com')) {
         const initials = payload.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
         const newUser: AuthUser = {
@@ -171,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isAdmin: false,
           avatar: payload.picture,
         }
-        localStorage.setItem('gravhub_session', JSON.stringify(newUser))
+        localStorage.setItem(SESSION_KEY, JSON.stringify(newUser))
         setUser(newUser)
         return { ok: true }
       }
@@ -182,10 +222,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const changePassword = useCallback((email: string, newPassword: string) => {
+    const dynamic = loadDynamicUsers()
+    const key = email.toLowerCase().trim()
+
+    if (dynamic[key]) {
+      dynamic[key] = { ...dynamic[key], password: newPassword, mustChangePassword: false }
+      saveDynamicUsers(dynamic)
+    } else if (BASE_USERS[key]) {
+      // Store override in dynamic store
+      dynamic[key] = { ...BASE_USERS[key], password: newPassword, mustChangePassword: false }
+      saveDynamicUsers(dynamic)
+    }
+
+    localStorage.removeItem(MUST_CHANGE_KEY)
+    setMustChangePassword(false)
+  }, [])
+
+  const addUser = useCallback((params: {
+    name: string
+    email: string
+    role: AuthUser['role']
+    unit: AuthUser['unit']
+    password: string
+  }) => {
+    const initials = params.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    const newUser: AuthUser = {
+      id: `dyn_${Date.now()}`,
+      email: params.email,
+      name: params.name,
+      role: params.role,
+      initials,
+      unit: params.unit,
+      isAdmin: params.role === 'Super Admin',
+    }
+    const dynamic = loadDynamicUsers()
+    dynamic[params.email] = { password: params.password, mustChangePassword: true, user: newUser }
+    saveDynamicUsers(dynamic)
+
+    // Add to team members list
+    const newMember: TeamMember = {
+      id: `tm_${Date.now()}`,
+      name: params.name,
+      email: params.email,
+      role: params.role as TeamMember['role'],
+      unit: params.unit as TeamMember['unit'],
+      initials,
+    }
+    setMembers(prev => [...prev, newMember])
+  }, [])
+
   const logout = () => {
-    localStorage.removeItem('gravhub_session')
+    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(MUST_CHANGE_KEY)
     localStorage.removeItem('gravhub_gmail_email')
     setUser(null)
+    setMustChangePassword(false)
     setGmailToken(null)
     setGmailEmail(null)
   }
@@ -210,7 +302,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       callback: (resp: { access_token?: string; error?: string }) => {
         if (resp.error || !resp.access_token) return
         setGmailToken(resp.access_token)
-        // Fetch the connected email address
         fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${resp.access_token}` },
         })
@@ -239,7 +330,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [gmailToken])
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout, gmailToken, gmailEmail, connectGmail, disconnectGmail }}>
+    <AuthContext.Provider value={{
+      user, loading, mustChangePassword,
+      login, loginWithGoogle, logout,
+      changePassword, addUser,
+      gmailToken, gmailEmail, connectGmail, disconnectGmail,
+      members,
+    }}>
       {children}
     </AuthContext.Provider>
   )

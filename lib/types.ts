@@ -301,6 +301,8 @@ export interface ContactTask {
   notes?: string
 }
 
+export type ContactLifecycleStage = 'lead' | 'opportunity' | 'client' | 'other'
+
 export interface CRMContact {
   id: string
   companyId: string
@@ -309,9 +311,8 @@ export interface CRMContact {
   lastName: string
   fullName: string
   title: string
-  email: string
-  phone: string
-  mobile?: string
+  emails: string[]
+  phones: string[]
   linkedIn?: string
   website?: string
   isPrimary: boolean
@@ -322,6 +323,7 @@ export interface CRMContact {
   contactTasks?: ContactTask[]
   createdDate: string
   lastActivity?: string
+  lifecycleStage?: ContactLifecycleStage
 }
 
 export interface CRMCompany {

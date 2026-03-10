@@ -411,10 +411,10 @@ function RenewalPanel({
                     </Link>
                   </div>
                   <div className="flex gap-2">
-                    <a href={`mailto:${contact.email}`} className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
+                    <a href={`mailto:${contact.emails[0] ?? ''}`} className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
                       <Mail size={12} /> Email
                     </a>
-                    <a href={`tel:${contact.phone}`} className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
+                    <a href={`tel:${contact.phones[0] ?? ''}`} className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
                       <Phone size={12} /> Call
                     </a>
                   </div>

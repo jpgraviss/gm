@@ -61,9 +61,9 @@ function EditContactPanel({
     firstName: contact.firstName,
     lastName: contact.lastName,
     title: contact.title,
-    email: contact.email,
-    phone: contact.phone,
-    mobile: contact.mobile ?? '',
+    email: contact.emails[0] ?? '',
+    phone: contact.phones[0] ?? '',
+    mobile: contact.phones[1] ?? '',
     linkedIn: contact.linkedIn ?? '',
     website: contact.website ?? '',
     owner: contact.owner,
@@ -82,9 +82,8 @@ function EditContactPanel({
       lastName: form.lastName.trim(),
       fullName: `${form.firstName.trim()} ${form.lastName.trim()}`,
       title: form.title.trim(),
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      mobile: form.mobile.trim() || undefined,
+      emails: [form.email.trim()].filter(Boolean) as string[],
+      phones: [form.phone.trim(), form.mobile.trim()].filter(Boolean) as string[],
       linkedIn: form.linkedIn.trim() || undefined,
       website: form.website.trim() || undefined,
       owner: form.owner,
@@ -92,7 +91,7 @@ function EditContactPanel({
     })
   }
 
-  const canSave = form.firstName.trim() && form.lastName.trim() && form.email.trim()
+  const canSave = form.firstName.trim() && form.lastName.trim()
 
   return (
     <div className="fixed inset-0 z-[60] flex pointer-events-none">
@@ -429,10 +428,10 @@ function ContactPanel({ contact, onClose, onEdit }: { contact: CRMContact; onClo
 
         {/* Action buttons */}
         <div className="flex gap-2 px-5 py-3 border-b border-gray-100 flex-shrink-0">
-          <a href={`mailto:${contact.email}`} className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
+          <a href={`mailto:${contact.emails[0] ?? ''}`} className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
             <Mail size={13} /> Email
           </a>
-          <a href={`tel:${contact.phone}`} className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
+          <a href={`tel:${contact.phones[0] ?? ''}`} className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
             <Phone size={13} /> Call
           </a>
           {contact.linkedIn && (
@@ -474,11 +473,14 @@ function ContactPanel({ contact, onClose, onEdit }: { contact: CRMContact; onClo
               <div className="p-4 bg-gray-50 rounded-xl">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Contact Info</p>
                 <div className="flex flex-col gap-2.5">
-                  <InfoRow icon={<Mail size={14} />} label="Email" value={
-                    <a href={`mailto:${contact.email}`} className="text-blue-500 hover:underline">{contact.email}</a>
-                  } />
-                  <InfoRow icon={<Phone size={14} />} label="Phone" value={contact.phone} />
-                  {contact.mobile && <InfoRow icon={<Phone size={14} />} label="Mobile" value={contact.mobile} />}
+                  {contact.emails.map((e, i) => (
+                    <InfoRow key={`e${i}`} icon={<Mail size={14} />} label={i === 0 ? 'Email' : 'Alt Email'} value={
+                      <a href={`mailto:${e}`} className="text-blue-500 hover:underline">{e}</a>
+                    } />
+                  ))}
+                  {contact.phones.map((p, i) => (
+                    <InfoRow key={`p${i}`} icon={<Phone size={14} />} label={i === 0 ? 'Phone' : 'Mobile'} value={p} />
+                  ))}
                   {contact.website && (
                     <InfoRow icon={<Globe size={14} />} label="Website" value={
                       <a href={`https://${contact.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">{contact.website}</a>
@@ -958,9 +960,8 @@ export default function ContactsPage() {
       lastName: data.lastName,
       fullName: `${data.firstName} ${data.lastName}`,
       title: data.title,
-      email: data.email,
-      phone: data.phone,
-      mobile: data.mobile || undefined,
+      emails: [data.email].filter(Boolean) as string[],
+      phones: [data.phone, data.mobile].filter(Boolean) as string[],
       linkedIn: data.linkedIn || undefined,
       website: data.website || undefined,
       isPrimary: false,
@@ -979,7 +980,7 @@ export default function ContactsPage() {
     c.fullName.toLowerCase().includes(search.toLowerCase()) ||
     c.companyName.toLowerCase().includes(search.toLowerCase()) ||
     c.title.toLowerCase().includes(search.toLowerCase()) ||
-    c.email.toLowerCase().includes(search.toLowerCase())
+    c.emails.join(' ').toLowerCase().includes(search.toLowerCase())
   )
 
   return (
@@ -1082,10 +1083,10 @@ export default function ContactsPage() {
                     </td>
                     <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1">
-                        <a href={`mailto:${contact.email}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors">
+                        <a href={`mailto:${contact.emails[0] ?? ''}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors">
                           <Mail size={13} />
                         </a>
-                        <a href={`tel:${contact.phone}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors">
+                        <a href={`tel:${contact.phones[0] ?? ''}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors">
                           <Phone size={13} />
                         </a>
                         {contact.linkedIn && (

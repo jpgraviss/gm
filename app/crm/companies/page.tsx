@@ -229,10 +229,10 @@ function CompanyPanel({ company, onClose, onEdit }: { company: CRMCompany; onClo
                       <p className="text-xs text-gray-400">{c.title}</p>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <a href={`mailto:${c.email}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                      <a href={`mailto:${c.emails[0] ?? ''}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                         <Mail size={13} />
                       </a>
-                      <a href={`tel:${c.phone}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                      <a href={`tel:${c.phones[0] ?? ''}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                         <Phone size={13} />
                       </a>
                     </div>
@@ -343,13 +343,13 @@ function CompanyPanel({ company, onClose, onEdit }: { company: CRMCompany; onClo
                       )}
                     </div>
                     <p className="text-xs text-gray-500">{c.title}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{c.email}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{c.emails[0] ?? ''}</p>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <a href={`mailto:${c.email}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600">
+                    <a href={`mailto:${c.emails[0] ?? ''}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600">
                       <Mail size={13} />
                     </a>
-                    <a href={`tel:${c.phone}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600">
+                    <a href={`tel:${c.phones[0] ?? ''}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600">
                       <Phone size={13} />
                     </a>
                   </div>

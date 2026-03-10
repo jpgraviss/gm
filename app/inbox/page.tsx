@@ -142,7 +142,7 @@ export default function InboxPage() {
   // Find a CRM contact whose email matches the sender
   function findMatchingContact(fromEmail: string) {
     const email = fromEmail.toLowerCase()
-    return crmContacts.find(c => c.email.toLowerCase() === email) ?? null
+    return crmContacts.find(c => c.emails.some(e => e.toLowerCase() === email)) ?? null
   }
 
   function openLogModal() {

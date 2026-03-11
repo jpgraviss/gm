@@ -36,15 +36,9 @@ const membershipColors: Record<string, string> = {
 
 const auditLog = [
   { id: 'al1', user: 'Jonathan Graviss', action: 'Admin panel accessed', module: 'Admin', time: 'Just now', type: 'info' },
-  { id: 'al2', user: 'Marcus Webb', action: 'Contract CON2 sent for signature', module: 'Contracts', time: '2 hours ago', type: 'action' },
-  { id: 'al3', user: 'Tyler Ross', action: 'Invoice INV2 marked as paid — $22,500', module: 'Billing', time: '3 hours ago', type: 'success' },
   { id: 'al4', user: 'System', action: 'Automation triggered: Renewal alert for ProVenture LLC', module: 'Automation', time: '4 hours ago', type: 'warning' },
-  { id: 'al5', user: 'Sarah Chen', action: 'New deal created: Summit Capital ($52,000)', module: 'CRM', time: '5 hours ago', type: 'action' },
-  { id: 'al6', user: 'Jordan Ellis', action: 'Milestone completed: Discovery & Strategy', module: 'Projects', time: '1 day ago', type: 'success' },
   { id: 'al7', user: 'System', action: 'QuickBooks sync completed — 7 invoices synced', module: 'Integrations', time: '1 day ago', type: 'success' },
-  { id: 'al8', user: 'Amanda Foster', action: 'User permissions updated for Marcus Webb', module: 'Admin', time: '2 days ago', type: 'warning' },
   { id: 'al9', user: 'Jonathan Graviss', action: 'DocuSign integration connected', module: 'Integrations', time: '3 days ago', type: 'success' },
-  { id: 'al10', user: 'Priya Patel', action: 'Project PR1 status updated to In Progress', module: 'Projects', time: '3 days ago', type: 'action' },
 ]
 
 const auditColors: Record<string, string> = {
@@ -819,7 +813,7 @@ export default function AdminPage() {
                 {[
                   { label: 'Company Name', value: 'Graviss Marketing' },
                   { label: 'Admin Email', value: 'jonathan@gravissmarketing.com' },
-                  { label: 'Platform URL', value: 'gravhub.gravissmarketing.com' },
+                  { label: 'Platform URL', value: 'app.gravissmarketing.com' },
                   { label: 'Fiscal Year Start', value: 'January' },
                   { label: 'Default Currency', value: 'USD ($)' },
                   { label: 'Timezone', value: 'America/New_York (ET)' },

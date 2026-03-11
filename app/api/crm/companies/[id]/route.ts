@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient, isConfigured } from '@/lib/supabase'
-import { crmCompanies as seedCompanies } from '@/lib/data'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCompany(row: any) {
@@ -25,29 +24,15 @@ function mapCompany(row: any) {
   }
 }
 
-export async function GET() {
-  if (!isConfigured) {
-    return NextResponse.json(seedCompanies)
-  }
-  const db = createServiceClient()
-  const { data, error } = await db
-    .from('crm_companies')
-    .select('*')
-    .order('name')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json((data ?? []).map(mapCompany))
-}
-
-export async function POST(req: NextRequest) {
+export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
   if (!isConfigured) {
-    return NextResponse.json({ ...body, id: `co-${Date.now()}` })
+    return NextResponse.json(body)
   }
   const db = createServiceClient()
   const { data, error } = await db
     .from('crm_companies')
-    .insert({
-      id:               `co-${Date.now()}`,
+    .update({
       name:             body.name,
       industry:         body.industry,
       website:          body.website ?? null,
@@ -55,17 +40,28 @@ export async function POST(req: NextRequest) {
       hq:               body.hq,
       size:             body.size,
       annual_revenue:   body.annualRevenue ?? null,
-      status:           body.status ?? 'Prospect',
+      status:           body.status,
       owner:            body.owner,
       description:      body.description ?? null,
       tags:             body.tags ?? [],
       contact_ids:      body.contactIds ?? [],
       deal_ids:         body.dealIds ?? [],
       total_deal_value: body.totalDealValue ?? 0,
-      created_date:     new Date().toISOString().split('T')[0],
+      last_activity:    body.lastActivity ?? null,
     })
+    .eq('id', params.id)
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(mapCompany(data), { status: 201 })
+  return NextResponse.json(mapCompany(data))
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  if (!isConfigured) {
+    return NextResponse.json({ success: true })
+  }
+  const db = createServiceClient()
+  const { error } = await db.from('crm_companies').delete().eq('id', params.id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
 }

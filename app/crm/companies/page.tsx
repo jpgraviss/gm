@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { crmCompanies, crmContacts, deals, contracts, invoices, projects, crmActivities } from '@/lib/data'
@@ -661,15 +661,26 @@ export default function CompaniesPage() {
   const [localCompanies, setLocalCompanies] = useState<CRMCompany[]>(crmCompanies)
   const [creatingCompany, setCreatingCompany] = useState(false)
 
-  function handleEditCompany(updated: CRMCompany) {
+  useEffect(() => {
+    fetch('/api/crm/companies')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
+      .catch(() => {/* keep static fallback */})
+  }, [])
+
+  async function handleEditCompany(updated: CRMCompany) {
     setLocalCompanies(prev => prev.map(c => c.id === updated.id ? updated : c))
     setEditingCompany(null)
     if (selectedCompany?.id === updated.id) setSelectedCompany(updated)
+    await fetch(`/api/crm/companies/${updated.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => {})
   }
 
-  function handleNewCompany(data: NewCompanyFormData) {
-    const newCompany: CRMCompany = {
-      id: `co-${Date.now()}`,
+  async function handleNewCompany(data: NewCompanyFormData) {
+    const payload: Omit<CRMCompany, 'id'> = {
       name: data.name,
       industry: data.industry,
       website: data.website || undefined,
@@ -686,7 +697,17 @@ export default function CompaniesPage() {
       createdDate: new Date().toISOString().split('T')[0],
       totalDealValue: data.proposal ? data.proposal.grandTotal : 0,
     }
-    setLocalCompanies(prev => [newCompany, ...prev])
+    try {
+      const res = await fetch('/api/crm/companies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const saved = await res.json()
+      setLocalCompanies(prev => [saved, ...prev])
+    } catch {
+      setLocalCompanies(prev => [{ ...payload, id: `co-${Date.now()}` } as CRMCompany, ...prev])
+    }
     setCreatingCompany(false)
   }
 

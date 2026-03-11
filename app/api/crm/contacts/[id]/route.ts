@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient, isConfigured } from '@/lib/supabase'
-import { crmContacts as seedContacts } from '@/lib/data'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {
@@ -15,7 +14,7 @@ function mapContact(row: any) {
     emails:         row.emails ?? [],
     phones:         row.phones ?? [],
     linkedIn:       row.linked_in ?? undefined,
-    website:        row.website ?? undefined,
+    website:        row.website ?? null,
     isPrimary:      row.is_primary ?? false,
     lifecycleStage: row.lifecycle_stage ?? undefined,
     owner:          row.owner ?? '',
@@ -28,38 +27,15 @@ function mapContact(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const companyId = searchParams.get('companyId')
-
-  if (!isConfigured) {
-    const results = companyId
-      ? seedContacts.filter(c => c.companyId === companyId)
-      : seedContacts
-    return NextResponse.json(results)
-  }
-
-  const db = createServiceClient()
-  let query = db.from('crm_contacts').select('*').order('full_name')
-  if (companyId) query = query.eq('company_id', companyId)
-
-  const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json((data ?? []).map(mapContact))
-}
-
-export async function POST(req: NextRequest) {
+export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
   if (!isConfigured) {
-    return NextResponse.json({ ...body, id: `ct-${Date.now()}` })
+    return NextResponse.json(body)
   }
   const db = createServiceClient()
   const { data, error } = await db
     .from('crm_contacts')
-    .insert({
-      id:              `ct-${Date.now()}`,
-      company_id:      body.companyId ?? null,
-      company_name:    body.companyName ?? '',
+    .update({
       first_name:      body.firstName,
       last_name:       body.lastName,
       full_name:       body.fullName ?? `${body.firstName} ${body.lastName}`,
@@ -70,15 +46,26 @@ export async function POST(req: NextRequest) {
       website:         body.website ?? null,
       is_primary:      body.isPrimary ?? false,
       lifecycle_stage: body.lifecycleStage ?? null,
-      owner:           body.owner ?? '',
+      owner:           body.owner,
       tags:            body.tags ?? [],
       notes:           body.notes ?? null,
       contact_notes:   body.contactNotes ?? [],
       contact_tasks:   body.contactTasks ?? [],
-      created_date:    new Date().toISOString().split('T')[0],
+      last_activity:   body.lastActivity ?? null,
     })
+    .eq('id', params.id)
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(mapContact(data), { status: 201 })
+  return NextResponse.json(mapContact(data))
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  if (!isConfigured) {
+    return NextResponse.json({ success: true })
+  }
+  const db = createServiceClient()
+  const { error } = await db.from('crm_contacts').delete().eq('id', params.id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
 }

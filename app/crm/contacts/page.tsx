@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { crmContacts, crmCompanies, deals, contracts, projects, crmActivities } from '@/lib/data'
@@ -938,30 +938,42 @@ export default function ContactsPage() {
   const [localContacts, setLocalContacts] = useState<CRMContact[]>(crmContacts)
   const [creatingContact, setCreatingContact] = useState(false)
 
-  function handleEditSave(updated: CRMContact) {
+  useEffect(() => {
+    fetch('/api/crm/contacts')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalContacts(data) })
+      .catch(() => {/* keep static fallback */})
+  }, [])
+
+  async function handleEditSave(updated: CRMContact) {
     setLocalContacts(prev => prev.map(c => c.id === updated.id ? updated : c))
     setEditingContact(null)
     if (selectedContact?.id === updated.id) setSelectedContact(updated)
+    await fetch(`/api/crm/contacts/${updated.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => {})
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     setLocalContacts(prev => prev.filter(c => c.id !== id))
     setEditingContact(null)
     if (selectedContact?.id === id) setSelectedContact(null)
+    await fetch(`/api/crm/contacts/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
-  function handleNewContact(data: NewContactFormData) {
+  async function handleNewContact(data: NewContactFormData) {
     const company = crmCompanies.find(c => c.name === data.companyName)
-    const newContact: CRMContact = {
-      id: `contact-${Date.now()}`,
+    const payload = {
       companyId: company?.id ?? `co-${Date.now()}`,
       companyName: data.companyName,
       firstName: data.firstName,
       lastName: data.lastName,
       fullName: `${data.firstName} ${data.lastName}`,
       title: data.title,
-      emails: [data.email].filter(Boolean) as string[],
-      phones: [data.phone, data.mobile].filter(Boolean) as string[],
+      emails: [data.email].filter(Boolean),
+      phones: [data.phone, data.mobile].filter(Boolean),
       linkedIn: data.linkedIn || undefined,
       website: data.website || undefined,
       isPrimary: false,
@@ -972,7 +984,17 @@ export default function ContactsPage() {
       contactTasks: [],
       createdDate: new Date().toISOString().split('T')[0],
     }
-    setLocalContacts(prev => [newContact, ...prev])
+    try {
+      const res = await fetch('/api/crm/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const saved = await res.json()
+      setLocalContacts(prev => [saved, ...prev])
+    } catch {
+      setLocalContacts(prev => [{ ...payload, id: `contact-${Date.now()}` } as CRMContact, ...prev])
+    }
     setCreatingContact(false)
   }
 

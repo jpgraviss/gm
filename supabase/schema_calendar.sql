@@ -11,7 +11,7 @@ create table if not exists calendar_settings (
   description           text,
   duration              int  not null default 30,      -- slot length in minutes
   buffer                int  not null default 15,      -- gap after each booking
-  timezone              text not null default 'America/Chicago',
+  timezone              text not null default 'America/New York',
   available_days        int[] not null default '{1,2,3,4,5}', -- 0=Sun … 6=Sat
   available_start       text not null default '09:00', -- "HH:MM" 24h
   available_end         text not null default '17:00',

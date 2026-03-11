@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
-import { crmContacts } from '@/lib/data'
+import { fetchCrmContacts } from '@/lib/supabase'
+import type { CRMContact } from '@/lib/types'
 import {
   Mail, RefreshCw, X, ChevronDown, Search, Link2,
   Inbox as InboxIcon, AlertCircle, CheckCircle, ExternalLink,
@@ -75,6 +76,9 @@ export default function InboxPage() {
   const [logContact, setLogContact] = useState('')
   const [logSuccess, setLogSuccess] = useState(false)
   const [loggedIds, setLoggedIds] = useState<Set<string>>(new Set())
+  const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
+
+  useEffect(() => { fetchCrmContacts().then(setCrmContacts) }, [])
 
   // Load already-logged activity IDs from localStorage
   useEffect(() => {

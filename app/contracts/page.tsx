@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { invoices, projects, proposals } from '@/lib/data'
+import { fetchInvoices, fetchProjects, fetchProposals } from '@/lib/supabase'
 import { formatCurrency, contractStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
-import type { Contract, ContractStatus } from '@/lib/types'
+import type { Contract, ContractStatus, Invoice, Project, Proposal } from '@/lib/types'
 import {
   X, CheckCircle, Clock, AlertCircle, ScrollText, Calendar, DollarSign, User,
   ExternalLink, FileText, FolderKanban, Send, RefreshCw, Shield, Plus, FilePlus2,
@@ -29,6 +29,7 @@ interface Addendum {
 
 function ContractPanel({
   contract, onClose, onUpdateStatus, addendums, onAddAddendum, onUpdateAddendumStatus,
+  invoices, projects, proposals,
 }: {
   contract: Contract
   onClose: () => void
@@ -36,6 +37,9 @@ function ContractPanel({
   addendums: Addendum[]
   onAddAddendum: (contractId: string, title: string, description: string) => void
   onUpdateAddendumStatus: (id: string, status: Addendum['status']) => void
+  invoices: Invoice[]
+  projects: Project[]
+  proposals: Proposal[]
 }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'project' | 'addendums'>('overview')
   const [showAddForm, setShowAddForm] = useState(false)
@@ -535,12 +539,18 @@ export default function ContractsPage() {
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'All'>('All')
   const [creatingContract, setCreatingContract] = useState(false)
   const [localAddendums, setLocalAddendums] = useState<Addendum[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [proposals, setProposals] = useState<Proposal[]>([])
 
   useEffect(() => {
     fetch('/api/contracts')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalContracts(data) })
       .catch(() => {})
+    fetchInvoices().then(setInvoices)
+    fetchProjects().then(setProjects)
+    fetchProposals().then(setProposals)
   }, [])
 
   function addAddendum(contractId: string, title: string, description: string) {
@@ -733,6 +743,9 @@ export default function ContractsPage() {
           addendums={localAddendums}
           onAddAddendum={addAddendum}
           onUpdateAddendumStatus={updateAddendumStatus}
+          invoices={invoices}
+          projects={projects}
+          proposals={proposals}
         />
       )}
       {creatingContract && (

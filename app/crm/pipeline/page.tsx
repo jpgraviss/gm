@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { crmActivities, crmCompanies, crmContacts, contracts } from '@/lib/data'
+import { fetchCrmActivities, fetchCrmCompanies, fetchCrmContacts, fetchContracts } from '@/lib/supabase'
 import { formatCurrency, serviceTypeColors, contractStatusColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import CRMSubNav from '@/components/crm/CRMSubNav'
@@ -12,7 +12,7 @@ import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
-import type { Deal } from '@/lib/types'
+import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/types'
 import {
   X, Phone, Mail, Calendar, TrendingUp, DollarSign,
   FileText, ScrollText, User, ChevronRight, Plus,
@@ -138,18 +138,26 @@ function DealPanel({
   onClose,
   onAdvanceStage,
   onUpdateDeal,
+  crmActivities,
+  crmCompanies,
+  crmContacts,
+  contracts,
 }: {
   deal: LocalDeal
   pipelineStages: PipelineStage[]
   onClose: () => void
   onAdvanceStage: (dealId: string, newStage: string) => void
   onUpdateDeal?: (id: string, updates: Partial<LocalDeal>) => void
+  crmActivities: CRMActivity[]
+  crmCompanies: CRMCompany[]
+  crmContacts: CRMContact[]
+  contracts: Contract[]
 }) {
   const [tab, setTab] = useState<'overview' | 'activity' | 'tasks'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [creatingProposal, setCreatingProposal] = useState(false)
   const [localActivities, setLocalActivities] = useState(
-    () => crmActivities.filter(a => a.companyId === crmCompanies.find(c => c.name === deal.company)?.id).slice(0, 8)
+    () => (crmActivities ?? []).filter(a => a.companyId === (crmCompanies ?? []).find(c => c.name === deal.company)?.id).slice(0, 8)
   )
 
   const company = crmCompanies.find(c => c.name === deal.company)
@@ -734,6 +742,10 @@ export default function PipelinePage() {
   const [filterRep, setFilterRep] = useState('All')
   const [managingPipeline, setManagingPipeline] = useState(false)
   const [creatingDeal, setCreatingDeal] = useState(false)
+  const [crmActivities, setCrmActivities] = useState<CRMActivity[]>([])
+  const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
+  const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -742,6 +754,10 @@ export default function PipelinePage() {
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
       .catch(() => {})
+    fetchCrmActivities().then(setCrmActivities)
+    fetchCrmCompanies().then(setCrmCompanies)
+    fetchCrmContacts().then(setCrmContacts)
+    fetchContracts().then(setContracts)
   }, [])
 
   const activePipeline = pipelines.find(p => p.id === activePipelineId) ?? pipelines[0]
@@ -931,6 +947,10 @@ export default function PipelinePage() {
           onClose={() => setSelectedDeal(null)}
           onAdvanceStage={handleAdvanceStage}
           onUpdateDeal={handleUpdateDeal}
+          crmActivities={crmActivities}
+          crmCompanies={crmCompanies}
+          crmContacts={crmContacts}
+          contracts={contracts}
         />
       )}
 

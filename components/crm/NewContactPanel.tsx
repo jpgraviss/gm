@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
-import { crmCompanies } from '@/lib/data'
+import { fetchCrmCompanies } from '@/lib/supabase'
+import type { CRMCompany } from '@/lib/types'
 
 export interface NewContactFormData {
   firstName: string
@@ -50,6 +51,10 @@ interface Props {
 }
 
 export default function NewContactPanel({ onSave, onClose }: Props) {
+  const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
+
+  useEffect(() => { fetchCrmCompanies().then(setCrmCompanies) }, [])
+
   const [form, setForm] = useState<NewContactFormData>({
     firstName: '',
     lastName: '',

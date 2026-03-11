@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Header from '@/components/layout/Header'
-import { crmContacts, contracts, invoices } from '@/lib/data'
+import { fetchCrmContacts, fetchContracts, fetchInvoices } from '@/lib/supabase'
 import { formatCurrency, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import type { MaintenanceRecord, MaintenanceStatus } from '@/lib/types'
+import type { MaintenanceRecord, MaintenanceStatus, CRMContact, Contract, Invoice } from '@/lib/types'
 import {
   X, RefreshCw, DollarSign, Calendar, AlertTriangle, CheckCircle,
   Building2, ChevronRight, Clock, FileText, Ban, CreditCard,
@@ -146,12 +146,18 @@ function MaintenancePanel({
   onConfirmCancellation,
   onUpdateBilling,
   onEdit,
+  crmContacts,
+  contracts,
+  invoices,
 }: {
   record: MaintenanceRecord
   onClose: () => void
   onConfirmCancellation: (id: string) => void
   onUpdateBilling: (id: string, fee: number, nextDate: string) => void
   onEdit: (record: MaintenanceRecord) => void
+  crmContacts: CRMContact[]
+  contracts: Contract[]
+  invoices: Invoice[]
 }) {
   const [tab, setTab] = useState<'overview' | 'invoices' | 'documents'>('overview')
   const [showBillingEdit, setShowBillingEdit] = useState(false)
@@ -512,12 +518,18 @@ export default function MaintenancePage() {
   const [addingRecord, setAddingRecord] = useState(false)
   const [editingRecord, setEditingRecord] = useState<MaintenanceRecord | null>(null)
   const [tabFilter, setTabFilter] = useState<TabFilter>('All')
+  const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
 
   useEffect(() => {
     fetch('/api/maintenance')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setRecords(data) })
       .catch(() => {})
+    fetchCrmContacts().then(setCrmContacts)
+    fetchContracts().then(setContracts)
+    fetchInvoices().then(setInvoices)
   }, [])
 
   const activeRecords = records.filter(m => m.status === 'Active')
@@ -679,6 +691,9 @@ export default function MaintenancePage() {
           onConfirmCancellation={confirmCancellation}
           onUpdateBilling={updateBilling}
           onEdit={r => { setSelected(null); setEditingRecord(r) }}
+          crmContacts={crmContacts}
+          contracts={contracts}
+          invoices={invoices}
         />
       )}
       {addingRecord && <AddRecordPanel onSave={handleAddRecord} onClose={() => setAddingRecord(false)} />}

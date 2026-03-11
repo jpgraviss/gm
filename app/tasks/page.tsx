@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
-import { teamMembers } from '@/lib/data'
-import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority } from '@/lib/types'
+import { fetchTeamMembers } from '@/lib/supabase'
+import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority, TeamMember } from '@/lib/types'
 import {
   CheckSquare, Clock, AlertCircle, CheckCircle2, Plus, X, ChevronRight,
   Building2, User, Calendar, Flag, Tag, Trash2, Circle,
@@ -46,7 +46,7 @@ function dueDateLabel(dueDate: string, status: AppTaskStatus) {
 
 // ─── New Task Panel ────────────────────────────────────────────────────────────
 
-function NewTaskPanel({ onSave, onClose }: { onSave: (t: AppTask) => void; onClose: () => void }) {
+function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) => void; onClose: () => void; teamMembers: TeamMember[] }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<AppTaskCategory>('General')
@@ -343,6 +343,7 @@ const categories: AppTaskCategory[] = ['Deal', 'Contract', 'Billing', 'Renewal',
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<AppTask[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [filterTab, setFilterTab] = useState<FilterTab>('All')
   const [filterCategory, setFilterCategory] = useState<AppTaskCategory | 'All'>('All')
   const [filterAssignee, setFilterAssignee] = useState<string>('All')
@@ -354,6 +355,7 @@ export default function TasksPage() {
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setTasks(data) })
       .catch(() => {})
+    fetchTeamMembers().then(setTeamMembers)
   }, [])
 
   function updateStatus(id: string, status: AppTaskStatus) {
@@ -560,7 +562,7 @@ export default function TasksPage() {
         />
       )}
       {creatingTask && (
-        <NewTaskPanel onSave={addTask} onClose={() => setCreatingTask(false)} />
+        <NewTaskPanel onSave={addTask} onClose={() => setCreatingTask(false)} teamMembers={teamMembers} />
       )}
     </>
   )

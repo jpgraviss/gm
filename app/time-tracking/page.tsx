@@ -2,8 +2,8 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { Clock, Plus, X, ChevronLeft, ChevronRight, DollarSign, Ban, Users, Check, Pencil, Trash2 } from 'lucide-react'
-import type { TimeEntry, TeamServiceLine } from '@/lib/types'
-import { teamMembers, projects } from '@/lib/data'
+import type { TimeEntry, TeamServiceLine, TeamMember, Project } from '@/lib/types'
+import { fetchTeamMembers, fetchProjects } from '@/lib/supabase'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -68,9 +68,11 @@ interface LogFormProps {
   onSave: (e: TimeEntry) => void
   onClose: () => void
   defaultDate?: string
+  teamMembers: TeamMember[]
+  projects: Project[]
 }
 
-function LogTimePanel({ entry, onSave, onClose, defaultDate }: LogFormProps) {
+function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projects }: LogFormProps) {
   const [date, setDate]           = useState(entry?.date ?? defaultDate ?? toIso(new Date()))
   const [teamMember, setTeamMember] = useState(entry?.teamMember ?? teamMembers[0]?.name ?? '')
   const [projectId, setProjectId]   = useState(entry?.projectId ?? '')
@@ -265,6 +267,8 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate }: LogFormProps) {
 
 export default function TimeTrackingPage() {
   const [entries, setEntries] = useState<TimeEntry[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [anchorDate, setAnchor]   = useState(new Date())
   const [showLog, setShowLog]     = useState(false)
   const [editEntry, setEditEntry] = useState<TimeEntry | undefined>()
@@ -274,6 +278,8 @@ export default function TimeTrackingPage() {
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setEntries(data) })
       .catch(() => {})
+    fetchTeamMembers().then(setTeamMembers)
+    fetchProjects().then(setProjects)
   }, [])
   const [filterMember, setFilterMember] = useState('All')
   const [filterBillable, setFilterBillable] = useState<'All' | 'Billable' | 'Non-Billable'>('All')
@@ -619,6 +625,8 @@ export default function TimeTrackingPage() {
           defaultDate={logDate}
           onSave={handleSave}
           onClose={() => { setShowLog(false); setEditEntry(undefined) }}
+          teamMembers={teamMembers}
+          projects={projects}
         />
       )}
     </div>

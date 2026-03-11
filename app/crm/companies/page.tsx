@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { crmCompanies, crmContacts, deals, contracts, invoices, projects, crmActivities } from '@/lib/data'
+import { fetchCrmCompanies, fetchCrmContacts, fetchDeals, fetchContracts, fetchInvoices, fetchProjects, fetchCrmActivities } from '@/lib/supabase'
 import {
   formatCurrency, stageColors, serviceTypeColors, contractStatusColors,
   projectStatusColors, invoiceStatusColors,
@@ -16,7 +16,7 @@ import NewCompanyPanel, { type NewCompanyFormData } from '@/components/crm/NewCo
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
-import type { CRMCompany, CRMContact, CompanyStatus } from '@/lib/types'
+import type { CRMCompany, CRMContact, CompanyStatus, Deal, Contract, Invoice, Project, CRMActivity } from '@/lib/types'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight,
@@ -37,7 +37,7 @@ const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Cli
 
 // ─── Company Detail Panel ─────────────────────────────────────────────────────
 
-function CompanyPanel({ company, onClose, onEdit, onDelete }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void }) {
+function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, contracts, invoices, projects, crmActivities }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void; crmContacts: CRMContact[]; deals: Deal[]; contracts: Contract[]; invoices: Invoice[]; projects: Project[]; crmActivities: CRMActivity[] }) {
   const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'activity'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
@@ -47,7 +47,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete }: { company: CRMComp
   const [newTag, setNewTag] = useState('')
   const [addingTag, setAddingTag] = useState(false)
   const [localActivities, setLocalActivities] = useState(
-    () => crmActivities.filter(a => a.companyId === company.id)
+    () => (crmActivities ?? []).filter(a => a.companyId === company.id)
   )
 
   function handleAddTag() {
@@ -663,14 +663,27 @@ export default function CompaniesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('All')
   const [selectedCompany, setSelectedCompany] = useState<CRMCompany | null>(null)
   const [editingCompany, setEditingCompany] = useState<CRMCompany | null>(null)
-  const [localCompanies, setLocalCompanies] = useState<CRMCompany[]>(crmCompanies)
+  const [localCompanies, setLocalCompanies] = useState<CRMCompany[]>([])
   const [creatingCompany, setCreatingCompany] = useState(false)
+
+  const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [crmActivities, setCrmActivities] = useState<CRMActivity[]>([])
 
   useEffect(() => {
     fetch('/api/crm/companies')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
       .catch(() => {/* keep static fallback */})
+    fetchCrmContacts().then(setCrmContacts)
+    fetchDeals().then(setDeals)
+    fetchContracts().then(setContracts)
+    fetchInvoices().then(setInvoices)
+    fetchProjects().then(setProjects)
+    fetchCrmActivities().then(setCrmActivities)
   }, [])
 
   async function handleEditCompany(updated: CRMCompany) {
@@ -884,6 +897,12 @@ export default function CompaniesPage() {
       {selectedCompany && (
         <CompanyPanel
           company={localCompanies.find(c => c.id === selectedCompany.id) ?? selectedCompany}
+          crmContacts={crmContacts}
+          deals={deals}
+          contracts={contracts}
+          invoices={invoices}
+          projects={projects}
+          crmActivities={crmActivities}
           onClose={() => setSelectedCompany(null)}
           onEdit={() => setEditingCompany(localCompanies.find(c => c.id === selectedCompany.id) ?? selectedCompany)}
           onDelete={() => handleDeleteCompany(selectedCompany.id)}

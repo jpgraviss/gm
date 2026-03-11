@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
-import { deals, crmContacts } from '@/lib/data'
+import { fetchDeals, fetchCrmContacts } from '@/lib/supabase'
+import type { Deal, CRMContact } from '@/lib/types'
 import { serviceTypeColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import CRMSubNav from '@/components/crm/CRMSubNav'
@@ -66,10 +67,14 @@ function SequencePanel({
   seq,
   onClose,
   onUpdate,
+  deals,
+  crmContacts,
 }: {
   seq: EmailSequence
   onClose: () => void
   onUpdate: (updated: EmailSequence) => void
+  deals: Deal[]
+  crmContacts: CRMContact[]
 }) {
   const [tab, setTab] = useState<'steps' | 'stats' | 'enrolled'>('steps')
   const [localSteps, setLocalSteps] = useState<SequenceStep[]>(seq.steps)
@@ -749,9 +754,13 @@ export default function SequencesPage() {
   const [selectedSeq, setSelectedSeq] = useState<EmailSequence | null>(null)
   const [statusFilter, setStatusFilter] = useState<SequenceStatus | 'All'>('All')
   const [creatingSeq, setCreatingSeq] = useState(false)
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
 
   useEffect(() => {
     fetch('/api/sequences').then(r => r.json()).then(setLocalSequences).catch(() => {})
+    fetchDeals().then(setDeals)
+    fetchCrmContacts().then(setCrmContacts)
   }, [])
 
   async function updateSequence(updated: EmailSequence) {
@@ -931,6 +940,8 @@ export default function SequencesPage() {
           seq={localSequences.find(s => s.id === selectedSeq.id) ?? selectedSeq}
           onClose={() => setSelectedSeq(null)}
           onUpdate={updateSequence}
+          deals={deals}
+          crmContacts={crmContacts}
         />
       )}
       {creatingSeq && <NewSequenceModal onSave={addSequence} onClose={() => setCreatingSeq(false)} />}

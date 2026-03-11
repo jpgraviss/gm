@@ -1,4 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import type {
+  TeamMember, Project, Invoice, Contract, Proposal, Deal,
+  CRMContact, CRMCompany, CRMActivity, RevenueMonth,
+} from './types'
 
 const supabaseUrl     = process.env.NEXT_PUBLIC_SUPABASE_URL     ?? ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
@@ -20,4 +24,65 @@ export function createServiceClient(): SupabaseClient {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
   const url        = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? ''
   return createClient(url, serviceKey)
+}
+
+// ── Client-side data fetch helpers ───────────────────────────────────────────
+// These call the Next.js API routes and are safe to use in 'use client' components.
+
+async function apiFetch<T>(path: string): Promise<T[]> {
+  try {
+    const res = await fetch(path)
+    if (!res.ok) return []
+    const data = await res.json()
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
+  }
+}
+
+export async function fetchTeamMembers(): Promise<TeamMember[]> {
+  return apiFetch<TeamMember>('/api/team-members')
+}
+
+export async function fetchProjects(): Promise<Project[]> {
+  return apiFetch<Project>('/api/projects')
+}
+
+export async function fetchInvoices(): Promise<Invoice[]> {
+  return apiFetch<Invoice>('/api/invoices')
+}
+
+export async function fetchContracts(): Promise<Contract[]> {
+  return apiFetch<Contract>('/api/contracts')
+}
+
+export async function fetchProposals(): Promise<Proposal[]> {
+  return apiFetch<Proposal>('/api/proposals')
+}
+
+export async function fetchDeals(): Promise<Deal[]> {
+  return apiFetch<Deal>('/api/deals')
+}
+
+export async function fetchCrmContacts(): Promise<CRMContact[]> {
+  return apiFetch<CRMContact>('/api/crm/contacts')
+}
+
+export async function fetchCrmCompanies(): Promise<CRMCompany[]> {
+  return apiFetch<CRMCompany>('/api/crm/companies')
+}
+
+export async function fetchCrmActivities(): Promise<CRMActivity[]> {
+  return apiFetch<CRMActivity>('/api/crm/activities')
+}
+
+export async function fetchRevenueByMonth(): Promise<RevenueMonth[]> {
+  try {
+    const res = await fetch('/api/dashboard')
+    if (!res.ok) return []
+    const data = await res.json()
+    return Array.isArray(data?.revenueByMonth) ? data.revenueByMonth : []
+  } catch {
+    return []
+  }
 }

@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { deals, contracts } from '@/lib/data'
+import { fetchDeals, fetchContracts } from '@/lib/supabase'
 import { formatCurrency, proposalStatusColors, serviceTypeColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import ProposalBuilderPanel from '@/components/crm/ProposalBuilderPanel'
-import type { Proposal, ProposalStatus } from '@/lib/types'
+import type { Deal, Contract, Proposal, ProposalStatus } from '@/lib/types'
 import {
   Eye, Send, CheckCircle, XCircle, FileText, DollarSign, Calendar, User, X,
   Clock, ExternalLink, Mail, Phone, TrendingUp, AlertTriangle, Edit2, ShieldCheck,
@@ -30,11 +30,15 @@ function ProposalPanel({
   onClose,
   onUpdateStatus,
   onEdit,
+  deals,
+  contracts,
 }: {
   proposal: Proposal
   onClose: () => void
   onUpdateStatus: (id: string, status: ProposalStatus) => void
   onEdit: (proposal: Proposal) => void
+  deals: Deal[]
+  contracts: Contract[]
 }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'scope' | 'activity'>('overview')
 
@@ -458,12 +462,16 @@ export default function ProposalsPage() {
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'All'>('All')
   const [creatingProposal, setCreatingProposal] = useState(false)
   const [editingProposal, setEditingProposal] = useState<Proposal | null>(null)
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
 
   useEffect(() => {
     fetch('/api/proposals')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalProposals(data) })
       .catch(() => {})
+    fetchDeals().then(setDeals)
+    fetchContracts().then(setContracts)
   }, [])
 
   function updateProposalStatus(id: string, status: ProposalStatus) {
@@ -669,6 +677,8 @@ export default function ProposalsPage() {
           onClose={() => setSelected(null)}
           onUpdateStatus={updateProposalStatus}
           onEdit={p => { setSelected(null); setEditingProposal(p) }}
+          deals={deals}
+          contracts={contracts}
         />
       )}
       {(creatingProposal || editingProposal) && (

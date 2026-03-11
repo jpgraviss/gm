@@ -1,218 +1,73 @@
--- ─── GravHub Database Schema ──────────────────────────────────────────────────
--- Run this in your Supabase SQL editor to set up the database.
+-- ─────────────────────────────────────────────────────────────────────────────
+-- GravHub — Complete Supabase Schema
+-- Run this entire file in Supabase Dashboard → SQL Editor
+-- ─────────────────────────────────────────────────────────────────────────────
 
--- ── Team Members ──────────────────────────────────────────────────────────────
-create table if not exists team_members (
+create extension if not exists "pgcrypto";
+
+-- ─── Team Members ─────────────────────────────────────────────────────────────
+create table if not exists public.team_members (
   id          text primary key,
   name        text not null,
-  email       text unique not null,
-  role        text not null,
-  unit        text not null,
-  initials    text not null,
-  created_at  timestamptz default now()
+  email       text not null unique,
+  role        text not null default 'Team Member',
+  unit        text not null default 'Leadership/Admin',
+  initials    text,
+  status      text not null default 'Active',
+  is_admin    boolean not null default false,
+  last_login  timestamptz,
+  created_at  timestamptz not null default now()
 );
 
--- ── CRM Companies ─────────────────────────────────────────────────────────────
-create table if not exists crm_companies (
+-- ─── CRM Companies ────────────────────────────────────────────────────────────
+create table if not exists public.crm_companies (
   id               text primary key,
   name             text not null,
-  industry         text,
+  industry         text not null default '',
   website          text,
   phone            text,
-  hq               text,
-  size             text,
-  annual_revenue   bigint,
+  hq               text not null default '',
+  size             text not null default '1-10',
+  annual_revenue   numeric,
   status           text not null default 'Prospect',
-  owner            text,
+  owner            text not null default '',
   description      text,
-  tags             text[] default '{}',
-  contact_ids      text[] default '{}',
-  deal_ids         text[] default '{}',
-  total_deal_value bigint default 0,
-  created_at       timestamptz default now(),
-  last_activity    timestamptz
+  tags             text[] not null default '{}',
+  contact_ids      text[] not null default '{}',
+  deal_ids         text[] not null default '{}',
+  total_deal_value numeric not null default 0,
+  created_date     text,
+  last_activity    text,
+  created_at       timestamptz not null default now()
 );
 
--- ── CRM Contacts ──────────────────────────────────────────────────────────────
-create table if not exists crm_contacts (
-  id               text primary key,
-  company_id       text references crm_companies(id) on delete set null,
-  company_name     text,
-  first_name       text not null,
-  last_name        text not null,
-  full_name        text not null,
-  title            text,
-  emails           text[] default '{}',
-  phones           text[] default '{}',
-  linked_in        text,
-  website          text,
-  is_primary       boolean default false,
-  lifecycle_stage  text,
-  owner            text,
-  tags             text[] default '{}',
-  notes            text,
-  contact_notes    jsonb default '[]',
-  contact_tasks    jsonb default '[]',
-  created_at       timestamptz default now(),
-  last_activity    timestamptz
+-- ─── CRM Contacts ─────────────────────────────────────────────────────────────
+create table if not exists public.crm_contacts (
+  id              text primary key,
+  company_id      text references public.crm_companies(id) on delete set null,
+  company_name    text not null default '',
+  first_name      text not null default '',
+  last_name       text not null default '',
+  full_name       text not null default '',
+  title           text,
+  emails          text[] not null default '{}',
+  phones          text[] not null default '{}',
+  linked_in       text,
+  website         text,
+  is_primary      boolean not null default false,
+  lifecycle_stage text,
+  owner           text not null default '',
+  tags            text[] not null default '{}',
+  notes           text,
+  contact_notes   jsonb not null default '[]',
+  contact_tasks   jsonb not null default '[]',
+  created_date    text,
+  last_activity   text,
+  created_at      timestamptz not null default now()
 );
 
--- ── Deals ─────────────────────────────────────────────────────────────────────
-create table if not exists deals (
-  id            text primary key,
-  company       text not null,
-  stage         text not null default 'Lead',
-  value         bigint default 0,
-  service_type  text,
-  close_date    date,
-  assigned_rep  text,
-  probability   int default 0,
-  notes         text[] default '{}',
-  last_activity text,
-  contact       jsonb,
-  created_at    timestamptz default now()
-);
-
--- ── Proposals ─────────────────────────────────────────────────────────────────
-create table if not exists proposals (
-  id                          text primary key,
-  deal_id                     text,
-  company                     text not null,
-  status                      text not null default 'Draft',
-  value                       bigint default 0,
-  service_type                text,
-  assigned_rep                text,
-  items                       jsonb default '[]',
-  submitted_for_approval_date date,
-  approved_by                 text,
-  approved_date               date,
-  rejected_by                 text,
-  rejected_date               date,
-  is_renewal                  boolean default false,
-  internal_only               boolean default false,
-  renewal_notes               text,
-  sent_date                   date,
-  viewed_date                 date,
-  responded_date              date,
-  created_at                  timestamptz default now(),
-  updated_at                  timestamptz default now()
-);
-
--- ── Contracts ─────────────────────────────────────────────────────────────────
-create table if not exists contracts (
-  id                text primary key,
-  proposal_id       text references proposals(id) on delete set null,
-  company           text not null,
-  status            text not null default 'Draft',
-  value             bigint default 0,
-  billing_structure text,
-  start_date        date,
-  duration          int default 12,
-  renewal_date      date,
-  assigned_rep      text,
-  service_type      text,
-  client_signed     date,
-  internal_signed   date,
-  created_at        timestamptz default now(),
-  updated_at        timestamptz default now()
-);
-
--- ── Invoices ──────────────────────────────────────────────────────────────────
-create table if not exists invoices (
-  id           text primary key,
-  contract_id  text references contracts(id) on delete set null,
-  company      text not null,
-  amount       bigint default 0,
-  status       text not null default 'Pending',
-  due_date     date,
-  issued_date  date,
-  paid_date    date,
-  service_type text,
-  created_at   timestamptz default now()
-);
-
--- ── Projects ──────────────────────────────────────────────────────────────────
-create table if not exists projects (
-  id                    text primary key,
-  contract_id           text references contracts(id) on delete set null,
-  company               text not null,
-  service_type          text,
-  status                text not null default 'Not Started',
-  start_date            date,
-  launch_date           date,
-  maintenance_start_date date,
-  assigned_team         text[] default '{}',
-  progress              int default 0,
-  milestones            jsonb default '[]',
-  tasks                 jsonb default '[]',
-  created_at            timestamptz default now(),
-  updated_at            timestamptz default now()
-);
-
--- ── Maintenance Records ───────────────────────────────────────────────────────
-create table if not exists maintenance_records (
-  id                  text primary key,
-  company             text not null,
-  service_type        text,
-  start_date          date,
-  monthly_fee         bigint default 0,
-  contract_duration   int default 12,
-  cancellation_window int default 30,
-  status              text not null default 'Active',
-  next_billing_date   date,
-  documents           jsonb default '[]',
-  created_at          timestamptz default now()
-);
-
--- ── Renewals ──────────────────────────────────────────────────────────────────
-create table if not exists renewals (
-  id               text primary key,
-  company          text not null,
-  contract_id      text references contracts(id) on delete set null,
-  expiration_date  date,
-  renewal_value    bigint default 0,
-  assigned_rep     text,
-  status           text not null default 'Upcoming',
-  days_until_expiry int default 0,
-  service_type     text,
-  created_at       timestamptz default now()
-);
-
--- ── Time Entries ──────────────────────────────────────────────────────────────
-create table if not exists time_entries (
-  id           text primary key,
-  date         date not null,
-  project_id   text,
-  project_name text,
-  description  text not null,
-  team_member  text not null,
-  service_type text,
-  hours        int default 0,
-  minutes      int default 0,
-  billable     boolean default true,
-  created_at   timestamptz default now()
-);
-
--- ── App Tasks ─────────────────────────────────────────────────────────────────
-create table if not exists app_tasks (
-  id                text primary key,
-  title             text not null,
-  description       text,
-  category          text,
-  priority          text default 'Medium',
-  status            text default 'Pending',
-  company           text,
-  assigned_to       text,
-  due_date          date,
-  created_date      date,
-  completed_date    date,
-  linked_id         text,
-  team_service_line text,
-  created_at        timestamptz default now()
-);
-
--- ── CRM Activities ────────────────────────────────────────────────────────────
-create table if not exists crm_activities (
+-- ─── CRM Activities ───────────────────────────────────────────────────────────
+create table if not exists public.crm_activities (
   id           text primary key,
   type         text not null,
   title        text not null,
@@ -222,33 +77,281 @@ create table if not exists crm_activities (
   contact_id   text,
   contact_name text,
   deal_id      text,
-  "user"       text,
-  timestamp    timestamptz default now(),
-  duration     int,
+  user_name    text not null default '',
+  timestamp    text not null,
+  duration     integer,
   outcome      text,
   next_step    text,
-  pinned       boolean default false
+  pinned       boolean not null default false,
+  created_at   timestamptz not null default now()
 );
 
--- ── Row Level Security (optional — enable when adding auth) ───────────────────
--- alter table proposals enable row level security;
--- alter table contracts enable row level security;
--- alter table time_entries enable row level security;
+-- ─── Deals ────────────────────────────────────────────────────────────────────
+create table if not exists public.deals (
+  id            text primary key,
+  company       text not null default '',
+  contact       jsonb,
+  stage         text not null default 'Lead',
+  value         numeric not null default 0,
+  service_type  text not null default 'General',
+  close_date    text,
+  assigned_rep  text not null default '',
+  probability   integer not null default 0,
+  notes         text[] not null default '{}',
+  last_activity text,
+  created_at    timestamptz not null default now()
+);
 
--- ── Updated_at trigger ────────────────────────────────────────────────────────
-create or replace function update_updated_at()
-returns trigger as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$ language plpgsql;
+-- ─── Proposals ────────────────────────────────────────────────────────────────
+create table if not exists public.proposals (
+  id                          text primary key,
+  deal_id                     text references public.deals(id) on delete set null,
+  company                     text not null default '',
+  status                      text not null default 'Draft',
+  value                       numeric not null default 0,
+  service_type                text not null default 'General',
+  assigned_rep                text not null default '',
+  items                       jsonb not null default '[]',
+  is_renewal                  boolean not null default false,
+  internal_only               boolean not null default false,
+  renewal_notes               text,
+  sent_date                   text,
+  viewed_date                 text,
+  responded_date              text,
+  submitted_for_approval_date text,
+  approved_by                 text,
+  approved_date               text,
+  rejected_by                 text,
+  rejected_date               text,
+  created_date                text,
+  created_at                  timestamptz not null default now()
+);
 
-create trigger proposals_updated_at before update on proposals
-  for each row execute function update_updated_at();
+-- ─── Contracts ────────────────────────────────────────────────────────────────
+create table if not exists public.contracts (
+  id                text primary key,
+  proposal_id       text references public.proposals(id) on delete set null,
+  company           text not null default '',
+  status            text not null default 'Draft',
+  value             numeric not null default 0,
+  billing_structure text not null default 'Monthly',
+  start_date        text,
+  duration          integer not null default 12,
+  renewal_date      text,
+  assigned_rep      text not null default '',
+  service_type      text not null default 'General',
+  client_signed     text,
+  internal_signed   text,
+  created_at        timestamptz not null default now()
+);
 
-create trigger contracts_updated_at before update on contracts
-  for each row execute function update_updated_at();
+-- ─── Invoices ─────────────────────────────────────────────────────────────────
+create table if not exists public.invoices (
+  id           text primary key,
+  contract_id  text references public.contracts(id) on delete set null,
+  company      text not null default '',
+  amount       numeric not null default 0,
+  status       text not null default 'Pending',
+  due_date     text,
+  issued_date  text,
+  paid_date    text,
+  service_type text not null default 'General',
+  created_at   timestamptz not null default now()
+);
 
-create trigger projects_updated_at before update on projects
-  for each row execute function update_updated_at();
+-- ─── Projects ─────────────────────────────────────────────────────────────────
+create table if not exists public.projects (
+  id                     text primary key,
+  contract_id            text references public.contracts(id) on delete set null,
+  company                text not null default '',
+  service_type           text not null default 'General',
+  status                 text not null default 'Not Started',
+  start_date             text,
+  launch_date            text,
+  maintenance_start_date text,
+  assigned_team          text[] not null default '{}',
+  progress               integer not null default 0,
+  milestones             jsonb not null default '[]',
+  tasks                  jsonb not null default '[]',
+  created_at             timestamptz not null default now()
+);
+
+-- ─── Maintenance Records ──────────────────────────────────────────────────────
+create table if not exists public.maintenance_records (
+  id                  text primary key,
+  company             text not null default '',
+  service_type        text not null default 'Website',
+  start_date          text,
+  monthly_fee         numeric not null default 0,
+  contract_duration   integer not null default 12,
+  cancellation_window integer not null default 30,
+  status              text not null default 'Active',
+  next_billing_date   text,
+  documents           jsonb not null default '[]',
+  created_at          timestamptz not null default now()
+);
+
+-- ─── Renewals ─────────────────────────────────────────────────────────────────
+create table if not exists public.renewals (
+  id                text primary key,
+  company           text not null default '',
+  contract_id       text references public.contracts(id) on delete set null,
+  expiration_date   text,
+  renewal_value     numeric not null default 0,
+  assigned_rep      text not null default '',
+  status            text not null default 'Upcoming',
+  days_until_expiry integer not null default 0,
+  service_type      text not null default 'General',
+  created_at        timestamptz not null default now()
+);
+
+-- ─── App Tasks ────────────────────────────────────────────────────────────────
+create table if not exists public.app_tasks (
+  id                text primary key,
+  title             text not null,
+  description       text,
+  category          text not null default 'General',
+  priority          text not null default 'Medium',
+  status            text not null default 'Pending',
+  company           text,
+  assigned_to       text not null default '',
+  due_date          text,
+  created_date      text,
+  completed_date    text,
+  linked_id         text,
+  team_service_line text,
+  created_at        timestamptz not null default now()
+);
+
+-- ─── Time Entries ─────────────────────────────────────────────────────────────
+create table if not exists public.time_entries (
+  id           text primary key,
+  date         text not null,
+  project_id   text,
+  project_name text,
+  description  text not null default '',
+  team_member  text not null default '',
+  service_type text not null default 'General',
+  hours        integer not null default 0,
+  minutes      integer not null default 0,
+  billable     boolean not null default true,
+  created_at   timestamptz not null default now()
+);
+
+-- ─── Tickets ──────────────────────────────────────────────────────────────────
+create table if not exists public.tickets (
+  id             text primary key,
+  subject        text not null,
+  company        text not null default '',
+  contact_name   text,
+  contact_email  text,
+  status         text not null default 'Open',
+  priority       text not null default 'Medium',
+  source         text not null default 'Email',
+  service_type   text not null default 'General',
+  project_id     text,
+  assigned_to    text,
+  tags           text[] not null default '{}',
+  messages       jsonb not null default '[]',
+  linked_task_id text,
+  created_date   text,
+  updated_date   text,
+  created_at     timestamptz not null default now()
+);
+
+-- ─── Audit Logs ───────────────────────────────────────────────────────────────
+create table if not exists public.audit_logs (
+  id         text primary key,
+  user_name  text not null default '',
+  action     text not null,
+  module     text not null default '',
+  type       text not null default 'action',
+  metadata   jsonb,
+  created_at timestamptz not null default now()
+);
+
+-- ─── Calendar Settings ────────────────────────────────────────────────────────
+create table if not exists public.calendar_settings (
+  id                   text primary key,
+  email                text not null unique,
+  slug                 text not null unique,
+  timezone             text not null default 'America/Chicago',
+  availability         jsonb not null default '{}',
+  google_access_token  text,
+  google_refresh_token text,
+  google_token_expiry  bigint,
+  google_calendar_id   text,
+  created_at           timestamptz not null default now()
+);
+
+-- ─── Bookings ─────────────────────────────────────────────────────────────────
+create table if not exists public.bookings (
+  id              text primary key,
+  calendar_slug   text not null,
+  booker_name     text not null,
+  booker_email    text not null,
+  date            text not null,
+  start_time      text not null,
+  end_time        text not null,
+  purpose         text,
+  status          text not null default 'confirmed',
+  google_event_id text,
+  created_at      timestamptz not null default now()
+);
+
+-- ─── Revenue by Month ─────────────────────────────────────────────────────────
+create table if not exists public.revenue_months (
+  id         text primary key default gen_random_uuid()::text,
+  month      text not null unique,
+  revenue    numeric not null default 0,
+  recurring  numeric not null default 0,
+  created_at timestamptz not null default now()
+);
+
+-- ─── Row Level Security ───────────────────────────────────────────────────────
+-- The service role key (used in API routes) bypasses RLS automatically.
+-- Enable RLS and allow authenticated users to read all tables.
+
+alter table public.team_members        enable row level security;
+alter table public.crm_companies       enable row level security;
+alter table public.crm_contacts        enable row level security;
+alter table public.crm_activities      enable row level security;
+alter table public.deals               enable row level security;
+alter table public.proposals           enable row level security;
+alter table public.contracts           enable row level security;
+alter table public.invoices            enable row level security;
+alter table public.projects            enable row level security;
+alter table public.maintenance_records enable row level security;
+alter table public.renewals            enable row level security;
+alter table public.app_tasks           enable row level security;
+alter table public.time_entries        enable row level security;
+alter table public.tickets             enable row level security;
+alter table public.audit_logs          enable row level security;
+alter table public.calendar_settings   enable row level security;
+alter table public.bookings            enable row level security;
+alter table public.revenue_months      enable row level security;
+
+-- Authenticated users: full read access
+create policy "auth_read_team_members"        on public.team_members        for select to authenticated using (true);
+create policy "auth_read_crm_companies"       on public.crm_companies       for select to authenticated using (true);
+create policy "auth_read_crm_contacts"        on public.crm_contacts        for select to authenticated using (true);
+create policy "auth_read_crm_activities"      on public.crm_activities      for select to authenticated using (true);
+create policy "auth_read_deals"               on public.deals               for select to authenticated using (true);
+create policy "auth_read_proposals"           on public.proposals           for select to authenticated using (true);
+create policy "auth_read_contracts"           on public.contracts           for select to authenticated using (true);
+create policy "auth_read_invoices"            on public.invoices            for select to authenticated using (true);
+create policy "auth_read_projects"            on public.projects            for select to authenticated using (true);
+create policy "auth_read_maintenance"         on public.maintenance_records for select to authenticated using (true);
+create policy "auth_read_renewals"            on public.renewals            for select to authenticated using (true);
+create policy "auth_read_app_tasks"           on public.app_tasks           for select to authenticated using (true);
+create policy "auth_read_time_entries"        on public.time_entries        for select to authenticated using (true);
+create policy "auth_read_tickets"             on public.tickets             for select to authenticated using (true);
+create policy "auth_read_audit_logs"          on public.audit_logs          for select to authenticated using (true);
+create policy "auth_read_calendar_settings"   on public.calendar_settings   for select to authenticated using (true);
+create policy "auth_read_bookings"            on public.bookings            for select to authenticated using (true);
+create policy "auth_read_revenue_months"      on public.revenue_months      for select to authenticated using (true);
+
+-- Anon access for public booking page
+create policy "anon_read_bookings"           on public.bookings          for select to anon using (true);
+create policy "anon_insert_bookings"         on public.bookings          for insert to anon with check (true);
+create policy "anon_read_calendar_settings"  on public.calendar_settings for select to anon using (true);

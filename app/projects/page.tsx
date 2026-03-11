@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
-import { projects as initialProjects } from '@/lib/data'
+// data loaded from API
 import { projectStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import type { Project, ProjectStatus } from '@/lib/types'
@@ -668,11 +668,18 @@ function ServiceTypeGroup({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ProjectsPage() {
-  const [localProjects, setLocalProjects] = useState<Project[]>(initialProjects)
+  const [localProjects, setLocalProjects] = useState<Project[]>([])
   const [selected, setSelected] = useState<Project | null>(null)
   const [serviceFilter, setServiceFilter] = useState<ServiceTypeKey | 'All'>('All')
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'All'>('All')
   const [view, setView] = useState<'grouped' | 'kanban'>('grouped')
+
+  useEffect(() => {
+    fetch('/api/projects')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalProjects(data) })
+      .catch(() => {})
+  }, [])
 
   const today = new Date().toISOString().split('T')[0]
 

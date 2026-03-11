@@ -20,7 +20,7 @@ import type { CRMCompany, CRMContact, CompanyStatus } from '@/lib/types'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight,
-  ExternalLink, TrendingUp, FolderKanban, Pencil, Tag,
+  ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2,
 } from 'lucide-react'
 
 // ─── Status colors ────────────────────────────────────────────────────────────
@@ -37,7 +37,7 @@ const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Cli
 
 // ─── Company Detail Panel ─────────────────────────────────────────────────────
 
-function CompanyPanel({ company, onClose, onEdit }: { company: CRMCompany; onClose: () => void; onEdit?: () => void }) {
+function CompanyPanel({ company, onClose, onEdit, onDelete }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void }) {
   const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'activity'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
@@ -144,6 +144,11 @@ function CompanyPanel({ company, onClose, onEdit }: { company: CRMCompany; onClo
               {onEdit && (
                 <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0" title="Edit company">
                   <Pencil size={15} className="text-white/60" />
+                </button>
+              )}
+              {onDelete && (
+                <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-500/20 flex-shrink-0" title="Delete company">
+                  <Trash2 size={15} className="text-red-400" />
                 </button>
               )}
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0">
@@ -711,6 +716,13 @@ export default function CompaniesPage() {
     setCreatingCompany(false)
   }
 
+  async function handleDeleteCompany(id: string) {
+    if (!confirm('Delete this company? This action cannot be undone.')) return
+    setLocalCompanies(prev => prev.filter(c => c.id !== id))
+    if (selectedCompany?.id === id) setSelectedCompany(null)
+    await fetch(`/api/crm/companies/${id}`, { method: 'DELETE' }).catch(() => {})
+  }
+
   const filtered = localCompanies.filter(c => {
     const matchSearch =
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -843,7 +855,16 @@ export default function CompaniesPage() {
                       <span className="text-sm text-gray-600">{company.owner.split(' ')[0]}</span>
                     </td>
                     <td className="py-3 px-4">
-                      <ChevronRight size={14} className="text-gray-300" />
+                      <div className="flex items-center gap-1 justify-end">
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeleteCompany(company.id) }}
+                          className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
+                          title="Delete company"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                        <ChevronRight size={14} className="text-gray-300" />
+                      </div>
                     </td>
                   </tr>
                 )
@@ -865,6 +886,7 @@ export default function CompaniesPage() {
           company={localCompanies.find(c => c.id === selectedCompany.id) ?? selectedCompany}
           onClose={() => setSelectedCompany(null)}
           onEdit={() => setEditingCompany(localCompanies.find(c => c.id === selectedCompany.id) ?? selectedCompany)}
+          onDelete={() => handleDeleteCompany(selectedCompany.id)}
         />
       )}
       {editingCompany && (

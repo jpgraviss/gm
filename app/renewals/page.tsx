@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
-import { renewals as seedRenewals, crmContacts, contracts, proposals } from '@/lib/data'
+import { contracts, crmContacts, proposals } from '@/lib/data'
 import { formatCurrency, serviceTypeColors, renewalStatusColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import type { Renewal } from '@/lib/types'
@@ -514,10 +514,17 @@ function RenewalPanel({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function RenewalsPage() {
-  const [localRenewals, setLocalRenewals] = useState(seedRenewals)
+  const [localRenewals, setLocalRenewals] = useState<Renewal[]>([])
   const [selected, setSelected] = useState<Renewal | null>(null)
   const [renewalProposalFor, setRenewalProposalFor] = useState<Renewal | null>(null)
   const [showLogRenewal, setShowLogRenewal] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/renewals')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalRenewals(data) })
+      .catch(() => {})
+  }, [])
 
   const sorted = [...localRenewals].sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry)
 

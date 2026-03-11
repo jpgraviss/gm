@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { projects } from '@/lib/data'
+
 import NewTicketPanel, { type NewTicketFormData } from '@/components/crm/NewTicketPanel'
 import { formatDate } from '@/lib/utils'
 import {
@@ -45,112 +45,6 @@ interface Ticket {
   linkedTaskId?: string
 }
 
-// ─── Mock Ticket Data ──────────────────────────────────────────────────────────
-
-const tickets: Ticket[] = [
-  {
-    id: 'tkt-001',
-    subject: 'Homepage hero image needs to be updated',
-    company: 'Coastal Realty',
-    contactName: 'Dana Kim',
-    contactEmail: 'dana@coastalrealty.com',
-    status: 'Open',
-    priority: 'High',
-    source: 'Client Portal',
-    serviceType: 'Website',
-    projectId: 'pr1',
-    createdDate: '2026-02-25',
-    updatedDate: '2026-02-25',
-    assignedTo: 'Jordan Ellis',
-    tags: ['Design', 'Content'],
-    messages: [
-      { id: 'm1', author: 'Dana Kim', isInternal: false, body: 'Hi team! We need to update the hero image on the homepage. The current one doesn\'t reflect our Q1 listings. Can we swap this out this week?', timestamp: '2026-02-25 09:14' },
-      { id: 'm2', author: 'Jordan Ellis', isInternal: false, body: 'Hi Dana, absolutely! Can you send over the new image file? Should be at least 2000px wide for best quality.', timestamp: '2026-02-25 10:30' },
-    ],
-  },
-  {
-    id: 'tkt-002',
-    subject: 'Monthly SEO report missing — February',
-    company: 'BlueStar Logistics',
-    contactName: 'Kelly Shaw',
-    contactEmail: 'kelly@bluestar.com',
-    status: 'In Progress',
-    priority: 'Medium',
-    source: 'Email',
-    serviceType: 'SEO',
-    projectId: 'pr2',
-    createdDate: '2026-02-24',
-    updatedDate: '2026-02-26',
-    assignedTo: 'Priya Patel',
-    tags: ['Reporting'],
-    messages: [
-      { id: 'm3', author: 'Kelly Shaw', isInternal: false, body: 'We haven\'t received the February SEO report yet. Usually gets delivered on the 20th. Can you share it ASAP?', timestamp: '2026-02-24 14:00' },
-      { id: 'm4', author: 'Priya Patel', isInternal: true, body: '⚠️ Internal note: February report is still being compiled. Rankings data delayed due to GA4 API issue. ETA Friday.', timestamp: '2026-02-24 15:22' },
-      { id: 'm5', author: 'Priya Patel', isInternal: false, body: 'Hi Kelly, apologies for the delay! We\'re finalizing the February report now and will have it to you by Friday EOD. The data looks great — rankings up 12% month-over-month.', timestamp: '2026-02-24 15:24' },
-    ],
-  },
-  {
-    id: 'tkt-003',
-    subject: 'Email campaign — wrong link in footer CTA',
-    company: 'Harvest Foods',
-    contactName: 'Frank Lopez',
-    contactEmail: 'frank@harvestfoods.com',
-    status: 'Resolved',
-    priority: 'Urgent',
-    source: 'Phone',
-    serviceType: 'Email Marketing',
-    projectId: 'pr3',
-    createdDate: '2026-02-20',
-    updatedDate: '2026-02-20',
-    assignedTo: 'Jordan Ellis',
-    tags: ['Bug', 'Email Campaign'],
-    messages: [
-      { id: 'm6', author: 'Frank Lopez', isInternal: false, body: 'The footer CTA link in today\'s email blast is pointing to the old landing page URL. Several customers have complained. This needs to be fixed immediately.', timestamp: '2026-02-20 11:00' },
-      { id: 'm7', author: 'Jordan Ellis', isInternal: false, body: 'We see the issue — fixing right now. The corrected version is scheduled for a resend at 2pm to the full list. Very sorry about this.', timestamp: '2026-02-20 11:18' },
-      { id: 'm8', author: 'Jordan Ellis', isInternal: false, body: 'Resend is live. All links confirmed working. Reach out if you see anything else.', timestamp: '2026-02-20 14:05' },
-    ],
-  },
-  {
-    id: 'tkt-004',
-    subject: 'Request: Add team bios page to website',
-    company: 'Apex Solutions',
-    contactName: 'Marcus Rivera',
-    contactEmail: 'marcus@apex.com',
-    status: 'Open',
-    priority: 'Low',
-    source: 'Client Portal',
-    serviceType: 'Website',
-    projectId: 'pr4',
-    createdDate: '2026-02-26',
-    updatedDate: '2026-02-26',
-    assignedTo: undefined,
-    tags: ['Feature Request', 'Content'],
-    messages: [
-      { id: 'm9', author: 'Marcus Rivera', isInternal: false, body: 'As we near launch, we\'d love to add a "Meet the Team" page with short bios for our 5 leadership members. Is this in scope or additional?', timestamp: '2026-02-26 08:45' },
-    ],
-  },
-  {
-    id: 'tkt-005',
-    subject: 'Social media calendar for March not shared',
-    company: 'GreenLeaf Organics',
-    contactName: 'Olivia Grant',
-    contactEmail: 'olivia@greenleaf.com',
-    status: 'Waiting on Client',
-    priority: 'Medium',
-    source: 'Email',
-    serviceType: 'Social Media',
-    projectId: 'pr5',
-    createdDate: '2026-02-23',
-    updatedDate: '2026-02-25',
-    assignedTo: 'Jordan Ellis',
-    tags: ['Content Calendar'],
-    messages: [
-      { id: 'm10', author: 'Olivia Grant', isInternal: false, body: 'Hi, I haven\'t received the March content calendar for approval yet. We need this by end of week to stay on schedule.', timestamp: '2026-02-23 16:00' },
-      { id: 'm11', author: 'Jordan Ellis', isInternal: false, body: 'Hi Olivia! The calendar draft is ready. I\'m waiting on the 4 product photos you mentioned — can you send those so I can finalize and send everything together?', timestamp: '2026-02-25 09:00' },
-    ],
-  },
-]
-
 // ─── Status / Priority Config ─────────────────────────────────────────────────
 
 const statusConfig: Record<TicketStatus, { color: string; bg: string; icon: React.ReactNode }> = {
@@ -183,7 +77,6 @@ function TicketPanel({
   const [reply, setReply] = useState('')
   const [showInternal, setShowInternal] = useState(true)
 
-  const linkedProject = ticket.projectId ? projects.find(p => p.id === ticket.projectId) : null
   const cfg = statusConfig[ticket.status]
   const priCfg = priorityConfig[ticket.priority]
 
@@ -242,7 +135,7 @@ function TicketPanel({
         </div>
 
         {/* Linked project banner */}
-        {linkedProject && (
+        {ticket.projectId && (
           <div className="flex-shrink-0 mx-4 mt-3">
             <Link
               href="/projects"
@@ -250,8 +143,8 @@ function TicketPanel({
             >
               <FolderKanban size={14} style={{ color: '#015035' }} />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-800 truncate">{linkedProject.company} — {linkedProject.serviceType}</p>
-                <p className="text-[11px] text-gray-500">{linkedProject.status} · {linkedProject.progress}% complete</p>
+                <p className="text-xs font-semibold text-gray-800 truncate">Linked Project</p>
+                <p className="text-[11px] text-gray-500">View in Projects</p>
               </div>
               <ExternalLink size={12} className="text-gray-400 flex-shrink-0" />
             </Link>
@@ -362,10 +255,17 @@ function TicketPanel({
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TicketsPage() {
-  const [localTickets, setLocalTickets] = useState<Ticket[]>(tickets)
+  const [localTickets, setLocalTickets] = useState<Ticket[]>([])
   const [selected, setSelected] = useState<Ticket | null>(null)
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'All'>('All')
   const [creatingTicket, setCreatingTicket] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/tickets')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalTickets(data) })
+      .catch(() => {})
+  }, [])
 
   function sendReply(id: string, body: string, isInternal: boolean) {
     const now = new Date()

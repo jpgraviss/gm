@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Clock, Plus, X, ChevronLeft, ChevronRight, DollarSign, Ban, Users, Check, Pencil, Trash2 } from 'lucide-react'
 import type { TimeEntry, TeamServiceLine } from '@/lib/types'
-import { timeEntries as seedEntries, projects, teamMembers } from '@/lib/data'
+import { teamMembers, projects } from '@/lib/data'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -264,10 +264,17 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate }: LogFormProps) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TimeTrackingPage() {
-  const [entries, setEntries]     = useState<TimeEntry[]>(seedEntries)
-  const [anchorDate, setAnchor]   = useState(new Date('2026-03-06'))
+  const [entries, setEntries] = useState<TimeEntry[]>([])
+  const [anchorDate, setAnchor]   = useState(new Date())
   const [showLog, setShowLog]     = useState(false)
   const [editEntry, setEditEntry] = useState<TimeEntry | undefined>()
+
+  useEffect(() => {
+    fetch('/api/time-entries')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setEntries(data) })
+      .catch(() => {})
+  }, [])
   const [filterMember, setFilterMember] = useState('All')
   const [filterBillable, setFilterBillable] = useState<'All' | 'Billable' | 'Non-Billable'>('All')
   const [logDate, setLogDate]     = useState<string | undefined>()

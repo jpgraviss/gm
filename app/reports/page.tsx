@@ -1,27 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
-import { deals, invoices, projects, renewals, revenueByMonth } from '@/lib/data'
 import { formatCurrency } from '@/lib/utils'
 import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download } from 'lucide-react'
+import type { Deal, Invoice, Project, Renewal, RevenueMonth } from '@/lib/types'
 
 type DateRange = '3M' | '6M' | '12M'
-type RepFilter = 'All' | 'Sarah Chen' | 'Marcus Webb'
-
-const closedWon = deals.filter(d => d.stage === 'Closed Won')
-const closedLost = deals.filter(d => d.stage === 'Closed Lost')
-const totalDeals = deals.length
-const conversionRate = Math.round((closedWon.length / totalDeals) * 100)
-const avgDealSize = closedWon.length > 0 ? closedWon.reduce((s, d) => s + d.value, 0) / closedWon.length : 0
-
-const collected = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0)
-const outstanding = invoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0)
-const mrr = 3417
-const arr = mrr * 12
-
-const completedProjects = projects.filter(p => ['Completed', 'Launched', 'In Maintenance'].includes(p.status)).length
-const renewalRate = Math.round((renewals.filter(r => r.status === 'Renewed').length / renewals.length) * 100)
+type RepFilter = 'All' | string
 
 function MiniBar({ value, max, color }: { value: number; max: number; color: string }) {
   return (
@@ -33,31 +19,68 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
   )
 }
 
-function exportCSV() {
-  const headers = ['ID', 'Company', 'Amount', 'Status', 'Due Date', 'Paid Date', 'Service Type']
-  const rows = invoices.map(i => [i.id, i.company, i.amount, i.status, i.dueDate, i.paidDate || '', i.serviceType])
-  const csv = [headers, ...rows].map(r => r.map(String).join(',')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'gravhub-revenue-export.csv'
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 export default function ReportsPage() {
   const [dateRange, setDateRange] = useState<DateRange>('6M')
   const [repFilter, setRepFilter] = useState<RepFilter>('All')
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [renewals, setRenewals] = useState<Renewal[]>([])
+  const [revenueByMonth, setRevenueByMonth] = useState<RevenueMonth[]>([])
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/deals').then(r => r.json()),
+      fetch('/api/invoices').then(r => r.json()),
+      fetch('/api/projects').then(r => r.json()),
+      fetch('/api/renewals').then(r => r.json()),
+      fetch('/api/dashboard').then(r => r.json()).then(d => d.revenueByMonth ?? []),
+    ]).then(([d, i, p, r, rev]) => {
+      if (Array.isArray(d)) setDeals(d)
+      if (Array.isArray(i)) setInvoices(i)
+      if (Array.isArray(p)) setProjects(p)
+      if (Array.isArray(r)) setRenewals(r)
+      if (Array.isArray(rev)) setRevenueByMonth(rev)
+    }).catch(() => {})
+  }, [])
+
+  function exportCSV() {
+    const headers = ['ID', 'Company', 'Amount', 'Status', 'Due Date', 'Paid Date', 'Service Type']
+    const rows = invoices.map(i => [i.id, i.company, i.amount, i.status, i.dueDate, i.paidDate || '', i.serviceType])
+    const csv = [headers, ...rows].map(r => r.map(String).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'gravhub-revenue-export.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const closedWon = deals.filter(d => d.stage === 'Closed Won')
+  const totalDeals = deals.length
+  const conversionRate = totalDeals > 0 ? Math.round((closedWon.length / totalDeals) * 100) : 0
+  const avgDealSize = closedWon.length > 0 ? closedWon.reduce((s, d) => s + d.value, 0) / closedWon.length : 0
+  const collected = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0)
+  const outstanding = invoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0)
+  const completedProjects = projects.filter(p => ['Completed', 'Launched', 'In Maintenance'].includes(p.status)).length
+  const renewalRate = renewals.length > 0 ? Math.round((renewals.filter(r => r.status === 'Renewed').length / renewals.length) * 100) : 0
 
   const monthsToShow = dateRange === '3M' ? 3 : dateRange === '6M' ? 6 : revenueByMonth.length
   const visibleMonths = revenueByMonth.slice(-monthsToShow)
-  const maxRevenue = Math.max(...visibleMonths.map(r => r.revenue))
+  const maxRevenue = Math.max(...visibleMonths.map(r => r.revenue), 1)
 
-  const allRepStats = [
-    { name: 'Sarah Chen', deals: 4, revenue: 123000, winRate: 75 },
-    { name: 'Marcus Webb', deals: 4, revenue: 56000, winRate: 50 },
-  ]
+  const allRepStats = useMemo(() => {
+    const reps: Record<string, { name: string; deals: number; revenue: number; won: number }> = {}
+    deals.forEach(d => {
+      if (!reps[d.assignedRep]) reps[d.assignedRep] = { name: d.assignedRep, deals: 0, revenue: 0, won: 0 }
+      reps[d.assignedRep].deals++
+      reps[d.assignedRep].revenue += d.value
+      if (d.stage === 'Closed Won') reps[d.assignedRep].won++
+    })
+    return Object.values(reps).map(r => ({ ...r, winRate: r.deals > 0 ? Math.round((r.won / r.deals) * 100) : 0 }))
+  }, [deals])
+
   const repStats = repFilter === 'All' ? allRepStats : allRepStats.filter(r => r.name === repFilter)
 
   const serviceRevenue = [
@@ -113,7 +136,7 @@ export default function ReportsPage() {
             { label: 'Avg Deal Size',     value: formatCurrency(avgDealSize),   icon: <DollarSign size={16} />, color: '#015035', sub: 'Closed won' },
             { label: 'Revenue Collected', value: formatCurrency(collected),     icon: <CheckCircle size={16} />,color: '#22c55e', sub: 'All invoices' },
             { label: 'Outstanding',       value: formatCurrency(outstanding),   icon: <DollarSign size={16} />, color: '#f59e0b', sub: 'Pending + overdue' },
-            { label: 'ARR',              value: formatCurrency(arr),            icon: <RefreshCw size={16} />,  color: '#8b5cf6', sub: 'Annual recurring' },
+            { label: 'ARR',              value: formatCurrency(collected * 12),  icon: <RefreshCw size={16} />,  color: '#8b5cf6', sub: 'Annual recurring' },
             { label: 'Renewal Rate',     value: `${renewalRate || 78}%`,        icon: <Users size={16} />,      color: '#ec4899', sub: 'Client retention' },
           ].map(m => (
             <div key={m.label} className="kpi-card" style={{ '--kpi-accent': m.color } as React.CSSProperties}>

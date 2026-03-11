@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { contracts as seedContracts, invoices, projects, proposals } from '@/lib/data'
+import { invoices, projects, proposals } from '@/lib/data'
 import { formatCurrency, contractStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
@@ -530,11 +530,18 @@ function ContractPanel({
 }
 
 export default function ContractsPage() {
-  const [localContracts, setLocalContracts] = useState<Contract[]>(seedContracts)
+  const [localContracts, setLocalContracts] = useState<Contract[]>([])
   const [selected, setSelected] = useState<Contract | null>(null)
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'All'>('All')
   const [creatingContract, setCreatingContract] = useState(false)
   const [localAddendums, setLocalAddendums] = useState<Addendum[]>([])
+
+  useEffect(() => {
+    fetch('/api/contracts')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalContracts(data) })
+      .catch(() => {})
+  }, [])
 
   function addAddendum(contractId: string, title: string, description: string) {
     const today = new Date().toISOString().split('T')[0]

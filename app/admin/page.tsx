@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Header from '@/components/layout/Header'
@@ -11,7 +11,7 @@ import {
   Activity, Bell, Building, Download, Upload, Key, ToggleLeft,
   ToggleRight, Server, Wifi, Clock, X,
 } from 'lucide-react'
-import { teamMembers, deals, contracts, invoices, projects, dashboardMetrics } from '@/lib/data'
+// data loaded from API
 import { formatCurrency } from '@/lib/utils'
 
 type AdminTab = 'overview' | 'users' | 'integrations' | 'permissions' | 'config' | 'audit'
@@ -55,16 +55,8 @@ const auditColors: Record<string, string> = {
   error: 'bg-red-100 text-red-600',
 }
 
-// Extended user list for admin
-const allUsers = [
-  { id: 'u0', name: 'Jonathan Graviss', email: 'jonathan@gravissmarketing.com', role: 'Super Admin', unit: 'Leadership/Admin', status: 'Active', lastLogin: 'Just now', initials: 'JG', isAdmin: true },
-  { id: 'u6', name: 'Amanda Foster', email: 'amanda@gravissmarketing.com', role: 'Leadership', unit: 'Leadership/Admin', status: 'Active', lastLogin: '2 hours ago', initials: 'AF', isAdmin: false },
-  { id: 'u1', name: 'Sarah Chen', email: 'sarah@gravissmarketing.com', role: 'Department Manager', unit: 'Sales', status: 'Active', lastLogin: '1 day ago', initials: 'SC', isAdmin: false },
-  { id: 'u2', name: 'Marcus Webb', email: 'marcus@gravissmarketing.com', role: 'Team Member', unit: 'Sales', status: 'Active', lastLogin: '5 hours ago', initials: 'MW', isAdmin: false },
-  { id: 'u3', name: 'Jordan Ellis', email: 'jordan@gravissmarketing.com', role: 'Team Member', unit: 'Delivery/Operations', status: 'Active', lastLogin: '3 days ago', initials: 'JE', isAdmin: false },
-  { id: 'u4', name: 'Priya Patel', email: 'priya@gravissmarketing.com', role: 'Department Manager', unit: 'Delivery/Operations', status: 'Active', lastLogin: '1 day ago', initials: 'PP', isAdmin: false },
-  { id: 'u5', name: 'Tyler Ross', email: 'tyler@gravissmarketing.com', role: 'Team Member', unit: 'Billing/Finance', status: 'Active', lastLogin: '2 days ago', initials: 'TR', isAdmin: false },
-]
+// User type for admin panel
+type AdminUser = { id: string; name: string; email: string; role: string; unit: string; status: string; lastLogin: string | null; initials: string; isAdmin: boolean }
 
 function SystemHealthRow({ label, status, detail }: { label: string; status: 'ok' | 'warn' | 'error'; detail: string }) {
   return (
@@ -164,10 +156,19 @@ function IntegrationCard({
 export default function AdminPage() {
   const { user } = useAuth()
   const router = useRouter()
+
+  // Load users from database on mount
+  useEffect(() => {
+    fetch('/api/admin/users')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setUsers(data as AdminUser[]) })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [tab, setTab] = useState<AdminTab>('overview')
   const [showAddUser, setShowAddUser] = useState(false)
   const [editingUser, setEditingUser] = useState<string | null>(null)
-  const [users, setUsers] = useState(allUsers)
+  const [users, setUsers] = useState<AdminUser[]>([])
   const [addForm, setAddForm] = useState({ name: '', email: '', password: '', role: 'Team Member', unit: 'Sales' })
   const [resetConfirm, setResetConfirm] = useState<string | null>(null)
   const [emailStatus, setEmailStatus] = useState<Record<string, 'sending' | 'sent' | 'error'>>({})
@@ -195,7 +196,7 @@ export default function AdminPage() {
     }
   }
 
-  async function sendResetEmail(targetUser: typeof allUsers[0]) {
+  async function sendResetEmail(targetUser: AdminUser) {
     setEmailStatus(prev => ({ ...prev, [targetUser.id]: 'sending' }))
     try {
       const res = await fetch('/api/email/reset-password', {
@@ -298,11 +299,11 @@ export default function AdminPage() {
             {/* KPIs */}
             <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
               {[
-                { label: 'Total Users', value: allUsers.length.toString(), color: '#015035', icon: <Users size={16} /> },
-                { label: 'Active Contracts', value: contracts.filter(c => c.status === 'Fully Executed').length.toString(), color: '#3b82f6', icon: <ScrollText size={16} /> },
-                { label: 'Pipeline Value', value: formatCurrency(dashboardMetrics.pipelineValue), color: '#f59e0b', icon: <BarChart3 size={16} /> },
-                { label: 'MRR', value: formatCurrency(dashboardMetrics.mrr), color: '#8b5cf6', icon: <CreditCard size={16} /> },
-                { label: 'Open Projects', value: dashboardMetrics.activeProjects.toString(), color: '#ec4899', icon: <Activity size={16} /> },
+                { label: 'Total Users', value: users.length.toString(), color: '#015035', icon: <Users size={16} /> },
+                { label: 'Active Contracts', value: '—', color: '#3b82f6', icon: <ScrollText size={16} /> },
+                { label: 'Pipeline Value', value: '—', color: '#f59e0b', icon: <BarChart3 size={16} /> },
+                { label: 'MRR', value: '—', color: '#8b5cf6', icon: <CreditCard size={16} /> },
+                { label: 'Open Projects', value: '—', color: '#ec4899', icon: <Activity size={16} /> },
                 { label: 'Integrations', value: '2 Active', color: '#14b8a6', icon: <Zap size={16} /> },
               ].map(m => (
                 <div key={m.label} className="metric-card">
@@ -944,7 +945,7 @@ export default function AdminPage() {
               <div className="flex items-center gap-2">
                 <select className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 text-gray-600">
                   <option>All Users</option>
-                  {allUsers.map(u => <option key={u.id}>{u.name}</option>)}
+                  {users.map(u => <option key={u.id}>{u.name}</option>)}
                 </select>
                 <select className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 text-gray-600">
                   <option>All Modules</option>

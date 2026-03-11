@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { proposals as seedProposals, deals, contracts } from '@/lib/data'
+import { deals, contracts } from '@/lib/data'
 import { formatCurrency, proposalStatusColors, serviceTypeColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import ProposalBuilderPanel from '@/components/crm/ProposalBuilderPanel'
@@ -453,11 +453,18 @@ function ProposalPanel({
 }
 
 export default function ProposalsPage() {
-  const [localProposals, setLocalProposals] = useState<Proposal[]>(seedProposals)
+  const [localProposals, setLocalProposals] = useState<Proposal[]>([])
   const [selected, setSelected] = useState<Proposal | null>(null)
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'All'>('All')
   const [creatingProposal, setCreatingProposal] = useState(false)
   const [editingProposal, setEditingProposal] = useState<Proposal | null>(null)
+
+  useEffect(() => {
+    fetch('/api/proposals')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalProposals(data) })
+      .catch(() => {})
+  }, [])
 
   function updateProposalStatus(id: string, status: ProposalStatus) {
     const today = new Date().toISOString().split('T')[0]

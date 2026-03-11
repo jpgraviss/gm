@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Header from '@/components/layout/Header'
-import { maintenanceRecords as seedRecords, invoices, crmContacts, contracts } from '@/lib/data'
+import { crmContacts, contracts, invoices } from '@/lib/data'
 import { formatCurrency, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import type { MaintenanceRecord, MaintenanceStatus } from '@/lib/types'
@@ -507,11 +507,18 @@ function MaintenancePanel({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function MaintenancePage() {
-  const [records, setRecords] = useState(seedRecords)
+  const [records, setRecords] = useState<MaintenanceRecord[]>([])
   const [selected, setSelected] = useState<MaintenanceRecord | null>(null)
   const [addingRecord, setAddingRecord] = useState(false)
   const [editingRecord, setEditingRecord] = useState<MaintenanceRecord | null>(null)
   const [tabFilter, setTabFilter] = useState<TabFilter>('All')
+
+  useEffect(() => {
+    fetch('/api/maintenance')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setRecords(data) })
+      .catch(() => {})
+  }, [])
 
   const activeRecords = records.filter(m => m.status === 'Active')
   const totalMRR = activeRecords.reduce((s, m) => s + m.monthlyFee, 0)

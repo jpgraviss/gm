@@ -135,7 +135,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: false, error: 'Access is restricted to Graviss Marketing team members.' }
       }
 
-      const profile = await loadProfileByEmail(email, payload.picture)
+      // Use the API route (service role) so RLS doesn't block unauthenticated reads
+      const res = await fetch('/api/team-members')
+      const members: { email: string }[] = res.ok ? await res.json() : []
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = members.find((m: any) => m.email?.toLowerCase() === email)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const profile = row ? rowToAuthUser(row as any, payload.picture) : null
       if (!profile) return { ok: false, error: 'No team member profile found. Contact your administrator.' }
 
       setUser(profile)

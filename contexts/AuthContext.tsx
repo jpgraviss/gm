@@ -176,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const connectGmail = useCallback(() => {
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '667334631499-o7tofbtcbgm17vumqe33q8k5j46s9lp2.apps.googleusercontent.com'
     if (!clientId) return
 
     const g = (window as unknown as { google?: { accounts?: { oauth2?: { initTokenClient: (cfg: object) => { requestAccessToken: () => void } } } } }).google

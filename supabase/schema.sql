@@ -275,7 +275,7 @@ create table if not exists public.calendar_settings (
   id                   text primary key,
   email                text not null unique,
   slug                 text not null unique,
-  timezone             text not null default 'America/Chicago',
+  timezone             text not null default 'America/New York',
   availability         jsonb not null default '{}',
   google_access_token  text,
   google_refresh_token text,

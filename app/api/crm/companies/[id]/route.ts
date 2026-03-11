@@ -24,7 +24,8 @@ function mapCompany(row: any) {
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const body = await req.json()
   const db = createServiceClient()
   const { data, error } = await db
@@ -46,16 +47,17 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       total_deal_value: body.totalDealValue ?? 0,
       last_activity:    body.lastActivity ?? null,
     })
-    .eq('id', params.id)
+    .eq('id', id)
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(mapCompany(data))
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const db = createServiceClient()
-  const { error } = await db.from('crm_companies').delete().eq('id', params.id)
+  const { error } = await db.from('crm_companies').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }

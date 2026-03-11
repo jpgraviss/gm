@@ -73,7 +73,7 @@ const REPS = ['Sarah Chen', 'Marcus Webb']
 const STATUSES: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned']
 const SIZES: CompanySize[] = ['1-10', '11-50', '51-200', '201-500', '500+']
 const INDUSTRIES = [
-  'Real Estate', 'Healthcare', 'Technology', 'Finance', 'Retail',
+  'OOH', 'Real Estate', 'Healthcare', 'Technology', 'Finance', 'Retail',
   'Education', 'Construction', 'Hospitality', 'Legal', 'Non-Profit', 'Other',
 ]
 

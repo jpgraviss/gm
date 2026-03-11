@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
-import { getSupabaseClient } from '@/lib/supabase'
+import { getSupabaseClient, isConfigured } from '@/lib/supabase'
 import type { TeamMember } from '@/lib/types'
 
 export interface AuthUser {
@@ -76,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    if (!isConfigured) {
+      setLoading(false)
+      return
+    }
     const supabase = getSupabaseClient()
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -102,16 +106,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchMembers, loadProfileByEmail])
 
   const login = async (email: string, password: string): Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean }> => {
-    const supabase = getSupabaseClient()
-    const { error } = await supabase.auth.signInWithPassword({ email: email.toLowerCase().trim(), password })
-    if (error) return { ok: false, error: 'Incorrect email or password.' }
+    try {
+      const supabase = getSupabaseClient()
+      const { error } = await supabase.auth.signInWithPassword({ email: email.toLowerCase().trim(), password })
+      if (error) return { ok: false, error: 'Incorrect email or password.' }
 
-    const profile = await loadProfileByEmail(email)
-    if (!profile) return { ok: false, error: 'No team member profile found. Contact your administrator.' }
+      const profile = await loadProfileByEmail(email)
+      if (!profile) return { ok: false, error: 'No team member profile found. Contact your administrator.' }
 
-    setUser(profile)
-    fetchMembers()
-    return { ok: true }
+      setUser(profile)
+      fetchMembers()
+      return { ok: true }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Login failed. Please try again.'
+      return { ok: false, error: msg }
+    }
   }
 
   const loginWithGoogle = async (credential: string): Promise<{ ok: boolean; error?: string }> => {
@@ -126,7 +135,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: false, error: 'Access is restricted to Graviss Marketing team members.' }
       }
 
-      const profile = await loadProfileByEmail(email, payload.picture)
+      // Use the API route (service role) so RLS doesn't block unauthenticated reads
+      const res = await fetch('/api/team-members')
+      const members: { email: string }[] = res.ok ? await res.json() : []
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = members.find((m: any) => m.email?.toLowerCase() === email)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const profile = row ? rowToAuthUser(row as any, payload.picture) : null
       if (!profile) return { ok: false, error: 'No team member profile found. Contact your administrator.' }
 
       setUser(profile)
@@ -167,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const connectGmail = useCallback(() => {
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '667334631499-o7tofbtcbgm17vumqe33q8k5j46s9lp2.apps.googleusercontent.com'
     if (!clientId) return
 
     const g = (window as unknown as { google?: { accounts?: { oauth2?: { initTokenClient: (cfg: object) => { requestAccessToken: () => void } } } } }).google

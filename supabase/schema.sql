@@ -272,30 +272,42 @@ create table if not exists public.audit_logs (
 
 -- ─── Calendar Settings ────────────────────────────────────────────────────────
 create table if not exists public.calendar_settings (
-  id                   text primary key,
-  email                text not null unique,
+  id                   text primary key default gen_random_uuid()::text,
+  user_email           text not null unique,
+  user_name            text not null default '',
   slug                 text not null unique,
-  timezone             text not null default 'America/New York',
-  availability         jsonb not null default '{}',
+  title                text not null default 'Book a Call',
+  description          text,
+  duration             int  not null default 30,
+  buffer               int  not null default 15,
+  timezone             text not null default 'America/New_York',
+  available_days       int[] not null default '{1,2,3,4,5}',
+  available_start      text not null default '09:00',
+  available_end        text not null default '17:00',
   google_access_token  text,
   google_refresh_token text,
-  google_token_expiry  bigint,
-  google_calendar_id   text,
-  created_at           timestamptz not null default now()
+  google_token_expiry  timestamptz,
+  active               boolean not null default true,
+  created_at           timestamptz not null default now(),
+  updated_at           timestamptz not null default now()
 );
 
 -- ─── Bookings ─────────────────────────────────────────────────────────────────
 create table if not exists public.bookings (
-  id              text primary key,
-  calendar_slug   text not null,
-  booker_name     text not null,
-  booker_email    text not null,
-  date            text not null,
+  id              text primary key default gen_random_uuid()::text,
+  calendar_slug   text not null references public.calendar_settings(slug) on delete cascade,
+  client_name     text not null,
+  client_email    text not null,
+  client_company  text,
+  client_phone    text,
+  notes           text,
+  date            date not null,
   start_time      text not null,
   end_time        text not null,
-  purpose         text,
+  timezone        text not null default 'America/New_York',
   status          text not null default 'confirmed',
   google_event_id text,
+  meet_link       text,
   created_at      timestamptz not null default now()
 );
 

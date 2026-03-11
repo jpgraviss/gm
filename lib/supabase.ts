@@ -4,8 +4,8 @@ import type {
   CRMContact, CRMCompany, CRMActivity, RevenueMonth,
 } from './types'
 
-const supabaseUrl     = process.env.NEXT_PUBLIC_SUPABASE_URL     ?? 'https://hufztrajgtyuzsgopzyi.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Znp0cmFqZ3R5dXpzZ29wenlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyNTU4MDgsImV4cCI6MjA4ODgzMTgwOH0.KrCwv92Y6sfvYZlZxl_jWmxzg2H8mSUA3Hyo5NmLBjE'
+const supabaseUrl     = process.env.NEXT_PUBLIC_SUPABASE_URL     || 'https://hufztrajgtyuzsgopzyi.supabase.co'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Znp0cmFqZ3R5dXpzZ29wenlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyNTU4MDgsImV4cCI6MjA4ODgzMTgwOH0.KrCwv92Y6sfvYZlZxl_jWmxzg2H8mSUA3Hyo5NmLBjE'
 
 export const isConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 

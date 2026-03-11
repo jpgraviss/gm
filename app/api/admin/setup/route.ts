@@ -33,6 +33,16 @@ const BASE_USERS = [
     isAdmin:  true,
     tmId:     't1',
   },
+  {
+    email:    'test@gravissmarketing.com',
+    password: process.env.TEST_PASSWORD ?? '',
+    name:     'Test User',
+    role:     'Team Member',
+    unit:     'Leadership/Admin',
+    initials: 'TU',
+    isAdmin:  false,
+    tmId:     't2',
+  },
 ]
 
 export async function POST(req: NextRequest) {

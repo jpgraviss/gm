@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, DollarSign, Calendar } from 'lucide-react'
-import { crmCompanies, contracts } from '@/lib/data'
-import type { ServiceType } from '@/lib/types'
+import { fetchCrmCompanies, fetchContracts } from '@/lib/supabase'
+import type { ServiceType, CRMCompany, Contract } from '@/lib/types'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 
@@ -56,6 +56,12 @@ export default function NewInvoicePanel({ onSave, onClose }: Props) {
     contractId: '',
   })
 
+  const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  useEffect(() => {
+    fetchCrmCompanies().then(setCrmCompanies)
+    fetchContracts().then(setContracts)
+  }, [])
   const companyNames = crmCompanies.map(c => c.name)
   const companyContracts = contracts.filter(c => c.company === form.company)
 

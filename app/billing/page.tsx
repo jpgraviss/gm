@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { invoices as seedInvoices, contracts, revenueByMonth } from '@/lib/data'
+import { fetchContracts, fetchRevenueByMonth } from '@/lib/supabase'
 import { formatCurrency, invoiceStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import NewInvoicePanel, { type NewInvoiceFormData } from '@/components/crm/NewInvoicePanel'
-import type { Invoice, InvoiceStatus } from '@/lib/types'
+import type { Invoice, InvoiceStatus, Contract, RevenueMonth } from '@/lib/types'
 import {
   DollarSign, AlertCircle, CheckCircle, Clock, Send, RefreshCw,
   X, ExternalLink, ScrollText, Calendar, Zap, ArrowDownToLine,
@@ -68,9 +68,9 @@ function downloadReceipt(invoice: Invoice) {
   w.document.close()
 }
 
-function InvoicePanel({ invoice, onClose, onUpdateStatus }: { invoice: Invoice; onClose: () => void; onUpdateStatus: (id: string, status: InvoiceStatus) => void }) {
+function InvoicePanel({ invoice, onClose, onUpdateStatus, contracts, allInvoices }: { invoice: Invoice; onClose: () => void; onUpdateStatus: (id: string, status: InvoiceStatus) => void; contracts: Contract[]; allInvoices: Invoice[] }) {
   const linkedContract = contracts.find(c => c.id === invoice.contractId)
-  const relatedInvoices = seedInvoices.filter(i => i.contractId === invoice.contractId && i.id !== invoice.id)
+  const relatedInvoices = allInvoices.filter(i => i.contractId === invoice.contractId && i.id !== invoice.id)
   const isOverdue = invoice.status === 'Overdue'
   const isPaid = invoice.status === 'Paid'
 
@@ -217,10 +217,21 @@ function InvoicePanel({ invoice, onClose, onUpdateStatus }: { invoice: Invoice; 
 }
 
 export default function BillingPage() {
-  const [localInvoices, setLocalInvoices] = useState<Invoice[]>(seedInvoices)
+  const [localInvoices, setLocalInvoices] = useState<Invoice[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [revenueByMonth, setRevenueByMonth] = useState<RevenueMonth[]>([])
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'All'>('All')
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [creatingInvoice, setCreatingInvoice] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/invoices')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalInvoices(data) })
+      .catch(() => {})
+    fetchContracts().then(setContracts)
+    fetchRevenueByMonth().then(setRevenueByMonth)
+  }, [])
 
   function updateInvoiceStatus(id: string, status: InvoiceStatus) {
     const today = new Date().toISOString().split('T')[0]
@@ -544,6 +555,8 @@ export default function BillingPage() {
           invoice={selectedInvoice}
           onClose={() => setSelectedInvoice(null)}
           onUpdateStatus={updateInvoiceStatus}
+          contracts={contracts}
+          allInvoices={localInvoices}
         />
       )}
       {creatingInvoice && (

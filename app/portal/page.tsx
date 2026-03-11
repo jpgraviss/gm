@@ -1,8 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
-import { projects, contracts, renewals, invoices } from '@/lib/data'
 import { formatCurrency, projectStatusColors, serviceTypeColors, invoiceStatusColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import {
@@ -13,28 +12,25 @@ import {
 
 // ─── Client data ──────────────────────────────────────────────────────────────
 
-const CLIENT_ACCOUNTS_SEED = [
-  { company: 'Coastal Realty',    service: 'Website',        access: 'Active',    lastLogin: '2 days ago',  contact: 'Dana Kim',       email: 'dana@coastalrealty.com' },
-  { company: 'BlueStar Logistics', service: 'SEO',           access: 'Active',    lastLogin: '1 week ago',  contact: 'Kelly Shaw',     email: 'kelly@bluestarlogistics.com' },
-  { company: 'Harvest Foods',     service: 'Email Marketing', access: 'Active',   lastLogin: '3 days ago',  contact: 'Frank Lopez',    email: 'frank@harvestfoods.com' },
-  { company: 'Apex Solutions',    service: 'Website',         access: 'Invited',  lastLogin: 'Never',       contact: 'Marcus Rivera',  email: 'marcus@apexsolutions.com' },
-  { company: 'Summit Capital',    service: 'Custom',          access: 'Not Setup', lastLogin: 'Never',      contact: 'Tanya Reeves',   email: 'tanya@summitcapital.com' },
-]
-
-function getClientData(company: string) {
-  const project  = projects.find(p => p.company === company)
-  const contract = contracts.find(c => c.company === company)
-  const renewal  = renewals.find(r => r.company === company)
-  const clientInvoices = invoices.filter(i => i.company === company)
-  return { project, contract, renewal, invoices: clientInvoices }
-}
+type PortalClient = { id: string; company: string; service: string; access: string; lastLogin: string; contact: string; email: string }
 
 // ─── Client Portal View ───────────────────────────────────────────────────────
 
-function ClientPortalView({ company, onExit }: { company: string; onExit: () => void }) {
+function ClientPortalView({ company, accountInfo, onExit }: { company: string; accountInfo: PortalClient | undefined; onExit: () => void }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files'>('overview')
-  const { project, contract, renewal, invoices: clientInvoices } = getClientData(company)
-  const accountInfo = CLIENT_ACCOUNTS_SEED.find(c => c.company === company)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [project, setProject]         = useState<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [contract, setContract]       = useState<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [clientInvoices, setClientInvoices] = useState<any[]>([])
+
+  useEffect(() => {
+    const q = encodeURIComponent(company)
+    fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => {})
+    fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => {})
+    fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => {})
+  }, [company])
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
 
@@ -252,7 +248,7 @@ function ClientPortalView({ company, onExit }: { company: string; onExit: () => 
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
                   <h3 className="text-sm font-semibold text-gray-800 mb-3">Milestones</h3>
                   <div className="flex flex-col gap-2">
-                    {project.milestones.map((m, i) => (
+                    {project.milestones.map((m: {id:string;name:string;dueDate:string;completed:boolean}, i: number) => (
                       <div key={m.id} className={`flex items-center gap-3 p-3 rounded-xl ${m.completed ? 'bg-emerald-50' : 'bg-gray-50'}`}>
                         <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${m.completed ? '' : 'bg-gray-200'}`}
                           style={m.completed ? { background: '#015035' } : {}}>
@@ -271,10 +267,10 @@ function ClientPortalView({ company, onExit }: { company: string; onExit: () => 
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
                   <h3 className="text-sm font-semibold text-gray-800 mb-3">Your Team</h3>
                   <div className="flex flex-wrap gap-2">
-                    {project.assignedTeam.map(name => (
+                    {project.assignedTeam.map((name: string) => (
                       <div key={name} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl">
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: '#015035' }}>
-                          {name.split(' ').map(n => n[0]).join('')}
+                          {name.split(' ').map((n: string) => n[0]).join('')}
                         </div>
                         <span className="text-xs font-medium text-gray-700">{name}</span>
                       </div>
@@ -440,11 +436,21 @@ function ClientPortalView({ company, onExit }: { company: string; onExit: () => 
 
 export default function PortalPage() {
   const [viewAsClient, setViewAsClient] = useState(false)
-  const [clients, setClients] = useState(CLIENT_ACCOUNTS_SEED)
-  const [previewCompany, setPreviewCompany] = useState(CLIENT_ACCOUNTS_SEED[0].company)
+  const [clients, setClients] = useState<PortalClient[]>([])
+  const [previewCompany, setPreviewCompany] = useState('')
   const [inviteStatus, setInviteStatus] = useState<Record<string, 'sending' | 'sent' | 'error'>>({})
 
-  async function sendPortalInvite(client: typeof CLIENT_ACCOUNTS_SEED[0], isResend = false) {
+  useEffect(() => {
+    fetch('/api/portal-clients')
+      .then(r => r.json())
+      .then((data: PortalClient[]) => {
+        setClients(data)
+        if (data.length > 0) setPreviewCompany(data.find(c => c.access === 'Active')?.company ?? data[0].company)
+      })
+      .catch(() => {})
+  }, [])
+
+  async function sendPortalInvite(client: PortalClient, isResend = false) {
     setInviteStatus(prev => ({ ...prev, [client.company]: 'sending' }))
     try {
       const res = await fetch('/api/email/portal-invite', {
@@ -462,6 +468,11 @@ export default function PortalPage() {
       setInviteStatus(prev => ({ ...prev, [client.company]: ok ? 'sent' : 'error' }))
       if (ok && client.access === 'Not Setup') {
         setClients(prev => prev.map(c => c.company === client.company ? { ...c, access: 'Invited' } : c))
+        await fetch(`/api/portal-clients/${client.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access: 'Invited' }),
+        })
       }
       setTimeout(() => setInviteStatus(prev => { const n = { ...prev }; delete n[client.company]; return n }), 4000)
     } catch {
@@ -470,7 +481,7 @@ export default function PortalPage() {
   }
 
   if (viewAsClient) {
-    return <ClientPortalView company={previewCompany} onExit={() => setViewAsClient(false)} />
+    return <ClientPortalView company={previewCompany} accountInfo={clients.find(c => c.company === previewCompany)} onExit={() => setViewAsClient(false)} />
   }
 
   return (

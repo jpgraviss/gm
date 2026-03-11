@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight } from 'lucide-react'
 
@@ -16,71 +16,6 @@ interface Automation {
   lastRun: string
 }
 
-const initialAutomations: Automation[] = [
-  {
-    id: 'auto1',
-    name: 'Proposal Accepted → Generate Contract',
-    trigger: 'Proposal Accepted',
-    actions: ['Create Draft Contract', 'Notify Sales Rep', 'Log Activity'],
-    status: 'Active',
-    runs: 4,
-    lastRun: '3 days ago',
-  },
-  {
-    id: 'auto2',
-    name: 'Contract Executed → Create Invoice Task',
-    trigger: 'Contract Fully Executed',
-    actions: ['Create Billing Task', 'Notify Finance Team', 'Update Revenue Metrics'],
-    status: 'Active',
-    runs: 3,
-    lastRun: '5 days ago',
-  },
-  {
-    id: 'auto3',
-    name: 'Invoice Paid → Create Project',
-    trigger: 'Invoice Paid',
-    actions: ['Create Project Record', 'Apply Service Template', 'Notify Delivery Team'],
-    status: 'Active',
-    runs: 3,
-    lastRun: '1 week ago',
-  },
-  {
-    id: 'auto4',
-    name: 'Renewal Window (90 days) → Notify Sales',
-    trigger: 'Renewal Date Within 90 Days',
-    actions: ['Notify Assigned Rep', 'Create Renewal Task', 'Flag in Dashboard'],
-    status: 'Triggered',
-    runs: 2,
-    lastRun: '2 hours ago',
-  },
-  {
-    id: 'auto5',
-    name: 'Overdue Invoice → Send Reminder',
-    trigger: 'Invoice Overdue by 3 Days',
-    actions: ['Send Email Reminder', 'Notify Finance', 'Escalate if 7+ Days'],
-    status: 'Active',
-    runs: 8,
-    lastRun: '1 day ago',
-  },
-  {
-    id: 'auto6',
-    name: 'Project Launched → Start Maintenance',
-    trigger: 'Project Status = Launched',
-    actions: ['Create Maintenance Record', 'Generate Monthly Invoice Task', 'Update Client Portal'],
-    status: 'Active',
-    runs: 2,
-    lastRun: '2 weeks ago',
-  },
-  {
-    id: 'auto7',
-    name: 'Contract Sent → Follow-up After 3 Days',
-    trigger: 'Contract Sent + 3 Days No Response',
-    actions: ['Send Follow-up Email', 'Create Task for Rep', 'Log Touchpoint'],
-    status: 'Paused',
-    runs: 5,
-    lastRun: '1 month ago',
-  },
-]
 
 const statusConfig: Record<AutoStatus, { badge: string; icon: React.ReactNode; dot: string }> = {
   Active:    { badge: 'bg-green-100 text-green-700',   icon: <CheckCircle size={12} className="text-green-500" />,  dot: '#015035' },
@@ -244,18 +179,35 @@ function NewAutomationPanel({ onSave, onClose }: { onSave: (a: Automation) => vo
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AutomationPage() {
-  const [automations, setAutomations] = useState<Automation[]>(initialAutomations)
+  const [automations, setAutomations] = useState<Automation[]>([])
   const [creatingAutomation, setCreatingAutomation] = useState(false)
 
-  function toggleStatus(id: string) {
-    setAutomations(prev => prev.map(a => {
-      if (a.id !== id) return a
-      return { ...a, status: a.status === 'Paused' ? 'Active' : 'Paused' }
-    }))
+  useEffect(() => {
+    fetch('/api/automations').then(r => r.json()).then(setAutomations).catch(() => {})
+  }, [])
+
+  async function toggleStatus(id: string) {
+    const a = automations.find(x => x.id === id)
+    if (!a) return
+    const newStatus: AutoStatus = a.status === 'Paused' ? 'Active' : 'Paused'
+    setAutomations(prev => prev.map(x => x.id === id ? { ...x, status: newStatus } : x))
+    await fetch(`/api/automations/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
   }
 
-  function handleNewAutomation(automation: Automation) {
-    setAutomations(prev => [automation, ...prev])
+  async function handleNewAutomation(automation: Automation) {
+    const res = await fetch('/api/automations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(automation),
+    })
+    if (res.ok) {
+      const saved = await res.json()
+      setAutomations(prev => [saved, ...prev])
+    }
     setCreatingAutomation(false)
   }
 

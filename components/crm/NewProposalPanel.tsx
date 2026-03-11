@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, DollarSign, User, FileText } from 'lucide-react'
-import { crmCompanies } from '@/lib/data'
-import type { ServiceType } from '@/lib/types'
+import { fetchCrmCompanies } from '@/lib/supabase'
+import type { ServiceType, CRMCompany } from '@/lib/types'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 const REPS = ['Sarah Chen', 'Marcus Webb']
@@ -54,6 +54,8 @@ export default function NewProposalPanel({ onSave, onClose }: Props) {
     notes: '',
   })
 
+  const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
+  useEffect(() => { fetchCrmCompanies().then(setCrmCompanies) }, [])
   const companyNames = crmCompanies.map(c => c.name)
 
   function set(field: keyof NewProposalFormData, value: string) {

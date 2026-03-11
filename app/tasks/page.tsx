@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
-import { appTasks, teamMembers } from '@/lib/data'
-import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority } from '@/lib/types'
+import { fetchTeamMembers } from '@/lib/supabase'
+import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority, TeamMember } from '@/lib/types'
 import {
   CheckSquare, Clock, AlertCircle, CheckCircle2, Plus, X, ChevronRight,
   Building2, User, Calendar, Flag, Tag, Trash2, Circle,
@@ -46,12 +46,12 @@ function dueDateLabel(dueDate: string, status: AppTaskStatus) {
 
 // ─── New Task Panel ────────────────────────────────────────────────────────────
 
-function NewTaskPanel({ onSave, onClose }: { onSave: (t: AppTask) => void; onClose: () => void }) {
+function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) => void; onClose: () => void; teamMembers: TeamMember[] }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<AppTaskCategory>('General')
   const [priority, setPriority] = useState<TaskPriority>('Medium')
-  const [assignedTo, setAssignedTo] = useState(teamMembers[0].name)
+  const [assignedTo, setAssignedTo] = useState('')
   const [dueDate, setDueDate] = useState(TODAY)
   const [company, setCompany] = useState('')
 
@@ -342,12 +342,21 @@ type FilterTab = 'All' | 'Due Today' | 'Overdue' | 'In Progress' | 'Pending' | '
 const categories: AppTaskCategory[] = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'General']
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<AppTask[]>(appTasks)
+  const [tasks, setTasks] = useState<AppTask[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [filterTab, setFilterTab] = useState<FilterTab>('All')
   const [filterCategory, setFilterCategory] = useState<AppTaskCategory | 'All'>('All')
   const [filterAssignee, setFilterAssignee] = useState<string>('All')
   const [selectedTask, setSelectedTask] = useState<AppTask | null>(null)
   const [creatingTask, setCreatingTask] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/tasks')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setTasks(data) })
+      .catch(() => {})
+    fetchTeamMembers().then(setTeamMembers)
+  }, [])
 
   function updateStatus(id: string, status: AppTaskStatus) {
     const today = TODAY
@@ -553,7 +562,7 @@ export default function TasksPage() {
         />
       )}
       {creatingTask && (
-        <NewTaskPanel onSave={addTask} onClose={() => setCreatingTask(false)} />
+        <NewTaskPanel onSave={addTask} onClose={() => setCreatingTask(false)} teamMembers={teamMembers} />
       )}
     </>
   )

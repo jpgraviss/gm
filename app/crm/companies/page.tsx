@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { crmCompanies, crmContacts, deals, contracts, invoices, projects, crmActivities } from '@/lib/data'
+import { fetchCrmCompanies, fetchCrmContacts, fetchDeals, fetchContracts, fetchInvoices, fetchProjects, fetchCrmActivities } from '@/lib/supabase'
 import {
   formatCurrency, stageColors, serviceTypeColors, contractStatusColors,
   projectStatusColors, invoiceStatusColors,
@@ -16,11 +16,11 @@ import NewCompanyPanel, { type NewCompanyFormData } from '@/components/crm/NewCo
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
-import type { CRMCompany, CRMContact, CompanyStatus } from '@/lib/types'
+import type { CRMCompany, CRMContact, CompanyStatus, Deal, Contract, Invoice, Project, CRMActivity } from '@/lib/types'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight,
-  ExternalLink, TrendingUp, FolderKanban, Pencil, Tag,
+  ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2,
 } from 'lucide-react'
 
 // ─── Status colors ────────────────────────────────────────────────────────────
@@ -37,7 +37,7 @@ const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Cli
 
 // ─── Company Detail Panel ─────────────────────────────────────────────────────
 
-function CompanyPanel({ company, onClose, onEdit }: { company: CRMCompany; onClose: () => void; onEdit?: () => void }) {
+function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, contracts, invoices, projects, crmActivities }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void; crmContacts: CRMContact[]; deals: Deal[]; contracts: Contract[]; invoices: Invoice[]; projects: Project[]; crmActivities: CRMActivity[] }) {
   const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'activity'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
@@ -47,7 +47,7 @@ function CompanyPanel({ company, onClose, onEdit }: { company: CRMCompany; onClo
   const [newTag, setNewTag] = useState('')
   const [addingTag, setAddingTag] = useState(false)
   const [localActivities, setLocalActivities] = useState(
-    () => crmActivities.filter(a => a.companyId === company.id)
+    () => (crmActivities ?? []).filter(a => a.companyId === company.id)
   )
 
   function handleAddTag() {
@@ -144,6 +144,11 @@ function CompanyPanel({ company, onClose, onEdit }: { company: CRMCompany; onClo
               {onEdit && (
                 <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0" title="Edit company">
                   <Pencil size={15} className="text-white/60" />
+                </button>
+              )}
+              {onDelete && (
+                <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-500/20 flex-shrink-0" title="Delete company">
+                  <Trash2 size={15} className="text-red-400" />
                 </button>
               )}
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0">
@@ -658,18 +663,42 @@ export default function CompaniesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('All')
   const [selectedCompany, setSelectedCompany] = useState<CRMCompany | null>(null)
   const [editingCompany, setEditingCompany] = useState<CRMCompany | null>(null)
-  const [localCompanies, setLocalCompanies] = useState<CRMCompany[]>(crmCompanies)
+  const [localCompanies, setLocalCompanies] = useState<CRMCompany[]>([])
   const [creatingCompany, setCreatingCompany] = useState(false)
 
-  function handleEditCompany(updated: CRMCompany) {
+  const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [crmActivities, setCrmActivities] = useState<CRMActivity[]>([])
+
+  useEffect(() => {
+    fetch('/api/crm/companies')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
+      .catch(() => {/* keep static fallback */})
+    fetchCrmContacts().then(setCrmContacts)
+    fetchDeals().then(setDeals)
+    fetchContracts().then(setContracts)
+    fetchInvoices().then(setInvoices)
+    fetchProjects().then(setProjects)
+    fetchCrmActivities().then(setCrmActivities)
+  }, [])
+
+  async function handleEditCompany(updated: CRMCompany) {
     setLocalCompanies(prev => prev.map(c => c.id === updated.id ? updated : c))
     setEditingCompany(null)
     if (selectedCompany?.id === updated.id) setSelectedCompany(updated)
+    await fetch(`/api/crm/companies/${updated.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => {})
   }
 
-  function handleNewCompany(data: NewCompanyFormData) {
-    const newCompany: CRMCompany = {
-      id: `co-${Date.now()}`,
+  async function handleNewCompany(data: NewCompanyFormData) {
+    const payload: Omit<CRMCompany, 'id'> = {
       name: data.name,
       industry: data.industry,
       website: data.website || undefined,
@@ -686,8 +715,25 @@ export default function CompaniesPage() {
       createdDate: new Date().toISOString().split('T')[0],
       totalDealValue: data.proposal ? data.proposal.grandTotal : 0,
     }
-    setLocalCompanies(prev => [newCompany, ...prev])
+    try {
+      const res = await fetch('/api/crm/companies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const saved = await res.json()
+      setLocalCompanies(prev => [saved, ...prev])
+    } catch {
+      setLocalCompanies(prev => [{ ...payload, id: `co-${Date.now()}` } as CRMCompany, ...prev])
+    }
     setCreatingCompany(false)
+  }
+
+  async function handleDeleteCompany(id: string) {
+    if (!confirm('Delete this company? This action cannot be undone.')) return
+    setLocalCompanies(prev => prev.filter(c => c.id !== id))
+    if (selectedCompany?.id === id) setSelectedCompany(null)
+    await fetch(`/api/crm/companies/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
   const filtered = localCompanies.filter(c => {
@@ -822,7 +868,16 @@ export default function CompaniesPage() {
                       <span className="text-sm text-gray-600">{company.owner.split(' ')[0]}</span>
                     </td>
                     <td className="py-3 px-4">
-                      <ChevronRight size={14} className="text-gray-300" />
+                      <div className="flex items-center gap-1 justify-end">
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeleteCompany(company.id) }}
+                          className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
+                          title="Delete company"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                        <ChevronRight size={14} className="text-gray-300" />
+                      </div>
                     </td>
                   </tr>
                 )
@@ -842,8 +897,15 @@ export default function CompaniesPage() {
       {selectedCompany && (
         <CompanyPanel
           company={localCompanies.find(c => c.id === selectedCompany.id) ?? selectedCompany}
+          crmContacts={crmContacts}
+          deals={deals}
+          contracts={contracts}
+          invoices={invoices}
+          projects={projects}
+          crmActivities={crmActivities}
           onClose={() => setSelectedCompany(null)}
           onEdit={() => setEditingCompany(localCompanies.find(c => c.id === selectedCompany.id) ?? selectedCompany)}
+          onDelete={() => handleDeleteCompany(selectedCompany.id)}
         />
       )}
       {editingCompany && (

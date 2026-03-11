@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, User, Tag } from 'lucide-react'
-import { crmCompanies } from '@/lib/data'
-import type { ServiceType } from '@/lib/types'
+import { fetchCrmCompanies } from '@/lib/supabase'
+import type { ServiceType, CRMCompany } from '@/lib/types'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const
@@ -60,6 +60,9 @@ export default function NewTicketPanel({ onSave, onClose }: Props) {
     assignedTo: '',
     body: '',
   })
+  const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
+
+  useEffect(() => { fetchCrmCompanies().then(setCrmCompanies) }, [])
 
   const companyNames = crmCompanies.map(c => c.name)
 

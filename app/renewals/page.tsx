@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
-import { renewals as seedRenewals, crmContacts, contracts, proposals } from '@/lib/data'
+import { fetchContracts, fetchCrmContacts, fetchProposals } from '@/lib/supabase'
 import { formatCurrency, serviceTypeColors, renewalStatusColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import type { Renewal } from '@/lib/types'
+import type { Renewal, Contract, CRMContact, Proposal } from '@/lib/types'
 import {
   X, AlertTriangle, Clock, CheckCircle, Calendar, DollarSign,
   ChevronRight, User, FileText, TrendingUp, Mail, Phone,
@@ -40,10 +40,12 @@ function RenewalProposalSidebar({
   renewal,
   onClose,
   onSave,
+  contracts,
 }: {
   renewal: Renewal
   onClose: () => void
   onSave: (renewalId: string) => void
+  contracts: Contract[]
 }) {
   const contract = contracts.find(c => c.id === renewal.contractId || c.company === renewal.company)
   const [increasePercent, setIncreasePercent] = useState(5)
@@ -295,11 +297,17 @@ function RenewalPanel({
   onClose,
   onStartRenewal,
   onOpenProposal,
+  crmContacts,
+  contracts,
+  proposals,
 }: {
   renewal: Renewal
   onClose: () => void
   onStartRenewal: (id: string) => void
   onOpenProposal: (renewal: Renewal) => void
+  crmContacts: CRMContact[]
+  contracts: Contract[]
+  proposals: Proposal[]
 }) {
   const [tab, setTab] = useState<'overview' | 'history'>('overview')
 
@@ -514,10 +522,23 @@ function RenewalPanel({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function RenewalsPage() {
-  const [localRenewals, setLocalRenewals] = useState(seedRenewals)
+  const [localRenewals, setLocalRenewals] = useState<Renewal[]>([])
   const [selected, setSelected] = useState<Renewal | null>(null)
   const [renewalProposalFor, setRenewalProposalFor] = useState<Renewal | null>(null)
   const [showLogRenewal, setShowLogRenewal] = useState(false)
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
+  const [proposals, setProposals] = useState<Proposal[]>([])
+
+  useEffect(() => {
+    fetch('/api/renewals')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalRenewals(data) })
+      .catch(() => {})
+    fetchContracts().then(setContracts)
+    fetchCrmContacts().then(setCrmContacts)
+    fetchProposals().then(setProposals)
+  }, [])
 
   const sorted = [...localRenewals].sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry)
 
@@ -690,6 +711,9 @@ export default function RenewalsPage() {
           onClose={() => setSelected(null)}
           onStartRenewal={id => { startRenewal(id) }}
           onOpenProposal={r => { setSelected(null); setRenewalProposalFor(r) }}
+          crmContacts={crmContacts}
+          contracts={contracts}
+          proposals={proposals}
         />
       )}
       {renewalProposalFor && (
@@ -700,6 +724,7 @@ export default function RenewalsPage() {
             setLocalRenewals(prev => prev.map(r => r.id === renewalId ? { ...r, status: 'In Progress' as const } : r))
             setRenewalProposalFor(null)
           }}
+          contracts={contracts}
         />
       )}
       {showLogRenewal && (

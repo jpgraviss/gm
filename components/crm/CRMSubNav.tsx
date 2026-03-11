@@ -1,15 +1,24 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { crmCompanies, crmContacts } from '@/lib/data'
+import { fetchCrmCompanies, fetchCrmContacts } from '@/lib/supabase'
 
 export default function CRMSubNav() {
   const pathname = usePathname()
+  const [companyCount, setCompanyCount] = useState(0)
+  const [contactCount, setContactCount] = useState(0)
+
+  useEffect(() => {
+    fetchCrmCompanies().then(data => setCompanyCount(data.length))
+    fetchCrmContacts().then(data => setContactCount(data.length))
+  }, [])
+
   const tabs = [
     { label: 'Pipeline', href: '/crm/pipeline' },
-    { label: `Companies (${crmCompanies.length})`, href: '/crm/companies' },
-    { label: `Contacts (${crmContacts.length})`, href: '/crm/contacts' },
+    { label: `Companies (${companyCount})`, href: '/crm/companies' },
+    { label: `Contacts (${contactCount})`, href: '/crm/contacts' },
     { label: 'Sequences', href: '/crm/sequences' },
   ]
   return (

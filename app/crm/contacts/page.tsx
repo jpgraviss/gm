@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { crmContacts, crmCompanies, deals, contracts, projects, crmActivities } from '@/lib/data'
+import { fetchCrmContacts, fetchCrmCompanies, fetchDeals, fetchContracts, fetchProjects, fetchCrmActivities } from '@/lib/supabase'
 import {
   formatCurrency, stageColors, serviceTypeColors,
   contractStatusColors, projectStatusColors,
@@ -14,7 +14,7 @@ import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
-import type { CRMContact, ContactNote, ContactTask } from '@/lib/types'
+import type { CRMContact, ContactNote, ContactTask, CRMCompany, Deal, Contract, Project, CRMActivity } from '@/lib/types'
 import {
   X, Phone, Mail, User, Search, Plus, ScrollText,
   ChevronRight, Linkedin, StickyNote, CheckSquare,
@@ -264,7 +264,7 @@ function EditContactPanel({
 
 // ─── Contact Detail Panel ─────────────────────────────────────────────────────
 
-function ContactPanel({ contact, onClose, onEdit }: { contact: CRMContact; onClose: () => void; onEdit?: () => void }) {
+function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts, projects, crmActivities }: { contact: CRMContact; onClose: () => void; onEdit?: () => void; crmCompanies: CRMCompany[]; deals: Deal[]; contracts: Contract[]; projects: Project[]; crmActivities: CRMActivity[] }) {
   const [tab, setTab] = useState<'overview' | 'pipeline' | 'contracts' | 'notes' | 'tasks' | 'activity'>('overview')
   const [taskDone, setTaskDone] = useState<Set<string>>(
     new Set((contact.contactTasks ?? []).filter(t => t.completed).map(t => t.id))
@@ -280,7 +280,7 @@ function ContactPanel({ contact, onClose, onEdit }: { contact: CRMContact; onClo
   const [newTaskDue, setNewTaskDue] = useState('')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [localActivities, setLocalActivities] = useState(
-    () => crmActivities.filter(a => a.contactId === contact.id || a.companyId === contact.companyId)
+    () => (crmActivities ?? []).filter(a => a.contactId === contact.id || a.companyId === contact.companyId)
   )
   const [localTags, setLocalTags] = useState<string[]>(contact.tags ?? [])
   const [newTag, setNewTag] = useState('')
@@ -935,33 +935,56 @@ export default function ContactsPage() {
   const [search, setSearch] = useState('')
   const [selectedContact, setSelectedContact] = useState<CRMContact | null>(null)
   const [editingContact, setEditingContact] = useState<CRMContact | null>(null)
-  const [localContacts, setLocalContacts] = useState<CRMContact[]>(crmContacts)
+  const [localContacts, setLocalContacts] = useState<CRMContact[]>([])
   const [creatingContact, setCreatingContact] = useState(false)
 
-  function handleEditSave(updated: CRMContact) {
+  const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [crmActivities, setCrmActivities] = useState<CRMActivity[]>([])
+
+  useEffect(() => {
+    fetch('/api/crm/contacts')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalContacts(data) })
+      .catch(() => {/* keep static fallback */})
+    fetchCrmCompanies().then(setCrmCompanies)
+    fetchDeals().then(setDeals)
+    fetchContracts().then(setContracts)
+    fetchProjects().then(setProjects)
+    fetchCrmActivities().then(setCrmActivities)
+  }, [])
+
+  async function handleEditSave(updated: CRMContact) {
     setLocalContacts(prev => prev.map(c => c.id === updated.id ? updated : c))
     setEditingContact(null)
     if (selectedContact?.id === updated.id) setSelectedContact(updated)
+    await fetch(`/api/crm/contacts/${updated.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => {})
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     setLocalContacts(prev => prev.filter(c => c.id !== id))
     setEditingContact(null)
     if (selectedContact?.id === id) setSelectedContact(null)
+    await fetch(`/api/crm/contacts/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
-  function handleNewContact(data: NewContactFormData) {
+  async function handleNewContact(data: NewContactFormData) {
     const company = crmCompanies.find(c => c.name === data.companyName)
-    const newContact: CRMContact = {
-      id: `contact-${Date.now()}`,
+    const payload = {
       companyId: company?.id ?? `co-${Date.now()}`,
       companyName: data.companyName,
       firstName: data.firstName,
       lastName: data.lastName,
       fullName: `${data.firstName} ${data.lastName}`,
       title: data.title,
-      emails: [data.email].filter(Boolean) as string[],
-      phones: [data.phone, data.mobile].filter(Boolean) as string[],
+      emails: [data.email].filter(Boolean),
+      phones: [data.phone, data.mobile].filter(Boolean),
       linkedIn: data.linkedIn || undefined,
       website: data.website || undefined,
       isPrimary: false,
@@ -972,7 +995,17 @@ export default function ContactsPage() {
       contactTasks: [],
       createdDate: new Date().toISOString().split('T')[0],
     }
-    setLocalContacts(prev => [newContact, ...prev])
+    try {
+      const res = await fetch('/api/crm/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const saved = await res.json()
+      setLocalContacts(prev => [saved, ...prev])
+    } catch {
+      setLocalContacts(prev => [{ ...payload, id: `contact-${Date.now()}` } as CRMContact, ...prev])
+    }
     setCreatingContact(false)
   }
 
@@ -1122,6 +1155,11 @@ export default function ContactsPage() {
       {selectedContact && (
         <ContactPanel
           contact={localContacts.find(c => c.id === selectedContact.id) ?? selectedContact}
+          crmCompanies={crmCompanies}
+          deals={deals}
+          contracts={contracts}
+          projects={projects}
+          crmActivities={crmActivities}
           onClose={() => setSelectedContact(null)}
           onEdit={() => setEditingContact(localContacts.find(c => c.id === selectedContact.id) ?? selectedContact)}
         />

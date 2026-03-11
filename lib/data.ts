@@ -1,10 +1,3 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// lib/data.ts — intentionally empty
-//
-// All data is loaded from Supabase via the API routes.
-// Add records through the application UI; they persist in the database.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import type {
   Deal,
   Proposal,
@@ -23,27 +16,472 @@ import type {
   TimeEntry,
 } from './types'
 
-export const teamMembers:        TeamMember[]        = []
-export const deals:              Deal[]              = []
-export const proposals:          Proposal[]          = []
-export const contracts:          Contract[]          = []
-export const invoices:           Invoice[]           = []
-export const projects:           Project[]           = []
-export const maintenanceRecords: MaintenanceRecord[] = []
-export const renewals:           Renewal[]           = []
-export const activityFeed:       ActivityItem[]      = []
-export const revenueByMonth:     RevenueMonth[]      = []
-export const crmContacts:        CRMContact[]        = []
-export const crmCompanies:       CRMCompany[]        = []
-export const crmActivities:      CRMActivity[]       = []
-export const appTasks:           AppTask[]           = []
-export const timeEntries:        TimeEntry[]         = []
+export const teamMembers: TeamMember[] = [
+  { id: 't0', name: 'Jonathan Graviss', email: 'jonathan@gravissmarketing.com', role: 'Super Admin', unit: 'Leadership/Admin', initials: 'JG' },
+  { id: 't6', name: 'JG Graviss', email: 'jgraviss@gravissmarketing.com', role: 'Super Admin', unit: 'Leadership/Admin', initials: 'JG' },
+]
+
+// ─── Trailhead Media ──────────────────────────────────────────────────────────
+
+export const deals: Deal[] = [
+  {
+    id: 'deal_th',
+    company: 'Trailhead Media, LLC',
+    stage: 'Closed Won',
+    value: 7800,
+    serviceType: 'Website',
+    closeDate: '2025-07-01',
+    assignedRep: 'Jonathan Graviss',
+    probability: 100,
+    lastActivity: '2025-07-01',
+    contact: { id: 'contact_th', name: 'Trailhead Media', email: '', phone: '', title: '' },
+    notes: ['Custom website development and management — $650/month, 12-month agreement effective July 1, 2025'],
+  },
+  { id: 'deal_api',     company: 'Associated Posters Inc.',               stage: 'Closed Won',    value: 11300, serviceType: 'Custom',        closeDate: '2025-08-01', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2025-08-01', contact: { id: 'contact_api',     name: 'Tom Briggs',          email: '', phone: '', title: 'President' },                  notes: ['API 25/26'] },
+  { id: 'deal_nomadic', company: 'Nomadic Outdoor Media',                  stage: 'Closed Won',    value:  1800, serviceType: 'Custom',        closeDate: '2025-08-01', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2025-08-01', contact: { id: 'contact_nomadic', name: 'Wes Carmichael',       email: '', phone: '', title: 'Founder' },                    notes: ['Nomadic Outdoor 25/26'] },
+  { id: 'deal_cap',     company: 'Capital Outdoor Advertising',            stage: 'Closed Won',    value:  5100, serviceType: 'Custom',        closeDate: '2025-08-22', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2025-08-22', contact: { id: 'contact_cap',     name: 'Greg Levi',           email: '', phone: '', title: 'Owner' },                      notes: ['Capital Outdoor 25/26'] },
+  { id: 'deal_opsiq',   company: 'OpsIQ',                                  stage: 'Closed Won',    value: 13500, serviceType: 'Custom',        closeDate: '2025-08-22', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2025-08-22', contact: { id: 'contact_opsiq',   name: 'Dana Brooks',         email: '', phone: '', title: 'CEO' },                        notes: ['OpsIQ 25/26'] },
+  { id: 'deal_stpete',  company: 'St. Pete Chamber',                       stage: 'Closed Won',    value: 10000, serviceType: 'Custom',        closeDate: '2025-09-23', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2025-09-23', contact: { id: 'contact_stpete',  name: 'Sarah Hill',          email: '', phone: '', title: 'President/CEO' },               notes: ['St. Pete Chamber 25/26'] },
+  { id: 'deal_turbo',   company: 'TurboBrakes LKN',                        stage: 'Closed Won',    value:  6500, serviceType: 'Website',       closeDate: '2025-09-30', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2025-09-30', contact: { id: 'contact_turbo',   name: 'Paul Gentry',         email: '', phone: '', title: 'Owner' },                      notes: [] },
+  { id: 'deal_lod',     company: 'Lead Outdoor Development',               stage: 'Closed Won',    value:  6000, serviceType: 'Custom',        closeDate: '2025-09-30', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2025-09-30', contact: { id: 'contact_lod',     name: 'Tim Larson',          email: '', phone: '', title: 'CEO' },                        notes: ['Lead Outdoor Development 25'] },
+  { id: 'deal_renfroe', company: 'Renfroe Media',                          stage: 'Closed Won',    value: 15800, serviceType: 'Custom',        closeDate: '2025-10-16', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2025-10-16', contact: { id: 'contact_renfroe', name: 'Mike Renfroe',        email: '', phone: '', title: 'President' },                  notes: ['Renfroe Media 25/26'] },
+  { id: 'deal_adco',    company: 'ADCO',                                   stage: 'Closed Won',    value:  1200, serviceType: 'Custom',        closeDate: '2025-10-20', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2025-10-20', contact: { id: 'contact_adco',    name: 'Pat Morgan',          email: '', phone: '', title: 'Owner' },                      notes: ['ADCO 25/26'] },
+  { id: 'deal_formetco',company: 'Formetco',                               stage: 'Closed Won',    value: 44400, serviceType: 'Website',       closeDate: '2025-12-16', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2025-12-16', contact: { id: 'contact_formetco',name: 'Gary Patterson',      email: '', phone: '', title: 'VP Marketing' },               notes: ["Formetco '26 - Web + Maintenance"] },
+  { id: 'deal_bass',    company: 'BASS LTD',                               stage: 'Closed Won',    value:  2800, serviceType: 'Custom',        closeDate: '2026-02-04', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2026-02-04', contact: { id: 'contact_bass',    name: 'Robert Bass',         email: '', phone: '', title: 'Managing Director' },           notes: ['BASS LTD 26/27'] },
+  { id: 'deal_sdd',     company: 'Skydragon Designs',                      stage: 'Closed Won',    value:  9450, serviceType: 'Custom',        closeDate: '2026-01-07', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2026-01-07', contact: { id: 'contact_sdd',     name: 'Chen Wei',            email: '', phone: '', title: 'Creative Director' },           notes: ['Skydragon Designs 2/1/26'] },
+  { id: 'deal_oaag',    company: 'OAAG',                                   stage: 'Closed Won',    value:  2000, serviceType: 'Website',       closeDate: '2026-03-09', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2026-03-09', contact: { id: 'contact_oaag',    name: 'Karen Hollis',        email: '', phone: '', title: 'Executive Director' },          notes: ['OAAG - 2026 Website Redesign + Hosting'] },
+  { id: 'deal_pp',      company: 'Pontoon Pros',                           stage: 'Closed Won',    value:   750, serviceType: 'SEO',           closeDate: '2026-03-09', assignedRep: 'Jonathan Graviss', probability: 100, lastActivity: '2026-03-09', contact: { id: 'contact_pp',      name: 'Derek Marsh',         email: '', phone: '', title: 'Owner' },                      notes: ['Pontoon Pros - SEO + Website Maintenance'] },
+  // Closed Lost
+  { id: 'deal_dailey',  company: 'Dailey Billboards',                      stage: 'Closed Lost',   value:     0, serviceType: 'Custom',        closeDate: '2025-09-30', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2025-09-30', contact: { id: 'contact_dailey',  name: 'Frank Dailey',        email: '', phone: '', title: 'Owner' },                      notes: ['Dailey Billboards 26/27'] },
+  { id: 'deal_mhom',    company: 'MH Outdoor Media',                       stage: 'Closed Lost',   value:     0, serviceType: 'Custom',        closeDate: '2025-09-30', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2025-09-30', contact: { id: 'contact_mhom',    name: 'Mark Harris',         email: '', phone: '', title: 'Owner' },                      notes: ['MH Outdoor Media 26/27'] },
+  { id: 'deal_dsw',     company: 'DSW Signs',                              stage: 'Closed Lost',   value: 15500, serviceType: 'Custom',        closeDate: '2025-09-24', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2025-09-24', contact: { id: 'contact_dsw',     name: 'Dan Whitmore',        email: '', phone: '', title: 'President' },                  notes: ['DSW Signs 26/27'] },
+  { id: 'deal_foaa',    company: 'Florida Outdoor Advertising Association', stage: 'Closed Lost',   value:  4500, serviceType: 'Custom',        closeDate: '2025-10-09', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2025-10-09', contact: { id: 'contact_foaa',    name: 'Maria Santos',        email: '', phone: '', title: 'Executive Director' },          notes: ['Florida Outdoor Advertising Association 25/26'] },
+  { id: 'deal_signdash',company: 'SignDash',                               stage: 'Closed Lost',   value: 13500, serviceType: 'Custom',        closeDate: '2025-10-13', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2025-10-13', contact: { id: 'contact_signdash',name: 'Ryan Nash',           email: '', phone: '', title: 'CEO' },                        notes: ['SignDash 25/26'] },
+  { id: 'deal_edge',    company: 'Edge Consulting',                        stage: 'Closed Lost',   value: 15500, serviceType: 'Custom',        closeDate: '2025-10-13', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2025-10-13', contact: { id: 'contact_edge',    name: 'Chris Walker',        email: '', phone: '', title: 'Principal' },                   notes: ['Edge Consulting 26/27'] },
+  { id: 'deal_logan',   company: 'Logan Outdoor Advertising',              stage: 'Closed Lost',   value:     0, serviceType: 'Custom',        closeDate: '2025-10-15', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2025-10-15', contact: { id: 'contact_logan',   name: 'Brenda Logan',        email: '', phone: '', title: 'President' },                  notes: [] },
+  { id: 'deal_tdo',     company: 'TDO Advertising',                        stage: 'Closed Lost',   value: 15500, serviceType: 'Custom',        closeDate: '2025-10-10', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2025-10-10', contact: { id: 'contact_tdo',     name: 'Amy Chen',            email: '', phone: '', title: 'Director' },                    notes: ['TDO Advertising 25/26'] },
+  { id: 'deal_triou',   company: 'Triou Marketing',                        stage: 'Closed Lost',   value: 12500, serviceType: 'Custom',        closeDate: '2026-02-01', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2026-02-01', contact: { id: 'contact_triou',   name: 'Dana Triou',          email: '', phone: '', title: 'President' },                  notes: ['Triou Marketing 25/26'] },
+  { id: 'deal_avant',   company: 'Avant Outdoor Advertising',              stage: 'Closed Lost',   value: 15500, serviceType: 'Custom',        closeDate: '2026-02-01', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2026-02-01', contact: { id: 'contact_avant',   name: 'Rick Avant',          email: '', phone: '', title: 'President' },                  notes: ['Avant Outdoor Advertising - 26/27'] },
+  { id: 'deal_choice',  company: 'Choice Media',                           stage: 'Closed Lost',   value: 15500, serviceType: 'Custom',        closeDate: '2026-02-01', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2026-02-01', contact: { id: 'contact_choice',  name: 'Ray Holt',            email: '', phone: '', title: 'VP Sales' },                    notes: ['Choice Media 26/27'] },
+  { id: 'deal_hunt',    company: 'Huntington Billboards',                  stage: 'Closed Lost',   value: 11000, serviceType: 'Custom',        closeDate: '2026-02-01', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2026-02-01', contact: { id: 'contact_hunt',    name: 'Dave Hunt',           email: '', phone: '', title: 'President' },                  notes: ['Huntington Billboard'] },
+  { id: 'deal_foa',     company: 'Fairmount Outdoor Advertising',          stage: 'Closed Lost',   value: 17400, serviceType: 'Custom',        closeDate: '2026-02-23', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2026-02-23', contact: { id: 'contact_foa',     name: 'Ed Whitmore',         email: '', phone: '', title: 'VP Sales' },                    notes: ['Fairmount Outdoor Advertising 26/27'] },
+  { id: 'deal_vo',      company: 'View Outdoor',                           stage: 'Closed Lost',   value:  2450, serviceType: 'Custom',        closeDate: '2026-02-23', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2026-02-23', contact: { id: 'contact_vo',      name: 'Ashley Turner',       email: '', phone: '', title: 'VP Business Development' },     notes: ['View Outdoor - Sales Training 2/26'] },
+  { id: 'deal_bj',      company: 'Billboard Joe',                          stage: 'Closed Lost',   value: 16800, serviceType: 'Custom',        closeDate: '2026-02-23', assignedRep: 'Jonathan Graviss', probability:   0, lastActivity: '2026-02-23', contact: { id: 'contact_bj',      name: 'Joe Martinez',        email: '', phone: '', title: 'Owner' },                      notes: ['Billboard Joe 26/27'] },
+  // Proposals
+  { id: 'deal_fg',      company: 'Franklin Graphics',                      stage: 'Proposal Sent', value: 16800, serviceType: 'Website',       closeDate: '2026-03-01', assignedRep: 'Jonathan Graviss', probability:  60, lastActivity: '2026-03-01', contact: { id: 'contact_fg',      name: 'Nick Franklin',       email: '', phone: '', title: 'Owner' },                      notes: ['Franklin Graphics - E-Commerce Site'] },
+  { id: 'deal_oohs',    company: 'The OOH Squad',                          stage: 'Proposal Sent', value:  8100, serviceType: 'Custom',        closeDate: '2026-02-01', assignedRep: 'Jonathan Graviss', probability:  60, lastActivity: '2026-02-01', contact: { id: 'contact_oohs',    name: 'Melissa Thorne',      email: '', phone: '', title: 'Co-Founder' },                  notes: ['The OOH Squad - 26/27'] },
+  { id: 'deal_apar',    company: 'Apparatix',                              stage: 'Proposal Sent', value: 29400, serviceType: 'Website',       closeDate: '2026-01-03', assignedRep: 'Jonathan Graviss', probability:  60, lastActivity: '2026-01-03', contact: { id: 'contact_apar',    name: 'James Conroy',        email: '', phone: '', title: 'CEO' },                        notes: ['Apparatix - Website Maintenance Transfer'] },
+  { id: 'deal_rdm',     company: 'Red Diamond Media Group',                stage: 'Proposal Sent', value:  9300, serviceType: 'SEO',           closeDate: '2026-04-01', assignedRep: 'Jonathan Graviss', probability:  60, lastActivity: '2026-04-01', contact: { id: 'contact_rdm',     name: 'Lisa Park',           email: '', phone: '', title: 'VP Sales' },                    notes: ['Red Diamond Media Group - SEO / Consulting'] },
+  { id: 'deal_dkoi',    company: 'DKOI',                                   stage: 'Proposal Sent', value: 21000, serviceType: 'Custom',        closeDate: '2026-04-01', assignedRep: 'Jonathan Graviss', probability:  60, lastActivity: '2026-04-01', contact: { id: 'contact_dkoi',    name: 'Sandra Kim',          email: '', phone: '', title: 'Director of Operations' },       notes: ['DKOI 26/27'] },
+  { id: 'deal_rsm',     company: 'Reeves Shaw Media',                      stage: 'Proposal Sent', value: 14400, serviceType: 'Custom',        closeDate: '2026-04-01', assignedRep: 'Jonathan Graviss', probability:  60, lastActivity: '2026-04-01', contact: { id: 'contact_rsm',     name: 'Brian Reeves',        email: '', phone: '', title: 'President' },                  notes: ['Reeves Shaw Media - New Deal'] },
+  // Negotiation
+  { id: 'deal_scb',     company: 'Steel City Billboards',                  stage: 'Contract Sent', value: 27000, serviceType: 'Custom',        closeDate: '2026-02-01', assignedRep: 'Jonathan Graviss', probability:  80, lastActivity: '2026-02-01', contact: { id: 'contact_scb',     name: 'Tom Ferraro',         email: '', phone: '', title: 'General Manager' },              notes: ['Steel City Billboards 26/27'] },
+  { id: 'deal_mr',      company: 'Media Resources',                        stage: 'Contract Sent', value: 30000, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  80, lastActivity: '2026-01-01', contact: { id: 'contact_mr',      name: 'Alan Mead',           email: '', phone: '', title: 'CEO' },                        notes: ['Media Resources 25/26'] },
+  { id: 'deal_jr',      company: 'JR Promotions',                          stage: 'Contract Sent', value: 15700, serviceType: 'Custom',        closeDate: '2026-04-01', assignedRep: 'Jonathan Graviss', probability:  80, lastActivity: '2026-04-01', contact: { id: 'contact_jr',      name: 'Jake Rodriguez',      email: '', phone: '', title: 'President' },                  notes: ['JR Promotions 25/26'] },
+  { id: 'deal_scpc',    company: 'South Carolina Pickleball Courts',       stage: 'Contract Sent', value:  8800, serviceType: 'Website',       closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  80, lastActivity: '2026-01-01', contact: { id: 'contact_scpc',    name: 'Matt Collins',        email: '', phone: '', title: 'Owner' },                      notes: [] },
+  { id: 'deal_uplp',    company: 'Upstate Pool Liner Pros',                stage: 'Contract Sent', value:  8800, serviceType: 'Website',       closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  80, lastActivity: '2026-01-01', contact: { id: 'contact_uplp',    name: 'Kyle Burns',          email: '', phone: '', title: 'President' },                  notes: [] },
+  // Leads / Initial Outreach
+  { id: 'deal_bmv',     company: 'BMV Service Pro',                        stage: 'Lead',          value: 18900, serviceType: 'Custom',        closeDate: '2026-03-06', assignedRep: 'Jonathan Graviss', probability:  20, lastActivity: '2026-03-06', contact: { id: 'contact_bmv',     name: 'Victor Mendes',       email: '', phone: '', title: 'Owner' },                      notes: ['BMV Service - SEO / Google Ads'] },
+  { id: 'deal_mashburn',company: 'Mashburn Outdoor',                       stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_mashburn',name: 'Bill Mashburn',       email: '', phone: '', title: 'CEO' },                        notes: ['Mashburn Outdoor 26/27'] },
+  { id: 'deal_tyler',   company: 'Tyler Media',                            stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_tyler',   name: 'Steve Tyler',         email: '', phone: '', title: 'CEO' },                        notes: ['Tyler Media 26/27'] },
+  { id: 'deal_hughes',  company: 'Hughes Outdoor Media',                   stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_hughes',  name: 'Pete Hughes',         email: '', phone: '', title: 'President' },                  notes: ['hughesoutdoormedia 26/27'] },
+  { id: 'deal_oaktree', company: 'Oaktree Outdoor Advertising',            stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_oaktree', name: 'Craig Morton',        email: '', phone: '', title: 'VP Sales' },                    notes: ['Oaktree Outdoor Advertising 26/27'] },
+  { id: 'deal_smg',     company: 'Street Media Group',                     stage: 'Lead',          value:     0, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_smg',     name: 'Diane Strickland',    email: '', phone: '', title: 'President' },                  notes: ['Street Media Group - 26/27'] },
+  { id: 'deal_ddi',     company: 'DDI Media',                              stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_ddi',     name: 'Carlos Diaz',         email: '', phone: '', title: 'General Manager' },              notes: ['DDI Media 26/27'] },
+  { id: 'deal_azalea',  company: 'Azalea Outdoor',                         stage: 'Lead',          value:     0, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_azalea',  name: 'Sandy Bloom',         email: '', phone: '', title: 'Owner' },                      notes: ['Azalea Outdoor 26/27'] },
+  { id: 'deal_camel',   company: 'Camel City Posters',                     stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_camel',   name: 'Greg Camel',          email: '', phone: '', title: 'President' },                  notes: ['Camel City Posters 26/27'] },
+  { id: 'deal_harkey',  company: 'Harkey Media',                           stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_harkey',  name: 'Ron Harkey',          email: '', phone: '', title: 'CEO' },                        notes: ['Harkey Media 26/27'] },
+  { id: 'deal_derose',  company: 'DeRose Displays',                        stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_derose',  name: 'Tony DeRose',         email: '', phone: '', title: 'Owner' },                      notes: ['DeRose Displays 26/27'] },
+  { id: 'deal_doa',     company: 'Digital Outdoor Advertising',            stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_doa',     name: 'Phil Norton',         email: '', phone: '', title: 'VP Operations' },               notes: ['Digital Outdoor Advertising 26/27'] },
+  { id: 'deal_cw',      company: 'Colorado West',                          stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_cw',      name: 'Dave Westbrook',      email: '', phone: '', title: 'GM' },                         notes: ['Colorado West 26/27'] },
+  { id: 'deal_burelz',  company: 'Burelz Billboards',                      stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_burelz',  name: 'Sam Burelz',          email: '', phone: '', title: 'Owner' },                      notes: ['Burelz Billboards 26/27'] },
+  { id: 'deal_porlier', company: 'Porlier Outdoor',                        stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_porlier', name: 'Jean Porlier',        email: '', phone: '', title: 'President' },                  notes: ['Porlier Outdoor 26/27'] },
+  { id: 'deal_comstor', company: 'Comstor Outdoor',                        stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_comstor', name: 'Nate Combs',          email: '', phone: '', title: 'VP Marketing' },               notes: ['Comstor Outdoor 26/27'] },
+  { id: 'deal_classic', company: 'Classic Outdoor',                        stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_classic', name: 'Earl Simmons',        email: '', phone: '', title: 'Owner' },                      notes: ['Classic Outdoor 26/27'] },
+  { id: 'deal_carlson', company: 'Carlson Sign',                           stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_carlson', name: 'Brad Carlson',        email: '', phone: '', title: 'President' },                  notes: ['Carlson Sign 26/27'] },
+  { id: 'deal_coast',   company: 'Coast Outdoor',                          stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_coast',   name: 'Todd Hooper',         email: '', phone: '', title: 'GM' },                         notes: ['Coast Outdoor 25/26'] },
+  { id: 'deal_compass', company: 'Compass Outdoor Media',                  stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_compass', name: 'Linda Shore',         email: '', phone: '', title: 'VP Operations' },               notes: ['Compass Outdoor Media 26/27'] },
+  { id: 'deal_cco',     company: 'Circle City Outdoor',                    stage: 'Lead',          value: 15500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_cco',     name: 'Bob Ring',            email: '', phone: '', title: 'President' },                  notes: ['Circle City Outdoor 25/26'] },
+  { id: 'deal_cooa',    company: 'Coastal Outdoor Advertising',            stage: 'Lead',          value: 13500, serviceType: 'Custom',        closeDate: '2026-01-01', assignedRep: 'Jonathan Graviss', probability:  10, lastActivity: '2026-01-01', contact: { id: 'contact_cooa',    name: 'Frank Shore',         email: '', phone: '', title: 'Owner' },                      notes: ['Coastal Outdoor Advertising 25/26'] },
+]
+
+export const proposals: Proposal[] = [
+  {
+    id: 'prop_th',
+    dealId: 'deal_th',
+    company: 'Trailhead Media, LLC',
+    status: 'Accepted',
+    value: 7800,
+    serviceType: 'Website',
+    createdDate: '2025-06-15',
+    sentDate: '2025-06-15',
+    viewedDate: '2025-06-16',
+    respondedDate: '2025-06-20',
+    assignedRep: 'Jonathan Graviss',
+    items: [
+      {
+        id: 'item_th_1',
+        description: 'Custom Website Development & Management — Monthly Retainer',
+        type: 'recurring',
+        quantity: 12,
+        unitPrice: 650,
+        total: 7800,
+      },
+    ],
+    approvedBy: 'Jonathan Graviss',
+    approvedDate: '2025-06-15',
+  },
+]
+
+export const contracts: Contract[] = [
+  {
+    id: 'con_th',
+    proposalId: 'prop_th',
+    company: 'Trailhead Media, LLC',
+    status: 'Fully Executed',
+    value: 650,
+    billingStructure: '$650/month',
+    startDate: '2025-07-01',
+    duration: 12,
+    renewalDate: '2026-07-01',
+    assignedRep: 'Jonathan Graviss',
+    serviceType: 'Website',
+    clientSigned: '2025-06-25',
+    internalSigned: '2025-06-25',
+  },
+]
+
+export const invoices: Invoice[] = [
+  { id: 'inv_th_1',  contractId: 'con_th', company: 'Trailhead Media, LLC', amount: 650, status: 'Paid',   issuedDate: '2025-07-01', dueDate: '2025-07-01', paidDate: '2025-07-05',  serviceType: 'Website' },
+  { id: 'inv_th_2',  contractId: 'con_th', company: 'Trailhead Media, LLC', amount: 650, status: 'Paid',   issuedDate: '2025-08-01', dueDate: '2025-08-01', paidDate: '2025-08-06',  serviceType: 'Website' },
+  { id: 'inv_th_3',  contractId: 'con_th', company: 'Trailhead Media, LLC', amount: 650, status: 'Paid',   issuedDate: '2025-09-01', dueDate: '2025-09-01', paidDate: '2025-09-04',  serviceType: 'Website' },
+  { id: 'inv_th_4',  contractId: 'con_th', company: 'Trailhead Media, LLC', amount: 650, status: 'Paid',   issuedDate: '2025-10-01', dueDate: '2025-10-01', paidDate: '2025-10-03',  serviceType: 'Website' },
+  { id: 'inv_th_5',  contractId: 'con_th', company: 'Trailhead Media, LLC', amount: 650, status: 'Paid',   issuedDate: '2025-11-01', dueDate: '2025-11-01', paidDate: '2025-11-07',  serviceType: 'Website' },
+  { id: 'inv_th_6',  contractId: 'con_th', company: 'Trailhead Media, LLC', amount: 650, status: 'Paid',   issuedDate: '2025-12-01', dueDate: '2025-12-01', paidDate: '2025-12-05',  serviceType: 'Website' },
+  { id: 'inv_th_7',  contractId: 'con_th', company: 'Trailhead Media, LLC', amount: 650, status: 'Paid',   issuedDate: '2026-01-01', dueDate: '2026-01-01', paidDate: '2026-01-06',  serviceType: 'Website' },
+  { id: 'inv_th_8',  contractId: 'con_th', company: 'Trailhead Media, LLC', amount: 650, status: 'Paid',   issuedDate: '2026-02-01', dueDate: '2026-02-01', paidDate: '2026-02-04',  serviceType: 'Website' },
+  { id: 'inv_th_9',  contractId: 'con_th', company: 'Trailhead Media, LLC', amount: 650, status: 'Sent',   issuedDate: '2026-03-01', dueDate: '2026-03-01',                          serviceType: 'Website' },
+]
+
+export const projects: Project[] = [
+  {
+    id: 'proj_th',
+    contractId: 'con_th',
+    company: 'Trailhead Media, LLC',
+    serviceType: 'Website',
+    status: 'In Maintenance',
+    startDate: '2025-07-01',
+    launchDate: '2025-07-01',
+    maintenanceStartDate: '2025-07-01',
+    assignedTeam: ['Jonathan Graviss'],
+    progress: 100,
+    milestones: [
+      { id: 'ms_th_1', name: 'Initial Setup & Launch', dueDate: '2025-07-01', completed: true },
+      { id: 'ms_th_2', name: 'Ongoing Maintenance Active', dueDate: '2025-07-01', completed: true },
+    ],
+    tasks: [],
+  },
+]
+
+export const maintenanceRecords: MaintenanceRecord[] = [
+  {
+    id: 'mr_th',
+    company: 'Trailhead Media, LLC',
+    serviceType: 'Website',
+    startDate: '2025-07-01',
+    monthlyFee: 650,
+    contractDuration: 12,
+    cancellationWindow: 30,
+    status: 'Active',
+    nextBillingDate: '2026-04-01',
+  },
+]
+
+export const renewals: Renewal[] = [
+  {
+    id: 'ren_th',
+    company: 'Trailhead Media, LLC',
+    contractId: 'con_th',
+    expirationDate: '2026-06-30',
+    renewalValue: 650,
+    assignedRep: 'Jonathan Graviss',
+    status: 'Upcoming',
+    daysUntilExpiry: 113,
+    serviceType: 'Website',
+  },
+]
+
+export const activityFeed: ActivityItem[] = [
+  { id: 'act_th_1', type: 'contract', description: 'Service Agreement fully executed — $650/month', company: 'Trailhead Media, LLC', timestamp: '2025-07-01', user: 'Jonathan Graviss' },
+  { id: 'act_th_2', type: 'invoice',  description: 'Invoice paid — $650 (July 2025)',              company: 'Trailhead Media, LLC', timestamp: '2025-07-05', user: 'Jonathan Graviss' },
+  { id: 'act_th_3', type: 'invoice',  description: 'Invoice paid — $650 (March 2026)',              company: 'Trailhead Media, LLC', timestamp: '2026-03-01', user: 'Jonathan Graviss' },
+]
+
+export const revenueByMonth: RevenueMonth[] = [
+  { month: 'Jul 2025', revenue: 650, recurring: 650 },
+  { month: 'Aug 2025', revenue: 650, recurring: 650 },
+  { month: 'Sep 2025', revenue: 650, recurring: 650 },
+  { month: 'Oct 2025', revenue: 650, recurring: 650 },
+  { month: 'Nov 2025', revenue: 650, recurring: 650 },
+  { month: 'Dec 2025', revenue: 650, recurring: 650 },
+  { month: 'Jan 2026', revenue: 650, recurring: 650 },
+  { month: 'Feb 2026', revenue: 650, recurring: 650 },
+  { month: 'Mar 2026', revenue: 650, recurring: 650 },
+]
+
+// ─── CRM ──────────────────────────────────────────────────────────────────────
+
+// Helper for building contacts
+function mkContact(
+  id: string, companyId: string, companyName: string,
+  firstName: string, lastName: string, title: string,
+  lifecycleStage: 'lead' | 'opportunity' | 'client' | 'other',
+  tags: string[], createdDate: string, lastActivity: string,
+): CRMContact {
+  return {
+    id, companyId, companyName, firstName, lastName,
+    fullName: `${firstName} ${lastName}`,
+    title, emails: [], phones: [], isPrimary: true,
+    lifecycleStage, owner: 'Jonathan Graviss',
+    tags, contactNotes: [], contactTasks: [],
+    createdDate, lastActivity,
+  }
+}
+
+export const crmContacts: CRMContact[] = [
+  {
+    id: 'contact_th',
+    companyId: 'comp_th',
+    companyName: 'Trailhead Media, LLC',
+    firstName: 'Trailhead',
+    lastName: 'Media',
+    fullName: 'Trailhead Media',
+    title: 'Client',
+    emails: [],
+    phones: [],
+    isPrimary: true,
+    lifecycleStage: 'client',
+    owner: 'Jonathan Graviss',
+    tags: ['Signed Client', 'Website'],
+    contactNotes: [],
+    contactTasks: [],
+    createdDate: '2025-07-01',
+    lastActivity: '2026-03-01',
+  },
+  // ── Closed Won / Active Clients ──────────────────────────────────────────
+  mkContact('contact_api',      'comp_api',      'Associated Posters Inc.',               'Tom',     'Briggs',      'President',              'client',      ['Signed Client'],          '2025-07-15', '2025-08-01'),
+  mkContact('contact_nomadic',  'comp_nomadic',  'Nomadic Outdoor Media',                 'Wes',     'Carmichael',  'Founder',                'client',      ['Signed Client'],          '2025-07-20', '2025-08-01'),
+  mkContact('contact_cap',      'comp_cap',      'Capital Outdoor Advertising',           'Greg',    'Levi',        'Owner',                  'client',      ['Signed Client'],          '2025-08-01', '2025-08-22'),
+  mkContact('contact_opsiq',    'comp_opsiq',    'OpsIQ',                                 'Dana',    'Brooks',      'CEO',                    'client',      ['Signed Client'],          '2025-08-01', '2025-08-22'),
+  mkContact('contact_stpete',   'comp_stpete',   'St. Pete Chamber',                      'Sarah',   'Hill',        'President/CEO',           'client',      ['Signed Client'],          '2025-09-01', '2025-09-23'),
+  mkContact('contact_turbo',    'comp_turbo',    'TurboBrakes LKN',                       'Paul',    'Gentry',      'Owner',                  'client',      ['Signed Client', 'Website'], '2025-09-01', '2025-09-30'),
+  mkContact('contact_lod',      'comp_lod',      'Lead Outdoor Development',              'Tim',     'Larson',      'CEO',                    'client',      ['Signed Client'],          '2025-09-01', '2025-09-30'),
+  mkContact('contact_renfroe',  'comp_renfroe',  'Renfroe Media',                         'Mike',    'Renfroe',     'President',              'client',      ['Signed Client'],          '2025-09-15', '2025-10-16'),
+  mkContact('contact_adco',     'comp_adco',     'ADCO',                                  'Pat',     'Morgan',      'Owner',                  'client',      ['Signed Client'],          '2025-09-20', '2025-10-20'),
+  mkContact('contact_formetco', 'comp_formetco', 'Formetco',                              'Gary',    'Patterson',   'VP Marketing',           'client',      ['Signed Client', 'Website'], '2025-11-01', '2025-12-16'),
+  mkContact('contact_bass',     'comp_bass',     'BASS LTD',                              'Robert',  'Bass',        'Managing Director',      'client',      ['Signed Client'],          '2026-01-10', '2026-02-04'),
+  mkContact('contact_sdd',      'comp_sdd',      'Skydragon Designs',                     'Chen',    'Wei',         'Creative Director',      'client',      ['Signed Client'],          '2025-12-01', '2026-01-07'),
+  mkContact('contact_oaag',     'comp_oaag',     'OAAG',                                  'Karen',   'Hollis',      'Executive Director',     'client',      ['Signed Client', 'Website'], '2026-02-01', '2026-03-09'),
+  mkContact('contact_pp',       'comp_pp',       'Pontoon Pros',                          'Derek',   'Marsh',       'Owner',                  'client',      ['Signed Client', 'SEO'],   '2026-02-01', '2026-03-09'),
+  // ── Active Pipeline – Proposals ──────────────────────────────────────────
+  mkContact('contact_fg',       'comp_fg',       'Franklin Graphics',                     'Nick',    'Franklin',    'Owner',                  'opportunity', ['Proposal', 'Website'],    '2026-01-15', '2026-03-01'),
+  mkContact('contact_oohs',     'comp_oohs',     'The OOH Squad',                         'Melissa', 'Thorne',      'Co-Founder',             'opportunity', ['Proposal'],               '2025-12-10', '2026-02-01'),
+  mkContact('contact_apar',     'comp_apar',     'Apparatix',                             'James',   'Conroy',      'CEO',                    'opportunity', ['Proposal', 'Website'],    '2025-11-15', '2026-01-03'),
+  mkContact('contact_rdm',      'comp_rdm',      'Red Diamond Media Group',               'Lisa',    'Park',        'VP Sales',               'opportunity', ['Proposal', 'SEO'],        '2026-02-10', '2026-04-01'),
+  mkContact('contact_dkoi',     'comp_dkoi',     'DKOI',                                  'Sandra',  'Kim',         'Director of Operations', 'opportunity', ['Proposal'],               '2026-02-15', '2026-04-01'),
+  mkContact('contact_rsm',      'comp_rsm',      'Reeves Shaw Media',                     'Brian',   'Reeves',      'President',              'opportunity', ['Proposal'],               '2026-02-20', '2026-04-01'),
+  // ── Active Pipeline – Negotiation ────────────────────────────────────────
+  mkContact('contact_scb',      'comp_scb',      'Steel City Billboards',                 'Tom',     'Ferraro',     'General Manager',        'opportunity', ['Negotiation'],            '2025-12-01', '2026-02-01'),
+  mkContact('contact_mr',       'comp_mr',       'Media Resources',                       'Alan',    'Mead',        'CEO',                    'opportunity', ['Negotiation'],            '2025-11-01', '2026-01-01'),
+  mkContact('contact_jr',       'comp_jr',       'JR Promotions',                         'Jake',    'Rodriguez',   'President',              'opportunity', ['Negotiation'],            '2026-01-15', '2026-04-01'),
+  mkContact('contact_scpc',     'comp_scpc',     'South Carolina Pickleball Courts',      'Matt',    'Collins',     'Owner',                  'opportunity', ['Negotiation', 'Website'], '2025-11-20', '2026-01-01'),
+  mkContact('contact_uplp',     'comp_uplp',     'Upstate Pool Liner Pros',               'Kyle',    'Burns',       'President',              'opportunity', ['Negotiation', 'Website'], '2025-11-20', '2026-01-01'),
+  // ── Leads / Initial Outreach ─────────────────────────────────────────────
+  mkContact('contact_bmv',      'comp_bmv',      'BMV Service Pro',                       'Victor',  'Mendes',      'Owner',                  'lead',        ['Lead'],                   '2026-02-15', '2026-03-06'),
+  mkContact('contact_mashburn', 'comp_mashburn', 'Mashburn Outdoor',                      'Bill',    'Mashburn',    'CEO',                    'lead',        ['Lead'],                   '2025-12-01', '2026-01-01'),
+  mkContact('contact_tyler',    'comp_tyler',    'Tyler Media',                           'Steve',   'Tyler',       'CEO',                    'lead',        ['Lead'],                   '2025-12-01', '2026-01-01'),
+  mkContact('contact_hughes',   'comp_hughes',   'Hughes Outdoor Media',                  'Pete',    'Hughes',      'President',              'lead',        ['Lead'],                   '2025-12-01', '2026-01-01'),
+  mkContact('contact_oaktree',  'comp_oaktree',  'Oaktree Outdoor Advertising',           'Craig',   'Morton',      'VP Sales',               'lead',        ['Lead'],                   '2025-12-01', '2026-01-01'),
+  mkContact('contact_smg',      'comp_smg',      'Street Media Group',                    'Diane',   'Strickland',  'President',              'lead',        ['Lead'],                   '2025-12-01', '2026-01-01'),
+  mkContact('contact_ddi',      'comp_ddi',      'DDI Media',                             'Carlos',  'Diaz',        'General Manager',        'lead',        ['Lead'],                   '2025-12-01', '2026-01-01'),
+  mkContact('contact_azalea',   'comp_azalea',   'Azalea Outdoor',                        'Sandy',   'Bloom',       'Owner',                  'lead',        ['Lead'],                   '2025-12-01', '2026-01-01'),
+  mkContact('contact_camel',    'comp_camel',    'Camel City Posters',                    'Greg',    'Camel',       'President',              'lead',        ['Lead'],                   '2025-12-01', '2026-01-01'),
+  mkContact('contact_harkey',   'comp_harkey',   'Harkey Media',                          'Ron',     'Harkey',      'CEO',                    'lead',        ['Lead'],                   '2025-12-01', '2026-01-01'),
+  mkContact('contact_derose',   'comp_derose',   'DeRose Displays',                       'Tony',    'DeRose',      'Owner',                  'lead',        ['Lead'],                   '2025-12-01', '2026-01-01'),
+  mkContact('contact_doa',      'comp_doa',      'Digital Outdoor Advertising',           'Phil',    'Norton',      'VP Operations',          'lead',        ['Lead'],                   '2025-12-01', '2026-01-01'),
+  mkContact('contact_cw',       'comp_cw',       'Colorado West',                         'Dave',    'Westbrook',   'GM',                     'lead',        ['Lead'],                   '2025-12-15', '2026-01-01'),
+  mkContact('contact_burelz',   'comp_burelz',   'Burelz Billboards',                     'Sam',     'Burelz',      'Owner',                  'lead',        ['Lead'],                   '2025-12-15', '2026-01-01'),
+  mkContact('contact_porlier',  'comp_porlier',  'Porlier Outdoor',                       'Jean',    'Porlier',     'President',              'lead',        ['Lead'],                   '2025-12-15', '2026-01-01'),
+  mkContact('contact_comstor',  'comp_comstor',  'Comstor Outdoor',                       'Nate',    'Combs',       'VP Marketing',           'lead',        ['Lead'],                   '2025-12-15', '2026-01-01'),
+  mkContact('contact_classic',  'comp_classic',  'Classic Outdoor',                       'Earl',    'Simmons',     'Owner',                  'lead',        ['Lead'],                   '2025-12-15', '2026-01-01'),
+  mkContact('contact_carlson',  'comp_carlson',  'Carlson Sign',                          'Brad',    'Carlson',     'President',              'lead',        ['Lead'],                   '2025-12-15', '2026-01-01'),
+  mkContact('contact_coast',    'comp_coast',    'Coast Outdoor',                         'Todd',    'Hooper',      'GM',                     'lead',        ['Lead'],                   '2025-12-15', '2026-01-01'),
+  mkContact('contact_compass',  'comp_compass',  'Compass Outdoor Media',                 'Linda',   'Shore',       'VP Operations',          'lead',        ['Lead'],                   '2025-12-15', '2026-01-01'),
+  mkContact('contact_cco',      'comp_cco',      'Circle City Outdoor',                   'Bob',     'Ring',        'President',              'lead',        ['Lead'],                   '2025-12-15', '2026-01-01'),
+  mkContact('contact_cooa',     'comp_cooa',     'Coastal Outdoor Advertising',           'Frank',   'Shore',       'Owner',                  'lead',        ['Lead'],                   '2025-12-15', '2026-01-01'),
+  // ── Closed Lost ──────────────────────────────────────────────────────────
+  mkContact('contact_dailey',   'comp_dailey',   'Dailey Billboards',                     'Frank',   'Dailey',      'Owner',                  'other',       ['Closed Lost'],            '2025-08-01', '2025-09-30'),
+  mkContact('contact_mhom',     'comp_mhom',     'MH Outdoor Media',                      'Mark',    'Harris',      'Owner',                  'other',       ['Closed Lost'],            '2025-08-01', '2025-09-30'),
+  mkContact('contact_dsw',      'comp_dsw',      'DSW Signs',                             'Dan',     'Whitmore',    'President',              'other',       ['Closed Lost'],            '2025-08-01', '2025-09-24'),
+  mkContact('contact_foaa',     'comp_foaa',     'Florida Outdoor Advertising Association','Maria',   'Santos',      'Executive Director',     'other',       ['Closed Lost'],            '2025-08-15', '2025-10-09'),
+  mkContact('contact_signdash', 'comp_signdash', 'SignDash',                              'Ryan',    'Nash',        'CEO',                    'other',       ['Closed Lost'],            '2025-08-15', '2025-10-13'),
+  mkContact('contact_edge',     'comp_edge',     'Edge Consulting',                       'Chris',   'Walker',      'Principal',              'other',       ['Closed Lost'],            '2025-08-20', '2025-10-13'),
+  mkContact('contact_tdo',      'comp_tdo',      'TDO Advertising',                       'Amy',     'Chen',        'Director',               'other',       ['Closed Lost'],            '2025-09-01', '2025-10-10'),
+  mkContact('contact_logan',    'comp_logan',    'Logan Outdoor Advertising',             'Brenda',  'Logan',       'President',              'other',       ['Closed Lost'],            '2025-09-01', '2025-10-15'),
+  mkContact('contact_triou',    'comp_triou',    'Triou Marketing',                       'Dana',    'Triou',       'President',              'other',       ['Closed Lost'],            '2025-11-01', '2026-02-01'),
+  mkContact('contact_avant',    'comp_avant',    'Avant Outdoor Advertising',             'Rick',    'Avant',       'President',              'other',       ['Closed Lost'],            '2025-11-01', '2026-02-01'),
+  mkContact('contact_choice',   'comp_choice',   'Choice Media',                          'Ray',     'Holt',        'VP Sales',               'other',       ['Closed Lost'],            '2025-11-01', '2026-02-01'),
+  mkContact('contact_hunt',     'comp_hunt',     'Huntington Billboards',                 'Dave',    'Hunt',        'President',              'other',       ['Closed Lost'],            '2025-11-01', '2026-02-01'),
+  mkContact('contact_foa',      'comp_foa',      'Fairmount Outdoor Advertising',         'Ed',      'Whitmore',    'VP Sales',               'other',       ['Closed Lost'],            '2025-12-01', '2026-02-23'),
+  mkContact('contact_vo',       'comp_vo',       'View Outdoor',                          'Ashley',  'Turner',      'VP Business Development','other',       ['Closed Lost'],            '2026-01-01', '2026-02-23'),
+  mkContact('contact_bj',       'comp_bj',       'Billboard Joe',                         'Joe',     'Martinez',    'Owner',                  'other',       ['Closed Lost'],            '2026-01-01', '2026-02-23'),
+]
+
+// Helper for building companies
+function mkCompany(
+  id: string, name: string, industry: string, hq: string, size: '1-10' | '11-50' | '51-200' | '201-500' | '500+',
+  status: 'Prospect' | 'Active Client' | 'Past Client' | 'Partner' | 'Churned',
+  tags: string[], contactId: string, dealId: string,
+  totalDealValue: number, createdDate: string, lastActivity: string,
+): CRMCompany {
+  return {
+    id, name, industry, hq, size, status,
+    owner: 'Jonathan Graviss', tags,
+    contactIds: [contactId], dealIds: [dealId],
+    totalDealValue, createdDate, lastActivity,
+  }
+}
+
+export const crmCompanies: CRMCompany[] = [
+  {
+    id: 'comp_th',
+    name: 'Trailhead Media, LLC',
+    industry: 'Media & Communications',
+    website: '',
+    phone: '',
+    hq: '',
+    size: '1-10',
+    annualRevenue: 7800,
+    status: 'Active Client',
+    owner: 'Jonathan Graviss',
+    description: 'Digital marketing services client. Custom website development and management under 12-month service agreement effective July 1, 2025.',
+    tags: ['Signed Client', 'Website'],
+    contactIds: ['contact_th'],
+    dealIds: ['deal_th'],
+    createdDate: '2025-07-01',
+    lastActivity: '2026-03-01',
+    totalDealValue: 7800,
+  },
+  // ── Active Clients (Closed Won) ───────────────────────────────────────────
+  mkCompany('comp_api',      'Associated Posters Inc.',               'Outdoor Advertising',      'Birmingham, AL',    '11-50',   'Active Client', ['Signed Client'],            'contact_api',      'deal_api',      11300, '2025-07-15', '2025-08-01'),
+  mkCompany('comp_nomadic',  'Nomadic Outdoor Media',                 'Outdoor Advertising',      'Nashville, TN',     '1-10',    'Active Client', ['Signed Client'],            'contact_nomadic',  'deal_nomadic',   1800, '2025-07-20', '2025-08-01'),
+  mkCompany('comp_cap',      'Capital Outdoor Advertising',           'Outdoor Advertising',      'Richmond, VA',      '11-50',   'Active Client', ['Signed Client'],            'contact_cap',      'deal_cap',       5100, '2025-08-01', '2025-08-22'),
+  mkCompany('comp_opsiq',    'OpsIQ',                                 'Software / Technology',    'Atlanta, GA',       '11-50',   'Active Client', ['Signed Client'],            'contact_opsiq',    'deal_opsiq',    13500, '2025-08-01', '2025-08-22'),
+  mkCompany('comp_stpete',   'St. Pete Chamber',                      'Chamber of Commerce',      'St. Petersburg, FL','11-50',   'Active Client', ['Signed Client'],            'contact_stpete',   'deal_stpete',   10000, '2025-09-01', '2025-09-23'),
+  mkCompany('comp_turbo',    'TurboBrakes LKN',                       'Automotive Services',      'Cornelius, NC',     '1-10',    'Active Client', ['Signed Client', 'Website'], 'contact_turbo',    'deal_turbo',     6500, '2025-09-01', '2025-09-30'),
+  mkCompany('comp_lod',      'Lead Outdoor Development',              'Outdoor Advertising',      'Memphis, TN',       '11-50',   'Active Client', ['Signed Client'],            'contact_lod',      'deal_lod',       6000, '2025-09-01', '2025-09-30'),
+  mkCompany('comp_renfroe',  'Renfroe Media',                         'Outdoor Advertising',      'Greenville, SC',    '11-50',   'Active Client', ['Signed Client'],            'contact_renfroe',  'deal_renfroe',  15800, '2025-09-15', '2025-10-16'),
+  mkCompany('comp_adco',     'ADCO',                                  'Outdoor Advertising',      'Charlotte, NC',     '1-10',    'Active Client', ['Signed Client'],            'contact_adco',     'deal_adco',      1200, '2025-09-20', '2025-10-20'),
+  mkCompany('comp_formetco', 'Formetco',                              'Outdoor Advertising',      'Gainesville, GA',   '51-200',  'Active Client', ['Signed Client', 'Website'], 'contact_formetco', 'deal_formetco', 44400, '2025-11-01', '2025-12-16'),
+  mkCompany('comp_bass',     'BASS LTD',                              'Outdoor Advertising',      'Louisville, KY',    '11-50',   'Active Client', ['Signed Client'],            'contact_bass',     'deal_bass',      2800, '2026-01-10', '2026-02-04'),
+  mkCompany('comp_sdd',      'Skydragon Designs',                     'Design & Creative',        'Tampa, FL',         '1-10',    'Active Client', ['Signed Client'],            'contact_sdd',      'deal_sdd',       9450, '2025-12-01', '2026-01-07'),
+  mkCompany('comp_oaag',     'OAAG',                                  'Industry Association',     'Orlando, FL',       '1-10',    'Active Client', ['Signed Client', 'Website'], 'contact_oaag',     'deal_oaag',      2000, '2026-02-01', '2026-03-09'),
+  mkCompany('comp_pp',       'Pontoon Pros',                          'Marine / Recreation',      'Clearwater, FL',    '1-10',    'Active Client', ['Signed Client', 'SEO'],     'contact_pp',       'deal_pp',         750, '2026-02-01', '2026-03-09'),
+  // ── Pipeline – Proposals ─────────────────────────────────────────────────
+  mkCompany('comp_fg',       'Franklin Graphics',                     'Design & Print',           'Tampa, FL',         '1-10',    'Prospect',      ['Proposal', 'Website'],      'contact_fg',       'deal_fg',       16800, '2026-01-15', '2026-03-01'),
+  mkCompany('comp_oohs',     'The OOH Squad',                         'Outdoor Advertising',      'Austin, TX',        '1-10',    'Prospect',      ['Proposal'],                 'contact_oohs',     'deal_oohs',      8100, '2025-12-10', '2026-02-01'),
+  mkCompany('comp_apar',     'Apparatix',                             'Software / Technology',    'Chicago, IL',       '11-50',   'Prospect',      ['Proposal', 'Website'],      'contact_apar',     'deal_apar',     29400, '2025-11-15', '2026-01-03'),
+  mkCompany('comp_rdm',      'Red Diamond Media Group',               'Media & Communications',   'Dallas, TX',        '11-50',   'Prospect',      ['Proposal', 'SEO'],          'contact_rdm',      'deal_rdm',       9300, '2026-02-10', '2026-04-01'),
+  mkCompany('comp_dkoi',     'DKOI',                                  'Outdoor Advertising',      'Denver, CO',        '11-50',   'Prospect',      ['Proposal'],                 'contact_dkoi',     'deal_dkoi',     21000, '2026-02-15', '2026-04-01'),
+  mkCompany('comp_rsm',      'Reeves Shaw Media',                     'Media & Communications',   'Atlanta, GA',       '11-50',   'Prospect',      ['Proposal'],                 'contact_rsm',      'deal_rsm',      14400, '2026-02-20', '2026-04-01'),
+  // ── Pipeline – Negotiation ───────────────────────────────────────────────
+  mkCompany('comp_scb',      'Steel City Billboards',                 'Outdoor Advertising',      'Pittsburgh, PA',    '11-50',   'Prospect',      ['Negotiation'],              'contact_scb',      'deal_scb',      27000, '2025-12-01', '2026-02-01'),
+  mkCompany('comp_mr',       'Media Resources',                       'Media & Communications',   'Columbus, OH',      '51-200',  'Prospect',      ['Negotiation'],              'contact_mr',       'deal_mr',       30000, '2025-11-01', '2026-01-01'),
+  mkCompany('comp_jr',       'JR Promotions',                         'Marketing & Promotions',   'Jacksonville, FL',  '11-50',   'Prospect',      ['Negotiation'],              'contact_jr',       'deal_jr',       15700, '2026-01-15', '2026-04-01'),
+  mkCompany('comp_scpc',     'South Carolina Pickleball Courts',      'Sports & Recreation',      'Columbia, SC',      '1-10',    'Prospect',      ['Negotiation', 'Website'],   'contact_scpc',     'deal_scpc',      8800, '2025-11-20', '2026-01-01'),
+  mkCompany('comp_uplp',     'Upstate Pool Liner Pros',               'Home Services',            'Greenville, SC',    '1-10',    'Prospect',      ['Negotiation', 'Website'],   'contact_uplp',     'deal_uplp',      8800, '2025-11-20', '2026-01-01'),
+  // ── Pipeline – Leads / Initial Outreach ─────────────────────────────────
+  mkCompany('comp_bmv',      'BMV Service Pro',                       'Automotive Services',      'Orlando, FL',       '11-50',   'Prospect',      ['Lead'],                     'contact_bmv',      'deal_bmv',      18900, '2026-02-15', '2026-03-06'),
+  mkCompany('comp_mashburn', 'Mashburn Outdoor',                      'Outdoor Advertising',      'Montgomery, AL',    '11-50',   'Prospect',      ['Lead'],                     'contact_mashburn', 'deal_mashburn', 15500, '2025-12-01', '2026-01-01'),
+  mkCompany('comp_tyler',    'Tyler Media',                           'Outdoor Advertising',      'Tyler, TX',         '11-50',   'Prospect',      ['Lead'],                     'contact_tyler',    'deal_tyler',    15500, '2025-12-01', '2026-01-01'),
+  mkCompany('comp_hughes',   'Hughes Outdoor Media',                  'Outdoor Advertising',      'Knoxville, TN',     '11-50',   'Prospect',      ['Lead'],                     'contact_hughes',   'deal_hughes',   15500, '2025-12-01', '2026-01-01'),
+  mkCompany('comp_oaktree',  'Oaktree Outdoor Advertising',           'Outdoor Advertising',      'Raleigh, NC',       '11-50',   'Prospect',      ['Lead'],                     'contact_oaktree',  'deal_oaktree',  15500, '2025-12-01', '2026-01-01'),
+  mkCompany('comp_smg',      'Street Media Group',                    'Outdoor Advertising',      'Miami, FL',         '11-50',   'Prospect',      ['Lead'],                     'contact_smg',      'deal_smg',          0, '2025-12-01', '2026-01-01'),
+  mkCompany('comp_ddi',      'DDI Media',                             'Outdoor Advertising',      'Indianapolis, IN',  '11-50',   'Prospect',      ['Lead'],                     'contact_ddi',      'deal_ddi',      15500, '2025-12-01', '2026-01-01'),
+  mkCompany('comp_azalea',   'Azalea Outdoor',                        'Outdoor Advertising',      'Columbia, SC',      '1-10',    'Prospect',      ['Lead'],                     'contact_azalea',   'deal_azalea',       0, '2025-12-01', '2026-01-01'),
+  mkCompany('comp_camel',    'Camel City Posters',                    'Outdoor Advertising',      'Winston-Salem, NC', '11-50',   'Prospect',      ['Lead'],                     'contact_camel',    'deal_camel',    15500, '2025-12-01', '2026-01-01'),
+  mkCompany('comp_harkey',   'Harkey Media',                          'Outdoor Advertising',      'Fayetteville, NC',  '11-50',   'Prospect',      ['Lead'],                     'contact_harkey',   'deal_harkey',   15500, '2025-12-01', '2026-01-01'),
+  mkCompany('comp_derose',   'DeRose Displays',                       'Outdoor Advertising',      'Buffalo, NY',       '11-50',   'Prospect',      ['Lead'],                     'contact_derose',   'deal_derose',   15500, '2025-12-01', '2026-01-01'),
+  mkCompany('comp_doa',      'Digital Outdoor Advertising',           'Outdoor Advertising',      'Phoenix, AZ',       '11-50',   'Prospect',      ['Lead'],                     'contact_doa',      'deal_doa',      15500, '2025-12-01', '2026-01-01'),
+  mkCompany('comp_cw',       'Colorado West',                         'Outdoor Advertising',      'Grand Junction, CO','11-50',   'Prospect',      ['Lead'],                     'contact_cw',       'deal_cw',       15500, '2025-12-15', '2026-01-01'),
+  mkCompany('comp_burelz',   'Burelz Billboards',                     'Outdoor Advertising',      'Shreveport, LA',    '1-10',    'Prospect',      ['Lead'],                     'contact_burelz',   'deal_burelz',   15500, '2025-12-15', '2026-01-01'),
+  mkCompany('comp_porlier',  'Porlier Outdoor',                       'Outdoor Advertising',      'Baton Rouge, LA',   '11-50',   'Prospect',      ['Lead'],                     'contact_porlier',  'deal_porlier',  15500, '2025-12-15', '2026-01-01'),
+  mkCompany('comp_comstor',  'Comstor Outdoor',                       'Outdoor Advertising',      'Memphis, TN',       '11-50',   'Prospect',      ['Lead'],                     'contact_comstor',  'deal_comstor',  15500, '2025-12-15', '2026-01-01'),
+  mkCompany('comp_classic',  'Classic Outdoor',                       'Outdoor Advertising',      'Little Rock, AR',   '11-50',   'Prospect',      ['Lead'],                     'contact_classic',  'deal_classic',  15500, '2025-12-15', '2026-01-01'),
+  mkCompany('comp_carlson',  'Carlson Sign',                          'Outdoor Advertising',      'Sioux Falls, SD',   '11-50',   'Prospect',      ['Lead'],                     'contact_carlson',  'deal_carlson',  15500, '2025-12-15', '2026-01-01'),
+  mkCompany('comp_coast',    'Coast Outdoor',                         'Outdoor Advertising',      'Pensacola, FL',     '11-50',   'Prospect',      ['Lead'],                     'contact_coast',    'deal_coast',    15500, '2025-12-15', '2026-01-01'),
+  mkCompany('comp_compass',  'Compass Outdoor Media',                 'Outdoor Advertising',      'Kansas City, MO',   '11-50',   'Prospect',      ['Lead'],                     'contact_compass',  'deal_compass',  15500, '2025-12-15', '2026-01-01'),
+  mkCompany('comp_cco',      'Circle City Outdoor',                   'Outdoor Advertising',      'Indianapolis, IN',  '11-50',   'Prospect',      ['Lead'],                     'contact_cco',      'deal_cco',      15500, '2025-12-15', '2026-01-01'),
+  mkCompany('comp_cooa',     'Coastal Outdoor Advertising',           'Outdoor Advertising',      'Savannah, GA',      '11-50',   'Prospect',      ['Lead'],                     'contact_cooa',     'deal_cooa',     13500, '2025-12-15', '2026-01-01'),
+  // ── Closed Lost ──────────────────────────────────────────────────────────
+  mkCompany('comp_dailey',   'Dailey Billboards',                     'Outdoor Advertising',      'Tulsa, OK',         '11-50',   'Prospect',      ['Closed Lost'],              'contact_dailey',   'deal_dailey',       0, '2025-08-01', '2025-09-30'),
+  mkCompany('comp_mhom',     'MH Outdoor Media',                      'Outdoor Advertising',      'Lexington, KY',     '1-10',    'Prospect',      ['Closed Lost'],              'contact_mhom',     'deal_mhom',         0, '2025-08-01', '2025-09-30'),
+  mkCompany('comp_dsw',      'DSW Signs',                             'Sign & Display',           'Oklahoma City, OK', '11-50',   'Prospect',      ['Closed Lost'],              'contact_dsw',      'deal_dsw',      15500, '2025-08-01', '2025-09-24'),
+  mkCompany('comp_foaa',     'Florida Outdoor Advertising Association','Industry Association',     'Orlando, FL',       '1-10',    'Prospect',      ['Closed Lost'],              'contact_foaa',     'deal_foaa',      4500, '2025-08-15', '2025-10-09'),
+  mkCompany('comp_signdash', 'SignDash',                              'Software / Technology',    'Tampa, FL',         '11-50',   'Prospect',      ['Closed Lost'],              'contact_signdash', 'deal_signdash', 13500, '2025-08-15', '2025-10-13'),
+  mkCompany('comp_edge',     'Edge Consulting',                       'Business Consulting',      'Jacksonville, FL',  '1-10',    'Prospect',      ['Closed Lost'],              'contact_edge',     'deal_edge',     15500, '2025-08-20', '2025-10-13'),
+  mkCompany('comp_tdo',      'TDO Advertising',                       'Outdoor Advertising',      'Chattanooga, TN',   '11-50',   'Prospect',      ['Closed Lost'],              'contact_tdo',      'deal_tdo',      15500, '2025-09-01', '2025-10-10'),
+  mkCompany('comp_logan',    'Logan Outdoor Advertising',             'Outdoor Advertising',      'Louisville, KY',    '11-50',   'Prospect',      ['Closed Lost'],              'contact_logan',    'deal_logan',        0, '2025-09-01', '2025-10-15'),
+  mkCompany('comp_triou',    'Triou Marketing',                       'Marketing & Advertising',  'Tampa, FL',         '1-10',    'Prospect',      ['Closed Lost'],              'contact_triou',    'deal_triou',    12500, '2025-11-01', '2026-02-01'),
+  mkCompany('comp_avant',    'Avant Outdoor Advertising',             'Outdoor Advertising',      'Jackson, MS',       '11-50',   'Prospect',      ['Closed Lost'],              'contact_avant',    'deal_avant',    15500, '2025-11-01', '2026-02-01'),
+  mkCompany('comp_choice',   'Choice Media',                          'Outdoor Advertising',      'Mobile, AL',        '11-50',   'Prospect',      ['Closed Lost'],              'contact_choice',   'deal_choice',   15500, '2025-11-01', '2026-02-01'),
+  mkCompany('comp_hunt',     'Huntington Billboards',                 'Outdoor Advertising',      'Huntington, WV',    '11-50',   'Prospect',      ['Closed Lost'],              'contact_hunt',     'deal_hunt',     11000, '2025-11-01', '2026-02-01'),
+  mkCompany('comp_foa',      'Fairmount Outdoor Advertising',         'Outdoor Advertising',      'Philadelphia, PA',  '11-50',   'Prospect',      ['Closed Lost'],              'contact_foa',      'deal_foa',      17400, '2025-12-01', '2026-02-23'),
+  mkCompany('comp_vo',       'View Outdoor',                          'Outdoor Advertising',      'Minneapolis, MN',   '51-200',  'Prospect',      ['Closed Lost'],              'contact_vo',       'deal_vo',        2450, '2026-01-01', '2026-02-23'),
+  mkCompany('comp_bj',       'Billboard Joe',                         'Outdoor Advertising',      'Nashville, TN',     '1-10',    'Prospect',      ['Closed Lost'],              'contact_bj',       'deal_bj',       16800, '2026-01-01', '2026-02-23'),
+]
+
+export const crmActivities: CRMActivity[] = [
+  {
+    id: 'crmact_th_1',
+    type: 'contract',
+    title: 'Service Agreement Executed',
+    body: 'Graviss Marketing – Trailhead Media Service Agreement fully executed. $650/month for 12 months beginning July 1, 2025.',
+    companyId: 'comp_th',
+    companyName: 'Trailhead Media, LLC',
+    contactId: 'contact_th',
+    user: 'Jonathan Graviss',
+    timestamp: '2025-06-25',
+    pinned: true,
+  },
+  {
+    id: 'crmact_th_2',
+    type: 'note',
+    title: 'Contract Terms',
+    body: 'Monthly fee: $650 due on the first business day of each month. Early termination penalty: $1,950 (3 months). Governing law: Florida. Services include custom website development, unlimited edits, SSL, hosting, SEO-friendly content, and lead form implementation.',
+    companyId: 'comp_th',
+    companyName: 'Trailhead Media, LLC',
+    contactId: 'contact_th',
+    user: 'Jonathan Graviss',
+    timestamp: '2025-07-01',
+    pinned: true,
+  },
+]
 
 export const dashboardMetrics = {
-  activeClients:    0,
-  openDeals:        0,
-  pipelineValue:    0,
-  monthlyRevenue:   0,
-  overdueInvoices:  0,
-  upcomingRenewals: 0,
+  mrr: 650,
+  activeClients: 15,
+  openDeals: 34,
+  openInvoices: 1,
+  overdueInvoices: 0,
+  upcomingRenewals: 1,
+  pipelineValue: 489500,
+  bookedRevenue: 5850,
+  revenueCollected: 5200,
+  activeProjects: 1,
 }
+
+export const appTasks: AppTask[] = []
+
+export const timeEntries: TimeEntry[] = []
+

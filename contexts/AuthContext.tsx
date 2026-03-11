@@ -106,16 +106,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchMembers, loadProfileByEmail])
 
   const login = async (email: string, password: string): Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean }> => {
-    const supabase = getSupabaseClient()
-    const { error } = await supabase.auth.signInWithPassword({ email: email.toLowerCase().trim(), password })
-    if (error) return { ok: false, error: 'Incorrect email or password.' }
+    try {
+      const supabase = getSupabaseClient()
+      const { error } = await supabase.auth.signInWithPassword({ email: email.toLowerCase().trim(), password })
+      if (error) return { ok: false, error: 'Incorrect email or password.' }
 
-    const profile = await loadProfileByEmail(email)
-    if (!profile) return { ok: false, error: 'No team member profile found. Contact your administrator.' }
+      const profile = await loadProfileByEmail(email)
+      if (!profile) return { ok: false, error: 'No team member profile found. Contact your administrator.' }
 
-    setUser(profile)
-    fetchMembers()
-    return { ok: true }
+      setUser(profile)
+      fetchMembers()
+      return { ok: true }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Login failed. Please try again.'
+      return { ok: false, error: msg }
+    }
   }
 
   const loginWithGoogle = async (credential: string): Promise<{ ok: boolean; error?: string }> => {

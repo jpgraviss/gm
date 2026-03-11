@@ -21,8 +21,8 @@ export function getSupabaseClient(): SupabaseClient {
 
 // Server-side client using service role key (for API routes only)
 export function createServiceClient(): SupabaseClient {
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
-  const url        = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? ''
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Znp0cmFqZ3R5dXpzZ29wenlpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzI1NTgwOCwiZXhwIjoyMDg4ODMxODA4fQ.Gdd9yfDe4MBsT3js1OJoP8ZghO9g6YAbTsb1NiC2cHM'
+  const url        = process.env.NEXT_PUBLIC_SUPABASE_URL  || 'https://hufztrajgtyuzsgopzyi.supabase.co'
   return createClient(url, serviceKey)
 }
 

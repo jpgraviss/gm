@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
-import { getSupabaseClient } from '@/lib/supabase'
+import { getSupabaseClient, isConfigured } from '@/lib/supabase'
 import type { TeamMember } from '@/lib/types'
 
 export interface AuthUser {
@@ -76,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    if (!isConfigured) {
+      setLoading(false)
+      return
+    }
     const supabase = getSupabaseClient()
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {

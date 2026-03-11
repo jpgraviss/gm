@@ -20,12 +20,13 @@ function mapContract(row: any) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  const company = searchParams.get('company')
   const db = createServiceClient()
-  const { data, error } = await db
-    .from('contracts')
-    .select('*')
-    .order('created_at', { ascending: false })
+  let query = db.from('contracts').select('*').order('created_at', { ascending: false })
+  if (company) query = query.eq('company', company)
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json((data ?? []).map(mapContract))
 }

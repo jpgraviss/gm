@@ -355,3 +355,55 @@ create policy "auth_read_revenue_months"      on public.revenue_months      for 
 create policy "anon_read_bookings"           on public.bookings          for select to anon using (true);
 create policy "anon_insert_bookings"         on public.bookings          for insert to anon with check (true);
 create policy "anon_read_calendar_settings"  on public.calendar_settings for select to anon using (true);
+
+-- ─── Automations ──────────────────────────────────────────────────────────────
+create table if not exists public.automations (
+  id         text primary key,
+  name       text not null,
+  trigger    text not null,
+  actions    text[] not null default '{}',
+  status     text not null default 'Active',
+  runs       integer not null default 0,
+  last_run   text not null default 'Never',
+  created_at timestamptz not null default now()
+);
+
+alter table public.automations enable row level security;
+create policy "auth_read_automations" on public.automations for select to authenticated using (true);
+
+-- ─── Email Sequences ──────────────────────────────────────────────────────────
+create table if not exists public.sequences (
+  id              text primary key,
+  name            text not null,
+  status          text not null default 'Draft',
+  trigger         text not null default '',
+  target_segment  text not null default '',
+  enrolled_count  integer not null default 0,
+  active_count    integer not null default 0,
+  completed_count integer not null default 0,
+  open_rate       numeric not null default 0,
+  click_rate      numeric not null default 0,
+  reply_rate      numeric not null default 0,
+  steps           jsonb not null default '[]',
+  created_date    text,
+  last_modified   text,
+  created_at      timestamptz not null default now()
+);
+
+alter table public.sequences enable row level security;
+create policy "auth_read_sequences" on public.sequences for select to authenticated using (true);
+
+-- ─── Portal Clients ───────────────────────────────────────────────────────────
+create table if not exists public.portal_clients (
+  id         text primary key,
+  company    text not null,
+  service    text not null default '',
+  access     text not null default 'Not Setup',
+  last_login text not null default 'Never',
+  contact    text not null default '',
+  email      text not null default '',
+  created_at timestamptz not null default now()
+);
+
+alter table public.portal_clients enable row level security;
+create policy "auth_read_portal_clients" on public.portal_clients for select to authenticated using (true);

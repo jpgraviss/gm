@@ -21,10 +21,12 @@ function mapProject(row: any) {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const status = searchParams.get('status')
+  const status  = searchParams.get('status')
+  const company = searchParams.get('company')
   const db = createServiceClient()
   let query = db.from('projects').select('*').order('created_at', { ascending: false })
-  if (status) query = query.eq('status', status)
+  if (status)  query = query.eq('status', status)
+  if (company) query = query.eq('company', company)
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json((data ?? []).map(mapProject))

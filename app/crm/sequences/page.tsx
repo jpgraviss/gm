@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import { deals, crmContacts } from '@/lib/data'
 import { serviceTypeColors } from '@/lib/utils'
@@ -45,119 +45,6 @@ interface EmailSequence {
   lastModified: string
 }
 
-// ─── Initial Data ──────────────────────────────────────────────────────────────
-
-const INITIAL_SEQUENCES: EmailSequence[] = [
-  {
-    id: 'seq1',
-    name: 'New Lead Nurture — Website',
-    status: 'Active',
-    trigger: 'Contact tagged as "New Lead" + Service = Website',
-    targetSegment: 'Website prospects',
-    enrolledCount: 12,
-    activeCount: 8,
-    completedCount: 4,
-    openRate: 62,
-    clickRate: 28,
-    replyRate: 15,
-    createdDate: '2026-01-10',
-    lastModified: '2026-02-15',
-    steps: [
-      { id: 's1', type: 'email', day: 0, subject: 'Your competitors are winning with better websites', body: "Hi {{first_name}},\n\nI noticed you've been exploring website options for {{company}}. We've helped companies in {{industry}} increase leads by 40-60% with a redesigned site.\n\nWould you be open to a quick 15-minute call this week?\n\nBest,\n{{sender_name}}" },
-      { id: 's2', type: 'wait', day: 2, waitDays: 2 },
-      { id: 's3', type: 'email', day: 2, subject: 'Case study: How {{similar_company}} got 3x more leads', body: "Following up on my last email — wanted to share a quick case study from a company similar to yours.\n\nIn 90 days we helped them:\n• Redesign their site with modern UX\n• Improve mobile conversion by 55%\n• Rank on page 1 for 12 target keywords\n\nWorth a conversation?" },
-      { id: 's4', type: 'wait', day: 5, waitDays: 3 },
-      { id: 's5', type: 'task', day: 5, taskTitle: 'Call prospect — check if they received emails' },
-      { id: 's6', type: 'email', day: 7, subject: 'Last chance — free website audit for {{company}}', body: "This is my last reach out for now. I'd love to offer you a free website audit — no strings attached.\n\nJust reply \"audit\" and I'll send you a custom report within 24 hours." },
-      { id: 's7', type: 'condition', day: 7, condition: "If replied → remove from sequence · If no reply → move to \"Cold\" tag" },
-    ],
-  },
-  {
-    id: 'seq2',
-    name: 'Proposal Follow-Up',
-    status: 'Active',
-    trigger: 'Proposal status = Sent (no response after 2 days)',
-    targetSegment: 'Prospects with sent proposals',
-    enrolledCount: 6,
-    activeCount: 5,
-    completedCount: 1,
-    openRate: 78,
-    clickRate: 45,
-    replyRate: 33,
-    createdDate: '2026-01-20',
-    lastModified: '2026-02-20',
-    steps: [
-      { id: 's8', type: 'email', day: 0, subject: 'Your proposal is ready — a few things to highlight', body: "Hi {{first_name}},\n\nJust wanted to check in on the proposal I sent over. A few things I want to make sure stand out:\n\n1. We included a 30-day quick-start timeline\n2. Payment is flexible — we can split it up\n3. You're locked in at this rate through March\n\nHappy to jump on a call if you have questions." },
-      { id: 's9', type: 'wait', day: 3, waitDays: 3 },
-      { id: 's10', type: 'email', day: 3, subject: 'Did the proposal make sense?', body: "Quick check-in — did the proposal scope and pricing make sense for what you're trying to accomplish?\n\nIf anything feels off, I'm happy to adjust." },
-      { id: 's11', type: 'task', day: 5, taskTitle: 'Call to discuss proposal — mention deadline' },
-      { id: 's12', type: 'email', day: 6, subject: '{{company}} — final note on proposal', body: "I don't want to keep filling your inbox, so this'll be my last note on this.\n\nIf the timing isn't right, no worries at all. If you'd like to move forward, just reply and we'll get started right away.\n\nEither way, best of luck!" },
-    ],
-  },
-  {
-    id: 'seq3',
-    name: 'Renewal Reminder — 90 Days Out',
-    status: 'Active',
-    trigger: 'Contract renewal date within 90 days',
-    targetSegment: 'Active clients nearing renewal',
-    enrolledCount: 3,
-    activeCount: 3,
-    completedCount: 0,
-    openRate: 91,
-    clickRate: 52,
-    replyRate: 44,
-    createdDate: '2026-02-01',
-    lastModified: '2026-02-22',
-    steps: [
-      { id: 's13', type: 'email', day: 0, subject: 'Your {{service_type}} contract — renewal coming up', body: "Hi {{first_name}},\n\nYour contract with us renews in about 90 days. I wanted to reach out early to give you plenty of time to review.\n\nLet's schedule a 30-minute review call to walk through results and discuss what's next. Would next week work?" },
-      { id: 's14', type: 'wait', day: 14, waitDays: 14 },
-      { id: 's15', type: 'email', day: 14, subject: 'Results snapshot — {{company}}', body: "Attached is a quick summary of what we've accomplished together over the last year. Key highlights:\n\n• [Metric 1]\n• [Metric 2]\n• [Metric 3]\n\nI'm excited to share what's planned for the next contract period." },
-      { id: 's16', type: 'task', day: 30, taskTitle: 'Send renewal proposal — 60 days before expiration' },
-      { id: 's17', type: 'wait', day: 60, waitDays: 30 },
-      { id: 's18', type: 'email', day: 60, subject: 'Contract renewal — 30 days remaining', body: "Just a reminder that your contract expires in 30 days. Have you had a chance to look at the renewal proposal?\n\nI'd love to make this a smooth process for you." },
-    ],
-  },
-  {
-    id: 'seq4',
-    name: 'Re-Engagement — Past Clients',
-    status: 'Paused',
-    trigger: 'Company status = Past Client · Inactive 6+ months',
-    targetSegment: 'Churned or past clients',
-    enrolledCount: 5,
-    activeCount: 0,
-    completedCount: 3,
-    openRate: 41,
-    clickRate: 12,
-    replyRate: 8,
-    createdDate: '2025-10-01',
-    lastModified: '2026-01-05',
-    steps: [
-      { id: 's19', type: 'email', day: 0, subject: "It's been a while, {{first_name}}", body: "Hope things are going well at {{company}}! It's been a while since we worked together and I wanted to check in.\n\nWe've launched several new services since then and I thought of you." },
-      { id: 's20', type: 'wait', day: 5, waitDays: 5 },
-      { id: 's21', type: 'email', day: 5, subject: "What's new at Graviss Marketing", body: "Quick update on what we've been building:\n\n• New AI-powered SEO tooling\n• Redesigned email automation capabilities\n• Expanded social media management\n\nWould any of these be relevant for where {{company}} is headed?" },
-    ],
-  },
-  {
-    id: 'seq5',
-    name: 'Post-Launch Upsell',
-    status: 'Draft',
-    trigger: 'Project status = Launched',
-    targetSegment: 'Recently launched website clients',
-    enrolledCount: 0,
-    activeCount: 0,
-    completedCount: 0,
-    openRate: 0,
-    clickRate: 0,
-    replyRate: 0,
-    createdDate: '2026-02-20',
-    lastModified: '2026-02-20',
-    steps: [
-      { id: 's22', type: 'email', day: 7, subject: "Congrats on the launch! What's next for {{company}}?", body: "Your site is live and looking great! Now is the perfect time to start driving traffic to it.\n\nWould you be interested in exploring SEO or paid advertising to amplify your launch?" },
-      { id: 's23', type: 'wait', day: 14, waitDays: 7 },
-      { id: 's24', type: 'email', day: 14, subject: 'Your website is live — are you getting leads?', body: "It's been two weeks since launch. Are you starting to see leads come through the new site?\n\nI'd love to share some quick-win strategies to boost conversions in the first 90 days." },
-    ],
-  },
-]
 
 const statusColors: Record<SequenceStatus, string> = {
   Active: 'bg-green-100 text-green-700',
@@ -858,28 +745,52 @@ function NewSequenceModal({ onSave, onClose }: { onSave: (s: EmailSequence) => v
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SequencesPage() {
-  const [localSequences, setLocalSequences] = useState<EmailSequence[]>(INITIAL_SEQUENCES)
+  const [localSequences, setLocalSequences] = useState<EmailSequence[]>([])
   const [selectedSeq, setSelectedSeq] = useState<EmailSequence | null>(null)
   const [statusFilter, setStatusFilter] = useState<SequenceStatus | 'All'>('All')
   const [creatingSeq, setCreatingSeq] = useState(false)
 
-  function updateSequence(updated: EmailSequence) {
-    // Duplicate creates a new sequence (different id)
+  useEffect(() => {
+    fetch('/api/sequences').then(r => r.json()).then(setLocalSequences).catch(() => {})
+  }, [])
+
+  async function updateSequence(updated: EmailSequence) {
     const exists = localSequences.some(s => s.id === updated.id)
     if (exists) {
       setLocalSequences(prev => prev.map(s => s.id === updated.id ? updated : s))
       setSelectedSeq(updated)
+      await fetch(`/api/sequences/${updated.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      })
     } else {
-      // New duplicate — add to list and open it
-      setLocalSequences(prev => [updated, ...prev])
-      setSelectedSeq(updated)
+      // Duplicate — create new record
+      const res = await fetch('/api/sequences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      })
+      if (res.ok) {
+        const saved = await res.json()
+        setLocalSequences(prev => [saved, ...prev])
+        setSelectedSeq(saved)
+      }
     }
   }
 
-  function addSequence(newSeq: EmailSequence) {
-    setLocalSequences(prev => [newSeq, ...prev])
+  async function addSequence(newSeq: EmailSequence) {
+    const res = await fetch('/api/sequences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newSeq),
+    })
+    if (res.ok) {
+      const saved = await res.json()
+      setLocalSequences(prev => [saved, ...prev])
+      setSelectedSeq(saved)
+    }
     setCreatingSeq(false)
-    setSelectedSeq(newSeq)
   }
 
   const filtered = statusFilter === 'All' ? localSequences : localSequences.filter(s => s.status === statusFilter)

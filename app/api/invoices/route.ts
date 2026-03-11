@@ -20,10 +20,12 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const contractId = searchParams.get('contractId')
   const status     = searchParams.get('status')
+  const company    = searchParams.get('company')
   const db = createServiceClient()
   let query = db.from('invoices').select('*').order('created_at', { ascending: false })
   if (contractId) query = query.eq('contract_id', contractId)
   if (status)     query = query.eq('status', status)
+  if (company)    query = query.eq('company', company)
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json((data ?? []).map(mapInvoice))

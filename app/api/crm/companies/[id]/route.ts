@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient, isConfigured } from '@/lib/supabase'
+import { createServiceClient } from '@/lib/supabase'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCompany(row: any) {
@@ -26,9 +26,6 @@ function mapCompany(row: any) {
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
-  if (!isConfigured) {
-    return NextResponse.json(body)
-  }
   const db = createServiceClient()
   const { data, error } = await db
     .from('crm_companies')
@@ -57,9 +54,6 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isConfigured) {
-    return NextResponse.json({ success: true })
-  }
   const db = createServiceClient()
   const { error } = await db.from('crm_companies').delete().eq('id', params.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient, isConfigured } from '@/lib/supabase'
-import { crmContacts as seedContacts } from '@/lib/data'
+import { createServiceClient } from '@/lib/supabase'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {
@@ -32,13 +31,6 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const companyId = searchParams.get('companyId')
 
-  if (!isConfigured) {
-    const results = companyId
-      ? seedContacts.filter(c => c.companyId === companyId)
-      : seedContacts
-    return NextResponse.json(results)
-  }
-
   const db = createServiceClient()
   let query = db.from('crm_contacts').select('*').order('full_name')
   if (companyId) query = query.eq('company_id', companyId)
@@ -50,9 +42,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  if (!isConfigured) {
-    return NextResponse.json({ ...body, id: `ct-${Date.now()}` })
-  }
   const db = createServiceClient()
   const { data, error } = await db
     .from('crm_contacts')

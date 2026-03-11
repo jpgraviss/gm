@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient, isConfigured } from '@/lib/supabase'
-import { crmCompanies as seedCompanies } from '@/lib/data'
+import { createServiceClient } from '@/lib/supabase'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCompany(row: any) {
@@ -26,9 +25,6 @@ function mapCompany(row: any) {
 }
 
 export async function GET() {
-  if (!isConfigured) {
-    return NextResponse.json(seedCompanies)
-  }
   const db = createServiceClient()
   const { data, error } = await db
     .from('crm_companies')
@@ -40,9 +36,6 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  if (!isConfigured) {
-    return NextResponse.json({ ...body, id: `co-${Date.now()}` })
-  }
   const db = createServiceClient()
   const { data, error } = await db
     .from('crm_companies')

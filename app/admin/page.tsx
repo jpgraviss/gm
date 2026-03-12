@@ -534,7 +534,7 @@ export default function AdminPage() {
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Email</label>
                     <input value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))}
-                      type="email" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" placeholder="email@gravissmarketing.com" />
+                      type="email" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" placeholder="email@" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Temp Password</label>
@@ -961,8 +961,8 @@ export default function AdminPage() {
               <div className="flex flex-col gap-3">
                 {[
                   { label: 'Company Name', value: 'Graviss Marketing' },
-                  { label: 'Admin Email', value: 'jonathan@gravissmarketing.com' },
-                  { label: 'Platform URL', value: 'gravhub.gravissmarketing.com' },
+                  { label: 'Admin Email', value: 'jonathan@' },
+                  { label: 'Platform URL', value: 'app.gravissmarketing.com' },
                   { label: 'Fiscal Year Start', value: 'January' },
                   { label: 'Default Currency', value: 'USD ($)' },
                   { label: 'Timezone', value: 'America/New_York (ET)' },

@@ -437,7 +437,7 @@ function RenewalPanel({
               <X size={18} className="text-white/60" />
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {[
               { label: 'Renewal Value', value: formatCurrency(renewal.renewalValue) },
               { label: 'Days Until Expiry', value: isExpired ? 'Expired' : `${renewal.daysUntilExpiry}d` },
@@ -732,9 +732,9 @@ export default function RenewalsPage() {
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+          <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap justify-between items-center gap-2">
             <h3 className="text-sm font-semibold text-gray-800">All Renewals</h3>
-            <div className="flex items-center gap-3 text-xs text-gray-500">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
               <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500" /> 0–30 days</div>
               <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-orange-500" /> 31–60 days</div>
               <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-500" /> 61–90 days</div>

@@ -240,7 +240,7 @@ function MaintenancePanel({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {[
               { label: 'Monthly Fee', value: formatCurrency(record.monthlyFee) },
               { label: 'Annual Value', value: formatCurrency(annualValue) },
@@ -274,7 +274,7 @@ function MaintenancePanel({
                 <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
                   <div className="h-2 rounded-full transition-all" style={{ width: `${pctElapsed}%`, background: isPendingCancel ? '#dc2626' : '#015035' }} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[
                     { label: 'Start Date', value: formatDate(record.startDate) },
                     { label: 'End Date', value: formatDate(endDate.toISOString().split('T')[0]) },

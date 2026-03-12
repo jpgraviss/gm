@@ -121,7 +121,7 @@ function TicketPanel({
         </div>
 
         {/* Quick info */}
-        <div className="flex-shrink-0 grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100">
+        <div className="flex-shrink-0 grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-gray-100 border-b border-gray-100">
           {[
             { label: 'Contact', value: ticket.contactName },
             { label: 'Assigned', value: ticket.assignedTo ?? 'Unassigned' },
@@ -221,7 +221,7 @@ function TicketPanel({
               rows={3}
             />
           </div>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex flex-wrap items-center gap-2 mt-2">
             <button
               onClick={() => handleSend(false)}
               disabled={!reply.trim()}

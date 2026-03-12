@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getQBConfig } from '@/lib/quickbooks'
+import { getQBConfig, getValidAccessToken } from '@/lib/quickbooks'
 
 // GET /api/quickbooks/status
-// Returns connection state and sync stats
+// Returns connection state and sync stats. Attempts token refresh if access token is expired.
 export async function GET() {
   try {
     const config = await getQBConfig()
@@ -11,10 +11,12 @@ export async function GET() {
       return NextResponse.json({ connected: false })
     }
 
-    const tokenExpired = new Date(config.token_expires_at).getTime() < Date.now()
+    // Try to get a valid token (will refresh if expired). This correctly handles
+    // the case where the 1-hour access token is stale but the 101-day refresh token is still valid.
+    const auth = await getValidAccessToken()
 
     return NextResponse.json({
-      connected:      !tokenExpired,
+      connected:      Boolean(auth),
       realmId:        config.realm_id,
       lastSync:       config.last_sync_at,
       invoicesSynced: config.invoices_synced,

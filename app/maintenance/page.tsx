@@ -8,7 +8,7 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import type { MaintenanceRecord, MaintenanceStatus, CRMContact, Contract, Invoice } from '@/lib/types'
 import {
   X, RefreshCw, DollarSign, Calendar, AlertTriangle, CheckCircle,
-  Building2, ChevronRight, Clock, FileText, Ban, CreditCard,
+  Building2, ChevronRight, ChevronLeft, Clock, FileText, Ban, CreditCard,
   Plus, Upload, Paperclip, Trash2, Edit2,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -207,6 +207,9 @@ function MaintenancePanel({
 
         {/* Header */}
         <div className="p-6 flex-shrink-0" style={{ background: '#012b1e' }}>
+          <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mb-3">
+            <ChevronLeft size={14} /> Back
+          </button>
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3 flex-1 min-w-0 pr-3">
               <div className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"

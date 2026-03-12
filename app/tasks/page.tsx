@@ -5,7 +5,7 @@ import Header from '@/components/layout/Header'
 import { fetchTeamMembers } from '@/lib/supabase'
 import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority, TeamMember } from '@/lib/types'
 import {
-  CheckSquare, Clock, AlertCircle, CheckCircle2, Plus, X, ChevronRight,
+  CheckSquare, Clock, AlertCircle, CheckCircle2, Plus, X, ChevronRight, ChevronLeft,
   Building2, User, Calendar, Flag, Tag, Trash2, Circle,
 } from 'lucide-react'
 
@@ -216,6 +216,9 @@ function TaskPanel({
 
         {/* Header */}
         <div className="p-5 flex-shrink-0" style={{ background: '#012b1e' }}>
+          <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mb-3">
+            <ChevronLeft size={14} /> Back
+          </button>
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${catColor}`}>

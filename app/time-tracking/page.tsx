@@ -407,7 +407,7 @@ export default function TimeTrackingPage() {
             <div className="text-sm font-semibold text-gray-900">
               {fmtHeader(weekDates[0])} — {fmtHeader(weekDates[6])}
             </div>
-            <div className="flex gap-1 mt-2 justify-center">
+            <div className="flex gap-1 mt-2 justify-center overflow-x-auto pb-1">
               {weekDates.map((d, i) => {
                 const iso = toIso(d)
                 const hasEntries = entries.some(e => e.date === iso)

@@ -110,12 +110,12 @@ function GreetingBanner({ name }: { name: string }) {
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
 function KpiCard({
-  label, value, sub, icon, accent, trend,
+  label, value, sub, icon, accent, trend, href,
 }: {
-  label: string; value: string; sub?: string; icon: React.ReactNode; accent: string; trend?: string
+  label: string; value: string; sub?: string; icon: React.ReactNode; accent: string; trend?: string; href?: string
 }) {
-  return (
-    <div className="kpi-card" style={{ '--kpi-accent': accent } as React.CSSProperties}>
+  const inner = (
+    <div className={`kpi-card h-full${href ? ' hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer' : ''}`} style={{ '--kpi-accent': accent } as React.CSSProperties}>
       <div className="flex items-start justify-between mb-3">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${accent}15` }}>
           <span style={{ color: accent }}>{icon}</span>
@@ -131,6 +131,7 @@ function KpiCard({
       {sub && <p className="text-[11px] text-gray-400 mt-1">{sub}</p>}
     </div>
   )
+  return href ? <Link href={href} className="block">{inner}</Link> : inner
 }
 
 // ─── Revenue Bar Chart ────────────────────────────────────────────────────────
@@ -304,12 +305,12 @@ export default function DashboardPage() {
 
         {/* KPI Row */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-          <KpiCard label="Pipeline"       value={formatCurrency(m.pipelineValue)}  icon={<TrendingUp size={17} />}   accent="#3b82f6"  sub="Active deals" />
-          <KpiCard label="Active Clients" value={String(m.activeClients)}          icon={<CheckCircle size={17} />}  accent="#015035"  sub="Executed contracts" />
-          <KpiCard label="Collected"      value={formatCurrency(m.monthlyRevenue)} icon={<DollarSign size={17} />}   accent="#22c55e"  sub="Payments received" />
-          <KpiCard label="Open Deals"     value={String(m.openDeals)}              icon={<RefreshCw size={17} />}    accent="#8b5cf6"  sub="In pipeline" />
-          <KpiCard label="Overdue"        value={String(m.overdueInvoices)}        icon={<FolderKanban size={17} />} accent="#f59e0b"  sub="Invoices overdue" />
-          <KpiCard label="Renewals (60d)" value={String(m.upcomingRenewals)}       icon={<Calendar size={17} />}     accent="#ef4444"  sub="Due soon" />
+          <KpiCard label="Pipeline"       value={formatCurrency(m.pipelineValue)}  icon={<TrendingUp size={17} />}   accent="#3b82f6"  sub="Active deals"        href="/crm/pipeline" />
+          <KpiCard label="Active Clients" value={String(m.activeClients)}          icon={<CheckCircle size={17} />}  accent="#015035"  sub="Executed contracts"  href="/contracts" />
+          <KpiCard label="Collected"      value={formatCurrency(m.monthlyRevenue)} icon={<DollarSign size={17} />}   accent="#22c55e"  sub="Payments received"   href="/billing" />
+          <KpiCard label="Open Deals"     value={String(m.openDeals)}              icon={<RefreshCw size={17} />}    accent="#8b5cf6"  sub="In pipeline"         href="/crm/pipeline" />
+          <KpiCard label="Overdue"        value={String(m.overdueInvoices)}        icon={<FolderKanban size={17} />} accent="#f59e0b"  sub="Invoices overdue"    href="/billing" />
+          <KpiCard label="Renewals (60d)" value={String(m.upcomingRenewals)}       icon={<Calendar size={17} />}     accent="#ef4444"  sub="Due soon"            href="/renewals" />
         </div>
 
         {/* Charts Row */}

@@ -17,7 +17,7 @@ import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMContact, ContactNote, ContactTask, CRMCompany, Deal, Contract, Project, CRMActivity } from '@/lib/types'
 import {
   X, Phone, Mail, User, Search, Plus, ScrollText,
-  ChevronRight, Linkedin, StickyNote, CheckSquare,
+  ChevronRight, ChevronLeft, Linkedin, StickyNote, CheckSquare,
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
   PhoneCall, Video, Pencil, Trash2,
@@ -394,6 +394,9 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
 
         {/* Header */}
         <div className="p-6 flex-shrink-0" style={{ background: '#012b1e' }}>
+          <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mb-3">
+            <ChevronLeft size={14} /> Back
+          </button>
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-4 flex-1 min-w-0 pr-3">
               <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>

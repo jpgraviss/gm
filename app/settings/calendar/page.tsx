@@ -48,6 +48,8 @@ export default function CalendarSettingsPage() {
   const [saved, setSaved]         = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [settings, setSettings]   = useState<Record<string, unknown> | null>(null)
+  const [gcalLink, setGcalLink]   = useState('')
+  const [allGcalLinks, setAllGcalLinks] = useState<Record<string, string>>({})
   const [fetching, setFetching]   = useState(true)
   const [copied, setCopied]       = useState(false)
 
@@ -71,47 +73,65 @@ export default function CalendarSettingsPage() {
   // Load existing settings
   useEffect(() => {
     if (!user?.email) return
-    fetch(`/api/calendar/settings?email=${encodeURIComponent(user.email)}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data && !data.error) {
-          setSettings(data)
-          setSlug(data.slug        ?? defaultSlug)
-          setTitle(data.title      ?? 'Book a Call')
-          setDescription(data.description ?? '')
-          setDuration(data.duration ?? 30)
-          setBuffer(data.buffer     ?? 15)
-          setTimezone(data.timezone ?? 'America/Chicago')
-          setAvailableDays(data.available_days ?? [1,2,3,4,5])
-          setStart(data.available_start ?? '09:00')
-          setEnd(data.available_end     ?? '17:00')
-        }
-        setFetching(false)
-      })
-      .catch(() => setFetching(false))
+    // Load calendar settings and global settings in parallel
+    Promise.all([
+      fetch(`/api/calendar/settings?email=${encodeURIComponent(user.email)}`).then(r => r.json()).catch(() => null),
+      fetch('/api/settings').then(r => r.json()).catch(() => null),
+    ]).then(([calData, globalData]) => {
+      if (calData && !calData.error) {
+        setSettings(calData)
+        setSlug(calData.slug        ?? defaultSlug)
+        setTitle(calData.title      ?? 'Book a Call')
+        setDescription(calData.description ?? '')
+        setDuration(calData.duration ?? 30)
+        setBuffer(calData.buffer     ?? 15)
+        setTimezone(calData.timezone ?? 'America/Chicago')
+        setAvailableDays(calData.available_days ?? [1,2,3,4,5])
+        setStart(calData.available_start ?? '09:00')
+        setEnd(calData.available_end     ?? '17:00')
+      }
+      const defaults: Record<string, string> = {
+        'jonathan@gravissmarketing.com': 'https://calendar.app.google/DdHBsREU2rAyEVoz8',
+        'jgraviss@gravissmarketing.com': 'https://calendar.app.google/DdHBsREU2rAyEVoz8',
+      }
+      const stored = (globalData?.gcal_links && typeof globalData.gcal_links === 'object') ? globalData.gcal_links as Record<string, string> : {}
+      const links = { ...defaults, ...stored }
+      setAllGcalLinks(links)
+      if (user?.email && links[user.email]) setGcalLink(links[user.email])
+      setFetching(false)
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.email])
 
   async function handleSave() {
     if (!user?.email) return
     setSaving(true)
-    await fetch('/api/calendar/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userEmail:      user.email,
-        userName:       user.name,
-        slug:           slug || defaultSlug,
-        title,
-        description:    description || null,
-        duration,
-        buffer,
-        timezone,
-        availableDays,
-        availableStart,
-        availableEnd,
+    const updatedLinks = { ...allGcalLinks, [user.email]: gcalLink }
+    await Promise.all([
+      fetch('/api/calendar/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userEmail:      user.email,
+          userName:       user.name,
+          slug:           slug || defaultSlug,
+          title,
+          description:    description || null,
+          duration,
+          buffer,
+          timezone,
+          availableDays,
+          availableStart,
+          availableEnd,
+        }),
       }),
-    })
+      fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gcalLinks: updatedLinks }),
+      }),
+    ])
+    setAllGcalLinks(updatedLinks)
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
@@ -270,6 +290,41 @@ export default function CalendarSettingsPage() {
               </a>
             </div>
           </div>
+        </div>
+
+        {/* ── Google Appointment Scheduling Link ── */}
+        <div className="bg-white rounded-xl border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
+              <ExternalLink className="w-4 h-4 text-red-500" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-gray-900">Google Appointment Scheduling Link</div>
+              <div className="text-xs text-gray-500">Paste your calendar.app.google link — clients can book directly in Google Calendar</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="url"
+              value={gcalLink}
+              onChange={e => setGcalLink(e.target.value)}
+              placeholder="https://calendar.app.google/..."
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/30"
+            />
+            {gcalLink && (
+              <a
+                href={gcalLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Open
+              </a>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Find this in Google Calendar → Create → Appointment Schedule → View booking page, then copy the URL.
+          </p>
         </div>
 
         {/* ── Meeting Details ── */}

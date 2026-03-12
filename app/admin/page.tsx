@@ -366,7 +366,7 @@ export default function AdminPage() {
     setUsers(prev => [...prev, newUser])
     // Send invite email in background
     if (addForm.email) {
-      sendInviteEmail(addForm.name, addForm.email, addForm.role, addForm.unit, addForm.password || 'Welcome1!')
+      await sendInviteEmail(addForm.name, addForm.email, addForm.role, addForm.unit, addForm.password || 'Welcome1!')
     }
     setAddForm({ name: '', email: '', password: '', role: 'Team Member', unit: 'Sales' })
     setShowAddUser(false)

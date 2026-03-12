@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { Calendar, Link2, Copy, Check, Clock, User, Building2, Video, X, ChevronRight, ExternalLink, Mail } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
+import { fetchTeamMembers } from '@/lib/supabase'
+import type { TeamMember } from '@/lib/types'
 
 interface Booking {
   id: string
@@ -51,6 +53,9 @@ export default function CalendarPage() {
   const [copied, setCopied]         = useState(false)
   const [filter, setFilter]         = useState<'upcoming' | 'past' | 'all'>('upcoming')
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [gcalLinks, setGcalLinks]   = useState<Record<string, string>>({})
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [copiedGcal, setCopiedGcal] = useState<string | null>(null)
 
   // Derive booking link from user's name (slug format)
   const userSlug = user?.name
@@ -68,6 +73,21 @@ export default function CalendarPage() {
       .then(d => { setBookings(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(() => setLoading(false))
   }, [userSlug])
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const defaults: Record<string, string> = {
+          'jonathan@gravissmarketing.com': 'https://calendar.app.google/DdHBsREU2rAyEVoz8',
+          'jgraviss@gravissmarketing.com': 'https://calendar.app.google/DdHBsREU2rAyEVoz8',
+        }
+        const stored = (d?.gcal_links && typeof d.gcal_links === 'object') ? d.gcal_links as Record<string, string> : {}
+        setGcalLinks({ ...defaults, ...stored })
+      })
+      .catch(() => {})
+    fetchTeamMembers().then(setTeamMembers)
+  }, [])
 
   const filtered = bookings.filter(b => {
     if (b.status === 'cancelled') return filter === 'past'
@@ -97,6 +117,14 @@ export default function CalendarPage() {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  function copyGcalLink(email: string, url: string) {
+    navigator.clipboard.writeText(url)
+    setCopiedGcal(email)
+    setTimeout(() => setCopiedGcal(null), 2000)
+  }
+
+  const membersWithLinks = teamMembers.filter(m => gcalLinks[m.email])
 
   return (
     <div className="min-h-screen bg-[#f9fafb]">
@@ -185,6 +213,70 @@ export default function CalendarPage() {
             </div>
           ))}
         </div>
+
+        {/* ── Google Appointment Scheduling Links ── */}
+        {(membersWithLinks.length > 0 || user) && (
+          <div className="bg-white rounded-xl border border-gray-100 p-5 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 bg-red-50 rounded-lg flex items-center justify-center">
+                  <Calendar className="w-3.5 h-3.5 text-red-500" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-gray-900">Google Appointment Scheduling</div>
+                  <div className="text-xs text-gray-400">Book directly via Google Calendar</div>
+                </div>
+              </div>
+              <a href="/settings/calendar" className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
+                Manage <ChevronRight className="w-3 h-3" />
+              </a>
+            </div>
+            {membersWithLinks.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {membersWithLinks.map(m => {
+                  const url = gcalLinks[m.email]
+                  const isSelf = m.email === user?.email
+                  return (
+                    <div key={m.id} className={`flex items-center gap-3 p-3 rounded-xl border ${isSelf ? 'border-[#015035]/30 bg-green-50/40' : 'border-gray-100 bg-gray-50'}`}>
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#012b1e' }}>
+                        {m.initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-gray-900 truncate">{m.name}</div>
+                        <div className="text-xs text-gray-400 truncate">{isSelf ? 'My link' : 'Booking link'}</div>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => copyGcalLink(m.email, url)}
+                          className="p-1.5 rounded-lg hover:bg-white border border-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+                          title="Copy link"
+                        >
+                          {copiedGcal === m.email ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 rounded-lg hover:bg-white border border-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+                          title="Open booking page"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-sm text-gray-400 mb-2">No appointment scheduling links configured yet.</p>
+                <a href="/settings/calendar" className="text-xs text-[#015035] font-semibold hover:underline">
+                  Add your Google Calendar link in Settings →
+                </a>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Bookings list + detail ── */}
         <div className="flex gap-4">

@@ -97,6 +97,7 @@ function SequencePanel({
   const [enrolling, setEnrolling] = useState(false)
   const [enrollSearch, setEnrollSearch] = useState('')
   const [enrollSelections, setEnrollSelections] = useState<Set<string>>(new Set())
+  const [runStatus, setRunStatus] = useState<string | null>(null)
 
   const enrolledContacts = crmContacts.slice(0, seq.enrolledCount)
 
@@ -150,17 +151,36 @@ function SequencePanel({
     setNewStepTask('')
   }
 
-  function commitEnroll() {
-    const count = enrollSelections.size
-    if (count === 0) { setEnrolling(false); return }
+  async function commitEnroll() {
+    if (enrollSelections.size === 0) { setEnrolling(false); return }
+    const selected = crmContacts.filter(c => enrollSelections.has(c.id) && c.emails[0])
+    if (!selected.length) { setEnrolling(false); return }
+    const contacts = selected.map(c => ({ id: c.id, name: c.fullName, email: c.emails[0] }))
+    await fetch(`/api/sequences/${seq.id}/enroll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contacts }),
+    })
     onUpdate({
       ...seq,
-      enrolledCount: seq.enrolledCount + count,
-      activeCount: seq.activeCount + count,
+      enrolledCount: seq.enrolledCount + selected.length,
+      activeCount: seq.activeCount + selected.length,
     })
     setEnrolling(false)
     setEnrollSelections(new Set())
     setEnrollSearch('')
+  }
+
+  async function handleRunNow() {
+    setRunStatus('running')
+    try {
+      const res = await fetch('/api/sequences/execute', { method: 'POST' })
+      const data = await res.json()
+      setRunStatus(`Sent ${data.sent ?? 0} email${data.sent === 1 ? '' : 's'}`)
+    } catch {
+      setRunStatus('Error running sequences')
+    }
+    setTimeout(() => setRunStatus(null), 4000)
   }
 
   const filteredForEnroll = crmContacts.filter(c =>
@@ -634,6 +654,15 @@ function SequencePanel({
               <Play size={14} /> Activate
             </button>
           ) : null}
+          {seq.status === 'Active' && (
+            <button
+              onClick={handleRunNow}
+              disabled={runStatus === 'running'}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            >
+              {runStatus === 'running' ? 'Running…' : runStatus ?? 'Run Now'}
+            </button>
+          )}
           <button
             onClick={() => onUpdate({
               ...seq,

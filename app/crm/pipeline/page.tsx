@@ -20,7 +20,7 @@ import {
   GripVertical, Pencil, Trash2, Check,
 } from 'lucide-react'
 
-const ALL_REPS = ['Jonathan Graviss']
+const ALL_REPS = ['Jonathan Graviss', 'JG Graviss']
 
 // ─── Pipeline Config Types ────────────────────────────────────────────────────
 

@@ -115,7 +115,7 @@ function inviteEmailHtml({
 
             <p style="margin:0;color:#9ca3af;font-size:13px;line-height:1.5;">
               If you weren't expecting this invitation, you can safely ignore this email.
-              Need help? Contact <a href="mailto:jgraviss@gravissmarketing.com" style="color:#015035;">jgraviss@gravissmarketing.com</a>.
+              Need help? Contact <a href="mailto:jonathan@gravissmarketing.com" style="color:#015035;">jonathan@gravissmarketing.com</a>.
             </p>
           </td>
         </tr>

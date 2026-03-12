@@ -44,7 +44,7 @@ const taskPriorityConfig: Record<ContactTask['priority'], { label: string; color
 
 // ─── Edit Contact Panel ───────────────────────────────────────────────────────
 
-const REPS = ['Jonathan Graviss', 'JG Graviss']
+const REPS = ['Jonathan Graviss']
 
 function EditContactPanel({
   contact,

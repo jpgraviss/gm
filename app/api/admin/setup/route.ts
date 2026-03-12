@@ -14,24 +14,14 @@ import { createServiceClient } from '@/lib/supabase'
 
 const BASE_USERS = [
   {
-    email:    'jonathan@gravissmarketing.com',
-    password: process.env.JONATHAN_PASSWORD ?? '',
+    email:    'jgraviss@gravissmarketing.com',
+    password: process.env.JG_PASSWORD ?? '',
     name:     'Jonathan Graviss',
     role:     'Super Admin',
     unit:     'Leadership/Admin',
     initials: 'JG',
     isAdmin:  true,
     tmId:     't0',
-  },
-  {
-    email:    'jgraviss@gravissmarketing.com',
-    password: process.env.JG_PASSWORD ?? '',
-    name:     'JG Graviss',
-    role:     'Super Admin',
-    unit:     'Leadership/Admin',
-    initials: 'JG',
-    isAdmin:  true,
-    tmId:     't1',
   },
   {
     email:    'test@gravissmarketing.com',

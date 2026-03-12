@@ -110,7 +110,7 @@ function resetEmailHtml({
                   <p style="margin:0;font-size:13px;color:#991b1b;font-weight:600;">Security notice</p>
                   <p style="margin:4px 0 0;font-size:12px;color:#b91c1c;line-height:1.5;">
                     If you did not expect this reset, your account may be at risk. Contact
-                    <a href="mailto:jonathan@gravissmarketing.com" style="color:#991b1b;">jonathan@gravissmarketing.com</a> immediately.
+                    <a href="mailto:jgraviss@gravissmarketing.com" style="color:#991b1b;">jgraviss@gravissmarketing.com</a> immediately.
                   </p>
                 </td>
               </tr>

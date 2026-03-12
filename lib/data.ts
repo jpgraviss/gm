@@ -17,8 +17,7 @@ import type {
 } from './types'
 
 export const teamMembers: TeamMember[] = [
-  { id: 't0', name: 'Jonathan Graviss', email: 'jonathan@gravissmarketing.com', role: 'Super Admin', unit: 'Leadership/Admin', initials: 'JG' },
-  { id: 't6', name: 'JG Graviss', email: 'jgraviss@gravissmarketing.com', role: 'Super Admin', unit: 'Leadership/Admin', initials: 'JG' },
+  { id: 't0', name: 'Jonathan Graviss', email: 'jgraviss@gravissmarketing.com', role: 'Super Admin', unit: 'Leadership/Admin', initials: 'JG' },
 ]
 
 // ─── Trailhead Media ──────────────────────────────────────────────────────────

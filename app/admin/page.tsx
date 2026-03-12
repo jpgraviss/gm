@@ -924,7 +924,7 @@ export default function AdminPage() {
               <div className="flex flex-col gap-3">
                 {[
                   { label: 'Company Name', value: 'Graviss Marketing' },
-                  { label: 'Admin Email', value: 'jonathan@gravissmarketing.com' },
+                  { label: 'Admin Email', value: 'jgraviss@gravissmarketing.com' },
                   { label: 'Platform URL', value: 'gravhub.gravissmarketing.com' },
                   { label: 'Fiscal Year Start', value: 'January' },
                   { label: 'Default Currency', value: 'USD ($)' },

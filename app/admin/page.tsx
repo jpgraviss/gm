@@ -174,11 +174,42 @@ export default function AdminPage() {
   const [bulkResetTarget, setBulkResetTarget] = useState('')
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([])
 
+  // QuickBooks
+  const [qbConnected, setQbConnected]   = useState(false)
+  const [qbStatus, setQbStatus]         = useState<{ lastSync: string | null; invoicesSynced: number; paymentsSynced: number; syncErrors: number } | null>(null)
+  const [qbSyncing, setQbSyncing]       = useState(false)
+
+  function fetchQBStatus() {
+    fetch('/api/quickbooks/status')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.connected) {
+          setQbConnected(true)
+          setQbStatus({ lastSync: d.lastSync, invoicesSynced: d.invoicesSynced, paymentsSynced: d.paymentsSynced, syncErrors: d.syncErrors })
+        } else {
+          setQbConnected(false)
+          setQbStatus(null)
+        }
+      })
+      .catch(() => {})
+  }
+
+  async function handleQBSync() {
+    setQbSyncing(true)
+    try {
+      await fetch('/api/quickbooks/sync', { method: 'POST' })
+      fetchQBStatus()
+    } catch { /* ignore */ } finally {
+      setQbSyncing(false)
+    }
+  }
+
   useEffect(() => {
     fetch('/api/audit-logs?limit=50')
       .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setAuditLog(data) })
       .catch(() => {})
+    fetchQBStatus()
   }, [])
 
   async function handleImport() {
@@ -789,14 +820,20 @@ export default function AdminPage() {
                 <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center font-bold text-blue-700 text-sm">QB</div>
                 <div>
                   <h3 className="text-sm font-bold text-gray-800">QuickBooks Configuration</h3>
-                  <p className="text-xs text-green-600 font-medium">● Connected • Syncing automatically</p>
+                  {qbConnected ? (
+                    <p className="text-xs text-green-600 font-medium">
+                      ● Connected{qbStatus?.lastSync ? ` • Last sync: ${new Date(qbStatus.lastSync).toLocaleString()}` : ' • Syncing automatically'}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400 font-medium">● Not connected — <a href="/settings?tab=Billing" className="text-emerald-700 hover:underline">Connect in Settings</a></p>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                 {[
-                  { label: 'Invoices Synced', value: '7', icon: <CheckCircle size={13} className="text-green-500" /> },
-                  { label: 'Payments Synced', value: '5', icon: <CheckCircle size={13} className="text-green-500" /> },
-                  { label: 'Sync Errors', value: '0', icon: <CheckCircle size={13} className="text-green-500" /> },
+                  { label: 'Invoices Synced', value: String(qbStatus?.invoicesSynced ?? 0), icon: <CheckCircle size={13} className="text-green-500" /> },
+                  { label: 'Payments Synced', value: String(qbStatus?.paymentsSynced ?? 0), icon: <CheckCircle size={13} className="text-green-500" /> },
+                  { label: 'Sync Errors',     value: String(qbStatus?.syncErrors ?? 0),     icon: <CheckCircle size={13} className={qbStatus?.syncErrors ? 'text-red-500' : 'text-green-500'} /> },
                 ].map(s => (
                   <div key={s.label} className="flex items-center gap-2.5 p-3 bg-gray-50 rounded-xl">
                     {s.icon}
@@ -808,12 +845,12 @@ export default function AdminPage() {
                 ))}
               </div>
               <div className="flex gap-2">
-                <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>
-                  <RefreshCw size={12} /> Sync Now
+                <button onClick={handleQBSync} disabled={!qbConnected || qbSyncing} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg disabled:opacity-50" style={{ background: '#015035' }}>
+                  <RefreshCw size={12} className={qbSyncing ? 'animate-spin' : ''} /> {qbSyncing ? 'Syncing…' : 'Sync Now'}
                 </button>
-                <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                <a href="/settings?tab=Billing" className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                   <Settings size={12} /> Settings
-                </button>
+                </a>
                 <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                   <Activity size={12} /> Sync Log
                 </button>

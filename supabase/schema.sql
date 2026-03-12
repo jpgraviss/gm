@@ -147,16 +147,21 @@ create table if not exists public.contracts (
 
 -- ─── Invoices ─────────────────────────────────────────────────────────────────
 create table if not exists public.invoices (
-  id           text primary key,
-  contract_id  text references public.contracts(id) on delete set null,
-  company      text not null default '',
-  amount       numeric not null default 0,
-  status       text not null default 'Pending',
-  due_date     text,
-  issued_date  text,
-  paid_date    text,
-  service_type text not null default 'General',
-  created_at   timestamptz not null default now()
+  id             text primary key,
+  contract_id    text references public.contracts(id) on delete set null,
+  company        text not null default '',
+  amount         numeric not null default 0,
+  status         text not null default 'Pending',
+  due_date       text,
+  issued_date    text,
+  paid_date      text,
+  service_type   text not null default 'General',
+  qb_invoice_id  text unique,
+  client         text,
+  amount_paid    numeric not null default 0,
+  issue_date     text,
+  source         text not null default 'manual',
+  created_at     timestamptz not null default now()
 );
 
 -- ─── Projects ─────────────────────────────────────────────────────────────────
@@ -437,3 +442,22 @@ create table if not exists public.app_settings (
 alter table public.app_settings enable row level security;
 create policy "auth_read_app_settings"  on public.app_settings for select  to authenticated using (true);
 create policy "auth_write_app_settings" on public.app_settings for all     to authenticated using (true) with check (true);
+
+-- ─── QuickBooks Config ─────────────────────────────────────────────────────────
+create table if not exists public.quickbooks_config (
+  id               uuid        primary key default gen_random_uuid(),
+  realm_id         text        not null,
+  access_token     text        not null,
+  refresh_token    text        not null,
+  token_expires_at timestamptz not null,
+  last_sync_at     timestamptz,
+  invoices_synced  integer     not null default 0,
+  payments_synced  integer     not null default 0,
+  sync_errors      integer     not null default 0,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+
+alter table public.quickbooks_config enable row level security;
+create policy "auth_read_qb_config"  on public.quickbooks_config for select to authenticated using (true);
+create policy "auth_write_qb_config" on public.quickbooks_config for all    to authenticated using (true) with check (true);

@@ -72,7 +72,7 @@ function GreetingBanner({ name }: { name: string }) {
       const elapsed = Date.now() - loginAt
       const THREE_MIN = 3 * 60 * 1000
       if (elapsed >= THREE_MIN) return
-      setGreeting(buildGreeting(name, new Date()))
+      setGreeting(buildGreeting(name, new Date())) // user's local timezone
       setVisible(true)
       const timer = setTimeout(() => setVisible(false), THREE_MIN - elapsed)
       return () => clearTimeout(timer)

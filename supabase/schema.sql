@@ -429,6 +429,8 @@ create table if not exists public.app_settings (
   pipeline_stages  jsonb not null default '[]',
   service_types    jsonb not null default '[]',
   contact_tags     jsonb not null default '[]',
+  branding         jsonb not null default '{}',
+  qb_sync          jsonb not null default '[]',
   updated_at       timestamptz not null default now()
 );
 

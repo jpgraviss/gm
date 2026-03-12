@@ -24,6 +24,8 @@ export async function PATCH(req: NextRequest) {
   if (body.pipelineStages   !== undefined) updates.pipeline_stages  = body.pipelineStages
   if (body.serviceTypes     !== undefined) updates.service_types    = body.serviceTypes
   if (body.contactTags      !== undefined) updates.contact_tags     = body.contactTags
+  if (body.branding         !== undefined) updates.branding         = body.branding
+  if (body.qbSync           !== undefined) updates.qb_sync          = body.qbSync
 
   const { data, error } = await db
     .from('app_settings')

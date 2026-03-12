@@ -93,6 +93,11 @@ const NOTIF_DEFAULTS = [
   { label: 'Client portal login', enabled: false, category: 'Portal' },
 ]
 
+const BRANDING_DEFAULTS = {
+  primaryColor: '#015035',
+  secondaryColor: '#FFF3EA',
+}
+
 const QB_SYNC_DEFAULTS = [
   { label: 'Sync new invoices to QuickBooks automatically', enabled: true },
   { label: 'Pull payment updates from QuickBooks', enabled: true },
@@ -142,6 +147,9 @@ export default function SettingsPage() {
   // Notifications
   const [notifications, setNotifications] = useState(NOTIF_DEFAULTS)
 
+  // Branding
+  const [branding, setBranding] = useState(BRANDING_DEFAULTS)
+
   // QB Sync
   const [qbSync, setQbSync] = useState(QB_SYNC_DEFAULTS)
 
@@ -168,6 +176,8 @@ export default function SettingsPage() {
           setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
           setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
           setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
+          setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
+          setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
           return
         }
         if (d.company          && Object.keys(d.company).length)           setCompany(d.company)
@@ -176,6 +186,8 @@ export default function SettingsPage() {
         if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length)  setPipelineStages(d.pipeline_stages)
         if (Array.isArray(d.service_types)   && d.service_types.length)    setServiceTypes(d.service_types)
         if (Array.isArray(d.contact_tags)    && d.contact_tags.length)     setContactTags(d.contact_tags)
+        if (d.branding         && Object.keys(d.branding).length)          setBranding(d.branding)
+        if (Array.isArray(d.qb_sync)         && d.qb_sync.length)          setQbSync(d.qb_sync)
       })
       .catch(() => {
         setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
@@ -184,8 +196,9 @@ export default function SettingsPage() {
         setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
         setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
         setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
+        setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
+        setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
       })
-    setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
   }, [])
 
   // Keep members in sync with auth
@@ -219,6 +232,14 @@ export default function SettingsPage() {
 
   function saveCRM() {
     patchSettings({ pipelineStages, serviceTypes, contactTags }, 'CRM Setup')
+  }
+
+  function saveBranding() {
+    patchSettings({ branding }, 'Branding')
+  }
+
+  function saveQbSync() {
+    patchSettings({ qbSync }, 'QB Sync')
   }
 
   async function submitInvite() {
@@ -545,22 +566,33 @@ export default function SettingsPage() {
         {/* ── Branding ── */}
         {activeTab === 'Branding' && (
           <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
-            <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Brand Configuration</h3>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Brand Configuration</h3>
+              {saved === 'Branding' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+            </div>
             <div className="flex flex-col gap-5">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Primary Color</label>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: '#015035' }} />
-                  <input className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700" defaultValue="#015035" />
-                  <span className="text-xs text-gray-500 hidden sm:inline">Deep Green</span>
+                  <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.primaryColor }} />
+                  <input
+                    className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                    value={branding.primaryColor}
+                    onChange={e => setBranding(p => ({ ...p, primaryColor: e.target.value }))}
+                  />
+                  <input type="color" value={branding.primaryColor} onChange={e => setBranding(p => ({ ...p, primaryColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Secondary Color</label>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: '#FFF3EA' }} />
-                  <input className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700" defaultValue="#FFF3EA" />
-                  <span className="text-xs text-gray-500 hidden sm:inline">Soft Tan</span>
+                  <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.secondaryColor }} />
+                  <input
+                    className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                    value={branding.secondaryColor}
+                    onChange={e => setBranding(p => ({ ...p, secondaryColor: e.target.value }))}
+                  />
+                  <input type="color" value={branding.secondaryColor} onChange={e => setBranding(p => ({ ...p, secondaryColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
                 </div>
               </div>
               <div>
@@ -575,7 +607,9 @@ export default function SettingsPage() {
                   Montserrat — The unified internal operating system for Graviss Marketing
                 </div>
               </div>
-              <button className="w-fit px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>Save Branding</button>
+              <button onClick={saveBranding} className="w-fit flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+                {saved === 'Branding' ? <><CheckCircle size={14} /> Saved!</> : 'Save Branding'}
+              </button>
             </div>
           </div>
         )}
@@ -779,7 +813,10 @@ export default function SettingsPage() {
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>QB Sync Settings</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>QB Sync Settings</h3>
+                {saved === 'QB Sync' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+              </div>
               <div className="flex flex-col gap-1">
                 {qbSync.map(item => (
                   <div key={item.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0 gap-3">
@@ -788,6 +825,9 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
+              <button onClick={saveQbSync} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+                {saved === 'QB Sync' ? <><CheckCircle size={14} /> Saved!</> : 'Save QB Sync Settings'}
+              </button>
             </div>
           </div>
         )}

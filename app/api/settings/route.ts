@@ -26,6 +26,8 @@ export async function PATCH(req: NextRequest) {
   if (body.contactTags      !== undefined) updates.contact_tags     = body.contactTags
   if (body.branding         !== undefined) updates.branding         = body.branding
   if (body.qbSync           !== undefined) updates.qb_sync          = body.qbSync
+  if (body.gcalLinks        !== undefined) updates.gcal_links       = body.gcalLinks
+  if (body.pipelines        !== undefined) updates.pipelines        = body.pipelines
 
   const { data, error } = await db
     .from('app_settings')

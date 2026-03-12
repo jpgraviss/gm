@@ -15,7 +15,7 @@ import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/New
 import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/types'
 import {
   X, Phone, Mail, Calendar, TrendingUp, DollarSign,
-  FileText, ScrollText, User, ChevronRight, Plus,
+  FileText, ScrollText, User, ChevronRight, ChevronLeft, Plus,
   CheckCircle2, Circle, AlertCircle, Settings,
   GripVertical, Pencil, Trash2, Check,
 } from 'lucide-react'
@@ -202,6 +202,9 @@ function DealPanel({
 
         {/* Header */}
         <div className="p-6 border-b border-gray-100 flex-shrink-0">
+          <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-gray-500 hover:text-gray-700 text-xs font-medium mb-3">
+            <ChevronLeft size={14} /> Back
+          </button>
           <div className="flex items-start justify-between mb-3">
             <div>
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -771,7 +774,7 @@ export default function PipelinePage() {
   const activePipeline = pipelines.find(p => p.id === activePipelineId) ?? pipelines[0]
   const activeStages = activePipeline.stages
 
-  const reps = ['All', ...Array.from(new Set(localDeals.map(d => d.assignedRep)))]
+  const reps = ['All', ...ALL_REPS]
   const filteredDeals = filterRep === 'All' ? localDeals : localDeals.filter(d => d.assignedRep === filterRep)
 
   const openDeals = filteredDeals.filter(d => !d.stage.startsWith('Closed'))

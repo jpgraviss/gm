@@ -22,21 +22,36 @@ function AddClientPanel({ onClose, onSave }: { onClose: () => void; onSave: (cli
   const [email, setEmail] = useState('')
   const [service, setService] = useState('Website')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   const canSave = company.trim() !== '' && contact.trim() !== '' && email.trim() !== ''
 
   async function handleSave() {
     if (!canSave) return
     setSaving(true)
+    setError('')
     try {
       const res = await fetch('/api/portal-clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company: company.trim(), contact: contact.trim(), email: email.trim(), service }),
+        body: JSON.stringify({
+          company: company.trim(),
+          contact: contact.trim(),
+          email: email.trim(),
+          service,
+          access: 'Not Setup',
+          lastLogin: new Date().toISOString().split('T')[0],
+        }),
       })
+      if (!res.ok) {
+        setError('Failed to add client. Please try again.')
+        setSaving(false)
+        return
+      }
       const newClient: PortalClient = await res.json()
       onSave(newClient)
     } catch {
+      setError('Failed to add client. Please try again.')
       setSaving(false)
     }
   }
@@ -106,7 +121,9 @@ function AddClientPanel({ onClose, onSave }: { onClose: () => void; onSave: (cli
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200 flex-shrink-0 bg-white">
+        <div className="flex flex-col gap-2 px-5 py-4 border-t border-gray-200 flex-shrink-0 bg-white">
+          {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+          <div className="flex items-center justify-end gap-2">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
@@ -121,6 +138,7 @@ function AddClientPanel({ onClose, onSave }: { onClose: () => void; onSave: (cli
           >
             {saving ? 'Adding…' : 'Add Client'}
           </button>
+          </div>
         </div>
       </div>
     </div>

@@ -307,7 +307,7 @@ export default function BillingPage() {
   }
 
   const filtered = statusFilter === 'All' ? localInvoices : localInvoices.filter(i => i.status === statusFilter)
-  const maxRevenue = revenueByMonth.length > 0 ? Math.max(...revenueByMonth.map(r => r.revenue)) : 1
+  const maxRevenue = Math.max(1, ...revenueByMonth.map(r => r.revenue || 0))
 
   const metrics = {
     awaitingInvoice: contracts.filter(c => c.status === 'Fully Executed').length,
@@ -324,7 +324,7 @@ export default function BillingPage() {
     { service: 'SEO', amount: localInvoices.filter(i => i.serviceType === 'SEO' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
     { service: 'Email Marketing', amount: localInvoices.filter(i => i.serviceType === 'Email Marketing' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
   ].filter(s => s.amount > 0)
-  const maxService = serviceBreakdown.length > 0 ? Math.max(...serviceBreakdown.map(s => s.amount)) : 1
+  const maxService = Math.max(1, ...serviceBreakdown.map(s => s.amount || 0))
 
   return (
     <>
@@ -375,11 +375,11 @@ export default function BillingPage() {
                   <div className="w-full flex flex-col">
                     <div
                       className="w-full rounded-t-sm"
-                      style={{ height: `${((d.revenue - d.recurring) / maxRevenue) * 120}px`, background: '#015035' }}
+                      style={{ height: `${(((d.revenue || 0) - (d.recurring || 0)) / maxRevenue) * 120}px`, background: '#015035' }}
                     />
                     <div
                       className="w-full rounded-b-sm"
-                      style={{ height: `${(d.recurring / maxRevenue) * 120}px`, background: '#FFF3EA', border: '1px solid #e5c9b2', borderTop: 'none' }}
+                      style={{ height: `${((d.recurring || 0) / maxRevenue) * 120}px`, background: '#FFF3EA', border: '1px solid #e5c9b2', borderTop: 'none' }}
                     />
                   </div>
                   <span className="text-[10px] text-gray-400 font-medium">{d.month}</span>

@@ -19,7 +19,7 @@ import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMCompany, CRMContact, CompanyStatus, Deal, Contract, Invoice, Project, CRMActivity } from '@/lib/types'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
-  User, Filter, Search, Plus, FileText, ScrollText, ChevronRight,
+  User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
   ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2,
 } from 'lucide-react'
 
@@ -151,6 +151,9 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, 
 
         {/* Header */}
         <div className="p-6 flex-shrink-0" style={{ background: '#012b1e' }}>
+          <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mb-3">
+            <ChevronLeft size={14} /> Back
+          </button>
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3 flex-1 min-w-0 pr-3">
               <div className="w-11 h-11 rounded-xl flex items-center justify-center text-lg font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>

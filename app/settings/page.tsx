@@ -239,14 +239,12 @@ export default function SettingsPage() {
   const [invoiceDefaults, setInvoiceDefaults] = useState(INVOICE_DEFAULTS)
 
   // CRM Setup
-  const [pipelineStages, setPipelineStages] = useState(PIPELINE_STAGES_DEFAULT)
   const [pipelines, setPipelines] = useState<PipelineConf[]>(PIPELINES_DEFAULT)
   const [expandedPipelineId, setExpandedPipelineId] = useState<string | null>('sales')
   const [newStageNames, setNewStageNames] = useState<Record<string, string>>({})
   const [newPipelineName, setNewPipelineName] = useState('')
   const [serviceTypes, setServiceTypes] = useState(SERVICE_TYPES_DEFAULT)
   const [contactTags, setContactTags] = useState(CONTACT_TAGS_DEFAULT)
-  const [newStage, setNewStage] = useState('')
   const [newService, setNewService] = useState('')
   const [newTag, setNewTag] = useState('')
 
@@ -259,7 +257,6 @@ export default function SettingsPage() {
           setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
           setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
           setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
-          setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
           setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
           setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
           setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
@@ -269,7 +266,6 @@ export default function SettingsPage() {
         if (d.company          && Object.keys(d.company).length)           setCompany(d.company)
         if (Array.isArray(d.notifications)   && d.notifications.length)    setNotifications(d.notifications)
         if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(d.invoice_defaults)
-        if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length)  setPipelineStages(d.pipeline_stages)
         if (Array.isArray(d.pipelines) && d.pipelines.length) setPipelines(d.pipelines)
         else if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length) setPipelines([{ id: 'sales', name: 'Sales Pipeline', stages: d.pipeline_stages.map((name: string, i: number) => ({ id: `s${i}`, name, color: STAGE_COLORS_CYCLE[i % STAGE_COLORS_CYCLE.length] })) }])
         if (Array.isArray(d.service_types)   && d.service_types.length)    setServiceTypes(d.service_types)
@@ -281,7 +277,6 @@ export default function SettingsPage() {
         setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
         setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
         setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
-        setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
         setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
         setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
         setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
@@ -319,7 +314,7 @@ export default function SettingsPage() {
   }
 
   function saveCRM() {
-    const firstPipelineStages = pipelines[0]?.stages.map(s => s.name) ?? pipelineStages
+    const firstPipelineStages = pipelines[0]?.stages.map(s => s.name) ?? []
     patchSettings({ pipelineStages: firstPipelineStages, pipelines, serviceTypes, contactTags }, 'CRM Setup')
   }
 

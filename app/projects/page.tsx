@@ -799,7 +799,7 @@ export default function ProjectsPage() {
 
   // Metrics
   const active = localProjects.filter(p => ['In Progress', 'Awaiting Client', 'Not Started'].includes(p.status))
-  const avgProgress = Math.round(localProjects.reduce((s, p) => s + p.progress, 0) / localProjects.length)
+  const avgProgress = localProjects.length > 0 ? Math.round(localProjects.reduce((s, p) => s + p.progress, 0) / localProjects.length) : 0
   const allOverdue = localProjects.flatMap(p => p.tasks.filter(t => !t.completed && t.dueDate < today))
   const launched = localProjects.filter(p => ['Launched', 'In Maintenance', 'Completed'].includes(p.status))
 

@@ -13,6 +13,8 @@ export interface AuthUser {
   unit: string
   isAdmin: boolean
   avatar?: string
+  userType: 'staff' | 'client'
+  company?: string
 }
 
 interface AuthContextType {
@@ -46,6 +48,23 @@ function rowToAuthUser(row: any, avatar?: string): AuthUser {
     unit:     row.unit,
     isAdmin:  row.is_admin ?? false,
     avatar,
+    userType: 'staff',
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function clientToAuthUser(row: any): AuthUser {
+  const names = (row.contact ?? '').split(' ')
+  return {
+    id:       row.id,
+    email:    row.email,
+    name:     row.contact ?? row.email,
+    role:     'Client',
+    initials: names.map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'CL',
+    unit:     'Client',
+    isAdmin:  false,
+    userType: 'client',
+    company:  row.company,
   }
 }
 
@@ -66,12 +85,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadProfileByEmail = useCallback(async (email: string, avatar?: string): Promise<AuthUser | null> => {
     try {
       const supabase = getSupabaseClient()
-      const { data } = await supabase
+      const { data: teamData } = await supabase
         .from('team_members')
         .select('*')
         .eq('email', email.toLowerCase())
         .single()
-      return data ? rowToAuthUser(data, avatar) : null
+      if (teamData) return rowToAuthUser(teamData, avatar)
+
+      const { data: clientData } = await supabase
+        .from('portal_clients')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .single()
+      if (clientData) return clientToAuthUser(clientData)
+
+      return null
     } catch { return null }
   }, [])
 
@@ -88,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const profile = await loadProfileByEmail(session.user.email)
         if (profile) {
           setUser(profile)
-          fetchMembers()
+          if (profile.userType === 'staff') fetchMembers()
         }
       }
       setLoading(false)
@@ -113,10 +141,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) return { ok: false, error: 'Incorrect email or password.' }
 
       const profile = await loadProfileByEmail(email)
-      if (!profile) return { ok: false, error: 'No team member profile found. Contact your administrator.' }
+      if (!profile) return { ok: false, error: 'No account found for this email. Contact your administrator.' }
 
       setUser(profile)
-      fetchMembers()
+      if (profile.userType === 'staff') fetchMembers()
       try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
       return { ok: true }
     } catch (err) {

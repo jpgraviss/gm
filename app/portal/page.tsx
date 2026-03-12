@@ -16,7 +16,7 @@ type PortalClient = { id: string; company: string; service: string; access: stri
 
 // ─── Add Client Panel ─────────────────────────────────────────────────────────
 
-function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; onSave: (client: PortalClient) => void; onInvite: (client: PortalClient) => Promise<void> }) {
+function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; onSave: (client: PortalClient) => void; onInvite: (client: PortalClient, tempPassword?: string) => Promise<void> }) {
   const [company, setCompany] = useState('')
   const [contact, setContact] = useState('')
   const [email, setEmail] = useState('')
@@ -50,9 +50,10 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
         setSaving(false)
         return
       }
-      const newClient: PortalClient = await res.json()
+      const json = await res.json()
+      const newClient: PortalClient = json
       onSave(newClient)
-      await onInvite(newClient)
+      await onInvite(newClient, json.tempPassword)
       setSaved(true)
       setSavedCount(n => n + 1)
       setSaving(false)
@@ -638,9 +639,23 @@ export default function PortalPage() {
       .catch(() => {})
   }, [])
 
-  async function sendPortalInvite(client: PortalClient, isResend = false) {
+  async function sendPortalInvite(client: PortalClient, isResend = false, tempPassword?: string) {
     setInviteStatus(prev => ({ ...prev, [client.company]: 'sending' }))
     try {
+      // On resend, reset the client's password first so they get new credentials
+      let password = tempPassword
+      if (isResend && client.email) {
+        const resetRes = await fetch('/api/portal-clients/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: client.email }),
+        })
+        if (resetRes.ok) {
+          const resetData = await resetRes.json()
+          password = resetData.tempPassword
+        }
+      }
+
       const res = await fetch('/api/email/portal-invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -650,6 +665,7 @@ export default function PortalPage() {
           email: client.email,
           service: client.service,
           isResend,
+          tempPassword: password,
         }),
       })
       if (res.ok) {
@@ -866,7 +882,7 @@ export default function PortalPage() {
         <AddClientPanel
           onClose={() => setAddingClient(false)}
           onSave={newClient => setClients(prev => [...prev, newClient])}
-          onInvite={client => sendPortalInvite(client, false)}
+          onInvite={(client, tempPassword) => sendPortalInvite(client, false, tempPassword)}
         />
       )}
     </>

@@ -27,6 +27,21 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const body = await req.json()
   const db = createServiceClient()
+
+  // Generate temp password and create Supabase Auth user so client can log in
+  const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4).toUpperCase()
+  if (body.email) {
+    const { error: authError } = await db.auth.admin.createUser({
+      email: body.email,
+      password: tempPassword,
+      email_confirm: true,
+    })
+    // If user already exists in auth (e.g. re-adding), ignore the conflict error
+    if (authError && !authError.message.includes('already')) {
+      return NextResponse.json({ error: authError.message }, { status: 500 })
+    }
+  }
+
   const { data, error } = await db
     .from('portal_clients')
     .insert({
@@ -41,5 +56,5 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(mapClient(data), { status: 201 })
+  return NextResponse.json({ ...mapClient(data), tempPassword }, { status: 201 })
 }

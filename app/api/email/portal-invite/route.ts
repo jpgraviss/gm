@@ -5,7 +5,7 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(req: NextRequest) {
   try {
-    const { company, contactName, email, service, isResend } = await req.json()
+    const { company, contactName, email, service, isResend, tempPassword } = await req.json()
 
     if (!company || !email) {
       return NextResponse.json({ error: 'company and email are required' }, { status: 400 })
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       subject: isResend
         ? `Reminder: Your ${company} client portal is ready`
         : `Your Graviss Marketing client portal is ready`,
-      html: portalInviteHtml({ company, contactName, service, portalUrl, isResend }),
+      html: portalInviteHtml({ company, contactName, service, portalUrl, isResend, tempPassword }),
     })
 
     if (error) {
@@ -41,12 +41,14 @@ function portalInviteHtml({
   service,
   portalUrl,
   isResend,
+  tempPassword,
 }: {
   company: string
   contactName: string
   service: string
   portalUrl: string
   isResend?: boolean
+  tempPassword?: string
 }) {
   return `<!DOCTYPE html>
 <html>
@@ -109,7 +111,7 @@ function portalInviteHtml({
                       </td>
                       <td width="50%">
                         <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;">Active Service</p>
-                        <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${service}</p>
+                        <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${service || 'Client Services'}</p>
                       </td>
                     </tr>
                   </table>
@@ -117,27 +119,18 @@ function portalInviteHtml({
               </tr>
             </table>
 
-            <!-- What you can do -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-              <tr><td style="padding-bottom:12px;">
-                <p style="margin:0;font-size:13px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">In your portal you can:</p>
-              </td></tr>
-              ${['View live project progress & milestones', 'Access and download invoices', 'Submit support requests', 'View shared files & deliverables'].map(item => `
+            ${tempPassword ? `
+            <!-- Login credentials -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;margin-bottom:28px;">
               <tr>
-                <td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                  <table cellpadding="0" cellspacing="0">
-                    <tr>
-                      <td style="width:20px;padding-right:10px;">
-                        <div style="width:18px;height:18px;background:#015035;border-radius:50%;text-align:center;line-height:18px;">
-                          <span style="color:#fff;font-size:10px;font-weight:bold;">✓</span>
-                        </div>
-                      </td>
-                      <td style="font-size:14px;color:#374151;">${item}</td>
-                    </tr>
-                  </table>
+                <td style="padding:20px 24px;">
+                  <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;">Your Login Credentials</p>
+                  <p style="margin:8px 0 4px;font-size:13px;color:#78350f;">Email: <strong>${contactName ? '' : ''}</strong> <span style="font-family:monospace;">${'(your email address)'}</span></p>
+                  <p style="margin:4px 0 8px;font-size:13px;color:#78350f;">Password: <strong style="font-family:monospace;font-size:16px;letter-spacing:0.1em;">${tempPassword}</strong></p>
+                  <p style="margin:0;font-size:12px;color:#92400e;">Please change your password after your first login.</p>
                 </td>
-              </tr>`).join('')}
-            </table>
+              </tr>
+            </table>` : ''}
 
             <!-- CTA -->
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">

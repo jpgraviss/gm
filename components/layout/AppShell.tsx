@@ -42,8 +42,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (loading) return
     if (!user && !isPublic) {
       router.replace('/login')
-    } else if (user && isPublic && pathname === '/login') {
-      router.replace('/')
+    } else if (user && pathname === '/login') {
+      router.replace(user.userType === 'client' ? '/client' : '/')
+    } else if (user && user.userType === 'client' && pathname !== '/client') {
+      router.replace('/client')
     } else if (user && !isPublic && !isRouteAllowed(pathname, user)) {
       router.replace('/')
     }
@@ -82,6 +84,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // Not authenticated — returning null while redirect runs
   if (!user) return null
+
+  // Client users — no sidebar, bare shell
+  if (user.userType === 'client') {
+    return (
+      <main className="flex min-h-screen flex-col" style={{ background: '#f8fafc' }}>
+        {children}
+      </main>
+    )
+  }
 
   return (
     <div className="flex min-h-screen">

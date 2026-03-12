@@ -8,6 +8,27 @@ import Sidebar from './Sidebar'
 
 const PUBLIC_ROUTES = ['/login']
 
+// Pages restricted to specific units. Admins (isAdmin=true) always have full access.
+// If a route prefix is listed, users whose unit is NOT in the allowed list get redirected to /.
+const UNIT_RESTRICTED: { prefix: string; allowedUnits: string[] }[] = [
+  { prefix: '/proposals',   allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
+  { prefix: '/contracts',   allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
+  { prefix: '/billing',     allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
+  { prefix: '/reports',     allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
+  { prefix: '/automation',  allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
+  { prefix: '/portal',      allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
+  { prefix: '/settings',    allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
+  { prefix: '/admin',       allowedUnits: [] }, // handled separately by adminOnly
+]
+
+function isRouteAllowed(pathname: string, user: { isAdmin: boolean; unit: string } | null): boolean {
+  if (!user) return false
+  if (user.isAdmin) return true
+  const match = UNIT_RESTRICTED.find(r => pathname === r.prefix || pathname.startsWith(r.prefix + '/'))
+  if (!match) return true
+  return match.allowedUnits.includes(user.unit)
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   const { sidebarOpen, closeSidebar } = useUI()
@@ -22,7 +43,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (!user && !isPublic) {
       router.replace('/login')
     } else if (user && isPublic && pathname === '/login') {
-      // Only redirect away from login, not from public /book pages
+      router.replace('/')
+    } else if (user && !isPublic && !isRouteAllowed(pathname, user)) {
       router.replace('/')
     }
   }, [user, loading, isPublic, router, pathname])

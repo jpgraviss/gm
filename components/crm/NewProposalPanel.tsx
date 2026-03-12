@@ -6,7 +6,7 @@ import { fetchCrmCompanies } from '@/lib/supabase'
 import type { ServiceType, CRMCompany } from '@/lib/types'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
-const REPS = ['Sarah Chen', 'Marcus Webb']
+const REPS = ['Jonathan Graviss', 'JG Graviss']
 
 export interface NewProposalFormData {
   company: string

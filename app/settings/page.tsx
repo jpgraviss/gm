@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -93,6 +94,11 @@ const NOTIF_DEFAULTS = [
   { label: 'Client portal login', enabled: false, category: 'Portal' },
 ]
 
+const BRANDING_DEFAULTS = {
+  primaryColor: '#015035',
+  secondaryColor: '#FFF3EA',
+}
+
 const QB_SYNC_DEFAULTS = [
   { label: 'Sync new invoices to QuickBooks automatically', enabled: true },
   { label: 'Pull payment updates from QuickBooks', enabled: true },
@@ -124,8 +130,80 @@ function loadLS<T>(key: string, fallback: T): T {
 
 export default function SettingsPage() {
   const { gmailToken, gmailEmail, connectGmail, disconnectGmail, addUser, members: authMembers } = useAuth()
-  const [activeTab, setActiveTab] = useState<Tab>('Company')
+  const searchParams   = useSearchParams()
+  const router         = useRouter()
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    if (typeof window !== 'undefined' && searchParams.get('tab') === 'integrations') return 'Integrations'
+    return 'Company'
+  })
   const [saved, setSaved] = useState<string | null>(null)
+
+  // QuickBooks status
+  const [qbConnected, setQbConnected]   = useState(false)
+  const [qbStatus, setQbStatus]         = useState<{ lastSync: string | null; invoicesSynced: number; paymentsSynced: number; syncErrors: number } | null>(null)
+  const [qbSyncing, setQbSyncing]       = useState(false)
+  const [qbMessage, setQbMessage]       = useState<string | null>(null)
+
+  const fetchQBStatus = useCallback(() => {
+    fetch('/api/quickbooks/status')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.connected) {
+          setQbConnected(true)
+          setQbStatus({ lastSync: d.lastSync, invoicesSynced: d.invoicesSynced, paymentsSynced: d.paymentsSynced, syncErrors: d.syncErrors })
+        } else {
+          setQbConnected(false)
+          setQbStatus(null)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => { fetchQBStatus() }, [fetchQBStatus])
+
+  // Handle OAuth callback params
+  useEffect(() => {
+    if (searchParams.get('qb_connected') === 'true') {
+      setQbConnected(true)
+      fetchQBStatus()
+      setQbMessage('QuickBooks connected successfully!')
+      setTimeout(() => setQbMessage(null), 4000)
+      router.replace('/settings?tab=integrations')
+    } else if (searchParams.get('qb_error')) {
+      setQbMessage(`Connection failed: ${searchParams.get('qb_error')}`)
+      setTimeout(() => setQbMessage(null), 6000)
+      router.replace('/settings?tab=integrations')
+    }
+  }, [searchParams, fetchQBStatus, router])
+
+  function connectQB() {
+    window.location.href = '/api/quickbooks/connect'
+  }
+
+  async function disconnectQB() {
+    await fetch('/api/quickbooks/disconnect', { method: 'POST' })
+    setQbConnected(false)
+    setQbStatus(null)
+  }
+
+  async function syncQB() {
+    setQbSyncing(true)
+    try {
+      const res = await fetch('/api/quickbooks/sync', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        setQbMessage(`Synced ${data.invoicesSynced} invoices, ${data.paymentsSynced} payments`)
+        fetchQBStatus()
+      } else {
+        setQbMessage(`Sync failed: ${data.error}`)
+      }
+    } catch {
+      setQbMessage('Sync failed')
+    } finally {
+      setQbSyncing(false)
+      setTimeout(() => setQbMessage(null), 4000)
+    }
+  }
 
   // Company
   const [company, setCompany] = useState(COMPANY_DEFAULTS)
@@ -142,6 +220,9 @@ export default function SettingsPage() {
   // Notifications
   const [notifications, setNotifications] = useState(NOTIF_DEFAULTS)
 
+  // Branding
+  const [branding, setBranding] = useState(BRANDING_DEFAULTS)
+
   // QB Sync
   const [qbSync, setQbSync] = useState(QB_SYNC_DEFAULTS)
 
@@ -156,15 +237,41 @@ export default function SettingsPage() {
   const [newService, setNewService] = useState('')
   const [newTag, setNewTag] = useState('')
 
-  // Load from localStorage on mount
+  // Load from API on mount (fall back to localStorage for backwards-compat, then defaults)
   useEffect(() => {
-    setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
-    setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
-    setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
-    setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
-    setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
-    setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
-    setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d || !d.id) {
+          setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
+          setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
+          setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
+          setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
+          setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
+          setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
+          setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
+          setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
+          return
+        }
+        if (d.company          && Object.keys(d.company).length)           setCompany(d.company)
+        if (Array.isArray(d.notifications)   && d.notifications.length)    setNotifications(d.notifications)
+        if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(d.invoice_defaults)
+        if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length)  setPipelineStages(d.pipeline_stages)
+        if (Array.isArray(d.service_types)   && d.service_types.length)    setServiceTypes(d.service_types)
+        if (Array.isArray(d.contact_tags)    && d.contact_tags.length)     setContactTags(d.contact_tags)
+        if (d.branding         && Object.keys(d.branding).length)          setBranding(d.branding)
+        if (Array.isArray(d.qb_sync)         && d.qb_sync.length)          setQbSync(d.qb_sync)
+      })
+      .catch(() => {
+        setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
+        setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
+        setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
+        setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
+        setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
+        setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
+        setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
+        setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
+      })
   }, [])
 
   // Keep members in sync with auth
@@ -175,26 +282,37 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(null), 2500)
   }
 
+  function patchSettings(payload: Record<string, unknown>, label: string) {
+    fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {})
+    flash(label)
+  }
+
   function saveCompany() {
-    localStorage.setItem('gravhub_company', JSON.stringify(company))
-    flash('Company')
+    patchSettings({ company }, 'Company')
   }
 
   function saveNotifications() {
-    localStorage.setItem('gravhub_notifications', JSON.stringify(notifications))
-    flash('Notifications')
+    patchSettings({ notifications }, 'Notifications')
   }
 
   function saveInvoiceDefaults() {
-    localStorage.setItem('gravhub_invoice_defaults', JSON.stringify(invoiceDefaults))
-    flash('Billing')
+    patchSettings({ invoiceDefaults }, 'Billing')
   }
 
   function saveCRM() {
-    localStorage.setItem('gravhub_pipeline_stages', JSON.stringify(pipelineStages))
-    localStorage.setItem('gravhub_service_types', JSON.stringify(serviceTypes))
-    localStorage.setItem('gravhub_contact_tags', JSON.stringify(contactTags))
-    flash('CRM Setup')
+    patchSettings({ pipelineStages, serviceTypes, contactTags }, 'CRM Setup')
+  }
+
+  function saveBranding() {
+    patchSettings({ branding }, 'Branding')
+  }
+
+  function saveQbSync() {
+    patchSettings({ qbSync }, 'QB Sync')
   }
 
   async function submitInvite() {
@@ -521,22 +639,33 @@ export default function SettingsPage() {
         {/* ── Branding ── */}
         {activeTab === 'Branding' && (
           <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
-            <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Brand Configuration</h3>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Brand Configuration</h3>
+              {saved === 'Branding' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+            </div>
             <div className="flex flex-col gap-5">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Primary Color</label>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: '#015035' }} />
-                  <input className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700" defaultValue="#015035" />
-                  <span className="text-xs text-gray-500 hidden sm:inline">Deep Green</span>
+                  <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.primaryColor }} />
+                  <input
+                    className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                    value={branding.primaryColor}
+                    onChange={e => setBranding(p => ({ ...p, primaryColor: e.target.value }))}
+                  />
+                  <input type="color" value={branding.primaryColor} onChange={e => setBranding(p => ({ ...p, primaryColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Secondary Color</label>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: '#FFF3EA' }} />
-                  <input className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700" defaultValue="#FFF3EA" />
-                  <span className="text-xs text-gray-500 hidden sm:inline">Soft Tan</span>
+                  <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.secondaryColor }} />
+                  <input
+                    className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                    value={branding.secondaryColor}
+                    onChange={e => setBranding(p => ({ ...p, secondaryColor: e.target.value }))}
+                  />
+                  <input type="color" value={branding.secondaryColor} onChange={e => setBranding(p => ({ ...p, secondaryColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
                 </div>
               </div>
               <div>
@@ -551,7 +680,9 @@ export default function SettingsPage() {
                   Montserrat — The unified internal operating system for Graviss Marketing
                 </div>
               </div>
-              <button className="w-fit px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>Save Branding</button>
+              <button onClick={saveBranding} className="w-fit flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+                {saved === 'Branding' ? <><CheckCircle size={14} /> Saved!</> : 'Save Branding'}
+              </button>
             </div>
           </div>
         )}
@@ -606,8 +737,31 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* QuickBooks row */}
+              <div className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
+                <div className="text-2xl flex-shrink-0">{qbConnected ? '🟢' : '⚪'}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800">QuickBooks Online</p>
+                  <p className="text-xs text-gray-500">Sync invoices, payments, and client accounts</p>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <span className={`text-[11px] font-semibold hidden sm:flex items-center gap-0.5 ${qbConnected ? 'text-emerald-600' : 'text-gray-400'}`}>
+                    {qbConnected ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+                    {qbConnected ? 'Connected' : 'Not Connected'}
+                  </span>
+                  {qbConnected ? (
+                    <button onClick={disconnectQB} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-200 transition-colors">
+                      Disconnect
+                    </button>
+                  ) : (
+                    <button onClick={connectQB} className="text-xs font-medium px-3 py-1.5 rounded-lg text-white transition-colors" style={{ background: '#015035' }}>
+                      Connect
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {[
-                { name: 'QuickBooks Online', description: 'Sync invoices, payments, and client accounts', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
                 { name: 'Google Workspace', description: 'Single sign-on and calendar integration', status: 'connected', statusLabel: 'Active', icon: '🔵', action: 'Manage' },
                 { name: 'DocuSign', description: 'E-signature workflow for proposals and contracts', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
                 { name: 'Slack', description: 'Team notifications for deals and project updates', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
@@ -719,20 +873,49 @@ export default function SettingsPage() {
         {activeTab === 'Billing' && (
           <div className="flex flex-col gap-4">
             <div className="bg-white rounded-xl border border-gray-200 p-5">
+              {qbMessage && (
+                <div className={`mb-4 px-4 py-2.5 rounded-lg text-xs font-medium ${qbMessage.includes('failed') || qbMessage.includes('Failed') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                  {qbMessage}
+                </div>
+              )}
               <div className="flex flex-wrap items-start gap-4 mb-5">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e8f5e9' }}>
-                  <span className="text-xl">⚪</span>
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: qbConnected ? '#e8f5e9' : '#f3f4f6' }}>
+                  <span className="text-xl">{qbConnected ? '🟢' : '⚪'}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-800">QuickBooks Online</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Not connected</p>
-                  <p className="flex items-center gap-1 text-[11px] text-gray-400 mt-1">
-                    <AlertCircle size={11} /> Connect QuickBooks to sync invoices and payments
-                  </p>
+                  {qbConnected ? (
+                    <>
+                      <p className="text-xs text-emerald-600 font-medium mt-0.5">Connected · Syncing automatically</p>
+                      {qbStatus?.lastSync && (
+                        <p className="text-[11px] text-gray-400 mt-0.5">Last sync: {new Date(qbStatus.lastSync).toLocaleString()}</p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-500 mt-0.5">Not connected</p>
+                      <p className="flex items-center gap-1 text-[11px] text-gray-400 mt-1">
+                        <AlertCircle size={11} /> Connect QuickBooks to sync invoices and payments
+                      </p>
+                    </>
+                  )}
                 </div>
-                <button className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg text-white flex-shrink-0" style={{ background: '#015035' }}>
-                  Connect QuickBooks
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {qbConnected ? (
+                    <>
+                      <button onClick={syncQB} disabled={qbSyncing} className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg text-white disabled:opacity-60" style={{ background: '#015035' }}>
+                        <RefreshCw size={12} className={qbSyncing ? 'animate-spin' : ''} /> {qbSyncing ? 'Syncing…' : 'Sync Now'}
+                      </button>
+                      <button onClick={disconnectQB} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+                        Disconnect
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={connectQB} className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg text-white" style={{ background: '#015035' }}>
+                      Connect QuickBooks
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -755,7 +938,10 @@ export default function SettingsPage() {
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>QB Sync Settings</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>QB Sync Settings</h3>
+                {saved === 'QB Sync' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+              </div>
               <div className="flex flex-col gap-1">
                 {qbSync.map(item => (
                   <div key={item.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0 gap-3">
@@ -764,6 +950,9 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
+              <button onClick={saveQbSync} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+                {saved === 'QB Sync' ? <><CheckCircle size={14} /> Saved!</> : 'Save QB Sync Settings'}
+              </button>
             </div>
           </div>
         )}

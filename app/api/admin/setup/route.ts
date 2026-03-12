@@ -19,7 +19,7 @@ const BASE_USERS = [
     name:     'Jonathan Graviss',
     role:     'Super Admin',
     unit:     'Leadership/Admin',
-    initials: 'JG',
+    initials: 'JON',
     isAdmin:  true,
     tmId:     't0',
   },
@@ -34,12 +34,42 @@ const BASE_USERS = [
     tmId:     't1',
   },
   {
+    email:    'ssarkar@gravissmarketing.com',
+    password: process.env.SHIHAB_PASSWORD ?? '',
+    name:     'Shihab Sarkar',
+    role:     'Team Member',
+    unit:     'Delivery/Operations',
+    initials: 'SS',
+    isAdmin:  false,
+    tmId:     't3',
+  },
+  {
+    email:    'seo@gravissmarketing.com',
+    password: process.env.SEO_PASSWORD ?? '',
+    name:     'Team SEO',
+    role:     'Team Member',
+    unit:     'Delivery/Operations',
+    initials: 'SE',
+    isAdmin:  false,
+    tmId:     't4',
+  },
+  {
+    email:    'billing@gravissmarketing.com',
+    password: process.env.BILLING_PASSWORD ?? '',
+    name:     'Graviss Billing',
+    role:     'Department Manager',
+    unit:     'Billing/Finance',
+    initials: 'GB',
+    isAdmin:  true,
+    tmId:     't5',
+  },
+  {
     email:    'test@gravissmarketing.com',
     password: process.env.TEST_PASSWORD ?? '',
-    name:     'Test User',
+    name:     'Graviss Marketing',
     role:     'Team Member',
     unit:     'Leadership/Admin',
-    initials: 'TU',
+    initials: 'GM',
     isAdmin:  false,
     tmId:     't2',
   },
@@ -60,7 +90,8 @@ export async function POST(req: NextRequest) {
       continue
     }
 
-    // Create Supabase Auth user
+    // Try to create Supabase Auth user
+    let userId: string = u.tmId
     const { data: authData, error: authError } = await db.auth.admin.createUser({
       email:             u.email,
       password:          u.password,
@@ -68,12 +99,29 @@ export async function POST(req: NextRequest) {
       user_metadata:     { name: u.name, role: u.role, unit: u.unit },
     })
 
-    if (authError && !authError.message.includes('already been registered')) {
-      results.push({ email: u.email, status: 'error', detail: authError.message })
-      continue
+    if (authError) {
+      if (!authError.message.includes('already been registered')) {
+        results.push({ email: u.email, status: 'error', detail: authError.message })
+        continue
+      }
+      // User already exists — look up their ID from team_members and update password
+      const { data: tm } = await db.from('team_members').select('id').eq('email', u.email.toLowerCase()).maybeSingle()
+      const existingId = tm?.id
+      if (existingId && existingId.length > 10) {
+        // Looks like a real UUID — update the password
+        const { error: pwError } = await db.auth.admin.updateUserById(existingId, { password: u.password })
+        if (pwError) {
+          results.push({ email: u.email, status: 'password_update_failed', detail: pwError.message })
+          continue
+        }
+        userId = existingId
+      } else {
+        // Can't find ID — skip password update but continue to upsert profile
+        userId = existingId ?? u.tmId
+      }
+    } else {
+      userId = authData?.user?.id ?? u.tmId
     }
-
-    const userId = authData?.user?.id ?? u.tmId
 
     // Upsert team_members row
     const { error: tmError } = await db.from('team_members').upsert({

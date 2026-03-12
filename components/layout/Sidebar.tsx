@@ -16,6 +16,8 @@ interface NavItem {
   href: string
   icon: React.ReactNode
   adminOnly?: boolean
+  /** If set, only users whose unit is in this list (or admins) can see/access this item */
+  allowedUnits?: string[]
 }
 
 interface NavSection {
@@ -46,9 +48,9 @@ const navigation: NavSection[] = [
   {
     section: 'Revenue',
     items: [
-      { label: 'Proposals', href: '/proposals', icon: <FileText size={16} /> },
-      { label: 'Contracts', href: '/contracts', icon: <ScrollText size={16} /> },
-      { label: 'Billing', href: '/billing', icon: <CreditCard size={16} /> },
+      { label: 'Proposals', href: '/proposals', icon: <FileText size={16} />,  allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
+      { label: 'Contracts', href: '/contracts', icon: <ScrollText size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
+      { label: 'Billing',   href: '/billing',   icon: <CreditCard size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
     ],
   },
   {
@@ -69,15 +71,15 @@ const navigation: NavSection[] = [
   {
     section: 'Intel',
     items: [
-      { label: 'Reports', href: '/reports', icon: <BarChart3 size={16} /> },
-      { label: 'Automation', href: '/automation', icon: <Zap size={16} /> },
+      { label: 'Reports',    href: '/reports',    icon: <BarChart3 size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
+      { label: 'Automation', href: '/automation', icon: <Zap size={16} />,       allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
     ],
   },
   {
     section: 'System',
     items: [
-      { label: 'Admin Panel', href: '/admin', icon: <ShieldCheck size={16} />, adminOnly: true },
-      { label: 'Settings', href: '/settings', icon: <Settings size={16} /> },
+      { label: 'Admin Panel', href: '/admin',    icon: <ShieldCheck size={16} />, adminOnly: true },
+      { label: 'Settings',    href: '/settings', icon: <Settings size={16} />,    allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
     ],
   },
 ]
@@ -125,9 +127,11 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-2 py-3 overflow-y-auto overflow-x-hidden">
         {navigation.map((group) => {
-          const visibleItems = group.items.filter(
-            (item) => !item.adminOnly || user?.isAdmin
-          )
+          const visibleItems = group.items.filter((item) => {
+            if (item.adminOnly && !user?.isAdmin) return false
+            if (item.allowedUnits && !user?.isAdmin && !item.allowedUnits.includes(user?.unit ?? '')) return false
+            return true
+          })
           if (visibleItems.length === 0) return null
 
           return (

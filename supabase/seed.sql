@@ -11,7 +11,10 @@
 
 -- ── Team Members ──────────────────────────────────────────────────────────────
 insert into team_members (id, name, email, role, unit, initials, is_admin) values
-  ('t0', 'Jonathan Graviss', 'jonathan@gravissmarketing.com', 'Super Admin', 'Leadership/Admin', 'JG', true),
-  ('t1', 'JG Graviss',       'jgraviss@gravissmarketing.com', 'Super Admin', 'Leadership/Admin', 'JG', true),
-  ('t2', 'Graviss Marketing',       'test@gravissmarketing.com', 'Super Admin', 'Leadership/Admin', 'GM', true)
+  ('t0', 'Jonathan Graviss',  'jonathan@gravissmarketing.com', 'Super Admin',        'Leadership/Admin',    'JON', true),
+  ('t1', 'JG Graviss',        'jgraviss@gravissmarketing.com', 'Super Admin',        'Leadership/Admin',    'JG',  true),
+  ('t3', 'Shihab Sarkar',     'ssarkar@gravissmarketing.com',  'Team Member',        'Delivery/Operations', 'SS',  false),
+  ('t4', 'Team SEO',          'seo@gravissmarketing.com',      'Team Member',        'Delivery/Operations', 'SE',  false),
+  ('t5', 'Graviss Billing',   'billing@gravissmarketing.com',  'Department Manager', 'Billing/Finance',     'GB',  true),
+  ('t2', 'Graviss Marketing', 'test@gravissmarketing.com',     'Team Member',        'Leadership/Admin',    'GM',  false)
 on conflict (id) do nothing;

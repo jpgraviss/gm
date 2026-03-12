@@ -19,7 +19,7 @@ export interface NewContactFormData {
   notes: string
 }
 
-const REPS = ['Sarah Chen', 'Marcus Webb']
+const REPS = ['Jonathan Graviss', 'JG Graviss']
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{children}</label>

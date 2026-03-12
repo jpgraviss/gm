@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 // data loaded from API
 import { projectStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
@@ -139,7 +139,8 @@ function ProjectDetailPanel({
 
   const today = new Date().toISOString().split('T')[0]
   const overdueTasks = localTasks.filter(t => !t.completed && t.dueDate < today)
-  const daysLeft = Math.max(0, Math.ceil((new Date(project.launchDate).getTime() - Date.now()) / 86400000))
+  // eslint-disable-next-line react-hooks/purity
+  const daysLeft = useMemo(() => Math.max(0, Math.ceil((new Date(project.launchDate).getTime() - Date.now()) / 86400000)), [project.launchDate])
   const isFinished = ['Launched', 'In Maintenance', 'Completed'].includes(project.status)
 
   const toggleTask = (taskId: string) => {
@@ -686,6 +687,11 @@ export default function ProjectsPage() {
   function updateProjectStatus(id: string, status: ProjectStatus) {
     setLocalProjects(prev => prev.map(p => p.id === id ? { ...p, status } : p))
     setSelected(prev => prev && prev.id === id ? { ...prev, status } : prev)
+    fetch(`/api/projects/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    }).catch(() => {})
   }
 
   // Metrics

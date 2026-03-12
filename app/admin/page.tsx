@@ -34,12 +34,7 @@ const membershipColors: Record<string, string> = {
   Client: 'bg-green-100 text-green-700',
 }
 
-const auditLog = [
-  { id: 'al1', user: 'Jonathan Graviss', action: 'Admin panel accessed', module: 'Admin', time: 'Just now', type: 'info' },
-  { id: 'al4', user: 'System', action: 'Automation triggered: Renewal alert for ProVenture LLC', module: 'Automation', time: '4 hours ago', type: 'warning' },
-  { id: 'al7', user: 'System', action: 'QuickBooks sync completed — 7 invoices synced', module: 'Integrations', time: '1 day ago', type: 'success' },
-  { id: 'al9', user: 'Jonathan Graviss', action: 'DocuSign integration connected', module: 'Integrations', time: '3 days ago', type: 'success' },
-]
+type AuditEntry = { id: string; user: string; action: string; module: string; type: string; createdAt: string }
 
 const auditColors: Record<string, string> = {
   info: 'bg-blue-100 text-blue-600',
@@ -173,9 +168,157 @@ export default function AdminPage() {
   const [showBackupModal, setShowBackupModal] = useState(false)
   const [exportModule, setExportModule] = useState('All')
   const [importFile, setImportFile] = useState<File | null>(null)
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number; error: string } | null>(null)
   const [cacheCleared, setCacheCleared] = useState(false)
   const [backupDone, setBackupDone] = useState(false)
   const [bulkResetTarget, setBulkResetTarget] = useState('')
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([])
+
+  // QuickBooks
+  const [qbConnected, setQbConnected]   = useState(false)
+  const [qbStatus, setQbStatus]         = useState<{ lastSync: string | null; invoicesSynced: number; paymentsSynced: number; syncErrors: number } | null>(null)
+  const [qbSyncing, setQbSyncing]       = useState(false)
+
+  function fetchQBStatus() {
+    fetch('/api/quickbooks/status')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.connected) {
+          setQbConnected(true)
+          setQbStatus({ lastSync: d.lastSync, invoicesSynced: d.invoicesSynced, paymentsSynced: d.paymentsSynced, syncErrors: d.syncErrors })
+        } else {
+          setQbConnected(false)
+          setQbStatus(null)
+        }
+      })
+      .catch(() => {})
+  }
+
+  async function handleQBSync() {
+    setQbSyncing(true)
+    try {
+      await fetch('/api/quickbooks/sync', { method: 'POST' })
+      fetchQBStatus()
+    } catch { /* ignore */ } finally {
+      setQbSyncing(false)
+    }
+  }
+
+  useEffect(() => {
+    fetch('/api/audit-logs?limit=50')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setAuditLog(data) })
+      .catch(() => {})
+    fetchQBStatus()
+  }, [])
+
+  async function handleImport() {
+    if (!importFile) return
+    const text = await importFile.text()
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+    if (lines.length < 2) { setImportProgress({ done: 0, total: 0, error: 'CSV file is empty or has no data rows.' }); return }
+
+    // Parse CSV properly (handles quoted fields with commas inside)
+    function parseCSVLine(line: string): string[] {
+      const result: string[] = []
+      let current = '', inQuotes = false
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i]
+        if (ch === '"') { inQuotes = !inQuotes }
+        else if (ch === ',' && !inQuotes) { result.push(current.trim()); current = '' }
+        else { current += ch }
+      }
+      result.push(current.trim())
+      return result
+    }
+
+    // HubSpot → GravHub field name mapping (covers common HubSpot export column names)
+    const HUBSPOT_MAP: Record<string, string> = {
+      firstname: 'first_name', first_name: 'first_name',
+      lastname: 'last_name', last_name: 'last_name',
+      email: 'email', 'email_address': 'email',
+      phone: 'phone', 'phone_number': 'phone', mobilephone: 'phone',
+      jobtitle: 'title', job_title: 'title', title: 'title',
+      company: 'company_name', company_name: 'company_name', associated_company: 'company_name',
+      'hs_lead_status': 'status', lifecyclestage: 'status',
+      website: 'website', 'company_website': 'website',
+      city: 'hq', state: 'hq', country: 'hq',
+      industry: 'industry',
+      numberofemployees: 'size', num_employees: 'size', size: 'size',
+      annualrevenue: 'annual_revenue',
+      hubspot_owner_assigneddate: '',   // drop
+      'hs_object_id': '',               // drop
+      'hs_createdate': '',              // drop
+      createdate: '',                   // drop
+      lastmodifieddate: '',             // drop
+      'hs_lastmodifieddate': '',        // drop
+      name: 'name',
+      'company_name_col': 'name',
+    }
+
+    const rawHeaders = parseCSVLine(lines[0])
+    const headers = rawHeaders.map(h => {
+      const norm = h.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+      return HUBSPOT_MAP[norm] ?? norm
+    })
+
+    const rows = lines.slice(1)
+    // Detect type by mapped headers
+    const isContacts = headers.includes('first_name') || headers.includes('last_name')
+    const isCompanies = !isContacts && headers.includes('name')
+    if (!isContacts && !isCompanies) {
+      setImportProgress({ done: 0, total: rows.length, error: 'Could not detect type. For contacts include "first_name"/"last_name" (or HubSpot "firstname"/"lastname"). For companies include "name".' })
+      return
+    }
+    setImportProgress({ done: 0, total: rows.length, error: '' })
+    let done = 0
+    for (const line of rows) {
+      const values = parseCSVLine(line)
+      const row: Record<string, string> = {}
+      headers.forEach((h, i) => { if (h) row[h] = values[i] ?? '' })
+      try {
+        if (isContacts) {
+          await fetch('/api/crm/contacts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              firstName:    row.first_name ?? '',
+              lastName:     row.last_name ?? '',
+              fullName:     `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim(),
+              emails:       row.email ? [row.email] : [],
+              phones:       row.phone ? [row.phone] : [],
+              title:        row.title ?? null,
+              companyName:  row.company_name ?? '',
+              owner:        'Jonathan Graviss',
+              tags:         [],
+              contactNotes: [],
+              contactTasks: [],
+            }),
+          })
+        } else {
+          await fetch('/api/crm/companies', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name:          row.name,
+              industry:      row.industry ?? '',
+              website:       row.website ?? null,
+              phone:         row.phone ?? null,
+              hq:            row.hq ?? '',
+              size:          row.size ?? '',
+              annualRevenue: row.annual_revenue ? parseFloat(row.annual_revenue.replace(/[^0-9.]/g, '')) : null,
+              status:        'Prospect',
+              owner:         'Jonathan Graviss',
+              tags:          [],
+            }),
+          })
+        }
+      } catch {/* continue on error */}
+      done++
+      setImportProgress({ done, total: rows.length, error: '' })
+    }
+    setTimeout(() => { setShowImportModal(false); setImportFile(null); setImportProgress(null) }, 1500)
+  }
 
   async function sendInviteEmail(name: string, email: string, role: string, unit: string, tempPassword: string) {
     try {
@@ -363,7 +506,7 @@ export default function AdminPage() {
                     <span className={`status-badge flex-shrink-0 mt-0.5 ${auditColors[entry.type]}`}>{entry.module}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-gray-800">{entry.action}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">{entry.user} · {entry.time}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{entry.user} · {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : ''}</p>
                     </div>
                   </div>
                 ))}
@@ -677,14 +820,20 @@ export default function AdminPage() {
                 <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center font-bold text-blue-700 text-sm">QB</div>
                 <div>
                   <h3 className="text-sm font-bold text-gray-800">QuickBooks Configuration</h3>
-                  <p className="text-xs text-green-600 font-medium">● Connected • Syncing automatically</p>
+                  {qbConnected ? (
+                    <p className="text-xs text-green-600 font-medium">
+                      ● Connected{qbStatus?.lastSync ? ` • Last sync: ${new Date(qbStatus.lastSync).toLocaleString()}` : ' • Syncing automatically'}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400 font-medium">● Not connected — <a href="/settings?tab=Billing" className="text-emerald-700 hover:underline">Connect in Settings</a></p>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                 {[
-                  { label: 'Invoices Synced', value: '7', icon: <CheckCircle size={13} className="text-green-500" /> },
-                  { label: 'Payments Synced', value: '5', icon: <CheckCircle size={13} className="text-green-500" /> },
-                  { label: 'Sync Errors', value: '0', icon: <CheckCircle size={13} className="text-green-500" /> },
+                  { label: 'Invoices Synced', value: String(qbStatus?.invoicesSynced ?? 0), icon: <CheckCircle size={13} className="text-green-500" /> },
+                  { label: 'Payments Synced', value: String(qbStatus?.paymentsSynced ?? 0), icon: <CheckCircle size={13} className="text-green-500" /> },
+                  { label: 'Sync Errors',     value: String(qbStatus?.syncErrors ?? 0),     icon: <CheckCircle size={13} className={qbStatus?.syncErrors ? 'text-red-500' : 'text-green-500'} /> },
                 ].map(s => (
                   <div key={s.label} className="flex items-center gap-2.5 p-3 bg-gray-50 rounded-xl">
                     {s.icon}
@@ -696,12 +845,12 @@ export default function AdminPage() {
                 ))}
               </div>
               <div className="flex gap-2">
-                <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>
-                  <RefreshCw size={12} /> Sync Now
+                <button onClick={handleQBSync} disabled={!qbConnected || qbSyncing} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg disabled:opacity-50" style={{ background: '#015035' }}>
+                  <RefreshCw size={12} className={qbSyncing ? 'animate-spin' : ''} /> {qbSyncing ? 'Syncing…' : 'Sync Now'}
                 </button>
-                <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                <a href="/settings?tab=Billing" className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                   <Settings size={12} /> Settings
-                </button>
+                </a>
                 <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                   <Activity size={12} /> Sync Log
                 </button>
@@ -971,7 +1120,7 @@ export default function AdminPage() {
                       <td className="py-3 px-5">
                         <div className="flex items-center gap-1.5 text-xs text-gray-400">
                           <Clock size={11} />
-                          {entry.time}
+                          {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : ''}
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -1060,24 +1209,38 @@ export default function AdminPage() {
                   style={{ '--file-bg': '#015035' } as React.CSSProperties}
                 />
               </div>
-              {importFile && (
+              {importFile && !importProgress && (
                 <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
                   <CheckCircle size={14} className="text-green-600" />
                   <p className="text-xs text-green-700 font-medium">{importFile.name} ready to import</p>
                 </div>
               )}
-              <p className="text-xs text-gray-400">Required columns: Name, Email, Company, Phone (for contacts)</p>
+              {importProgress && (
+                <div className="flex flex-col gap-1.5">
+                  {importProgress.error ? (
+                    <p className="text-xs text-red-600">{importProgress.error}</p>
+                  ) : (
+                    <>
+                      <div className="w-full bg-gray-100 rounded-full h-1.5">
+                        <div className="bg-emerald-600 h-1.5 rounded-full transition-all" style={{ width: `${importProgress.total ? Math.round((importProgress.done / importProgress.total) * 100) : 0}%` }} />
+                      </div>
+                      <p className="text-xs text-gray-500">{importProgress.done === importProgress.total ? `Done — ${importProgress.done} records imported` : `Importing ${importProgress.done} / ${importProgress.total}…`}</p>
+                    </>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-gray-400">Accepts GravHub CSV or <span className="font-medium text-gray-500">HubSpot exports</span> — columns are auto-mapped and unneeded fields are ignored.<br />Contacts: firstname/last_name, email, phone, jobtitle, company<br />Companies: name, industry, website, phone, city/state, numberofemployees</p>
             </div>
             <div className="px-5 pb-5 flex gap-2">
               <button
-                onClick={() => { if (importFile) setShowImportModal(false) }}
-                disabled={!importFile}
+                onClick={handleImport}
+                disabled={!importFile || (!!importProgress && !importProgress.error)}
                 className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-40"
                 style={{ background: '#015035' }}
               >
                 Import
               </button>
-              <button onClick={() => setShowImportModal(false)} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={() => { setShowImportModal(false); setImportFile(null); setImportProgress(null) }} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
             </div>
           </div>
         </div>

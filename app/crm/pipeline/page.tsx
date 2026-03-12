@@ -20,7 +20,7 @@ import {
   GripVertical, Pencil, Trash2, Check,
 } from 'lucide-react'
 
-const ALL_REPS = ['Sarah Chen', 'Marcus Webb', 'Priya Patel', 'Amanda Foster', 'Jonathan Graviss']
+const ALL_REPS = ['Jonathan Graviss', 'JG Graviss']
 
 // ─── Pipeline Config Types ────────────────────────────────────────────────────
 
@@ -747,7 +747,7 @@ export default function PipelinePage() {
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => { setMounted(true) }, []) // eslint-disable-line react-hooks/set-state-in-effect
 
   useEffect(() => {
     fetch('/api/deals')

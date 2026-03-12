@@ -58,6 +58,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json(mapContact(data))
 }
 
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const body = await req.json()
+  const db = createServiceClient()
+  const updates: Record<string, unknown> = {}
+  if (body.tags !== undefined) updates.tags = body.tags
+  if (body.lastActivity !== undefined) updates.last_activity = body.lastActivity
+  const { data, error } = await db
+    .from('crm_contacts')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(mapContact(data))
+}
+
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const db = createServiceClient()

@@ -77,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isConfigured) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false)
       return
     }
@@ -116,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(profile)
       fetchMembers()
+      try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
       return { ok: true }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed. Please try again.'
@@ -146,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(profile)
       fetchMembers()
+      try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
       return { ok: true }
     } catch {
       return { ok: false, error: 'Google sign-in failed. Please try again.' }
@@ -179,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setGmailToken(null)
     setGmailEmail(null)
     try { localStorage.removeItem('gravhub_gmail_email') } catch {/* ignore */}
+    try { sessionStorage.removeItem('gravhub_login_at') } catch {/* ignore */}
   }
 
   const connectGmail = useCallback(() => {

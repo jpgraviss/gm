@@ -22,7 +22,7 @@ export interface NewDealData {
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 const STAGES: DealStage[] = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
-const REPS = ['Sarah Chen', 'Marcus Webb']
+const REPS = ['Jonathan Graviss', 'JG Graviss']
 
 const STAGE_PROBS: Record<DealStage, string> = {
   Lead: '20',

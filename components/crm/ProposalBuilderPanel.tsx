@@ -52,7 +52,7 @@ interface Props {
   initialData?: Proposal
 }
 
-const ALL_REPS = ['Jaycee Graviss', 'Alex Thompson', 'Maria Chen', 'Jordan Williams']
+const ALL_REPS = ['Jonathan Graviss', 'JG Graviss']
 
 function fmt(val: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val)

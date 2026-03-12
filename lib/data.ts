@@ -17,8 +17,11 @@ import type {
 } from './types'
 
 export const teamMembers: TeamMember[] = [
-  { id: 't0', name: 'Jonathan Graviss', email: 'jonathan@gravissmarketing.com', role: 'Super Admin', unit: 'Leadership/Admin', initials: 'JG' },
-  { id: 't6', name: 'JG Graviss', email: 'jgraviss@gravissmarketing.com', role: 'Super Admin', unit: 'Leadership/Admin', initials: 'JG' },
+  { id: 't0', name: 'Jonathan Graviss', email: 'jonathan@gravissmarketing.com', role: 'Super Admin',        unit: 'Leadership/Admin',    initials: 'JON' },
+  { id: 't1', name: 'JG Graviss',       email: 'jgraviss@gravissmarketing.com', role: 'Super Admin',        unit: 'Leadership/Admin',    initials: 'JG'  },
+  { id: 't3', name: 'Shihab Sarkar',    email: 'ssarkar@gravissmarketing.com',  role: 'Team Member',        unit: 'Delivery/Operations', initials: 'SS'  },
+  { id: 't4', name: 'Team SEO',         email: 'seo@gravissmarketing.com',      role: 'Team Member',        unit: 'Delivery/Operations', initials: 'SE'  },
+  { id: 't5', name: 'Graviss Billing',  email: 'billing@gravissmarketing.com',  role: 'Department Manager', unit: 'Billing/Finance',      initials: 'GB'  },
 ]
 
 // ─── Trailhead Media ──────────────────────────────────────────────────────────

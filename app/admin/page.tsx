@@ -143,7 +143,7 @@ function IntegrationCard({
 }
 
 export default function AdminPage() {
-  const { user } = useAuth()
+  const { user, loginAs } = useAuth()
   const router = useRouter()
 
   // Load users from database on mount
@@ -672,6 +672,26 @@ export default function AdminPage() {
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-1.5">
+                              {/* Super Admin: login as this user */}
+                              {user?.role === 'Super Admin' && u.id !== user?.id && u.status === 'Active' && (
+                                <button
+                                  onClick={() => loginAs({
+                                    id: u.id,
+                                    email: u.email,
+                                    name: u.name,
+                                    role: u.role,
+                                    initials: u.initials,
+                                    unit: u.unit,
+                                    isAdmin: u.isAdmin,
+                                    userType: 'staff',
+                                  })}
+                                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold hover:opacity-90 transition-opacity"
+                                  style={{ background: '#7c3aed', color: '#fff' }}
+                                  title={`Login as ${u.name}`}
+                                >
+                                  <Eye size={11} /> Login As
+                                </button>
+                              )}
                               {u.id !== 'u0' && (
                                 <>
                                   <button

@@ -26,6 +26,10 @@ interface AuthContextType {
   logout: () => void
   changePassword: (email: string, newPassword: string) => void
   addUser: (params: { name: string; email: string; role: AuthUser['role']; unit: AuthUser['unit']; password: string }) => void
+  // Super Admin impersonation
+  impersonatedBy: AuthUser | null
+  loginAs: (member: AuthUser) => void
+  exitImpersonation: () => void
   // Gmail
   gmailToken: string | null
   gmailEmail: string | null
@@ -74,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [gmailToken, setGmailToken]       = useState<string | null>(null)
   const [gmailEmail, setGmailEmail]       = useState<string | null>(null)
   const [members, setMembers]             = useState<TeamMember[]>([])
+  const [impersonatedBy, setImpersonatedBy] = useState<AuthUser | null>(null)
 
   const fetchMembers = useCallback(async () => {
     try {
@@ -224,10 +229,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fetchMembers()
   }, [fetchMembers])
 
+  // Super Admin only: impersonate a team member without changing the Supabase auth session
+  const loginAs = useCallback((member: AuthUser) => {
+    if (!user || user.role !== 'Super Admin') return
+    setImpersonatedBy(user)
+    setUser(member)
+  }, [user])
+
+  const exitImpersonation = useCallback(() => {
+    if (!impersonatedBy) return
+    setUser(impersonatedBy)
+    setImpersonatedBy(null)
+  }, [impersonatedBy])
+
   const logout = async () => {
     const supabase = getSupabaseClient()
     await supabase.auth.signOut()
     setUser(null)
+    setImpersonatedBy(null)
     setGmailToken(null)
     setGmailEmail(null)
     try { localStorage.removeItem('gravhub_gmail_email') } catch {/* ignore */}
@@ -286,6 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user, loading, mustChangePassword: false,
       login, loginWithGoogle, logout,
       changePassword, addUser,
+      impersonatedBy, loginAs, exitImpersonation,
       gmailToken, gmailEmail, connectGmail, disconnectGmail,
       members,
     }}>

@@ -7,7 +7,7 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import {
   Globe, Lock, Eye, CheckCircle, Calendar, RefreshCw, FolderKanban,
   ChevronDown, X, AlertTriangle, FileText, MessageSquare, Bell,
-  ArrowLeft, Settings, LogOut, ChevronRight, Upload, Download,
+  ArrowLeft, Settings, LogOut, ChevronRight, Upload, Download, Trash2,
 } from 'lucide-react'
 
 // ─── Client data ──────────────────────────────────────────────────────────────
@@ -23,6 +23,8 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
   const [service, setService] = useState('Website')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [saved, setSaved] = useState(false)
+  const [savedCount, setSavedCount] = useState(0)
 
   const canSave = company.trim() !== '' && contact.trim() !== '' && email.trim() !== ''
 
@@ -51,10 +53,22 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
       const newClient: PortalClient = await res.json()
       onSave(newClient)
       await onInvite(newClient)
+      setSaved(true)
+      setSavedCount(n => n + 1)
+      setSaving(false)
     } catch {
       setError('Failed to add client. Please try again.')
       setSaving(false)
     }
+  }
+
+  function handleAddAnother() {
+    setCompany('')
+    setContact('')
+    setEmail('')
+    setService('Website')
+    setError('')
+    setSaved(false)
   }
 
   return (
@@ -123,23 +137,48 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
 
         {/* Footer */}
         <div className="flex flex-col gap-2 px-5 py-4 border-t border-gray-200 flex-shrink-0 bg-white">
-          {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
-          <div className="flex items-center justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!canSave || saving}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-40"
-            style={{ background: '#015035' }}
-          >
-            {saving ? 'Adding…' : 'Add Client'}
-          </button>
-          </div>
+          {saved ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1.5">
+                <CheckCircle size={13} /> Client added &amp; invite sent{savedCount > 1 ? ` · ${savedCount} total added` : ''}
+              </p>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                  Done
+                </button>
+                <button
+                  onClick={handleAddAnother}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-opacity"
+                  style={{ background: '#015035' }}
+                >
+                  Add Another Client
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={!canSave || saving}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-40"
+                  style={{ background: '#015035' }}
+                >
+                  {saving ? 'Adding…' : 'Add Client'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -587,6 +626,7 @@ export default function PortalPage() {
   const [previewCompany, setPreviewCompany] = useState('')
   const [inviteStatus, setInviteStatus] = useState<Record<string, string>>({})
   const [addingClient, setAddingClient] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/portal-clients')
@@ -631,6 +671,12 @@ export default function PortalPage() {
     } catch {
       setInviteStatus(prev => ({ ...prev, [client.company]: 'Send failed' }))
     }
+  }
+
+  async function deleteClient(id: string) {
+    await fetch(`/api/portal-clients/${id}`, { method: 'DELETE' })
+    setClients(prev => prev.filter(c => c.id !== id))
+    setDeleteConfirm(null)
   }
 
   if (viewAsClient) {
@@ -785,6 +831,27 @@ export default function PortalPage() {
                           )}
                         </>
                       )}
+                      {deleteConfirm === client.id ? (
+                        <div className="flex items-center gap-1 ml-1">
+                          <span className="text-xs text-gray-500">Delete?</span>
+                          <button
+                            onClick={() => deleteClient(client.id)}
+                            className="text-xs text-white px-2 py-0.5 rounded font-semibold bg-red-500 hover:bg-red-600"
+                          >Yes</button>
+                          <button
+                            onClick={() => setDeleteConfirm(null)}
+                            className="text-xs text-gray-500 hover:text-gray-700 font-medium px-1"
+                          >No</button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteConfirm(client.id)}
+                          className="p-1 rounded text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors ml-1"
+                          title="Delete client"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -798,10 +865,7 @@ export default function PortalPage() {
       {addingClient && (
         <AddClientPanel
           onClose={() => setAddingClient(false)}
-          onSave={newClient => {
-            setClients(prev => [...prev, newClient])
-            setAddingClient(false)
-          }}
+          onSave={newClient => setClients(prev => [...prev, newClient])}
           onInvite={client => sendPortalInvite(client, false)}
         />
       )}

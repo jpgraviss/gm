@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     const portalUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
 
     const { data, error } = await resend.emails.send({
-      from: 'GravHub <noreply@gravissmarketing.com>',
+      from: 'GravHub <noreply@app.gravissmarketing.com>',
       replyTo: 'info@gravissmarketing.com',
       to: [email],
       subject: isResend

@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from:    'GravHub Scheduling <noreply@gravissmarketing.com>',
+          from:    'GravHub Scheduling <noreply@app.gravissmarketing.com>',
           to:      clientEmail,
           subject: `Confirmed: ${settings.title} with ${settings.user_name}`,
           html: `

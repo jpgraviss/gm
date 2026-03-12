@@ -46,7 +46,7 @@ export async function POST() {
 
     if (step.type === 'email') {
       const { error: emailErr } = await resend.emails.send({
-        from: 'Graviss Marketing <noreply@gravissmarketing.com>',
+        from: 'Graviss Marketing <noreply@app.gravissmarketing.com>',
         replyTo: 'info@gravissmarketing.com',
         to: [enrollment.contact_email],
         subject: step.subject ?? `Message from ${seq.name}`,

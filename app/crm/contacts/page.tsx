@@ -439,7 +439,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
           </Link>
 
           {/* Quick stats */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {[
               { label: 'Pipeline Stage', value: activeDeal?.stage ?? 'No Deal' },
               { label: 'Deal Value', value: activeDeal ? formatCurrency(activeDeal.value) : '—' },
@@ -706,7 +706,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                       {formatCurrency(c.value)}
                     </p>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 mt-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
                     {[
                       { label: 'Service', value: c.serviceType },
                       { label: 'Start', value: new Date(c.startDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) },
@@ -1050,8 +1050,8 @@ export default function ContactsPage() {
         <CRMSubNav />
 
         {/* Search */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 flex-1 max-w-sm">
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 flex-1 min-w-0 max-w-sm">
             <Search size={13} className="text-gray-400" />
             <input
               value={search}

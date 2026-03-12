@@ -65,13 +65,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfileByEmail = useCallback(async (email: string, avatar?: string): Promise<AuthUser | null> => {
     try {
-      const supabase = getSupabaseClient()
-      const { data } = await supabase
-        .from('team_members')
-        .select('*')
-        .eq('email', email.toLowerCase())
-        .single()
-      return data ? rowToAuthUser(data, avatar) : null
+      // Use API route (service role) so RLS never blocks this lookup
+      const res = await fetch('/api/team-members')
+      if (!res.ok) return null
+      const members: Record<string, unknown>[] = await res.json()
+      const row = members.find(m => (m.email as string)?.toLowerCase() === email.toLowerCase())
+      return row ? rowToAuthUser(row, avatar) : null
     } catch { return null }
   }, [])
 
@@ -85,12 +84,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user?.email) {
+        // Password-based login: restore from Supabase session
         const profile = await loadProfileByEmail(session.user.email)
         if (profile) {
           setUser(profile)
           fetchMembers()
+          setLoading(false)
+          return
         }
       }
+      // Fallback: restore Google-authenticated user from localStorage
+      try {
+        const storedEmail = localStorage.getItem('gravhub_user_email')
+        if (storedEmail) {
+          const profile = await loadProfileByEmail(storedEmail)
+          if (profile) {
+            setUser(profile)
+            fetchMembers()
+          }
+        }
+      } catch {/* ignore */}
       setLoading(false)
     })
 
@@ -101,6 +114,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const storedGmailEmail = localStorage.getItem('gravhub_gmail_email')
       if (storedGmailEmail) setGmailEmail(storedGmailEmail)
+      const storedGmailToken = localStorage.getItem('gravhub_gmail_token')
+      if (storedGmailToken) {
+        const { token, expiresAt } = JSON.parse(storedGmailToken)
+        if (expiresAt > Date.now()) setGmailToken(token)
+        else localStorage.removeItem('gravhub_gmail_token')
+      }
     } catch {/* ignore */}
 
     return () => subscription.unsubscribe()
@@ -117,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(profile)
       fetchMembers()
-      try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
+      try { localStorage.setItem('gravhub_user_email', profile.email) } catch {/* ignore */}
       return { ok: true }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed. Please try again.'
@@ -137,18 +156,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: false, error: 'Access is restricted to Graviss Marketing team members.' }
       }
 
-      // Use the API route (service role) so RLS doesn't block unauthenticated reads
-      const res = await fetch('/api/team-members')
-      const members: { email: string }[] = res.ok ? await res.json() : []
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const row = members.find((m: any) => m.email?.toLowerCase() === email)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const profile = row ? rowToAuthUser(row as any, payload.picture) : null
+      const profile = await loadProfileByEmail(email, payload.picture)
       if (!profile) return { ok: false, error: 'No team member profile found. Contact your administrator.' }
 
       setUser(profile)
       fetchMembers()
-      try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
+      try { localStorage.setItem('gravhub_user_email', profile.email) } catch {/* ignore */}
       return { ok: true }
     } catch {
       return { ok: false, error: 'Google sign-in failed. Please try again.' }
@@ -181,8 +194,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setGmailToken(null)
     setGmailEmail(null)
-    try { localStorage.removeItem('gravhub_gmail_email') } catch {/* ignore */}
-    try { sessionStorage.removeItem('gravhub_login_at') } catch {/* ignore */}
+    try {
+      localStorage.removeItem('gravhub_gmail_email')
+      localStorage.removeItem('gravhub_gmail_token')
+      localStorage.removeItem('gravhub_user_email')
+    } catch {/* ignore */}
   }
 
   const connectGmail = useCallback(() => {
@@ -205,6 +221,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       callback: (resp: { access_token?: string; error?: string }) => {
         if (resp.error || !resp.access_token) return
         setGmailToken(resp.access_token)
+        try {
+          localStorage.setItem('gravhub_gmail_token', JSON.stringify({
+            token: resp.access_token,
+            expiresAt: Date.now() + 3500 * 1000, // ~58 min (tokens last 1h)
+          }))
+        } catch {/* ignore */}
         fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${resp.access_token}` },
         })
@@ -229,7 +251,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setGmailToken(null)
     setGmailEmail(null)
-    try { localStorage.removeItem('gravhub_gmail_email') } catch {/* ignore */}
+    try {
+      localStorage.removeItem('gravhub_gmail_email')
+      localStorage.removeItem('gravhub_gmail_token')
+    } catch {/* ignore */}
   }, [gmailToken])
 
   return (

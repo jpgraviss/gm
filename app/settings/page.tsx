@@ -63,13 +63,22 @@ function EditableField({ label, value, onChange, type = 'text' }: { label: strin
   )
 }
 
+const US_TIMEZONES = [
+  { value: 'America/New_York', label: 'America/New_York (Eastern)' },
+  { value: 'America/Chicago', label: 'America/Chicago (Central)' },
+  { value: 'America/Denver', label: 'America/Denver (Mountain)' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (Pacific)' },
+  { value: 'America/Anchorage', label: 'America/Anchorage (Alaska)' },
+  { value: 'Pacific/Honolulu', label: 'Pacific/Honolulu (Hawaii)' },
+]
+
 const COMPANY_DEFAULTS = {
   name: 'Graviss Marketing, LLC',
   industry: 'Marketing Agency',
   email: 'info@gravissmarketing.com',
   phone: '+1 (830) 326-0320',
   website: 'www.gravissmarketing.com',
-  timezone: 'America/Chicago (CT)',
+  timezone: 'America/Chicago',
   fiscalYear: 'January 1',
   currency: 'USD ($)',
   street: '',
@@ -237,41 +246,34 @@ export default function SettingsPage() {
   const [newService, setNewService] = useState('')
   const [newTag, setNewTag] = useState('')
 
-  // Load from API on mount (fall back to localStorage for backwards-compat, then defaults)
+  // Load from localStorage on mount, then hydrate from API
   useEffect(() => {
+    setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
+    setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
+    setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
+    setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
+    setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
+    setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
+    setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
+    // Fetch persisted settings from API
     fetch('/api/settings')
       .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (!d || !d.id) {
-          setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
-          setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
-          setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
-          setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
-          setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
-          setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
-          setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
-          setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
-          return
-        }
-        if (d.company          && Object.keys(d.company).length)           setCompany(d.company)
-        if (Array.isArray(d.notifications)   && d.notifications.length)    setNotifications(d.notifications)
-        if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(d.invoice_defaults)
-        if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length)  setPipelineStages(d.pipeline_stages)
-        if (Array.isArray(d.service_types)   && d.service_types.length)    setServiceTypes(d.service_types)
-        if (Array.isArray(d.contact_tags)    && d.contact_tags.length)     setContactTags(d.contact_tags)
-        if (d.branding         && Object.keys(d.branding).length)          setBranding(d.branding)
-        if (Array.isArray(d.qb_sync)         && d.qb_sync.length)          setQbSync(d.qb_sync)
+      .then(data => {
+        if (!data) return
+        if (data.company && Object.keys(data.company).length > 0) setCompany(prev => ({ ...prev, ...data.company }))
+        if (Array.isArray(data.notifications) && data.notifications.length > 0) setNotifications(data.notifications)
+        if (Array.isArray(data.qbSync) && data.qbSync.length > 0) setQbSync(data.qbSync)
+        if (data.invoiceDefaults && Object.keys(data.invoiceDefaults).length > 0) setInvoiceDefaults(prev => ({ ...prev, ...data.invoiceDefaults }))
+        if (Array.isArray(data.pipelineStages) && data.pipelineStages.length > 0) setPipelineStages(data.pipelineStages)
+        if (Array.isArray(data.serviceTypes) && data.serviceTypes.length > 0) setServiceTypes(data.serviceTypes)
+        if (Array.isArray(data.contactTags) && data.contactTags.length > 0) setContactTags(data.contactTags)
       })
-      .catch(() => {
-        setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
-        setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
-        setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
-        setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
-        setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
-        setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
-        setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
-        setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
-      })
+      .catch(() => {})
+    // Fetch team members from API
+    fetch('/api/team-members')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (Array.isArray(data) && data.length > 0) setMembers(data) })
+      .catch(() => {})
   }, [])
 
   // Keep members in sync with auth
@@ -282,37 +284,48 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(null), 2500)
   }
 
-  function patchSettings(payload: Record<string, unknown>, label: string) {
+  function persistSettings(patch: Record<string, unknown>) {
     fetch('/api/settings', {
-      method: 'PATCH',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(patch),
     }).catch(() => {})
-    flash(label)
   }
 
   function saveCompany() {
-    patchSettings({ company }, 'Company')
+    localStorage.setItem('gravhub_company', JSON.stringify(company))
+    persistSettings({ company })
+    flash('Company')
   }
 
   function saveNotifications() {
-    patchSettings({ notifications }, 'Notifications')
+    localStorage.setItem('gravhub_notifications', JSON.stringify(notifications))
+    persistSettings({ notifications })
+    flash('Notifications')
   }
 
   function saveInvoiceDefaults() {
-    patchSettings({ invoiceDefaults }, 'Billing')
+    localStorage.setItem('gravhub_invoice_defaults', JSON.stringify(invoiceDefaults))
+    persistSettings({ invoiceDefaults })
+    flash('Billing')
   }
 
   function saveCRM() {
-    patchSettings({ pipelineStages, serviceTypes, contactTags }, 'CRM Setup')
+    localStorage.setItem('gravhub_pipeline_stages', JSON.stringify(pipelineStages))
+    localStorage.setItem('gravhub_service_types', JSON.stringify(serviceTypes))
+    localStorage.setItem('gravhub_contact_tags', JSON.stringify(contactTags))
+    persistSettings({ pipelineStages, serviceTypes, contactTags })
+    flash('CRM Setup')
   }
 
   function saveBranding() {
-    patchSettings({ branding }, 'Branding')
+    persistSettings({ branding })
+    flash('Branding')
   }
 
   function saveQbSync() {
-    patchSettings({ qbSync }, 'QB Sync')
+    persistSettings({ qbSync })
+    flash('QB Sync')
   }
 
   async function submitInvite() {
@@ -396,7 +409,18 @@ export default function SettingsPage() {
               <EditableField label="Primary Email"     value={company.email}      onChange={v => setCompany(p => ({ ...p, email: v }))} type="email" />
               <EditableField label="Phone"             value={company.phone}      onChange={v => setCompany(p => ({ ...p, phone: v }))} />
               <EditableField label="Website"           value={company.website}    onChange={v => setCompany(p => ({ ...p, website: v }))} />
-              <EditableField label="Timezone"          value={company.timezone}   onChange={v => setCompany(p => ({ ...p, timezone: v }))} />
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Timezone</label>
+                <select
+                  value={company.timezone}
+                  onChange={e => setCompany(p => ({ ...p, timezone: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                >
+                  {US_TIMEZONES.map(tz => (
+                    <option key={tz.value} value={tz.value}>{tz.label}</option>
+                  ))}
+                </select>
+              </div>
               <EditableField label="Fiscal Year Start" value={company.fiscalYear} onChange={v => setCompany(p => ({ ...p, fiscalYear: v }))} />
               <EditableField label="Default Currency"  value={company.currency}   onChange={v => setCompany(p => ({ ...p, currency: v }))} />
             </div>

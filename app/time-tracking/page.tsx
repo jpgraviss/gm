@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
-import { Clock, Plus, X, ChevronLeft, ChevronRight, DollarSign, Ban, Users, Check, Pencil, Trash2 } from 'lucide-react'
-import type { TimeEntry, TeamServiceLine, TeamMember, Project } from '@/lib/types'
-import { fetchTeamMembers, fetchProjects } from '@/lib/supabase'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { Clock, Plus, X, ChevronLeft, ChevronRight, DollarSign, Ban, Users, Check, Pencil, Trash2, Search } from 'lucide-react'
+import type { TimeEntry, TeamServiceLine, TeamMember } from '@/lib/types'
+import { fetchTeamMembers } from '@/lib/supabase'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -69,20 +69,86 @@ interface LogFormProps {
   onClose: () => void
   defaultDate?: string
   teamMembers: TeamMember[]
-  projects: Project[]
+  clientNames: string[]
 }
 
-function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projects }: LogFormProps) {
+function ClientSearchInput({ value, onChange, clientNames }: {
+  value: string
+  onChange: (v: string) => void
+  clientNames: string[]
+}) {
+  const [query, setQuery] = useState(value)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase()
+    return clientNames.filter(n => n.toLowerCase().includes(q))
+  }, [query, clientNames])
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <input
+          type="text"
+          value={query}
+          onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search client name…"
+          className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/30"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => { setQuery(''); onChange(''); setOpen(false) }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-100"
+          >
+            <X className="w-3 h-3 text-gray-400" />
+          </button>
+        )}
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {filtered.map(name => (
+            <button
+              key={name}
+              type="button"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { setQuery(name); onChange(name); setOpen(false) }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-gray-800"
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+      {open && query && filtered.length === 0 && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-sm text-gray-400">
+          No matching clients
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, clientNames }: LogFormProps) {
   const [date, setDate]           = useState(entry?.date ?? defaultDate ?? toIso(new Date()))
   const [teamMember, setTeamMember] = useState(entry?.teamMember ?? teamMembers[0]?.name ?? '')
-  const [projectId, setProjectId]   = useState(entry?.projectId ?? '')
+  const [clientName, setClientName] = useState(entry?.projectName ?? '')
   const [description, setDesc]      = useState(entry?.description ?? '')
   const [serviceType, setService]   = useState<TeamServiceLine>(entry?.serviceType ?? 'General')
   const [hours, setHours]           = useState(String(entry?.hours ?? 0))
   const [minutes, setMinutes]       = useState(String(entry?.minutes ?? 0))
   const [billable, setBillable]     = useState(entry?.billable ?? true)
-
-  const selectedProject = projects.find(p => p.id === projectId)
 
   function handleSave() {
     if (!description.trim()) return
@@ -93,8 +159,7 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projec
       id: entry?.id ?? `te-${Date.now()}`,
       date,
       teamMember,
-      projectId: projectId || undefined,
-      projectName: selectedProject?.company ?? entry?.projectName,
+      projectName: clientName || undefined,
       description: description.trim(),
       serviceType,
       hours: h,
@@ -106,7 +171,7 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projec
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="w-[440px] bg-white flex flex-col shadow-2xl">
+      <div className="w-full sm:w-[440px] bg-white flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
@@ -144,19 +209,10 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projec
             </select>
           </div>
 
-          {/* Project */}
+          {/* Client / Project */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Project (optional)</label>
-            <select
-              value={projectId}
-              onChange={e => setProjectId(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/30"
-            >
-              <option value="">— No project —</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.company}</option>
-              ))}
-            </select>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Client (optional)</label>
+            <ClientSearchInput value={clientName} onChange={setClientName} clientNames={clientNames} />
           </div>
 
           {/* Description */}
@@ -268,7 +324,7 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projec
 export default function TimeTrackingPage() {
   const [entries, setEntries] = useState<TimeEntry[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
+  const [clientNames, setClientNames] = useState<string[]>([])
   const [anchorDate, setAnchor]   = useState(new Date())
   const [showLog, setShowLog]     = useState(false)
   const [editEntry, setEditEntry] = useState<TimeEntry | undefined>()
@@ -279,7 +335,17 @@ export default function TimeTrackingPage() {
       .then(data => { if (Array.isArray(data)) setEntries(data) })
       .catch(() => {})
     fetchTeamMembers().then(setTeamMembers)
-    fetchProjects().then(setProjects)
+    fetch('/api/crm/contacts')
+      .then(r => r.json())
+      .then((data: { name?: string; company?: string }[]) => {
+        if (Array.isArray(data)) {
+          const names = data
+            .map(c => c.company || c.name || '')
+            .filter(Boolean)
+          setClientNames([...new Set(names)].sort())
+        }
+      })
+      .catch(() => {})
   }, [])
   const [filterMember, setFilterMember] = useState('All')
   const [filterBillable, setFilterBillable] = useState<'All' | 'Billable' | 'Non-Billable'>('All')
@@ -325,34 +391,30 @@ export default function TimeTrackingPage() {
   }, [weekEntries])
 
   async function handleSave(entry: TimeEntry) {
-    const isNew = !entries.find(e => e.id === entry.id)
-    if (isNew) {
-      try {
-        const res = await fetch('/api/time-entries', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(entry),
-        })
-        const saved = await res.json()
-        setEntries(prev => [saved, ...prev])
-      } catch {
-        setEntries(prev => [entry, ...prev])
-      }
-    } else {
-      fetch(`/api/time-entries/${entry.id}`, {
+    setShowLog(false)
+    setEditEntry(undefined)
+    const isEdit = entries.some(e => e.id === entry.id)
+    if (isEdit) {
+      setEntries(prev => prev.map(e => e.id === entry.id ? entry : e))
+      await fetch(`/api/time-entries/${entry.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(entry),
       }).catch(() => {})
-      setEntries(prev => prev.map(e => e.id === entry.id ? entry : e))
+    } else {
+      const res = await fetch('/api/time-entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      }).catch(() => null)
+      const saved = res?.ok ? await res.json() : entry
+      setEntries(prev => [saved, ...prev])
     }
-    setShowLog(false)
-    setEditEntry(undefined)
   }
 
-  function handleDelete(id: string) {
-    fetch(`/api/time-entries/${id}`, { method: 'DELETE' }).catch(() => {})
+  async function handleDelete(id: string) {
     setEntries(prev => prev.filter(e => e.id !== id))
+    await fetch(`/api/time-entries/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
   function openLog(date?: string) {
@@ -381,7 +443,7 @@ export default function TimeTrackingPage() {
   return (
     <div className="min-h-screen bg-[#f9fafb]">
       {/* ── Page Header ── */}
-      <div className="bg-white border-b border-gray-100 px-8 py-5">
+      <div className="bg-white border-b border-gray-100 px-4 md:px-8 py-4 md:py-5">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Time Tracking</h1>
@@ -397,7 +459,7 @@ export default function TimeTrackingPage() {
         </div>
       </div>
 
-      <div className="px-8 py-6 space-y-6">
+      <div className="px-4 md:px-8 py-4 md:py-6 space-y-4 md:space-y-6">
         {/* ── Week Navigator ── */}
         <div className="bg-white rounded-xl border border-gray-100 px-6 py-4 flex items-center justify-between">
           <button onClick={prevWeek} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -437,7 +499,7 @@ export default function TimeTrackingPage() {
         </div>
 
         {/* ── Summary Cards ── */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             {
               label: 'Total Hours',
@@ -486,7 +548,7 @@ export default function TimeTrackingPage() {
         </div>
 
         {/* ── Filters ── */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Member filter */}
           <div className="flex items-center gap-1 bg-white border border-gray-100 rounded-lg p-1">
             {allMembers.map(m => (
@@ -639,7 +701,7 @@ export default function TimeTrackingPage() {
           onSave={handleSave}
           onClose={() => { setShowLog(false); setEditEntry(undefined) }}
           teamMembers={teamMembers}
-          projects={projects}
+          clientNames={clientNames}
         />
       )}
     </div>

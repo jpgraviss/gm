@@ -7,7 +7,7 @@ import type { ServiceType, CRMCompany } from '@/lib/types'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const
-const ASSIGNEES = ['Sarah Chen', 'Marcus Webb', 'Priya Patel', 'Jordan Ellis']
+const ASSIGNEES = ['Jonathan Graviss', 'JG Graviss', 'SEO Team', 'Shihab', 'Billing']
 
 export interface NewTicketFormData {
   subject: string

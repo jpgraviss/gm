@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 // data loaded from API
 import { projectStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
@@ -139,25 +139,34 @@ function ProjectDetailPanel({
 
   const today = new Date().toISOString().split('T')[0]
   const overdueTasks = localTasks.filter(t => !t.completed && t.dueDate < today)
-  // eslint-disable-next-line react-hooks/purity
-  const daysLeft = useMemo(() => Math.max(0, Math.ceil((new Date(project.launchDate).getTime() - Date.now()) / 86400000)), [project.launchDate])
+  const daysLeft = Math.max(0, Math.ceil((new Date(project.launchDate).getTime() - Date.now()) / 86400000))
   const isFinished = ['Launched', 'In Maintenance', 'Completed'].includes(project.status)
 
   const toggleTask = (taskId: string) => {
-    setLocalTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t))
+    const updated = localTasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t)
+    setLocalTasks(updated)
+    fetch(`/api/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tasks: updated }),
+    }).catch(() => {})
   }
 
   const saveNote = () => {
     if (!noteText.trim()) return
-    setNotes(prev => [
-      ...prev,
-      {
-        id: `note-${Date.now()}`,
-        text: noteText.trim(),
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        author: 'You',
-      },
-    ])
+    const newNote = {
+      id: `note-${Date.now()}`,
+      text: noteText.trim(),
+      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      author: 'You',
+    }
+    const updated = [...notes, newNote]
+    setNotes(updated)
+    fetch(`/api/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: updated }),
+    }).catch(() => {})
     setNoteText('')
     setShowNoteForm(false)
   }
@@ -191,7 +200,7 @@ function ProjectDetailPanel({
           </div>
 
           {/* Quick stats */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {[
               { label: 'Milestones', value: `${project.milestones.filter(m => m.completed).length}/${project.milestones.length}` },
               { label: 'Tasks', value: `${localTasks.filter(t => t.completed).length}/${localTasks.length}` },
@@ -220,7 +229,7 @@ function ProjectDetailPanel({
           {/* ── Overview ── */}
           {tab === 'overview' && (
             <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {[
                   { label: 'Start Date', value: formatDate(project.startDate) },
                   { label: 'Launch Date', value: formatDate(project.launchDate) },
@@ -668,12 +677,72 @@ function ServiceTypeGroup({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+function NewProjectPanel({ onSave, onClose }: { onSave: (p: Project) => void; onClose: () => void }) {
+  const [company, setCompany] = useState('')
+  const [serviceType, setServiceType] = useState<ServiceTypeKey>('Website')
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
+  const [launchDate, setLaunchDate] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    if (!company.trim()) return
+    setSaving(true)
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company: company.trim(), serviceType, startDate, launchDate: launchDate || null, status: 'Not Started', progress: 0, milestones: [], tasks: [], assignedTeam: [] }),
+    }).catch(() => null)
+    const saved = res?.ok ? await res.json() : { id: `pr-${Date.now()}`, company: company.trim(), serviceType, startDate, launchDate, status: 'Not Started', progress: 0, milestones: [], tasks: [], assignedTeam: [], contractId: '' }
+    onSave(saved)
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex pointer-events-none">
+      <div className="flex-1 pointer-events-auto" onClick={onClose} />
+      <div className="w-full sm:w-[420px] bg-white h-full shadow-2xl flex flex-col pointer-events-auto border-l border-gray-200">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100" style={{ background: '#012b1e' }}>
+          <h2 className="text-white text-sm font-bold tracking-wide">New Project</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10"><X size={16} className="text-white/60" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Client / Company *</label>
+            <input value={company} onChange={e => setCompany(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700/30" placeholder="Client name" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Service Type</label>
+            <select value={serviceType} onChange={e => setServiceType(e.target.value as ServiceTypeKey)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700/30">
+              {(Object.keys(serviceTypeIcons) as ServiceTypeKey[]).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Start Date</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700/30" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Target Launch Date</label>
+            <input type="date" value={launchDate} onChange={e => setLaunchDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700/30" />
+          </div>
+        </div>
+        <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
+          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
+          <button onClick={handleSave} disabled={!company.trim() || saving} className="flex-1 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-40" style={{ background: '#012b1e' }}>
+            {saving ? 'Saving…' : 'Create Project'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ProjectsPage() {
   const [localProjects, setLocalProjects] = useState<Project[]>([])
   const [selected, setSelected] = useState<Project | null>(null)
   const [serviceFilter, setServiceFilter] = useState<ServiceTypeKey | 'All'>('All')
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'All'>('All')
   const [view, setView] = useState<'grouped' | 'kanban'>('grouped')
+  const [creatingProject, setCreatingProject] = useState(false)
 
   useEffect(() => {
     fetch('/api/projects')
@@ -684,10 +753,10 @@ export default function ProjectsPage() {
 
   const today = new Date().toISOString().split('T')[0]
 
-  function updateProjectStatus(id: string, status: ProjectStatus) {
+  async function updateProjectStatus(id: string, status: ProjectStatus) {
     setLocalProjects(prev => prev.map(p => p.id === id ? { ...p, status } : p))
     setSelected(prev => prev && prev.id === id ? { ...prev, status } : prev)
-    fetch(`/api/projects/${id}`, {
+    await fetch(`/api/projects/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
@@ -715,7 +784,7 @@ export default function ProjectsPage() {
 
   return (
     <>
-      <Header title="Projects" subtitle="Track delivery across all service lines" action={{ label: 'New Project' }} />
+      <Header title="Projects" subtitle="Track delivery across all service lines" action={{ label: 'New Project', onClick: () => setCreatingProject(true) }} />
       <div className="page-content">
 
         {/* Summary Metrics */}
@@ -831,11 +900,11 @@ export default function ProjectsPage() {
 
         {/* Kanban View — status columns */}
         {view === 'kanban' && (
-          <div className="flex gap-4 overflow-x-auto pb-4">
+          <div className="flex flex-col gap-4 md:flex-row md:overflow-x-auto pb-4">
             {visibleStatuses.map(status => {
               const cols = filtered.filter(p => p.status === status)
               return (
-                <div key={status} className="flex-shrink-0 w-[280px]">
+                <div key={status} className="w-full md:flex-shrink-0 md:w-[280px]">
                   <div className="flex items-center gap-2 mb-3 px-1">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: statusColumnColors[status] }} />
                     <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{status}</span>
@@ -868,6 +937,12 @@ export default function ProjectsPage() {
           project={selected}
           onClose={() => setSelected(null)}
           onUpdateStatus={updateProjectStatus}
+        />
+      )}
+      {creatingProject && (
+        <NewProjectPanel
+          onSave={p => { setLocalProjects(prev => [p, ...prev]); setCreatingProject(false) }}
+          onClose={() => setCreatingProject(false)}
         />
       )}
     </>

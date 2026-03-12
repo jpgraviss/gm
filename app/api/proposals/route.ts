@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
       items:         body.items ?? [],
       is_renewal:    body.isRenewal ?? false,
       internal_only: body.internalOnly ?? false,
+      renewal_notes: body.renewalNotes ?? null,
       created_date:  new Date().toISOString().split('T')[0],
     })
     .select()

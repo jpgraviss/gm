@@ -313,7 +313,7 @@ function PdfTemplate(p: PdfProps) {
 
 // ─── Main Builder Component ───────────────────────────────────────────────────
 
-export default function ProposalBuilderPanel({ onSave, onClose, initialCompany = '', initialRep = 'Jaycee Graviss', initialData }: Props) {
+export default function ProposalBuilderPanel({ onSave, onClose, initialCompany = '', initialRep = 'Jonathan Graviss', initialData }: Props) {
   // Client info
   const [company, setCompany]           = useState(initialData?.company ?? initialCompany)
   const [contactName, setContactName]   = useState('')
@@ -873,7 +873,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
       <div className="flex-1" onClick={onClose} />
 
       {/* Panel */}
-      <div className="pointer-events-auto flex flex-col bg-white shadow-2xl overflow-hidden" style={{ width: 'min(980px, 100vw)', height: '100vh' }}>
+      <div className="pointer-events-auto flex flex-col bg-white shadow-2xl overflow-hidden w-full" style={{ maxWidth: 'min(980px, 100vw)', width: '100%', height: '100vh' }}>
 
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-white/10" style={{ background: '#012b1e' }}>

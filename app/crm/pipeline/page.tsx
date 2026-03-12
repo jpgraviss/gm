@@ -12,7 +12,7 @@ import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
-import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/types'
+import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract, ServiceType } from '@/lib/types'
 import {
   X, Phone, Mail, Calendar, TrendingUp, DollarSign,
   FileText, ScrollText, User, ChevronRight, Plus,
@@ -42,6 +42,7 @@ type LocalDeal = Omit<Deal, 'stage'> & { stage: string }
 
 const DEFAULT_STAGE_COLORS: Record<string, string> = {
   Lead: '#9ca3af',
+  Contacted: '#6366f1',
   Qualified: '#3b82f6',
   'Proposal Sent': '#f59e0b',
   'Contract Sent': '#f97316',
@@ -60,6 +61,7 @@ const initialPipelines: PipelineConfig[] = [
     name: 'Sales Pipeline',
     stages: [
       { id: 'lead',          name: 'Lead',          color: '#9ca3af' },
+      { id: 'contacted',     name: 'Contacted',     color: '#6366f1' },
       { id: 'qualified',     name: 'Qualified',     color: '#3b82f6' },
       { id: 'proposal_sent', name: 'Proposal Sent', color: '#f59e0b' },
       { id: 'contract_sent', name: 'Contract Sent', color: '#f97316' },
@@ -68,6 +70,254 @@ const initialPipelines: PipelineConfig[] = [
     ],
   },
 ]
+
+// ─── Proposal Stage Modal ─────────────────────────────────────────────────────
+
+interface ProposalModalData {
+  company: string
+  value: string
+  serviceType: string
+  items: string
+}
+
+function ProposalStageModal({
+  deal,
+  onSubmit,
+  onClose,
+}: {
+  deal: LocalDeal
+  onSubmit: (data: ProposalModalData) => void
+  onClose: () => void
+}) {
+  const [form, setForm] = useState<ProposalModalData>({
+    company: deal.company,
+    value: String(deal.value),
+    serviceType: deal.serviceType,
+    items: deal.notes.join('\n'),
+  })
+  const [success, setSuccess] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit() {
+    setSubmitting(true)
+    await onSubmit(form)
+    setSuccess(true)
+    setSubmitting(false)
+    setTimeout(onClose, 1800)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 flex flex-col overflow-hidden">
+        <div className="p-5 flex items-center justify-between" style={{ background: '#f59e0b' }}>
+          <div>
+            <h3 className="text-base font-bold text-white">Proposal Details</h3>
+            <p className="text-white/80 text-xs mt-0.5">Deal moving to Proposal Sent</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/20">
+            <X size={16} className="text-white" />
+          </button>
+        </div>
+        {success ? (
+          <div className="p-8 text-center">
+            <CheckCircle2 size={36} className="text-emerald-500 mx-auto mb-3" />
+            <p className="text-base font-semibold text-gray-900">Proposal saved!</p>
+            <p className="text-sm text-gray-400 mt-1">Proposal has been created in Supabase.</p>
+          </div>
+        ) : (
+          <div className="p-5 flex flex-col gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company</label>
+              <input
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                value={form.company}
+                onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Value ($)</label>
+              <input
+                type="number"
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                value={form.value}
+                onChange={e => setForm(f => ({ ...f, value: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Service Type</label>
+              <input
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                value={form.serviceType}
+                onChange={e => setForm(f => ({ ...f, serviceType: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Items / Description</label>
+              <textarea
+                rows={3}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                placeholder="Describe services, deliverables..."
+                value={form.items}
+                onChange={e => setForm(f => ({ ...f, items: e.target.value }))}
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || !form.company.trim()}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
+                style={{ background: '#f59e0b' }}
+              >
+                {submitting ? 'Saving…' : 'Create Proposal'}
+              </button>
+              <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+                Skip
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Contract Stage Modal ─────────────────────────────────────────────────────
+
+interface ContractModalData {
+  company: string
+  value: string
+  serviceType: string
+  billingStructure: string
+  startDate: string
+  renewalDate: string
+}
+
+function ContractStageModal({
+  deal,
+  onSubmit,
+  onClose,
+}: {
+  deal: LocalDeal
+  onSubmit: (data: ContractModalData) => void
+  onClose: () => void
+}) {
+  const today = new Date().toISOString().split('T')[0]
+  const nextYear = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  const [form, setForm] = useState<ContractModalData>({
+    company: deal.company,
+    value: String(deal.value),
+    serviceType: deal.serviceType,
+    billingStructure: 'Monthly',
+    startDate: today,
+    renewalDate: nextYear,
+  })
+  const [success, setSuccess] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit() {
+    setSubmitting(true)
+    await onSubmit(form)
+    setSuccess(true)
+    setSubmitting(false)
+    setTimeout(onClose, 1800)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 flex flex-col overflow-hidden">
+        <div className="p-5 flex items-center justify-between" style={{ background: '#f97316' }}>
+          <div>
+            <h3 className="text-base font-bold text-white">Contract Details</h3>
+            <p className="text-white/80 text-xs mt-0.5">Deal moving to Contract Sent</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/20">
+            <X size={16} className="text-white" />
+          </button>
+        </div>
+        {success ? (
+          <div className="p-8 text-center">
+            <CheckCircle2 size={36} className="text-emerald-500 mx-auto mb-3" />
+            <p className="text-base font-semibold text-gray-900">Contract saved!</p>
+            <p className="text-sm text-gray-400 mt-1">Contract has been created in Supabase.</p>
+          </div>
+        ) : (
+          <div className="p-5 flex flex-col gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company</label>
+              <input
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                value={form.company}
+                onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Value ($)</label>
+              <input
+                type="number"
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                value={form.value}
+                onChange={e => setForm(f => ({ ...f, value: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Service Type</label>
+                <input
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  value={form.serviceType}
+                  onChange={e => setForm(f => ({ ...f, serviceType: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Billing Structure</label>
+                <select
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                  value={form.billingStructure}
+                  onChange={e => setForm(f => ({ ...f, billingStructure: e.target.value }))}
+                >
+                  {['Monthly', 'Quarterly', 'Annual', 'One-Time'].map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Start Date</label>
+                <input
+                  type="date"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  value={form.startDate}
+                  onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Renewal Date</label>
+                <input
+                  type="date"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  value={form.renewalDate}
+                  onChange={e => setForm(f => ({ ...f, renewalDate: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || !form.company.trim()}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
+                style={{ background: '#f97316' }}
+              >
+                {submitting ? 'Saving…' : 'Create Contract'}
+              </button>
+              <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+                Skip
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 // ─── Deal Card ────────────────────────────────────────────────────────────────
 
@@ -138,6 +388,7 @@ function DealPanel({
   onClose,
   onAdvanceStage,
   onUpdateDeal,
+  onDeleteDeal,
   crmActivities,
   crmCompanies,
   crmContacts,
@@ -148,6 +399,7 @@ function DealPanel({
   onClose: () => void
   onAdvanceStage: (dealId: string, newStage: string) => void
   onUpdateDeal?: (id: string, updates: Partial<LocalDeal>) => void
+  onDeleteDeal?: (id: string) => void
   crmActivities: CRMActivity[]
   crmCompanies: CRMCompany[]
   crmContacts: CRMContact[]
@@ -156,6 +408,8 @@ function DealPanel({
   const [tab, setTab] = useState<'overview' | 'activity' | 'tasks'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [creatingProposal, setCreatingProposal] = useState(false)
+  const [editingNotes, setEditingNotes] = useState(false)
+  const [notesText, setNotesText] = useState(deal.notes.join('\n'))
   const [localActivities, setLocalActivities] = useState(
     () => (crmActivities ?? []).filter(a => a.companyId === (crmCompanies ?? []).find(c => c.name === deal.company)?.id).slice(0, 8)
   )
@@ -194,6 +448,14 @@ function DealPanel({
     setTab('activity')
   }
 
+  function handleSaveNotes() {
+    const updatedNotes = notesText.split('\n').filter(n => n.trim())
+    if (onUpdateDeal) {
+      onUpdateDeal(deal.id, { notes: updatedNotes })
+    }
+    setEditingNotes(false)
+  }
+
   return (
   <>
     <div className="fixed inset-0 z-50 flex pointer-events-none">
@@ -215,11 +477,22 @@ function DealPanel({
               </h2>
               <p className="text-gray-500 text-sm mt-0.5">{deal.contact.title} — {deal.contact.name}</p>
             </div>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-50">
-              <X size={18} className="text-gray-400" />
-            </button>
+            <div className="flex items-center gap-1">
+              {onDeleteDeal && (
+                <button
+                  onClick={() => { onDeleteDeal(deal.id); onClose() }}
+                  className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
+                  title="Delete deal"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
+              <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-50">
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-[11px] text-gray-400 mb-0.5">Deal Value</p>
               <p className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
@@ -296,9 +569,29 @@ function DealPanel({
               )}
 
               {/* Notes */}
-              {deal.notes.length > 0 && (
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Notes</p>
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Notes</p>
+                  <button
+                    onClick={() => {
+                      if (editingNotes) { handleSaveNotes() }
+                      else { setNotesText(deal.notes.join('\n')); setEditingNotes(true) }
+                    }}
+                    className="text-xs text-emerald-600 hover:underline flex items-center gap-1"
+                  >
+                    {editingNotes ? <><Check size={11} /> Save</> : <><Pencil size={11} /> Edit</>}
+                  </button>
+                </div>
+                {editingNotes ? (
+                  <textarea
+                    value={notesText}
+                    onChange={e => setNotesText(e.target.value)}
+                    rows={4}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    placeholder="One note per line..."
+                    autoFocus
+                  />
+                ) : deal.notes.length > 0 ? (
                   <ul className="flex flex-col gap-1.5">
                     {deal.notes.map((note: string, i: number) => (
                       <li key={i} className="text-sm text-gray-700 flex gap-2">
@@ -306,8 +599,10 @@ function DealPanel({
                       </li>
                     ))}
                   </ul>
-                </div>
-              )}
+                ) : (
+                  <p className="text-sm text-gray-400">No notes yet. Click Edit to add.</p>
+                )}
+              </div>
 
               {/* Contact */}
               <div className="p-4 bg-gray-50 rounded-xl">
@@ -746,6 +1041,9 @@ export default function PipelinePage() {
   const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
+  // Stage-change modals
+  const [proposalModalDeal, setProposalModalDeal] = useState<LocalDeal | null>(null)
+  const [contractModalDeal, setContractModalDeal] = useState<LocalDeal | null>(null)
 
   useEffect(() => { setMounted(true) }, []) // eslint-disable-line react-hooks/set-state-in-effect
 
@@ -763,7 +1061,7 @@ export default function PipelinePage() {
   const activePipeline = pipelines.find(p => p.id === activePipelineId) ?? pipelines[0]
   const activeStages = activePipeline.stages
 
-  const reps = ['All', ...Array.from(new Set(localDeals.map(d => d.assignedRep)))]
+  const reps = ['All', ...ALL_REPS]
   const filteredDeals = filterRep === 'All' ? localDeals : localDeals.filter(d => d.assignedRep === filterRep)
 
   const openDeals = filteredDeals.filter(d => !d.stage.startsWith('Closed'))
@@ -776,9 +1074,26 @@ export default function PipelinePage() {
     if (!destination || source.droppableId === destination.droppableId) return
     const newStageName = activeStages.find(s => s.id === destination.droppableId)?.name
     if (!newStageName) return
+
+    // Optimistic update
     setLocalDeals(prev => prev.map(d => d.id === draggableId ? { ...d, stage: newStageName } : d))
     setSelectedDeal(prev => prev?.id === draggableId ? { ...prev, stage: newStageName } : prev)
-    fetch(`/api/deals/${draggableId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: newStageName }) }).catch(() => {})
+
+    // Persist stage change
+    fetch(`/api/deals/${draggableId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: newStageName }),
+    }).catch(() => {})
+
+    // Show proposal/contract modal if applicable
+    if (newStageName === 'Proposal Sent') {
+      const deal = localDeals.find(d => d.id === draggableId)
+      if (deal) setProposalModalDeal({ ...deal, stage: newStageName })
+    } else if (newStageName === 'Contract Sent') {
+      const deal = localDeals.find(d => d.id === draggableId)
+      if (deal) setContractModalDeal({ ...deal, stage: newStageName })
+    }
   }
 
   async function handleNewDeal(data: NewDealData) {
@@ -794,9 +1109,35 @@ export default function PipelinePage() {
       notes: data.notes ? [data.notes] : [],
     }
     try {
-      const res = await fetch('/api/deals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const res = await fetch('/api/deals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
       const saved = await res.json()
       setLocalDeals(prev => [saved as LocalDeal, ...prev])
+
+      // Also create the contact in CRM contacts
+      if (data.contactName.trim()) {
+        const nameParts = data.contactName.trim().split(' ')
+        const firstName = nameParts[0]
+        const lastName = nameParts.slice(1).join(' ')
+        fetch('/api/crm/contacts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companyName: data.company,
+            firstName,
+            lastName,
+            fullName: data.contactName.trim(),
+            title: data.contactTitle || null,
+            emails: data.contactEmail ? [data.contactEmail] : [],
+            phones: data.contactPhone ? [data.contactPhone] : [],
+            isPrimary: true,
+            owner: data.assignedRep,
+          }),
+        }).catch(() => {})
+      }
     } catch {
       setLocalDeals(prev => [{ ...payload, id: `deal-${Date.now()}`, lastActivity: new Date().toISOString().split('T')[0] } as LocalDeal, ...prev])
     }
@@ -805,11 +1146,68 @@ export default function PipelinePage() {
 
   function handleAdvanceStage(dealId: string, newStage: string) {
     setLocalDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage } : d))
-    fetch(`/api/deals/${dealId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: newStage }) }).catch(() => {})
+    fetch(`/api/deals/${dealId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: newStage }),
+    }).catch(() => {})
+
+    if (newStage === 'Proposal Sent') {
+      const deal = localDeals.find(d => d.id === dealId)
+      if (deal) setProposalModalDeal({ ...deal, stage: newStage })
+    } else if (newStage === 'Contract Sent') {
+      const deal = localDeals.find(d => d.id === dealId)
+      if (deal) setContractModalDeal({ ...deal, stage: newStage })
+    }
   }
 
   function handleUpdateDeal(id: string, updates: Partial<LocalDeal>) {
     setLocalDeals(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d))
+    fetch(`/api/deals/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    }).catch(() => {})
+  }
+
+  function handleDeleteDeal(id: string) {
+    setLocalDeals(prev => prev.filter(d => d.id !== id))
+    fetch(`/api/deals/${id}`, { method: 'DELETE' }).catch(() => {})
+  }
+
+  async function handleProposalSubmit(data: ProposalModalData) {
+    const deal = proposalModalDeal
+    fetch('/api/proposals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dealId: deal?.id ?? null,
+        company: data.company,
+        value: Number(data.value) || 0,
+        serviceType: data.serviceType as ServiceType,
+        assignedRep: deal?.assignedRep ?? ALL_REPS[0],
+        items: data.items ? data.items.split('\n').filter(Boolean) : [],
+        status: 'Draft',
+      }),
+    }).catch(() => {})
+  }
+
+  async function handleContractSubmit(data: ContractModalData) {
+    const deal = contractModalDeal
+    fetch('/api/contracts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company: data.company,
+        value: Number(data.value) || 0,
+        serviceType: data.serviceType as ServiceType,
+        billingStructure: data.billingStructure,
+        startDate: data.startDate,
+        renewalDate: data.renewalDate,
+        assignedRep: deal?.assignedRep ?? ALL_REPS[0],
+        status: 'Draft',
+      }),
+    }).catch(() => {})
   }
 
   return (
@@ -873,12 +1271,12 @@ export default function PipelinePage() {
 
         {/* Kanban Board */}
         {mounted ? <DragDropContext onDragEnd={onDragEnd}>
-          <div className="flex gap-3 overflow-x-auto pb-4 flex-1 items-start">
+          <div className="flex flex-col gap-4 md:flex-row md:overflow-x-auto pb-4 flex-1 md:items-start">
             {activeStages.map(stage => {
               const stageDeals = filteredDeals.filter(d => d.stage === stage.name)
               const stageTotal = stageDeals.reduce((s, d) => s + d.value, 0)
               return (
-                <div key={stage.id} className="kanban-col flex-shrink-0" style={{ width: 220 }}>
+                <div key={stage.id} className="kanban-col w-full md:flex-shrink-0 md:w-[220px]">
                   <div className="flex items-center justify-between mb-3 px-1">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
@@ -924,9 +1322,9 @@ export default function PipelinePage() {
             })}
           </div>
         </DragDropContext> : (
-          <div className="flex gap-3 overflow-x-auto pb-4 flex-1 items-start">
+          <div className="flex flex-col gap-4 md:flex-row md:overflow-x-auto pb-4 flex-1 md:items-start">
             {activeStages.map(stage => (
-              <div key={stage.id} className="kanban-col flex-shrink-0" style={{ width: 220 }}>
+              <div key={stage.id} className="kanban-col w-full md:flex-shrink-0 md:w-[220px]">
                 <div className="flex items-center gap-2 mb-3 px-1">
                   <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
                   <span className="text-xs font-semibold text-gray-700">{stage.name}</span>
@@ -947,6 +1345,7 @@ export default function PipelinePage() {
           onClose={() => setSelectedDeal(null)}
           onAdvanceStage={handleAdvanceStage}
           onUpdateDeal={handleUpdateDeal}
+          onDeleteDeal={handleDeleteDeal}
           crmActivities={crmActivities}
           crmCompanies={crmCompanies}
           crmContacts={crmContacts}
@@ -964,6 +1363,22 @@ export default function PipelinePage() {
           activePipelineId={activePipeline.id}
           onClose={() => setManagingPipeline(false)}
           onChange={updated => { setPipelines(updated) }}
+        />
+      )}
+
+      {proposalModalDeal && (
+        <ProposalStageModal
+          deal={proposalModalDeal}
+          onSubmit={handleProposalSubmit}
+          onClose={() => setProposalModalDeal(null)}
+        />
+      )}
+
+      {contractModalDeal && (
+        <ContractStageModal
+          deal={contractModalDeal}
+          onSubmit={handleContractSubmit}
+          onClose={() => setContractModalDeal(null)}
         />
       )}
     </>

@@ -358,8 +358,9 @@ export default function TasksPage() {
     fetchTeamMembers().then(setTeamMembers)
   }, [])
 
-  function updateStatus(id: string, status: AppTaskStatus) {
+  async function updateStatus(id: string, status: AppTaskStatus) {
     const today = TODAY
+    const completedDate = status === 'Completed' ? today : null
     setTasks(prev => prev.map(t =>
       t.id === id
         ? { ...t, status, ...(status === 'Completed' ? { completedDate: today } : { completedDate: undefined }) }
@@ -368,15 +369,28 @@ export default function TasksPage() {
     if (selectedTask?.id === id) {
       setSelectedTask(prev => prev ? { ...prev, status, ...(status === 'Completed' ? { completedDate: today } : { completedDate: undefined }) } : null)
     }
+    await fetch(`/api/tasks/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, completedDate }),
+    }).catch(() => {})
   }
 
-  function deleteTask(id: string) {
+  async function deleteTask(id: string) {
     setTasks(prev => prev.filter(t => t.id !== id))
+    if (selectedTask?.id === id) setSelectedTask(null)
+    await fetch(`/api/tasks/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
-  function addTask(task: AppTask) {
-    setTasks(prev => [task, ...prev])
+  async function addTask(task: AppTask) {
     setCreatingTask(false)
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(task),
+    }).catch(() => null)
+    const saved = res?.ok ? await res.json() : task
+    setTasks(prev => [saved, ...prev])
   }
 
   // Computed stats

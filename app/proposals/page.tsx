@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchDeals, fetchContracts } from '@/lib/supabase'
@@ -11,6 +11,7 @@ import type { Deal, Contract, Proposal, ProposalStatus } from '@/lib/types'
 import {
   Eye, Send, CheckCircle, XCircle, FileText, DollarSign, Calendar, User, X,
   Clock, ExternalLink, Mail, Phone, TrendingUp, AlertTriangle, Edit2, ShieldCheck,
+  Trash2,
 } from 'lucide-react'
 
 const statusOrder: ProposalStatus[] = ['Draft', 'Pending Approval', 'Approved', 'Sent', 'Viewed', 'Accepted', 'Declined']
@@ -25,11 +26,33 @@ const statusIcons: Record<ProposalStatus, React.ReactNode> = {
   Declined: <XCircle size={13} />,
 }
 
+// ─── Toast ────────────────────────────────────────────────────────────────────
+
+function Toast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 5000)
+    return () => clearTimeout(t)
+  }, [onDismiss])
+
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl border border-white/10 text-white text-sm font-medium" style={{ background: '#012b1e', maxWidth: '90vw' }}>
+      <CheckCircle size={16} className="text-emerald-400 flex-shrink-0" />
+      <span>{message}</span>
+      <button onClick={onDismiss} className="ml-1 opacity-60 hover:opacity-100 transition-opacity flex-shrink-0">
+        <X size={14} />
+      </button>
+    </div>
+  )
+}
+
+// ─── ProposalPanel ────────────────────────────────────────────────────────────
+
 function ProposalPanel({
   proposal,
   onClose,
   onUpdateStatus,
   onEdit,
+  onDelete,
   deals,
   contracts,
 }: {
@@ -37,6 +60,7 @@ function ProposalPanel({
   onClose: () => void
   onUpdateStatus: (id: string, status: ProposalStatus) => void
   onEdit: (proposal: Proposal) => void
+  onDelete: (id: string) => void
   deals: Deal[]
   contracts: Contract[]
 }) {
@@ -65,7 +89,7 @@ function ProposalPanel({
     <div className="pointer-events-none fixed inset-0 z-40 flex">
       <div className="flex-1" onClick={onClose} style={{ pointerEvents: 'auto' }} />
       <div
-        className="pointer-events-auto flex flex-col shadow-2xl border-l border-gray-200 bg-white"
+        className="pointer-events-auto flex flex-col shadow-2xl border-l border-gray-200 bg-white w-full sm:w-auto"
         style={{ width: 'min(440px, 100vw)', height: '100vh' }}
       >
         {/* Dark green header */}
@@ -85,6 +109,15 @@ function ProposalPanel({
                   title="Edit proposal"
                 >
                   <Edit2 size={14} className="text-white/60" />
+                </button>
+              )}
+              {proposal.status === 'Draft' && (
+                <button
+                  onClick={() => { onClose(); onDelete(proposal.id) }}
+                  className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                  title="Delete proposal"
+                >
+                  <Trash2 size={14} className="text-red-400/80" />
                 </button>
               )}
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
@@ -456,6 +489,8 @@ function ProposalPanel({
   )
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function ProposalsPage() {
   const [localProposals, setLocalProposals] = useState<Proposal[]>([])
   const [selected, setSelected] = useState<Proposal | null>(null)
@@ -464,6 +499,7 @@ export default function ProposalsPage() {
   const [editingProposal, setEditingProposal] = useState<Proposal | null>(null)
   const [deals, setDeals] = useState<Deal[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
+  const [toast, setToast] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/proposals')
@@ -474,52 +510,129 @@ export default function ProposalsPage() {
     fetchContracts().then(setContracts)
   }, [])
 
+  const dismissToast = useCallback(() => setToast(null), [])
+
   function updateProposalStatus(id: string, status: ProposalStatus) {
     const today = new Date().toISOString().split('T')[0]
+
+    const dateFields = {
+      ...(status === 'Pending Approval' ? { submittedForApprovalDate: today } : {}),
+      ...(status === 'Approved' ? { approvedDate: today, approvedBy: 'Jonathan Graviss' } : {}),
+      ...(status === 'Sent' ? { sentDate: today } : {}),
+      ...(status === 'Viewed' ? { viewedDate: today } : {}),
+      ...(['Accepted', 'Declined'].includes(status) ? { respondedDate: today } : {}),
+    }
+
+    // Optimistic UI update
     setLocalProposals(prev => prev.map(p => {
       if (p.id !== id) return p
-      return {
-        ...p,
-        status,
-        ...(status === 'Pending Approval' ? { submittedForApprovalDate: today } : {}),
-        ...(status === 'Approved' ? { approvedDate: today, approvedBy: 'Jonathan Graviss' } : {}),
-        ...(status === 'Sent' ? { sentDate: today } : {}),
-        ...(status === 'Viewed' ? { viewedDate: today } : {}),
-        ...(['Accepted', 'Declined'].includes(status) ? { respondedDate: today } : {}),
-      }
+      return { ...p, status, ...dateFields }
     }))
     setSelected(prev => {
       if (!prev || prev.id !== id) return prev
-      return {
-        ...prev,
-        status,
-        ...(status === 'Pending Approval' ? { submittedForApprovalDate: today } : {}),
-        ...(status === 'Approved' ? { approvedDate: today, approvedBy: 'Jonathan Graviss' } : {}),
-        ...(status === 'Sent' ? { sentDate: today } : {}),
-        ...(status === 'Viewed' ? { viewedDate: today } : {}),
-        ...(['Accepted', 'Declined'].includes(status) ? { respondedDate: today } : {}),
-      }
+      return { ...prev, status, ...dateFields }
     })
+
+    // Persist to API
+    fetch(`/api/proposals/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, ...dateFields }),
+    }).catch(() => {})
+
+    // If accepted, auto-create contract + task
+    if (status === 'Accepted') {
+      const proposal = localProposals.find(p => p.id === id)
+      if (proposal) {
+        // Create contract
+        fetch('/api/contracts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            company: proposal.company,
+            value: proposal.value,
+            serviceType: proposal.serviceType,
+            status: 'Draft',
+            assignedRep: proposal.assignedRep,
+            proposalId: proposal.id,
+          }),
+        }).catch(() => {})
+
+        // Create task (due 3 days from now)
+        const dueDate = new Date()
+        dueDate.setDate(dueDate.getDate() + 3)
+        fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: 'Convert accepted proposal to contract',
+            description: `Proposal for ${proposal.company} was accepted. Create the contract.`,
+            assignedTo: proposal.assignedRep,
+            category: 'Contract',
+            priority: 'High',
+            dueDate: dueDate.toISOString().split('T')[0],
+            status: 'Pending',
+          }),
+        }).catch(() => {})
+
+        setToast('Proposal accepted! Contract draft created and task assigned.')
+      }
+    }
   }
 
   function handleNewProposal(data: Omit<Proposal, 'id' | 'dealId' | 'createdDate'>) {
     if (editingProposal) {
+      // Optimistic update
       setLocalProposals(prev => prev.map(p =>
-        p.id === editingProposal.id
-          ? { ...p, ...data }
-          : p
+        p.id === editingProposal.id ? { ...p, ...data } : p
       ))
       setEditingProposal(null)
+
+      // Persist via PATCH
+      fetch(`/api/proposals/${editingProposal.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {})
     } else {
-      const newProposal: Proposal = {
-        id: `prop-${Date.now()}`,
-        dealId: '',
-        createdDate: new Date().toISOString().split('T')[0],
-        ...data,
-      }
-      setLocalProposals(prev => [newProposal, ...prev])
+      // POST to API and use returned proposal (real DB id)
+      fetch('/api/proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          status: data.status ?? 'Draft',
+          createdDate: new Date().toISOString().split('T')[0],
+        }),
+      })
+        .then(r => r.json())
+        .then(saved => {
+          if (saved && saved.id) {
+            setLocalProposals(prev => [saved, ...prev])
+          }
+        })
+        .catch(() => {
+          // Fallback: add with temp id
+          const newProposal: Proposal = {
+            id: `prop-${Date.now()}`,
+            dealId: '',
+            createdDate: new Date().toISOString().split('T')[0],
+            ...data,
+          }
+          setLocalProposals(prev => [newProposal, ...prev])
+        })
+
       setCreatingProposal(false)
     }
+  }
+
+  function deleteProposal(id: string) {
+    // Optimistic remove
+    setLocalProposals(prev => prev.filter(p => p.id !== id))
+    setSelected(null)
+
+    // Persist via DELETE
+    fetch(`/api/proposals/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
   const filtered = statusFilter === 'All' ? localProposals : localProposals.filter(p => p.status === statusFilter)
@@ -565,7 +678,7 @@ export default function ProposalsPage() {
           ))}
         </div>
 
-        {/* Table */}
+        {/* Proposals list */}
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 gap-3 bg-white">
             <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
@@ -578,7 +691,9 @@ export default function ProposalsPage() {
               {formatCurrency(filtered.reduce((s, p) => s + p.value, 0))}
             </span>
           </div>
-          <div className="overflow-x-auto table-scroll">
+
+          {/* Desktop table */}
+          <div className="hidden sm:block overflow-x-auto table-scroll">
             <table className="data-table min-w-[520px]">
               <thead>
                 <tr>
@@ -620,6 +735,12 @@ export default function ProposalsPage() {
                               className="text-xs font-medium text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md hover:bg-gray-50 transition-colors"
                             >
                               Edit
+                            </button>
+                            <button
+                              onClick={() => deleteProposal(p.id)}
+                              className="text-xs font-medium text-red-400 hover:text-red-600 px-2 py-1 rounded-md hover:bg-red-50 transition-colors"
+                            >
+                              <Trash2 size={12} />
                             </button>
                           </>
                         )}
@@ -665,6 +786,86 @@ export default function ProposalsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile card list */}
+          <div className="sm:hidden divide-y divide-gray-100">
+            {filtered.map(p => (
+              <div
+                key={p.id}
+                onClick={() => setSelected(p)}
+                className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm truncate">{p.company}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{p.id.toUpperCase()}</p>
+                  </div>
+                  <StatusBadge label={p.status} colorClass={proposalStatusColors[p.status]} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <StatusBadge label={p.serviceType} colorClass={serviceTypeColors[p.serviceType]} />
+                    <span className="text-[11px] text-gray-400">{p.assignedRep}</span>
+                  </div>
+                  <span className="font-bold text-gray-900 text-sm">{formatCurrency(p.value)}</span>
+                </div>
+                <div className="flex items-center gap-2 mt-2" onClick={e => e.stopPropagation()}>
+                  {p.status === 'Draft' && (
+                    <>
+                      <button
+                        onClick={() => updateProposalStatus(p.id, 'Pending Approval')}
+                        className="text-xs font-medium text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                      >
+                        Submit
+                      </button>
+                      <button
+                        onClick={() => { setEditingProposal(p) }}
+                        className="text-xs font-medium text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md hover:bg-gray-50 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteProposal(p.id)}
+                        className="text-xs font-medium text-red-400 hover:text-red-600 px-2 py-1 rounded-md hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </>
+                  )}
+                  {p.status === 'Pending Approval' && (
+                    <button
+                      onClick={() => updateProposalStatus(p.id, 'Approved')}
+                      className="text-xs font-medium text-amber-600 hover:text-amber-700 px-2 py-1 rounded-md hover:bg-amber-50 transition-colors"
+                    >
+                      Approve
+                    </button>
+                  )}
+                  {p.status === 'Approved' && (
+                    <button
+                      onClick={() => updateProposalStatus(p.id, 'Sent')}
+                      className="text-xs font-medium text-teal-600 hover:text-teal-700 px-2 py-1 rounded-md hover:bg-teal-50 transition-colors"
+                    >
+                      Send
+                    </button>
+                  )}
+                  {p.status === 'Viewed' && (
+                    <button
+                      onClick={() => updateProposalStatus(p.id, 'Accepted')}
+                      className="text-xs font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-md hover:bg-emerald-50 transition-colors"
+                    >
+                      Accept
+                    </button>
+                  )}
+                  {p.status === 'Accepted' && (
+                    <Link href="/contracts" className="text-xs font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-md hover:bg-emerald-50 transition-colors">
+                      Contract →
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
           {filtered.length === 0 && (
             <div className="py-12 text-center text-gray-400 text-sm">No proposals in this status</div>
           )}
@@ -677,6 +878,7 @@ export default function ProposalsPage() {
           onClose={() => setSelected(null)}
           onUpdateStatus={updateProposalStatus}
           onEdit={p => { setSelected(null); setEditingProposal(p) }}
+          onDelete={deleteProposal}
           deals={deals}
           contracts={contracts}
         />
@@ -688,6 +890,7 @@ export default function ProposalsPage() {
           onClose={() => { setCreatingProposal(false); setEditingProposal(null) }}
         />
       )}
+      {toast && <Toast message={toast} onDismiss={dismissToast} />}
     </>
   )
 }

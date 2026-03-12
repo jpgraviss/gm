@@ -3,6 +3,22 @@ import { createServiceClient } from '@/lib/supabase'
 
 const SETTINGS_ID = 'global'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapSettings(row: any) {
+  return {
+    id:              row.id,
+    company:         row.company ?? {},
+    notifications:   row.notifications ?? [],
+    qbSync:          row.qb_sync ?? [],
+    invoiceDefaults: row.invoice_defaults ?? {},
+    pipelineStages:  row.pipeline_stages ?? [],
+    serviceTypes:    row.service_types ?? [],
+    contactTags:     row.contact_tags ?? [],
+    branding:        row.branding ?? {},
+    updatedAt:       row.updated_at,
+  }
+}
+
 export async function GET() {
   const db = createServiceClient()
   const { data, error } = await db
@@ -11,7 +27,8 @@ export async function GET() {
     .eq('id', SETTINGS_ID)
     .maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? {})
+  if (!data) return NextResponse.json(null)
+  return NextResponse.json(mapSettings(data))
 }
 
 export async function PATCH(req: NextRequest) {
@@ -33,5 +50,9 @@ export async function PATCH(req: NextRequest) {
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(mapSettings(data))
+}
+
+export async function POST(req: NextRequest) {
+  return PATCH(req)
 }

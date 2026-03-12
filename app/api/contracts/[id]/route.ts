@@ -13,6 +13,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.assignedRep !== undefined)       update.assigned_rep = body.assignedRep
   if (body.billingStructure !== undefined)  update.billing_structure = body.billingStructure
   if (body.renewalDate !== undefined)       update.renewal_date = body.renewalDate
+  if (body.addendums !== undefined)         update.addendums = body.addendums
 
   const { data, error } = await db.from('contracts').update(update).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -1,5 +1,6 @@
 export type DealStage =
   | 'Lead'
+  | 'Contacted'
   | 'Qualified'
   | 'Proposal Sent'
   | 'Contract Sent'

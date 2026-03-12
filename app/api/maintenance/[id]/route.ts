@@ -6,11 +6,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json()
   const db = createServiceClient()
   const update: Record<string, unknown> = {}
-  if (body.status !== undefined)             update.status = body.status
-  if (body.monthlyFee !== undefined)         update.monthly_fee = body.monthlyFee
-  if (body.nextBillingDate !== undefined)    update.next_billing_date = body.nextBillingDate
-  if (body.documents !== undefined)         update.documents = body.documents
-  if (body.cancellationWindow !== undefined) update.cancellation_window = body.cancellationWindow
+  if (body.status !== undefined)              update.status = body.status
+  if (body.monthlyFee !== undefined)          update.monthly_fee = body.monthlyFee
+  if (body.nextBillingDate !== undefined)     update.next_billing_date = body.nextBillingDate
+  if (body.documents !== undefined)           update.documents = body.documents
+  if (body.cancellationWindow !== undefined)  update.cancellation_window = body.cancellationWindow
+  if (body.company !== undefined)             update.company = body.company
+  if (body.serviceType !== undefined)         update.service_type = body.serviceType
+  if (body.startDate !== undefined)           update.start_date = body.startDate
+  if (body.contractDuration !== undefined)    update.contract_duration = body.contractDuration
   const { data, error } = await db.from('maintenance_records').update(update).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)

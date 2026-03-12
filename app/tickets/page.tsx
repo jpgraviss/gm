@@ -121,7 +121,7 @@ function TicketPanel({
         </div>
 
         {/* Quick info */}
-        <div className="flex-shrink-0 grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100">
+        <div className="flex-shrink-0 grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-gray-100 border-b border-gray-100">
           {[
             { label: 'Contact', value: ticket.contactName },
             { label: 'Assigned', value: ticket.assignedTo ?? 'Unassigned' },
@@ -221,7 +221,7 @@ function TicketPanel({
               rows={3}
             />
           </div>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex flex-wrap items-center gap-2 mt-2">
             <button
               onClick={() => handleSend(false)}
               disabled={!reply.trim()}
@@ -277,25 +277,27 @@ export default function TicketsPage() {
       body,
       timestamp,
     }
-    const updatedDate = now.toISOString().split('T')[0]
-    setLocalTickets(prev => prev.map(t =>
-      t.id === id ? { ...t, messages: [...t.messages, newMsg], updatedDate } : t
-    ))
-    const updatedTicket = localTickets.find(t => t.id === id)
-    if (updatedTicket) {
-      const newMessages = [...updatedTicket.messages, newMsg]
-      fetch(`/api/tickets/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages }),
-      }).catch(() => {})
-    }
+    // Optimistic update
+    let updatedMessages: TicketMessage[] = []
+    setLocalTickets(prev => prev.map(t => {
+      if (t.id !== id) return t
+      updatedMessages = [...t.messages, newMsg]
+      return { ...t, messages: updatedMessages, updatedDate: now.toISOString().split('T')[0] }
+    }))
     setSelected(prev => prev?.id === id ? { ...prev, messages: [...prev.messages, newMsg] } : prev)
+    // Persist to Supabase
+    fetch(`/api/tickets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: updatedMessages }),
+    }).catch(() => {})
   }
 
   function updateTicketStatus(id: string, status: TicketStatus) {
+    // Optimistic update
     setLocalTickets(prev => prev.map(t => t.id === id ? { ...t, status } : t))
     setSelected(prev => prev?.id === id ? { ...prev, status } : prev)
+    // Persist to Supabase
     fetch(`/api/tickets/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -306,6 +308,13 @@ export default function TicketsPage() {
   async function handleNewTicket(data: NewTicketFormData) {
     const today = new Date().toISOString().split('T')[0]
     const timestamp = new Date().toLocaleString('en-CA', { hour12: false }).replace(',', '').slice(0, 16)
+    const messages: TicketMessage[] = data.body ? [{
+      id: `m-${Date.now()}`,
+      author: data.contactName,
+      isInternal: false,
+      body: data.body,
+      timestamp,
+    }] : []
     const payload = {
       subject: data.subject,
       company: data.company,
@@ -315,26 +324,52 @@ export default function TicketsPage() {
       priority: data.priority,
       source: 'Internal',
       serviceType: data.serviceType,
+      createdDate: today,
+      updatedDate: today,
       assignedTo: data.assignedTo || null,
       tags: [],
-      messages: data.body ? [{
-        id: `m-${Date.now()}`,
-        author: data.contactName,
-        isInternal: false,
-        body: data.body,
-        timestamp,
-      }] : [],
+      messages,
     }
+    // Persist to Supabase
     try {
       const res = await fetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      const saved = await res.json()
-      setLocalTickets(prev => [saved, ...prev])
+      if (res.ok) {
+        const saved = await res.json()
+        setLocalTickets(prev => [saved, ...prev])
+      } else {
+        // Fallback: add optimistically with temp id
+        const newTicket: Ticket = {
+          ...payload,
+          id: `tkt-${String(localTickets.length + 1).padStart(3, '0')}`,
+          status: 'Open' as TicketStatus,
+          priority: data.priority,
+          source: 'Internal' as const,
+          assignedTo: data.assignedTo || undefined,
+        }
+        setLocalTickets(prev => [newTicket, ...prev])
+      }
     } catch {
-      setLocalTickets(prev => [{ id: `tkt-${Date.now()}`, createdDate: today, updatedDate: today, ...payload } as Ticket, ...prev])
+      const newTicket: Ticket = {
+        id: `tkt-${String(localTickets.length + 1).padStart(3, '0')}`,
+        subject: data.subject,
+        company: data.company,
+        contactName: data.contactName,
+        contactEmail: data.contactEmail,
+        status: 'Open',
+        priority: data.priority,
+        source: 'Internal',
+        serviceType: data.serviceType,
+        createdDate: today,
+        updatedDate: today,
+        assignedTo: data.assignedTo || undefined,
+        tags: [],
+        messages,
+      }
+      setLocalTickets(prev => [newTicket, ...prev])
     }
     setCreatingTicket(false)
   }
@@ -364,7 +399,7 @@ export default function TicketsPage() {
           <div>
             <p className="text-sm font-semibold text-blue-800">Client Ticket System</p>
             <p className="text-xs text-blue-600 mt-0.5">
-              Clients submit requests via the <Link href="/portal" className="underline">Client Portal</Link> or email. Each ticket is linked to the client&apos;s project and can be converted to a project task automatically.
+              Clients submit requests via the <Link href="/portal" className="underline">Client Portal</Link> or email. Each ticket is linked to the client's project and can be converted to a project task automatically.
             </p>
           </div>
         </div>

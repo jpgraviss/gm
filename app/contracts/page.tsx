@@ -555,14 +555,27 @@ export default function ContractsPage() {
 
   function addAddendum(contractId: string, title: string, description: string) {
     const today = new Date().toISOString().split('T')[0]
-    setLocalAddendums(prev => [...prev, {
-      id: `add-${Date.now()}`,
+    const tempId = `add-${Date.now()}`
+    const newAddendum: Addendum = {
+      id: tempId,
       contractId,
       title,
       description,
       status: 'Draft',
       createdDate: today,
-    }])
+    }
+    setLocalAddendums(prev => [...prev, newAddendum])
+    // Persist to contract's addendums array via PATCH
+    const contract = localContracts.find(c => c.id === contractId)
+    if (contract) {
+      const existingAddendums = localAddendums.filter(a => a.contractId === contractId)
+      const updatedAddendums = [...existingAddendums, newAddendum]
+      fetch(`/api/contracts/${contractId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addendums: updatedAddendums }),
+      }).catch(() => {})
+    }
   }
 
   function updateAddendumStatus(id: string, status: Addendum['status']) {
@@ -570,28 +583,34 @@ export default function ContractsPage() {
     setLocalAddendums(prev => prev.map(a =>
       a.id === id ? { ...a, status, ...(status === 'Sent' ? { sentDate: today } : {}) } : a
     ))
+    // Find the addendum and its contract to persist
+    const addendum = localAddendums.find(a => a.id === id)
+    if (addendum) {
+      const updatedAddendums = localAddendums.map(a =>
+        a.id === id ? { ...a, status, ...(status === 'Sent' ? { sentDate: today } : {}) } : a
+      ).filter(a => a.contractId === addendum.contractId)
+      fetch(`/api/contracts/${addendum.contractId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addendums: updatedAddendums }),
+      }).catch(() => {})
+    }
   }
 
   function updateContractStatus(id: string, status: ContractStatus) {
     const today = new Date().toISOString().split('T')[0]
-    setLocalContracts(prev => prev.map(c => {
-      if (c.id !== id) return c
-      return {
-        ...c,
-        status,
-        ...(status === 'Signed by Client' ? { clientSigned: today } : {}),
-        ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
-      }
-    }))
-    setSelected(prev => {
-      if (!prev || prev.id !== id) return prev
-      return {
-        ...prev,
-        status,
-        ...(status === 'Signed by Client' ? { clientSigned: today } : {}),
-        ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
-      }
-    })
+    const optimisticUpdates = {
+      status,
+      ...(status === 'Signed by Client' ? { clientSigned: today } : {}),
+      ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
+    }
+    setLocalContracts(prev => prev.map(c => c.id !== id ? c : { ...c, ...optimisticUpdates }))
+    setSelected(prev => (!prev || prev.id !== id) ? prev : { ...prev, ...optimisticUpdates })
+    fetch(`/api/contracts/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(optimisticUpdates),
+    }).catch(() => {})
   }
 
   function handleNewContract(data: NewContractFormData) {
@@ -601,8 +620,9 @@ export default function ContractsPage() {
       d.setMonth(d.getMonth() + Number(data.duration))
       return d.toISOString().split('T')[0]
     })()
-    const newContract: Contract = {
-      id: `ct-${Date.now()}`,
+    const optimisticId = `ct-${Date.now()}`
+    const optimisticContract: Contract = {
+      id: optimisticId,
       company: data.company,
       status: 'Draft',
       value: Number(data.value),
@@ -613,8 +633,30 @@ export default function ContractsPage() {
       startDate,
       renewalDate,
     }
-    setLocalContracts(prev => [newContract, ...prev])
+    setLocalContracts(prev => [optimisticContract, ...prev])
     setCreatingContract(false)
+    fetch('/api/contracts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company: data.company,
+        status: 'Draft',
+        value: Number(data.value),
+        serviceType: data.serviceType,
+        assignedRep: data.assignedRep,
+        billingStructure: data.billingStructure,
+        duration: Number(data.duration),
+        startDate,
+        renewalDate,
+      }),
+    })
+      .then(r => r.json())
+      .then(created => {
+        if (created?.id) {
+          setLocalContracts(prev => prev.map(c => c.id === optimisticId ? { ...c, id: created.id } : c))
+        }
+      })
+      .catch(() => {})
   }
 
   const filtered = statusFilter === 'All' ? localContracts : localContracts.filter(c => c.status === statusFilter)

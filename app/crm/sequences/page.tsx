@@ -67,12 +67,14 @@ function SequencePanel({
   seq,
   onClose,
   onUpdate,
+  onDelete,
   deals,
   crmContacts,
 }: {
   seq: EmailSequence
   onClose: () => void
   onUpdate: (updated: EmailSequence) => void
+  onDelete: (id: string) => void
   deals: Deal[]
   crmContacts: CRMContact[]
 }) {
@@ -904,7 +906,14 @@ export default function SequencesPage() {
                         ...seq,
                         status: (seq.status === 'Active' ? 'Paused' : 'Active') as SequenceStatus,
                       }
+                      // Optimistic update
                       setLocalSequences(prev => prev.map(s => s.id === seq.id ? updated : s))
+                      // Persist to Supabase
+                      fetch(`/api/sequences/${seq.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: updated.status }),
+                      }).catch(() => {})
                     }}
                     title={seq.status === 'Active' ? 'Pause' : 'Activate'}
                   >

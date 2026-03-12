@@ -146,6 +146,7 @@ function MaintenancePanel({
   onConfirmCancellation,
   onUpdateBilling,
   onEdit,
+  onUpdateDocuments,
   crmContacts,
   contracts,
   invoices,
@@ -155,6 +156,7 @@ function MaintenancePanel({
   onConfirmCancellation: (id: string) => void
   onUpdateBilling: (id: string, fee: number, nextDate: string) => void
   onEdit: (record: MaintenanceRecord) => void
+  onUpdateDocuments: (id: string, documents: MaintenanceRecord['documents']) => void
   crmContacts: CRMContact[]
   contracts: Contract[]
   invoices: Invoice[]
@@ -187,14 +189,19 @@ function MaintenancePanel({
     if (!file) return
     const reader = new FileReader()
     reader.onload = ev => {
-      setDocuments(prev => [...prev, {
+      const newDoc = {
         id: `doc-${Date.now()}`,
         name: file.name,
         type: file.type,
         size: file.size,
         uploadedDate: new Date().toISOString().split('T')[0],
         dataUrl: ev.target?.result as string,
-      }])
+      }
+      setDocuments(prev => {
+        const updated = [...prev, newDoc]
+        onUpdateDocuments(record.id, updated)
+        return updated
+      })
     }
     reader.readAsDataURL(file)
     e.target.value = ''
@@ -465,7 +472,7 @@ function MaintenancePanel({
                     <a href={doc.dataUrl} download={doc.name} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg">
                       <FileText size={14} />
                     </a>
-                    <button onClick={() => setDocuments(prev => prev.filter(d => d.id !== doc.id))} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg">
+                    <button onClick={() => setDocuments(prev => { const updated = prev.filter(d => d.id !== doc.id); onUpdateDocuments(record.id, updated); return updated })} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg">
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -548,8 +555,21 @@ export default function MaintenancePage() {
   const filtered = tabFilter === 'All' ? records : records.filter(r => r.status === tabFilter)
 
   function handleAddRecord(data: Omit<MaintenanceRecord, 'id'>) {
-    setRecords(prev => [...prev, { ...data, id: `mr-${Date.now()}` }])
+    const optimisticId = `mr-${Date.now()}`
+    setRecords(prev => [...prev, { ...data, id: optimisticId }])
     setAddingRecord(false)
+    fetch('/api/maintenance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+      .then(r => r.json())
+      .then(created => {
+        if (created?.id) {
+          setRecords(prev => prev.map(r => r.id === optimisticId ? { ...r, id: created.id } : r))
+        }
+      })
+      .catch(() => {})
   }
 
   function handleEditRecord(data: Omit<MaintenanceRecord, 'id'>) {
@@ -557,16 +577,40 @@ export default function MaintenancePage() {
     setRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...data } : r))
     setEditingRecord(null)
     setSelected(null)
+    fetch(`/api/maintenance/${editingRecord.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).catch(() => {})
   }
 
   function confirmCancellation(id: string) {
     setRecords(prev => prev.map(r => r.id === id ? { ...r, status: 'Cancelled' } : r))
     setSelected(null)
+    fetch(`/api/maintenance/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Cancelled' }),
+    }).catch(() => {})
   }
 
   function updateBilling(id: string, fee: number, nextDate: string) {
     setRecords(prev => prev.map(r => r.id === id ? { ...r, monthlyFee: fee, nextBillingDate: nextDate } : r))
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, monthlyFee: fee, nextBillingDate: nextDate } : prev)
+    fetch(`/api/maintenance/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ monthlyFee: fee, nextBillingDate: nextDate }),
+    }).catch(() => {})
+  }
+
+  function updateDocuments(id: string, documents: MaintenanceRecord['documents']) {
+    setRecords(prev => prev.map(r => r.id === id ? { ...r, documents } : r))
+    fetch(`/api/maintenance/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documents }),
+    }).catch(() => {})
   }
 
   return (
@@ -691,6 +735,7 @@ export default function MaintenancePage() {
           onConfirmCancellation={confirmCancellation}
           onUpdateBilling={updateBilling}
           onEdit={r => { setSelected(null); setEditingRecord(r) }}
+          onUpdateDocuments={updateDocuments}
           crmContacts={crmContacts}
           contracts={contracts}
           invoices={invoices}

@@ -277,22 +277,45 @@ export default function TicketsPage() {
       body,
       timestamp,
     }
-    setLocalTickets(prev => prev.map(t =>
-      t.id === id ? { ...t, messages: [...t.messages, newMsg], updatedDate: now.toISOString().split('T')[0] } : t
-    ))
+    // Optimistic update
+    let updatedMessages: TicketMessage[] = []
+    setLocalTickets(prev => prev.map(t => {
+      if (t.id !== id) return t
+      updatedMessages = [...t.messages, newMsg]
+      return { ...t, messages: updatedMessages, updatedDate: now.toISOString().split('T')[0] }
+    }))
     setSelected(prev => prev?.id === id ? { ...prev, messages: [...prev.messages, newMsg] } : prev)
+    // Persist to Supabase
+    fetch(`/api/tickets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: updatedMessages }),
+    }).catch(() => {})
   }
 
   function updateTicketStatus(id: string, status: TicketStatus) {
+    // Optimistic update
     setLocalTickets(prev => prev.map(t => t.id === id ? { ...t, status } : t))
     setSelected(prev => prev?.id === id ? { ...prev, status } : prev)
+    // Persist to Supabase
+    fetch(`/api/tickets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    }).catch(() => {})
   }
 
-  function handleNewTicket(data: NewTicketFormData) {
+  async function handleNewTicket(data: NewTicketFormData) {
     const today = new Date().toISOString().split('T')[0]
     const timestamp = new Date().toLocaleString('en-CA', { hour12: false }).replace(',', '').slice(0, 16)
-    const newTicket: Ticket = {
-      id: `tkt-${String(localTickets.length + 1).padStart(3, '0')}`,
+    const messages: TicketMessage[] = data.body ? [{
+      id: `m-${Date.now()}`,
+      author: data.contactName,
+      isInternal: false,
+      body: data.body,
+      timestamp,
+    }] : []
+    const payload = {
       subject: data.subject,
       company: data.company,
       contactName: data.contactName,
@@ -303,17 +326,51 @@ export default function TicketsPage() {
       serviceType: data.serviceType,
       createdDate: today,
       updatedDate: today,
-      assignedTo: data.assignedTo || undefined,
+      assignedTo: data.assignedTo || null,
       tags: [],
-      messages: data.body ? [{
-        id: `m-${Date.now()}`,
-        author: data.contactName,
-        isInternal: false,
-        body: data.body,
-        timestamp,
-      }] : [],
+      messages,
     }
-    setLocalTickets(prev => [newTicket, ...prev])
+    // Persist to Supabase
+    try {
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        const saved = await res.json()
+        setLocalTickets(prev => [saved, ...prev])
+      } else {
+        // Fallback: add optimistically with temp id
+        const newTicket: Ticket = {
+          ...payload,
+          id: `tkt-${String(localTickets.length + 1).padStart(3, '0')}`,
+          status: 'Open' as TicketStatus,
+          priority: data.priority,
+          source: 'Internal' as const,
+          assignedTo: data.assignedTo || undefined,
+        }
+        setLocalTickets(prev => [newTicket, ...prev])
+      }
+    } catch {
+      const newTicket: Ticket = {
+        id: `tkt-${String(localTickets.length + 1).padStart(3, '0')}`,
+        subject: data.subject,
+        company: data.company,
+        contactName: data.contactName,
+        contactEmail: data.contactEmail,
+        status: 'Open',
+        priority: data.priority,
+        source: 'Internal',
+        serviceType: data.serviceType,
+        createdDate: today,
+        updatedDate: today,
+        assignedTo: data.assignedTo || undefined,
+        tags: [],
+        messages,
+      }
+      setLocalTickets(prev => [newTicket, ...prev])
+    }
     setCreatingTicket(false)
   }
 

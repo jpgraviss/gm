@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
+const REPS = ['Jonathan Graviss', 'JG Graviss']
+
 function UrgencyBar({ days }: { days: number }) {
   const pct = Math.max(0, Math.min(100, (days / 90) * 100))
   const color = days <= 14 ? '#ef4444' : days <= 30 ? '#f97316' : days <= 60 ? '#f59e0b' : '#22c55e'
@@ -53,12 +55,43 @@ function RenewalProposalSidebar({
   const [notes, setNotes] = useState('')
   const [includeSetup, setIncludeSetup] = useState(false)
   const [setupFee, setSetupFee] = useState(0)
+  const [saving, setSaving] = useState(false)
 
   const baseMonthly = renewal.renewalValue / 12
   const newMonthly = Math.round(baseMonthly * (1 + increasePercent / 100))
   const newAnnual = newMonthly * months
   const totalWithSetup = newAnnual + setupFee
   const difference = newMonthly - baseMonthly
+
+  function handleSave() {
+    setSaving(true)
+    // POST new proposal
+    fetch('/api/proposals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company: renewal.company,
+        serviceType: renewal.serviceType,
+        value: totalWithSetup,
+        status: 'Draft',
+        assignedRep: renewal.assignedRep,
+        isRenewal: true,
+        internalOnly: true,
+        renewalNotes: notes,
+        items: [],
+      }),
+    }).catch(() => {})
+
+    // PATCH renewal status to Renewed
+    fetch(`/api/renewals/${renewal.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Renewed' }),
+    }).catch(() => {})
+
+    setSaving(false)
+    onSave(renewal.id)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
@@ -227,8 +260,9 @@ function RenewalProposalSidebar({
 
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
           <button
-            onClick={() => onSave(renewal.id)}
-            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90"
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-60"
             style={{ background: '#015035' }}
           >
             Save Renewal Proposal
@@ -244,10 +278,43 @@ function RenewalProposalSidebar({
 
 // ─── Log Renewal Modal ────────────────────────────────────────────────────────
 
-function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (company: string, value: number) => void }) {
+function LogRenewalModal({
+  onClose,
+  onSave,
+}: {
+  onClose: () => void
+  onSave: (renewal: Omit<Renewal, 'id'>) => void
+}) {
+  const today = new Date().toISOString().split('T')[0]
   const [company, setCompany] = useState('')
   const [value, setValue] = useState('')
+  const [serviceType, setServiceType] = useState<Renewal['serviceType']>('Website')
+  const [assignedRep, setAssignedRep] = useState(REPS[0])
+  const [renewalDate, setRenewalDate] = useState('')
+  const [contractStartDate, setContractStartDate] = useState(today)
   const [notes, setNotes] = useState('')
+
+  const serviceTypes: Renewal['serviceType'][] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
+
+  const expirationDate = renewalDate || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  const daysUntilExpiry = Math.round(
+    (new Date(expirationDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  )
+
+  function handleSave() {
+    if (!company) return
+    onSave({
+      company,
+      serviceType,
+      contractId: '',
+      expirationDate,
+      daysUntilExpiry,
+      renewalValue: parseFloat(value) || 0,
+      status: 'Upcoming',
+      assignedRep,
+    })
+    onClose()
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
@@ -263,10 +330,38 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (co
             <input value={company} onChange={e => setCompany(e.target.value)}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="Acme Corp" />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
+              <select value={serviceType} onChange={e => setServiceType(e.target.value as Renewal['serviceType'])}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700">
+                {serviceTypes.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Assigned Rep</label>
+              <select value={assignedRep} onChange={e => setAssignedRep(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700">
+                {REPS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+          </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Renewal Value ($)</label>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Contract Value ($)</label>
             <input type="number" value={value} onChange={e => setValue(e.target.value)}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="12000" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Contract Start Date</label>
+              <input type="date" value={contractStartDate} onChange={e => setContractStartDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Renewal Date</label>
+              <input type="date" value={renewalDate} onChange={e => setRenewalDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+            </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Notes</label>
@@ -276,7 +371,7 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (co
         </div>
         <div className="px-5 pb-5 flex gap-2">
           <button
-            onClick={() => { if (company) { onSave(company, parseFloat(value) || 0); onClose() } }}
+            onClick={handleSave}
             disabled={!company}
             className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
             style={{ background: '#015035' }}
@@ -550,22 +645,34 @@ export default function RenewalsPage() {
   }
 
   function startRenewal(id: string) {
+    // Optimistic update
     setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: 'In Progress' as const } : r))
+    // Persist to Supabase
+    fetch(`/api/renewals/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'In Progress' }),
+    }).catch(() => {})
   }
 
-  function logRenewal(company: string, value: number) {
-    const newRenewal: Renewal = {
-      id: `ren-${Date.now()}`,
-      company,
-      serviceType: 'Website',
-      contractId: '',
-      expirationDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      daysUntilExpiry: 90,
-      renewalValue: value,
-      status: 'Upcoming',
-      assignedRep: 'Jaycee Graviss',
-    }
-    setLocalRenewals(prev => [newRenewal, ...prev])
+  function logRenewal(renewal: Omit<Renewal, 'id'>) {
+    const optimisticId = `ren-${Date.now()}`
+    const optimisticRenewal: Renewal = { ...renewal, id: optimisticId }
+    // Optimistic update
+    setLocalRenewals(prev => [optimisticRenewal, ...prev])
+    // Persist to Supabase, swap in real ID when returned
+    fetch('/api/renewals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(renewal),
+    })
+      .then(r => r.json())
+      .then(created => {
+        if (created?.id) {
+          setLocalRenewals(prev => prev.map(r => r.id === optimisticId ? { ...r, id: created.id } : r))
+        }
+      })
+      .catch(() => {})
   }
 
   return (
@@ -721,7 +828,7 @@ export default function RenewalsPage() {
           renewal={renewalProposalFor}
           onClose={() => setRenewalProposalFor(null)}
           onSave={renewalId => {
-            setLocalRenewals(prev => prev.map(r => r.id === renewalId ? { ...r, status: 'In Progress' as const } : r))
+            setLocalRenewals(prev => prev.map(r => r.id === renewalId ? { ...r, status: 'Renewed' as const } : r))
             setRenewalProposalFor(null)
           }}
           contracts={contracts}

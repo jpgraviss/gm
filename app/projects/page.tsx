@@ -200,7 +200,7 @@ function ProjectDetailPanel({
           </div>
 
           {/* Quick stats */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {[
               { label: 'Milestones', value: `${project.milestones.filter(m => m.completed).length}/${project.milestones.length}` },
               { label: 'Tasks', value: `${localTasks.filter(t => t.completed).length}/${localTasks.length}` },
@@ -229,7 +229,7 @@ function ProjectDetailPanel({
           {/* ── Overview ── */}
           {tab === 'overview' && (
             <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {[
                   { label: 'Start Date', value: formatDate(project.startDate) },
                   { label: 'Launch Date', value: formatDate(project.launchDate) },
@@ -900,11 +900,11 @@ export default function ProjectsPage() {
 
         {/* Kanban View — status columns */}
         {view === 'kanban' && (
-          <div className="flex gap-4 overflow-x-auto pb-4">
+          <div className="flex flex-col gap-4 md:flex-row md:overflow-x-auto pb-4">
             {visibleStatuses.map(status => {
               const cols = filtered.filter(p => p.status === status)
               return (
-                <div key={status} className="flex-shrink-0 w-[280px]">
+                <div key={status} className="w-full md:flex-shrink-0 md:w-[280px]">
                   <div className="flex items-center gap-2 mb-3 px-1">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: statusColumnColors[status] }} />
                     <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{status}</span>

@@ -259,7 +259,7 @@ function ContractStageModal({
                 onChange={e => setForm(f => ({ ...f, value: e.target.value }))}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Service Type</label>
                 <input
@@ -279,7 +279,7 @@ function ContractStageModal({
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Start Date</label>
                 <input
@@ -492,7 +492,7 @@ function DealPanel({
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-[11px] text-gray-400 mb-0.5">Deal Value</p>
               <p className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
@@ -1271,12 +1271,12 @@ export default function PipelinePage() {
 
         {/* Kanban Board */}
         {mounted ? <DragDropContext onDragEnd={onDragEnd}>
-          <div className="flex gap-3 overflow-x-auto pb-4 flex-1 items-start">
+          <div className="flex flex-col gap-4 md:flex-row md:overflow-x-auto pb-4 flex-1 md:items-start">
             {activeStages.map(stage => {
               const stageDeals = filteredDeals.filter(d => d.stage === stage.name)
               const stageTotal = stageDeals.reduce((s, d) => s + d.value, 0)
               return (
-                <div key={stage.id} className="kanban-col flex-shrink-0" style={{ width: 220 }}>
+                <div key={stage.id} className="kanban-col w-full md:flex-shrink-0 md:w-[220px]">
                   <div className="flex items-center justify-between mb-3 px-1">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
@@ -1322,9 +1322,9 @@ export default function PipelinePage() {
             })}
           </div>
         </DragDropContext> : (
-          <div className="flex gap-3 overflow-x-auto pb-4 flex-1 items-start">
+          <div className="flex flex-col gap-4 md:flex-row md:overflow-x-auto pb-4 flex-1 md:items-start">
             {activeStages.map(stage => (
-              <div key={stage.id} className="kanban-col flex-shrink-0" style={{ width: 220 }}>
+              <div key={stage.id} className="kanban-col w-full md:flex-shrink-0 md:w-[220px]">
                 <div className="flex items-center gap-2 mb-3 px-1">
                   <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
                   <span className="text-xs font-semibold text-gray-700">{stage.name}</span>

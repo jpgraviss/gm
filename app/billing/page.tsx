@@ -235,21 +235,20 @@ export default function BillingPage() {
 
   function updateInvoiceStatus(id: string, status: InvoiceStatus) {
     const today = new Date().toISOString().split('T')[0]
-    setLocalInvoices(prev => prev.map(i => {
-      if (i.id !== id) return i
-      return { ...i, status, ...(status === 'Paid' ? { paidDate: today } : {}) }
-    }))
-    setSelectedInvoice(prev => {
-      if (!prev || prev.id !== id) return prev
-      return { ...prev, status, ...(status === 'Paid' ? { paidDate: today } : {}) }
-    })
+    const patch = { status, ...(status === 'Paid' ? { paidDate: today } : {}) }
+    setLocalInvoices(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
+    setSelectedInvoice(prev => prev?.id === id ? { ...prev, ...patch } : prev)
+    fetch(`/api/invoices/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }).catch(() => {})
   }
 
-  function handleNewInvoice(data: NewInvoiceFormData) {
+  async function handleNewInvoice(data: NewInvoiceFormData) {
     const today = new Date().toISOString().split('T')[0]
-    const newInvoice: Invoice = {
-      id: `inv-${Date.now()}`,
-      contractId: data.contractId || `ct-standalone-${Date.now()}`,
+    const payload = {
+      contractId: data.contractId || null,
       company: data.company,
       amount: Number(data.amount),
       status: 'Pending',
@@ -257,7 +256,17 @@ export default function BillingPage() {
       issuedDate: today,
       serviceType: data.serviceType,
     }
-    setLocalInvoices(prev => [newInvoice, ...prev])
+    try {
+      const res = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const saved = await res.json()
+      setLocalInvoices(prev => [saved, ...prev])
+    } catch {
+      setLocalInvoices(prev => [{ id: `inv-${Date.now()}`, ...payload } as Invoice, ...prev])
+    }
     setCreatingInvoice(false)
   }
 

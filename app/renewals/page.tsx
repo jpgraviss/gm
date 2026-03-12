@@ -551,21 +551,36 @@ export default function RenewalsPage() {
 
   function startRenewal(id: string) {
     setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: 'In Progress' as const } : r))
+    fetch(`/api/renewals/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'In Progress' }),
+    }).catch(() => {})
   }
 
-  function logRenewal(company: string, value: number) {
-    const newRenewal: Renewal = {
-      id: `ren-${Date.now()}`,
+  async function logRenewal(company: string, value: number) {
+    const expDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const payload = {
       company,
       serviceType: 'Website',
       contractId: '',
-      expirationDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      expirationDate: expDate,
       daysUntilExpiry: 90,
       renewalValue: value,
       status: 'Upcoming',
-      assignedRep: 'Jaycee Graviss',
+      assignedRep: 'Jonathan Graviss',
     }
-    setLocalRenewals(prev => [newRenewal, ...prev])
+    try {
+      const res = await fetch('/api/renewals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const saved = await res.json()
+      setLocalRenewals(prev => [saved, ...prev])
+    } catch {
+      setLocalRenewals(prev => [{ id: `ren-${Date.now()}`, ...payload } as Renewal, ...prev])
+    }
   }
 
   return (
@@ -722,6 +737,7 @@ export default function RenewalsPage() {
           onClose={() => setRenewalProposalFor(null)}
           onSave={renewalId => {
             setLocalRenewals(prev => prev.map(r => r.id === renewalId ? { ...r, status: 'In Progress' as const } : r))
+            fetch(`/api/renewals/${renewalId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'In Progress' }) }).catch(() => {})
             setRenewalProposalFor(null)
           }}
           contracts={contracts}

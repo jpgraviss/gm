@@ -277,22 +277,36 @@ export default function TicketsPage() {
       body,
       timestamp,
     }
+    const updatedDate = now.toISOString().split('T')[0]
     setLocalTickets(prev => prev.map(t =>
-      t.id === id ? { ...t, messages: [...t.messages, newMsg], updatedDate: now.toISOString().split('T')[0] } : t
+      t.id === id ? { ...t, messages: [...t.messages, newMsg], updatedDate } : t
     ))
+    const updatedTicket = localTickets.find(t => t.id === id)
+    if (updatedTicket) {
+      const newMessages = [...updatedTicket.messages, newMsg]
+      fetch(`/api/tickets/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newMessages }),
+      }).catch(() => {})
+    }
     setSelected(prev => prev?.id === id ? { ...prev, messages: [...prev.messages, newMsg] } : prev)
   }
 
   function updateTicketStatus(id: string, status: TicketStatus) {
     setLocalTickets(prev => prev.map(t => t.id === id ? { ...t, status } : t))
     setSelected(prev => prev?.id === id ? { ...prev, status } : prev)
+    fetch(`/api/tickets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    }).catch(() => {})
   }
 
-  function handleNewTicket(data: NewTicketFormData) {
+  async function handleNewTicket(data: NewTicketFormData) {
     const today = new Date().toISOString().split('T')[0]
     const timestamp = new Date().toLocaleString('en-CA', { hour12: false }).replace(',', '').slice(0, 16)
-    const newTicket: Ticket = {
-      id: `tkt-${String(localTickets.length + 1).padStart(3, '0')}`,
+    const payload = {
       subject: data.subject,
       company: data.company,
       contactName: data.contactName,
@@ -301,9 +315,7 @@ export default function TicketsPage() {
       priority: data.priority,
       source: 'Internal',
       serviceType: data.serviceType,
-      createdDate: today,
-      updatedDate: today,
-      assignedTo: data.assignedTo || undefined,
+      assignedTo: data.assignedTo || null,
       tags: [],
       messages: data.body ? [{
         id: `m-${Date.now()}`,
@@ -313,7 +325,17 @@ export default function TicketsPage() {
         timestamp,
       }] : [],
     }
-    setLocalTickets(prev => [newTicket, ...prev])
+    try {
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const saved = await res.json()
+      setLocalTickets(prev => [saved, ...prev])
+    } catch {
+      setLocalTickets(prev => [{ id: `tkt-${Date.now()}`, createdDate: today, updatedDate: today, ...payload } as Ticket, ...prev])
+    }
     setCreatingTicket(false)
   }
 

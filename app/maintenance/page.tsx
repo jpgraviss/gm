@@ -547,26 +547,51 @@ export default function MaintenancePage() {
 
   const filtered = tabFilter === 'All' ? records : records.filter(r => r.status === tabFilter)
 
-  function handleAddRecord(data: Omit<MaintenanceRecord, 'id'>) {
-    setRecords(prev => [...prev, { ...data, id: `mr-${Date.now()}` }])
+  async function handleAddRecord(data: Omit<MaintenanceRecord, 'id'>) {
+    try {
+      const res = await fetch('/api/maintenance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      const saved = await res.json()
+      setRecords(prev => [saved, ...prev])
+    } catch {
+      setRecords(prev => [{ ...data, id: `mr-${Date.now()}` }, ...prev])
+    }
     setAddingRecord(false)
   }
 
   function handleEditRecord(data: Omit<MaintenanceRecord, 'id'>) {
     if (!editingRecord) return
     setRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...data } : r))
+    fetch(`/api/maintenance/${editingRecord.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).catch(() => {})
     setEditingRecord(null)
     setSelected(null)
   }
 
   function confirmCancellation(id: string) {
     setRecords(prev => prev.map(r => r.id === id ? { ...r, status: 'Cancelled' } : r))
+    fetch(`/api/maintenance/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Cancelled' }),
+    }).catch(() => {})
     setSelected(null)
   }
 
   function updateBilling(id: string, fee: number, nextDate: string) {
     setRecords(prev => prev.map(r => r.id === id ? { ...r, monthlyFee: fee, nextBillingDate: nextDate } : r))
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, monthlyFee: fee, nextBillingDate: nextDate } : prev)
+    fetch(`/api/maintenance/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ monthlyFee: fee, nextBillingDate: nextDate }),
+    }).catch(() => {})
   }
 
   return (

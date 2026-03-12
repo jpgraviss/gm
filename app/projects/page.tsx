@@ -686,6 +686,11 @@ export default function ProjectsPage() {
   function updateProjectStatus(id: string, status: ProjectStatus) {
     setLocalProjects(prev => prev.map(p => p.id === id ? { ...p, status } : p))
     setSelected(prev => prev && prev.id === id ? { ...prev, status } : prev)
+    fetch(`/api/projects/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    }).catch(() => {})
   }
 
   // Metrics

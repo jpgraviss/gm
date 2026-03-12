@@ -324,21 +324,34 @@ export default function TimeTrackingPage() {
     return Object.entries(map).sort(([a], [b]) => b.localeCompare(a))
   }, [weekEntries])
 
-  function handleSave(entry: TimeEntry) {
-    setEntries(prev => {
-      const idx = prev.findIndex(e => e.id === entry.id)
-      if (idx >= 0) {
-        const next = [...prev]
-        next[idx] = entry
-        return next
+  async function handleSave(entry: TimeEntry) {
+    const isNew = !entries.find(e => e.id === entry.id)
+    if (isNew) {
+      try {
+        const res = await fetch('/api/time-entries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entry),
+        })
+        const saved = await res.json()
+        setEntries(prev => [saved, ...prev])
+      } catch {
+        setEntries(prev => [entry, ...prev])
       }
-      return [entry, ...prev]
-    })
+    } else {
+      fetch(`/api/time-entries/${entry.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      }).catch(() => {})
+      setEntries(prev => prev.map(e => e.id === entry.id ? entry : e))
+    }
     setShowLog(false)
     setEditEntry(undefined)
   }
 
   function handleDelete(id: string) {
+    fetch(`/api/time-entries/${id}`, { method: 'DELETE' }).catch(() => {})
     setEntries(prev => prev.filter(e => e.id !== id))
   }
 

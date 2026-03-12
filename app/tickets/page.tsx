@@ -364,7 +364,7 @@ export default function TicketsPage() {
           <div>
             <p className="text-sm font-semibold text-blue-800">Client Ticket System</p>
             <p className="text-xs text-blue-600 mt-0.5">
-              Clients submit requests via the <Link href="/portal" className="underline">Client Portal</Link> or email. Each ticket is linked to the client's project and can be converted to a project task automatically.
+              Clients submit requests via the <Link href="/portal" className="underline">Client Portal</Link> or email. Each ticket is linked to the client&apos;s project and can be converted to a project task automatically.
             </p>
           </div>
         </div>

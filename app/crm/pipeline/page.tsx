@@ -747,7 +747,7 @@ export default function PipelinePage() {
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => { setMounted(true) }, []) // eslint-disable-line react-hooks/set-state-in-effect
 
   useEffect(() => {
     fetch('/api/deals')

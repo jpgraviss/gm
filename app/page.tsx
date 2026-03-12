@@ -72,7 +72,9 @@ function GreetingBanner({ name }: { name: string }) {
       const elapsed = Date.now() - loginAt
       const THREE_MIN = 3 * 60 * 1000
       if (elapsed >= THREE_MIN) return
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setGreeting(buildGreeting(name, new Date())) // user's local timezone
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setVisible(true)
       const timer = setTimeout(() => setVisible(false), THREE_MIN - elapsed)
       return () => clearTimeout(timer)
@@ -225,6 +227,7 @@ function LiveClock() {
   const [now, setNow] = useState<Date | null>(null)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNow(getNowET())
     const id = setInterval(() => setNow(getNowET()), 1000)
     return () => clearInterval(id)

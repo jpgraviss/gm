@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const resetUrl = `${appUrl}/login?reset=${token}`
 
     const { error } = await resend.emails.send({
-      from: 'GravHub <noreply@gravissmarketing.com>',
+      from: 'GravHub <noreply@app.gravissmarketing.com>',
       replyTo: 'info@gravissmarketing.com',
       to: [email],
       subject: 'GravHub — Reset Your Password',

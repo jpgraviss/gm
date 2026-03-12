@@ -69,7 +69,7 @@ const COMPANY_DEFAULTS = {
   email: 'info@gravissmarketing.com',
   phone: '+1 (830) 326-0320',
   website: 'www.gravissmarketing.com',
-  timezone: 'America/Chicago (CT)',
+  timezone: 'America/New_York (ET)',
   fiscalYear: 'January 1',
   currency: 'USD ($)',
   street: '',
@@ -117,6 +117,15 @@ const INVOICE_DEFAULTS = {
 }
 
 const PIPELINE_STAGES_DEFAULT = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
+
+type PipelineStageConf = { id: string; name: string; color: string }
+type PipelineConf = { id: string; name: string; stages: PipelineStageConf[] }
+const STAGE_COLORS_CYCLE = ['#9ca3af', '#3b82f6', '#f59e0b', '#f97316', '#22c55e', '#ef4444', '#8b5cf6']
+const PIPELINES_DEFAULT: PipelineConf[] = [{
+  id: 'sales',
+  name: 'Sales Pipeline',
+  stages: PIPELINE_STAGES_DEFAULT.map((name, i) => ({ id: `s${i}`, name, color: STAGE_COLORS_CYCLE[i % STAGE_COLORS_CYCLE.length] })),
+}]
 const SERVICE_TYPES_DEFAULT = ['Website', 'SEO', 'Social Media', 'Email Marketing', 'Branding', 'Custom']
 const CONTACT_TAGS_DEFAULT = ['Decision Maker', 'Executive', 'Signed Client', 'Warm Lead', 'Marketing', 'Healthcare', 'Partner']
 
@@ -231,6 +240,10 @@ export default function SettingsPage() {
 
   // CRM Setup
   const [pipelineStages, setPipelineStages] = useState(PIPELINE_STAGES_DEFAULT)
+  const [pipelines, setPipelines] = useState<PipelineConf[]>(PIPELINES_DEFAULT)
+  const [expandedPipelineId, setExpandedPipelineId] = useState<string | null>('sales')
+  const [newStageNames, setNewStageNames] = useState<Record<string, string>>({})
+  const [newPipelineName, setNewPipelineName] = useState('')
   const [serviceTypes, setServiceTypes] = useState(SERVICE_TYPES_DEFAULT)
   const [contactTags, setContactTags] = useState(CONTACT_TAGS_DEFAULT)
   const [newStage, setNewStage] = useState('')
@@ -257,6 +270,8 @@ export default function SettingsPage() {
         if (Array.isArray(d.notifications)   && d.notifications.length)    setNotifications(d.notifications)
         if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(d.invoice_defaults)
         if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length)  setPipelineStages(d.pipeline_stages)
+        if (Array.isArray(d.pipelines) && d.pipelines.length) setPipelines(d.pipelines)
+        else if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length) setPipelines([{ id: 'sales', name: 'Sales Pipeline', stages: d.pipeline_stages.map((name: string, i: number) => ({ id: `s${i}`, name, color: STAGE_COLORS_CYCLE[i % STAGE_COLORS_CYCLE.length] })) }])
         if (Array.isArray(d.service_types)   && d.service_types.length)    setServiceTypes(d.service_types)
         if (Array.isArray(d.contact_tags)    && d.contact_tags.length)     setContactTags(d.contact_tags)
         if (d.branding         && Object.keys(d.branding).length)          setBranding(d.branding)
@@ -304,7 +319,8 @@ export default function SettingsPage() {
   }
 
   function saveCRM() {
-    patchSettings({ pipelineStages, serviceTypes, contactTags }, 'CRM Setup')
+    const firstPipelineStages = pipelines[0]?.stages.map(s => s.name) ?? pipelineStages
+    patchSettings({ pipelineStages: firstPipelineStages, pipelines, serviceTypes, contactTags }, 'CRM Setup')
   }
 
   function saveBranding() {
@@ -799,25 +815,114 @@ export default function SettingsPage() {
         {/* ── CRM Setup ── */}
         {activeTab === 'CRM Setup' && (
           <div className="flex flex-col gap-4">
-            {/* Pipeline Stages */}
+            {/* Pipelines (multi-pipeline) */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Pipeline Stages</h3>
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Pipelines</h3>
+                <span className="text-xs text-gray-400">{pipelines.length} pipeline{pipelines.length !== 1 ? 's' : ''}</span>
               </div>
-              <div className="flex flex-col gap-1.5 mb-3">
-                {pipelineStages.map((stage, i) => (
-                  <div key={stage} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
-                    <span className="text-xs text-gray-400 font-mono w-4">{i + 1}</span>
-                    <span className="text-sm text-gray-800 flex-1 font-medium">{stage}</span>
-                    <button onClick={() => setPipelineStages(prev => prev.filter(s => s !== stage))} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input value={newStage} onChange={e => setNewStage(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newStage.trim()) { setPipelineStages(p => [...p, newStage.trim()]); setNewStage('') }}}
-                  placeholder="New stage name…" className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" />
-                <button onClick={() => { if (newStage.trim()) { setPipelineStages(p => [...p, newStage.trim()]); setNewStage('') }}} className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
-                  <Plus size={12} /> Add
+
+              {pipelines.map(pipeline => (
+                <div key={pipeline.id} className="border border-gray-200 rounded-xl mb-3 overflow-hidden">
+                  <button
+                    onClick={() => setExpandedPipelineId(expandedPipelineId === pipeline.id ? null : pipeline.id)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FolderKanban size={13} className="text-gray-400" />
+                      <span className="text-sm font-semibold text-gray-800">{pipeline.name}</span>
+                      <span className="text-xs text-gray-400">({pipeline.stages.length} stages)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {pipelines.length > 1 && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setPipelines(prev => prev.filter(p => p.id !== pipeline.id)) }}
+                          className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                      <ChevronRight size={13} className={`text-gray-400 transition-transform ${expandedPipelineId === pipeline.id ? 'rotate-90' : ''}`} />
+                    </div>
+                  </button>
+
+                  {expandedPipelineId === pipeline.id && (
+                    <div className="p-4 border-t border-gray-100">
+                      <div className="flex flex-col gap-1.5 mb-3">
+                        {pipeline.stages.map((stage, i) => (
+                          <div key={stage.id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
+                            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: stage.color }} />
+                            <span className="text-xs text-gray-400 font-mono w-4">{i + 1}</span>
+                            <span className="text-sm text-gray-800 flex-1 font-medium">{stage.name}</span>
+                            <button
+                              onClick={() => setPipelines(prev => prev.map(p => p.id === pipeline.id ? { ...p, stages: p.stages.filter(s => s.id !== stage.id) } : p))}
+                              className="text-gray-400 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          value={newStageNames[pipeline.id] ?? ''}
+                          onChange={e => setNewStageNames(prev => ({ ...prev, [pipeline.id]: e.target.value }))}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              const name = (newStageNames[pipeline.id] ?? '').trim()
+                              if (!name) return
+                              setPipelines(prev => prev.map(p => p.id === pipeline.id ? { ...p, stages: [...p.stages, { id: `s_${Date.now()}`, name, color: STAGE_COLORS_CYCLE[p.stages.length % STAGE_COLORS_CYCLE.length] }] } : p))
+                              setNewStageNames(prev => ({ ...prev, [pipeline.id]: '' }))
+                            }
+                          }}
+                          placeholder="New stage name…"
+                          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+                        />
+                        <button
+                          onClick={() => {
+                            const name = (newStageNames[pipeline.id] ?? '').trim()
+                            if (!name) return
+                            setPipelines(prev => prev.map(p => p.id === pipeline.id ? { ...p, stages: [...p.stages, { id: `s_${Date.now()}`, name, color: STAGE_COLORS_CYCLE[p.stages.length % STAGE_COLORS_CYCLE.length] }] } : p))
+                            setNewStageNames(prev => ({ ...prev, [pipeline.id]: '' }))
+                          }}
+                          className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-medium"
+                          style={{ background: '#015035' }}
+                        >
+                          <Plus size={12} /> Add
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <div className="flex gap-2 mt-2">
+                <input
+                  value={newPipelineName}
+                  onChange={e => setNewPipelineName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newPipelineName.trim()) {
+                      const id = `pipeline_${Date.now()}`
+                      setPipelines(prev => [...prev, { id, name: newPipelineName.trim(), stages: [] }])
+                      setExpandedPipelineId(id)
+                      setNewPipelineName('')
+                    }
+                  }}
+                  placeholder="New pipeline name…"
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+                />
+                <button
+                  onClick={() => {
+                    if (!newPipelineName.trim()) return
+                    const id = `pipeline_${Date.now()}`
+                    setPipelines(prev => [...prev, { id, name: newPipelineName.trim(), stages: [] }])
+                    setExpandedPipelineId(id)
+                    setNewPipelineName('')
+                  }}
+                  className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-medium"
+                  style={{ background: '#015035' }}
+                >
+                  <Plus size={12} /> Add Pipeline
                 </button>
               </div>
             </div>

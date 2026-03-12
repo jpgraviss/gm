@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, DollarSign, User, Calendar, TrendingUp } from 'lucide-react'
+import { X, DollarSign, User, Calendar, TrendingUp, ChevronLeft } from 'lucide-react'
 import { fetchCrmCompanies } from '@/lib/supabase'
 import type { ServiceType, DealStage, CRMCompany } from '@/lib/types'
 
@@ -99,6 +99,9 @@ export default function NewDealPanel({ onSave, onClose }: Props) {
 
         {/* Header */}
         <div className="p-6 flex-shrink-0 flex items-start justify-between" style={{ background: '#012b1e' }}>
+          <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mr-2">
+            <ChevronLeft size={14} /> Back
+          </button>
           <div>
             <h2 className="text-white font-bold text-base">New Deal</h2>
             <p className="text-white/50 text-xs mt-0.5">Add a new deal to the pipeline</p>

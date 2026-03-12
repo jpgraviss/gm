@@ -307,7 +307,7 @@ export default function BillingPage() {
   }
 
   const filtered = statusFilter === 'All' ? localInvoices : localInvoices.filter(i => i.status === statusFilter)
-  const maxRevenue = Math.max(...revenueByMonth.map(r => r.revenue))
+  const maxRevenue = revenueByMonth.length > 0 ? Math.max(...revenueByMonth.map(r => r.revenue)) : 1
 
   const metrics = {
     awaitingInvoice: contracts.filter(c => c.status === 'Fully Executed').length,
@@ -324,7 +324,7 @@ export default function BillingPage() {
     { service: 'SEO', amount: localInvoices.filter(i => i.serviceType === 'SEO' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
     { service: 'Email Marketing', amount: localInvoices.filter(i => i.serviceType === 'Email Marketing' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
   ].filter(s => s.amount > 0)
-  const maxService = Math.max(...serviceBreakdown.map(s => s.amount))
+  const maxService = serviceBreakdown.length > 0 ? Math.max(...serviceBreakdown.map(s => s.amount)) : 1
 
   return (
     <>
@@ -386,10 +386,12 @@ export default function BillingPage() {
                 </div>
               ))}
             </div>
-            <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-500">
-              <span>Feb total: <strong className="text-gray-800">{formatCurrency(revenueByMonth[revenueByMonth.length - 1].revenue)}</strong></span>
-              <span>MoM growth: <strong className="text-emerald-600">+47%</strong></span>
-            </div>
+            {revenueByMonth.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-500">
+                <span>{revenueByMonth[revenueByMonth.length - 1].month} total: <strong className="text-gray-800">{formatCurrency(revenueByMonth[revenueByMonth.length - 1].revenue)}</strong></span>
+                <span>MoM growth: <strong className="text-emerald-600">+47%</strong></span>
+              </div>
+            )}
           </div>
 
           {/* Revenue by service */}

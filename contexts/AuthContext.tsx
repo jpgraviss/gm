@@ -162,6 +162,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const email = payload.email.toLowerCase()
 
       if (!email.endsWith('@gravissmarketing.com')) {
+        // Check if this is a portal client — if so, guide them to email/password login
+        const clientRes = await fetch('/api/portal-clients')
+        if (clientRes.ok) {
+          const clients: { email: string }[] = await clientRes.json()
+          if (clients.some(c => c.email?.toLowerCase() === email)) {
+            return { ok: false, error: 'Client portal users: please sign in with your email and password below.' }
+          }
+        }
         return { ok: false, error: 'Access is restricted to Graviss Marketing team members.' }
       }
 

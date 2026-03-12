@@ -262,7 +262,7 @@ export default function BillingPage() {
   }
 
   const filtered = statusFilter === 'All' ? localInvoices : localInvoices.filter(i => i.status === statusFilter)
-  const maxRevenue = Math.max(...revenueByMonth.map(r => r.revenue))
+  const maxRevenue = revenueByMonth.length > 0 ? Math.max(...revenueByMonth.map(r => r.revenue), 1) : 1
 
   const metrics = {
     awaitingInvoice: contracts.filter(c => c.status === 'Fully Executed').length,
@@ -279,7 +279,7 @@ export default function BillingPage() {
     { service: 'SEO', amount: localInvoices.filter(i => i.serviceType === 'SEO' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
     { service: 'Email Marketing', amount: localInvoices.filter(i => i.serviceType === 'Email Marketing' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
   ].filter(s => s.amount > 0)
-  const maxService = Math.max(...serviceBreakdown.map(s => s.amount))
+  const maxService = serviceBreakdown.length > 0 ? Math.max(...serviceBreakdown.map(s => s.amount), 1) : 1
 
   return (
     <>
@@ -341,10 +341,12 @@ export default function BillingPage() {
                 </div>
               ))}
             </div>
-            <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-500">
-              <span>Feb total: <strong className="text-gray-800">{formatCurrency(revenueByMonth[revenueByMonth.length - 1].revenue)}</strong></span>
-              <span>MoM growth: <strong className="text-emerald-600">+47%</strong></span>
-            </div>
+            {revenueByMonth.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-500">
+                <span>{revenueByMonth[revenueByMonth.length - 1].month} total: <strong className="text-gray-800">{formatCurrency(revenueByMonth[revenueByMonth.length - 1].revenue)}</strong></span>
+                <span>MoM growth: <strong className="text-emerald-600">+47%</strong></span>
+              </div>
+            )}
           </div>
 
           {/* Revenue by service */}
@@ -389,23 +391,23 @@ export default function BillingPage() {
 
         {/* QuickBooks Integration Banner */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-start gap-3 px-5 py-4 border-b border-gray-100">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#2CA01C18' }}>
                 <Link2 size={16} style={{ color: '#2CA01C' }} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-800">QuickBooks Online Integration</p>
-                <p className="text-xs text-gray-500">Billing data pulled directly from your QuickBooks account</p>
+                <p className="text-xs text-gray-500 hidden sm:block">Billing data pulled directly from your QuickBooks account</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="text-[11px] font-semibold text-emerald-700">Connected</span>
               </div>
               <button className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                <ArrowDownToLine size={12} /> Pull Latest Data
+                <ArrowDownToLine size={12} /> <span className="hidden sm:inline">Pull Latest Data</span><span className="sm:hidden">Sync</span>
               </button>
               <button className="text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                 Settings

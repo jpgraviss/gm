@@ -106,7 +106,7 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projec
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="w-[440px] bg-white flex flex-col shadow-2xl">
+      <div className="w-full sm:w-[440px] bg-white flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
@@ -324,22 +324,31 @@ export default function TimeTrackingPage() {
     return Object.entries(map).sort(([a], [b]) => b.localeCompare(a))
   }, [weekEntries])
 
-  function handleSave(entry: TimeEntry) {
-    setEntries(prev => {
-      const idx = prev.findIndex(e => e.id === entry.id)
-      if (idx >= 0) {
-        const next = [...prev]
-        next[idx] = entry
-        return next
-      }
-      return [entry, ...prev]
-    })
+  async function handleSave(entry: TimeEntry) {
     setShowLog(false)
     setEditEntry(undefined)
+    const isEdit = entries.some(e => e.id === entry.id)
+    if (isEdit) {
+      setEntries(prev => prev.map(e => e.id === entry.id ? entry : e))
+      await fetch(`/api/time-entries/${entry.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      }).catch(() => {})
+    } else {
+      const res = await fetch('/api/time-entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      }).catch(() => null)
+      const saved = res?.ok ? await res.json() : entry
+      setEntries(prev => [saved, ...prev])
+    }
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     setEntries(prev => prev.filter(e => e.id !== id))
+    await fetch(`/api/time-entries/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
   function openLog(date?: string) {
@@ -368,7 +377,7 @@ export default function TimeTrackingPage() {
   return (
     <div className="min-h-screen bg-[#f9fafb]">
       {/* ── Page Header ── */}
-      <div className="bg-white border-b border-gray-100 px-8 py-5">
+      <div className="bg-white border-b border-gray-100 px-4 md:px-8 py-4 md:py-5">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Time Tracking</h1>
@@ -384,7 +393,7 @@ export default function TimeTrackingPage() {
         </div>
       </div>
 
-      <div className="px-8 py-6 space-y-6">
+      <div className="px-4 md:px-8 py-4 md:py-6 space-y-4 md:space-y-6">
         {/* ── Week Navigator ── */}
         <div className="bg-white rounded-xl border border-gray-100 px-6 py-4 flex items-center justify-between">
           <button onClick={prevWeek} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -424,7 +433,7 @@ export default function TimeTrackingPage() {
         </div>
 
         {/* ── Summary Cards ── */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             {
               label: 'Total Hours',
@@ -473,7 +482,7 @@ export default function TimeTrackingPage() {
         </div>
 
         {/* ── Filters ── */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Member filter */}
           <div className="flex items-center gap-1 bg-white border border-gray-100 rounded-lg p-1">
             {allMembers.map(m => (

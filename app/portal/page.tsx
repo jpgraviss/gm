@@ -14,10 +14,124 @@ import {
 
 type PortalClient = { id: string; company: string; service: string; access: string; lastLogin: string; contact: string; email: string }
 
+// ─── Add Client Panel ─────────────────────────────────────────────────────────
+
+function AddClientPanel({ onClose, onSave }: { onClose: () => void; onSave: (client: PortalClient) => void }) {
+  const [company, setCompany] = useState('')
+  const [contact, setContact] = useState('')
+  const [email, setEmail] = useState('')
+  const [service, setService] = useState('Website')
+  const [saving, setSaving] = useState(false)
+
+  const canSave = company.trim() !== '' && contact.trim() !== '' && email.trim() !== ''
+
+  async function handleSave() {
+    if (!canSave) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/portal-clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company: company.trim(), contact: contact.trim(), email: email.trim(), service }),
+      })
+      const newClient: PortalClient = await res.json()
+      onSave(newClient)
+    } catch {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex pointer-events-none">
+      <div className="flex-1 pointer-events-auto" onClick={onClose} />
+      <div className="w-full max-w-md flex flex-col shadow-2xl pointer-events-auto" style={{ background: '#f8fafc' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0" style={{ background: '#012b1e' }}>
+          <h2 className="text-sm font-bold text-white">Add Client to Portal</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+            <X size={16} className="text-white/70" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-600">Company Name <span className="text-red-400">*</span></label>
+            <input
+              type="text"
+              value={company}
+              onChange={e => setCompany(e.target.value)}
+              placeholder="Acme Corp"
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-600">Primary Contact Name <span className="text-red-400">*</span></label>
+            <input
+              type="text"
+              value={contact}
+              onChange={e => setContact(e.target.value)}
+              placeholder="Jane Smith"
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-600">Contact Email <span className="text-red-400">*</span></label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="jane@acme.com"
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-600">Service Type</label>
+            <select
+              value={service}
+              onChange={e => setService(e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+            >
+              <option>Website</option>
+              <option>SEO</option>
+              <option>Social Media</option>
+              <option>Branding</option>
+              <option>Email Marketing</option>
+              <option>Custom</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200 flex-shrink-0 bg-white">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!canSave || saving}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-40"
+            style={{ background: '#015035' }}
+          >
+            {saving ? 'Adding…' : 'Add Client'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Client Portal View ───────────────────────────────────────────────────────
 
 function ClientPortalView({ company, accountInfo, onExit }: { company: string; accountInfo: PortalClient | undefined; onExit: () => void }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files'>('overview')
+  const [showWelcome, setShowWelcome] = useState(true)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [project, setProject]         = useState<any>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -108,6 +222,20 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
         {/* ── Overview ── */}
         {activeTab === 'overview' && (
           <div className="max-w-4xl mx-auto flex flex-col gap-5">
+
+            {/* Welcome banner */}
+            {accountInfo && accountInfo.access === 'Active' && showWelcome && (
+              <div className="flex items-start gap-3 p-4 rounded-xl border mb-2" style={{ background: '#012b1e', borderColor: '#015035' }}>
+                <div>
+                  <p className="text-white font-bold text-sm mb-1">Welcome to Graviss Marketing!</p>
+                  <p className="text-white/70 text-xs leading-relaxed">We&apos;re thrilled to have you on board. This is your client portal where you can track your project progress, view invoices, submit support requests, and access shared files. If you have any questions, don&apos;t hesitate to reach out!</p>
+                </div>
+                <button onClick={() => setShowWelcome(false)} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0 mt-0.5">
+                  <X size={14} className="text-white/50" />
+                </button>
+              </div>
+            )}
+
             <div>
               <h2 className="text-lg font-bold text-gray-900 mb-1">Welcome back, {accountInfo?.contact.split(' ')[0]}!</h2>
               <p className="text-sm text-gray-500">Here&apos;s a snapshot of your account with Graviss Marketing.</p>
@@ -439,6 +567,7 @@ export default function PortalPage() {
   const [clients, setClients] = useState<PortalClient[]>([])
   const [previewCompany, setPreviewCompany] = useState('')
   const [inviteStatus, setInviteStatus] = useState<Record<string, 'sending' | 'sent' | 'error'>>({})
+  const [addingClient, setAddingClient] = useState(false)
 
   useEffect(() => {
     fetch('/api/portal-clients')
@@ -486,7 +615,7 @@ export default function PortalPage() {
 
   return (
     <>
-      <Header title="Client Portal" subtitle="Client-facing view configuration and access" action={{ label: 'Invite Client' }} />
+      <Header title="Client Portal" subtitle="Client-facing view configuration and access" action={{ label: 'Add Client', onClick: () => setAddingClient(true) }} />
       <div className="p-3 sm:p-6 flex-1">
 
         {/* View as Client panel */}
@@ -641,6 +770,16 @@ export default function PortalPage() {
           </div>
         </div>
       </div>
+
+      {addingClient && (
+        <AddClientPanel
+          onClose={() => setAddingClient(false)}
+          onSave={newClient => {
+            setClients(prev => [...prev, newClient])
+            setAddingClient(false)
+          }}
+        />
+      )}
     </>
   )
 }

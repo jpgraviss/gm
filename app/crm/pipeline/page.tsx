@@ -754,6 +754,14 @@ export default function PipelinePage() {
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
       .catch(() => {})
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.pipelines && Array.isArray(d.pipelines) && d.pipelines.length) {
+          setPipelines(d.pipelines)
+        }
+      })
+      .catch(() => {})
     fetchCrmActivities().then(setCrmActivities)
     fetchCrmCompanies().then(setCrmCompanies)
     fetchCrmContacts().then(setCrmContacts)

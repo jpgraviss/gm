@@ -666,11 +666,114 @@ function ServiceTypeGroup({
   )
 }
 
+// ─── New Project Modal ────────────────────────────────────────────────────────
+
+function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p: Project) => void }) {
+  const [company, setCompany] = useState('')
+  const [serviceType, setServiceType] = useState<Project['serviceType']>('Website')
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
+  const [launchDate, setLaunchDate] = useState('')
+  const [team, setTeam] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const canSave = company.trim() && launchDate
+
+  async function handleSave() {
+    if (!canSave) return
+    setSaving(true)
+    const payload = {
+      contractId: '',
+      company: company.trim(),
+      serviceType,
+      status: 'Not Started' as ProjectStatus,
+      startDate,
+      launchDate,
+      assignedTeam: team.split(',').map(t => t.trim()).filter(Boolean),
+      progress: 0,
+      milestones: [],
+      tasks: [],
+    }
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        const saved = await res.json()
+        onSave(saved)
+      } else {
+        onSave({ id: `proj-${Date.now()}`, ...payload } as Project)
+      }
+    } catch {
+      onSave({ id: `proj-${Date.now()}`, ...payload } as Project)
+    }
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+      <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 pointer-events-auto overflow-hidden">
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between" style={{ background: '#012b1e' }}>
+          <h2 className="text-white text-sm font-bold">New Project</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10"><X size={16} className="text-white/60" /></button>
+        </div>
+        <div className="p-5 flex flex-col gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company Name *</label>
+            <input value={company} onChange={e => setCompany(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="Acme Corp" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
+            <select value={serviceType} onChange={e => setServiceType(e.target.value as Project['serviceType'])}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+              {(['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom'] as const).map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Start Date</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Launch Date *</label>
+              <input type="date" value={launchDate} onChange={e => setLaunchDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Assigned Team (comma-separated)</label>
+            <input value={team} onChange={e => setTeam(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="Jonathan Graviss, JG Graviss" />
+          </div>
+        </div>
+        <div className="px-5 pb-5 flex gap-2">
+          <button
+            onClick={handleSave}
+            disabled={!canSave || saving}
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
+            style={{ background: '#015035' }}
+          >
+            {saving ? 'Creating…' : 'Create Project'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ProjectsPage() {
   const [localProjects, setLocalProjects] = useState<Project[]>([])
   const [selected, setSelected] = useState<Project | null>(null)
+  const [creatingProject, setCreatingProject] = useState(false)
   const [serviceFilter, setServiceFilter] = useState<ServiceTypeKey | 'All'>('All')
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'All'>('All')
   const [view, setView] = useState<'grouped' | 'kanban'>('grouped')
@@ -715,7 +818,7 @@ export default function ProjectsPage() {
 
   return (
     <>
-      <Header title="Projects" subtitle="Track delivery across all service lines" action={{ label: 'New Project' }} />
+      <Header title="Projects" subtitle="Track delivery across all service lines" action={{ label: 'New Project', onClick: () => setCreatingProject(true) }} />
       <div className="page-content">
 
         {/* Summary Metrics */}
@@ -868,6 +971,13 @@ export default function ProjectsPage() {
           project={selected}
           onClose={() => setSelected(null)}
           onUpdateStatus={updateProjectStatus}
+        />
+      )}
+
+      {creatingProject && (
+        <NewProjectModal
+          onClose={() => setCreatingProject(false)}
+          onSave={p => setLocalProjects(prev => [p, ...prev])}
         />
       )}
     </>

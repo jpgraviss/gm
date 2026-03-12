@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, User, Tag } from 'lucide-react'
+import { X, User, Tag, ChevronLeft } from 'lucide-react'
 import { fetchCrmCompanies } from '@/lib/supabase'
 import type { ServiceType, CRMCompany } from '@/lib/types'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const
-const ASSIGNEES = ['Sarah Chen', 'Marcus Webb', 'Priya Patel', 'Jordan Ellis']
+const ASSIGNEES = ['JG Graviss', 'Jonathan Graviss']
 
 export interface NewTicketFormData {
   subject: string
@@ -79,6 +79,9 @@ export default function NewTicketPanel({ onSave, onClose }: Props) {
 
         {/* Header */}
         <div className="p-6 flex-shrink-0 flex items-start justify-between" style={{ background: '#012b1e' }}>
+          <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mr-2">
+            <ChevronLeft size={14} /> Back
+          </button>
           <div>
             <h2 className="text-white font-bold text-base">New Ticket</h2>
             <p className="text-white/50 text-xs mt-0.5">Open a support ticket</p>

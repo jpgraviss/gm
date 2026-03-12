@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Check, Plus, Minus, ChevronDown, ChevronUp, Calculator } from 'lucide-react'
+import { X, Check, Plus, Minus, ChevronDown, ChevronUp, ChevronLeft, Calculator } from 'lucide-react'
 import type { CompanySize, CompanyStatus } from '@/lib/types'
 
 // ─── Pricing Constants ─────────────────────────────────────────────────────────
@@ -186,6 +186,9 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
 
         {/* Header */}
         <div className="p-6 flex-shrink-0 flex items-start justify-between" style={{ background: '#012b1e' }}>
+          <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mr-2">
+            <ChevronLeft size={14} /> Back
+          </button>
           <div>
             <h2 className="text-white font-bold text-base">New Company</h2>
             <p className="text-white/50 text-xs mt-0.5">Add a new company to your CRM</p>

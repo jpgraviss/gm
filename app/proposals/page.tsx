@@ -474,35 +474,69 @@ export default function ProposalsPage() {
     fetchContracts().then(setContracts)
   }, [])
 
-  function updateProposalStatus(id: string, status: ProposalStatus) {
+  async function updateProposalStatus(id: string, status: ProposalStatus) {
     const today = new Date().toISOString().split('T')[0]
+    const datePatch = {
+      ...(status === 'Pending Approval' ? { submittedForApprovalDate: today } : {}),
+      ...(status === 'Approved' ? { approvedDate: today, approvedBy: 'Jonathan Graviss' } : {}),
+      ...(status === 'Sent' ? { sentDate: today } : {}),
+      ...(status === 'Viewed' ? { viewedDate: today } : {}),
+      ...(['Accepted', 'Declined'].includes(status) ? { respondedDate: today } : {}),
+    }
+    const patchData = { status, ...datePatch }
+
     setLocalProposals(prev => prev.map(p => {
       if (p.id !== id) return p
-      return {
-        ...p,
-        status,
-        ...(status === 'Pending Approval' ? { submittedForApprovalDate: today } : {}),
-        ...(status === 'Approved' ? { approvedDate: today, approvedBy: 'Jonathan Graviss' } : {}),
-        ...(status === 'Sent' ? { sentDate: today } : {}),
-        ...(status === 'Viewed' ? { viewedDate: today } : {}),
-        ...(['Accepted', 'Declined'].includes(status) ? { respondedDate: today } : {}),
-      }
+      return { ...p, ...patchData }
     }))
     setSelected(prev => {
       if (!prev || prev.id !== id) return prev
-      return {
-        ...prev,
-        status,
-        ...(status === 'Pending Approval' ? { submittedForApprovalDate: today } : {}),
-        ...(status === 'Approved' ? { approvedDate: today, approvedBy: 'Jonathan Graviss' } : {}),
-        ...(status === 'Sent' ? { sentDate: today } : {}),
-        ...(status === 'Viewed' ? { viewedDate: today } : {}),
-        ...(['Accepted', 'Declined'].includes(status) ? { respondedDate: today } : {}),
-      }
+      return { ...prev, ...patchData }
     })
+
+    try {
+      await fetch(`/api/proposals/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patchData),
+      })
+    } catch (err) {
+      console.error('Failed to PATCH proposal status:', err)
+    }
+
+    if (status === 'Accepted') {
+      const proposal = localProposals.find(p => p.id === id)
+      if (proposal) {
+        try {
+          const contractPayload = {
+            proposalId: proposal.id,
+            company: proposal.company,
+            status: 'Draft',
+            value: proposal.value,
+            billingStructure: 'Monthly',
+            startDate: today,
+            duration: 12,
+            renewalDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
+            assignedRep: proposal.assignedRep,
+            serviceType: proposal.serviceType,
+          }
+          const res = await fetch('/api/contracts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(contractPayload),
+          })
+          if (res.ok) {
+            const savedContract = await res.json()
+            setContracts(prev => [savedContract, ...prev])
+          }
+        } catch (err) {
+          console.error('Failed to create contract from accepted proposal:', err)
+        }
+      }
+    }
   }
 
-  function handleNewProposal(data: Omit<Proposal, 'id' | 'dealId' | 'createdDate'>) {
+  async function handleNewProposal(data: Omit<Proposal, 'id' | 'dealId' | 'createdDate'>) {
     if (editingProposal) {
       setLocalProposals(prev => prev.map(p =>
         p.id === editingProposal.id
@@ -510,15 +544,43 @@ export default function ProposalsPage() {
           : p
       ))
       setEditingProposal(null)
+      try {
+        await fetch(`/api/proposals/${editingProposal.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        })
+      } catch (err) {
+        console.error('Failed to PATCH proposal:', err)
+      }
     } else {
-      const newProposal: Proposal = {
+      const localProposal: Proposal = {
         id: `prop-${Date.now()}`,
         dealId: '',
         createdDate: new Date().toISOString().split('T')[0],
         ...data,
       }
-      setLocalProposals(prev => [newProposal, ...prev])
+      setLocalProposals(prev => [localProposal, ...prev])
       setCreatingProposal(false)
+      try {
+        const res = await fetch('/api/proposals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dealId: '',
+            createdDate: localProposal.createdDate,
+            ...data,
+          }),
+        })
+        if (res.ok) {
+          const savedProposal = await res.json()
+          setLocalProposals(prev => prev.map(p =>
+            p.id === localProposal.id ? savedProposal : p
+          ))
+        }
+      } catch (err) {
+        console.error('Failed to POST proposal:', err)
+      }
     }
   }
 

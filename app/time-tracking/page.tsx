@@ -106,7 +106,7 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projec
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="w-[440px] bg-white flex flex-col shadow-2xl">
+      <div className="bg-white flex flex-col shadow-2xl" style={{ width: 'min(440px, 100vw)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
@@ -381,7 +381,7 @@ export default function TimeTrackingPage() {
   return (
     <div className="min-h-screen bg-[#f9fafb]">
       {/* ── Page Header ── */}
-      <div className="bg-white border-b border-gray-100 px-8 py-5">
+      <div className="bg-white border-b border-gray-100 px-4 py-4 sm:px-8 sm:py-5">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Time Tracking</h1>
@@ -397,7 +397,7 @@ export default function TimeTrackingPage() {
         </div>
       </div>
 
-      <div className="px-8 py-6 space-y-6">
+      <div className="px-3 py-4 sm:px-8 sm:py-6 space-y-6">
         {/* ── Week Navigator ── */}
         <div className="bg-white rounded-xl border border-gray-100 px-6 py-4 flex items-center justify-between">
           <button onClick={prevWeek} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -411,7 +411,7 @@ export default function TimeTrackingPage() {
               {weekDates.map((d, i) => {
                 const iso = toIso(d)
                 const hasEntries = entries.some(e => e.date === iso)
-                const isToday = iso === toIso(new Date('2026-03-06'))
+                const isToday = iso === toIso(new Date())
                 return (
                   <button
                     key={i}
@@ -437,7 +437,7 @@ export default function TimeTrackingPage() {
         </div>
 
         {/* ── Summary Cards ── */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             {
               label: 'Total Hours',
@@ -486,7 +486,7 @@ export default function TimeTrackingPage() {
         </div>
 
         {/* ── Filters ── */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 overflow-x-auto">
           {/* Member filter */}
           <div className="flex items-center gap-1 bg-white border border-gray-100 rounded-lg p-1">
             {allMembers.map(m => (

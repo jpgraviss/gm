@@ -9,7 +9,7 @@ import type { Renewal, Contract, CRMContact, Proposal } from '@/lib/types'
 import {
   X, AlertTriangle, Clock, CheckCircle, Calendar, DollarSign,
   ChevronRight, User, FileText, TrendingUp, Mail, Phone,
-  RefreshCw, AlertCircle, Plus, Minus,
+  RefreshCw, AlertCircle, Plus, Minus, Bell,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -244,10 +244,32 @@ function RenewalProposalSidebar({
 
 // ─── Log Renewal Modal ────────────────────────────────────────────────────────
 
-function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (company: string, value: number) => void }) {
+type LogRenewalPayload = {
+  company: string
+  serviceType: string
+  startDate: string
+  expirationDate: string
+  daysUntilExpiry: number
+  renewalValue: number
+  assignedRep: string
+  notes: string
+  contractId: string
+  status: 'Upcoming'
+}
+
+function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (payload: LogRenewalPayload) => void }) {
+  const today = new Date().toISOString().split('T')[0]
+  const oneYearFromToday = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
   const [company, setCompany] = useState('')
+  const [serviceType, setServiceType] = useState('Website')
+  const [startDate, setStartDate] = useState(today)
+  const [expirationDate, setExpirationDate] = useState(oneYearFromToday)
   const [value, setValue] = useState('')
+  const [assignedRep, setAssignedRep] = useState('Jonathan Graviss')
   const [notes, setNotes] = useState('')
+
+  const canSave = company.trim() && expirationDate
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
@@ -264,9 +286,38 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (co
               className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="Acme Corp" />
           </div>
           <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
+            <select value={serviceType} onChange={e => setServiceType(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+              {['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom'].map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Start Date</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">End / Expiry Date *</label>
+              <input type="date" value={expirationDate} onChange={e => setExpirationDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+            </div>
+          </div>
+          <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Renewal Value ($)</label>
             <input type="number" value={value} onChange={e => setValue(e.target.value)}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="12000" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Assigned Rep</label>
+            <select value={assignedRep} onChange={e => setAssignedRep(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+              <option>Jonathan Graviss</option>
+              <option>JG Graviss</option>
+            </select>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Notes</label>
@@ -276,8 +327,14 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (co
         </div>
         <div className="px-5 pb-5 flex gap-2">
           <button
-            onClick={() => { if (company) { onSave(company, parseFloat(value) || 0); onClose() } }}
-            disabled={!company}
+            onClick={() => {
+              if (canSave) {
+                const daysUntilExpiry = Math.ceil((new Date(expirationDate).getTime() - Date.now()) / 86400000)
+                onSave({ company: company.trim(), serviceType, startDate, expirationDate, daysUntilExpiry, renewalValue: parseFloat(value) || 0, assignedRep, notes, contractId: '', status: 'Upcoming' })
+                onClose()
+              }
+            }}
+            disabled={!canSave}
             className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
             style={{ background: '#015035' }}
           >
@@ -558,28 +615,21 @@ export default function RenewalsPage() {
     }).catch(() => {})
   }
 
-  async function logRenewal(company: string, value: number) {
-    const expDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    const payload = {
-      company,
-      serviceType: 'Website',
-      contractId: '',
-      expirationDate: expDate,
-      daysUntilExpiry: 90,
-      renewalValue: value,
-      status: 'Upcoming',
-      assignedRep: 'Jonathan Graviss',
-    }
+  async function logRenewal(data: LogRenewalPayload) {
     try {
       const res = await fetch('/api/renewals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(data),
       })
-      const saved = await res.json()
-      setLocalRenewals(prev => [saved, ...prev])
+      if (res.ok) {
+        const saved = await res.json()
+        setLocalRenewals(prev => [saved, ...prev])
+      } else {
+        setLocalRenewals(prev => [{ id: `ren-${Date.now()}`, ...data } as Renewal, ...prev])
+      }
     } catch {
-      setLocalRenewals(prev => [{ id: `ren-${Date.now()}`, ...payload } as Renewal, ...prev])
+      setLocalRenewals(prev => [{ id: `ren-${Date.now()}`, ...data } as Renewal, ...prev])
     }
   }
 
@@ -639,7 +689,7 @@ export default function RenewalsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
           <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
             <h3 className="text-sm font-semibold text-gray-800">All Renewals</h3>
             <div className="flex items-center gap-3 text-xs text-gray-500">
@@ -718,6 +768,43 @@ export default function RenewalsPage() {
             </table>
           </div>
         </div>
+
+        <div className="metric-card mt-6">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#01503518' }}>
+              <Bell size={16} style={{ color: '#015035' }} />
+            </div>
+            <h3 className="text-sm font-semibold text-gray-800">Renewal Sequence</h3>
+          </div>
+          <p className="text-xs text-gray-500 mb-3">
+            Automatic notifications are sent to the assigned rep and client contact at these intervals:
+          </p>
+          <ul className="flex flex-col gap-2 mb-4">
+            {[
+              { label: '60 days before expiry', urgent: false },
+              { label: '30 days before expiry', urgent: false },
+              { label: '14 days before expiry', urgent: false },
+              { label: '7 days before expiry (urgent)', urgent: true },
+            ].map(item => (
+              <li key={item.label} className="flex items-center gap-2">
+                <div
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ background: item.urgent ? '#ef4444' : '#015035' }}
+                />
+                <span className={`text-xs ${item.urgent ? 'font-semibold text-red-600' : 'text-gray-700'}`}>
+                  {item.label}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
+            <Mail size={13} className="text-gray-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-gray-500">
+              Notifications go to the assigned rep (internal) and the primary contact on the account (external email)
+            </p>
+          </div>
+        </div>
+
       </div>
 
       {selected && (

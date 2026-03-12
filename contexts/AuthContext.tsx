@@ -113,6 +113,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const storedGmailEmail = localStorage.getItem('gravhub_gmail_email')
       if (storedGmailEmail) setGmailEmail(storedGmailEmail)
+      const storedGmailToken = localStorage.getItem('gravhub_gmail_token')
+      if (storedGmailToken) {
+        const { token, expiresAt } = JSON.parse(storedGmailToken)
+        if (expiresAt > Date.now()) setGmailToken(token)
+        else localStorage.removeItem('gravhub_gmail_token')
+      }
     } catch {/* ignore */}
 
     return () => subscription.unsubscribe()
@@ -189,6 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setGmailEmail(null)
     try {
       localStorage.removeItem('gravhub_gmail_email')
+      localStorage.removeItem('gravhub_gmail_token')
       localStorage.removeItem('gravhub_user_email')
     } catch {/* ignore */}
   }
@@ -213,6 +220,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       callback: (resp: { access_token?: string; error?: string }) => {
         if (resp.error || !resp.access_token) return
         setGmailToken(resp.access_token)
+        try {
+          localStorage.setItem('gravhub_gmail_token', JSON.stringify({
+            token: resp.access_token,
+            expiresAt: Date.now() + 3500 * 1000, // ~58 min (tokens last 1h)
+          }))
+        } catch {/* ignore */}
         fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${resp.access_token}` },
         })
@@ -237,7 +250,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setGmailToken(null)
     setGmailEmail(null)
-    try { localStorage.removeItem('gravhub_gmail_email') } catch {/* ignore */}
+    try {
+      localStorage.removeItem('gravhub_gmail_email')
+      localStorage.removeItem('gravhub_gmail_token')
+    } catch {/* ignore */}
   }, [gmailToken])
 
   return (

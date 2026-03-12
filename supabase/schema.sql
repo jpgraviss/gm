@@ -419,3 +419,19 @@ create table if not exists public.portal_clients (
 
 alter table public.portal_clients enable row level security;
 create policy "auth_read_portal_clients" on public.portal_clients for select to authenticated using (true);
+
+-- ─── App Settings ─────────────────────────────────────────────────────────────
+create table if not exists public.app_settings (
+  id               text primary key default 'global',
+  company          jsonb not null default '{}',
+  notifications    jsonb not null default '[]',
+  invoice_defaults jsonb not null default '{}',
+  pipeline_stages  jsonb not null default '[]',
+  service_types    jsonb not null default '[]',
+  contact_tags     jsonb not null default '[]',
+  updated_at       timestamptz not null default now()
+);
+
+alter table public.app_settings enable row level security;
+create policy "auth_read_app_settings"  on public.app_settings for select  to authenticated using (true);
+create policy "auth_write_app_settings" on public.app_settings for all     to authenticated using (true) with check (true);

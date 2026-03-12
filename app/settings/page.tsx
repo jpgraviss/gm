@@ -156,15 +156,36 @@ export default function SettingsPage() {
   const [newService, setNewService] = useState('')
   const [newTag, setNewTag] = useState('')
 
-  // Load from localStorage on mount
+  // Load from API on mount (fall back to localStorage for backwards-compat, then defaults)
   useEffect(() => {
-    setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
-    setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d || !d.id) {
+          setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
+          setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
+          setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
+          setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
+          setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
+          setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
+          return
+        }
+        if (d.company          && Object.keys(d.company).length)           setCompany(d.company)
+        if (Array.isArray(d.notifications)   && d.notifications.length)    setNotifications(d.notifications)
+        if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(d.invoice_defaults)
+        if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length)  setPipelineStages(d.pipeline_stages)
+        if (Array.isArray(d.service_types)   && d.service_types.length)    setServiceTypes(d.service_types)
+        if (Array.isArray(d.contact_tags)    && d.contact_tags.length)     setContactTags(d.contact_tags)
+      })
+      .catch(() => {
+        setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
+        setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
+        setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
+        setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
+        setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
+        setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
+      })
     setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
-    setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
-    setPipelineStages(loadLS('gravhub_pipeline_stages', PIPELINE_STAGES_DEFAULT))
-    setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
-    setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
   }, [])
 
   // Keep members in sync with auth
@@ -175,26 +196,29 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(null), 2500)
   }
 
+  function patchSettings(payload: Record<string, unknown>, label: string) {
+    fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {})
+    flash(label)
+  }
+
   function saveCompany() {
-    localStorage.setItem('gravhub_company', JSON.stringify(company))
-    flash('Company')
+    patchSettings({ company }, 'Company')
   }
 
   function saveNotifications() {
-    localStorage.setItem('gravhub_notifications', JSON.stringify(notifications))
-    flash('Notifications')
+    patchSettings({ notifications }, 'Notifications')
   }
 
   function saveInvoiceDefaults() {
-    localStorage.setItem('gravhub_invoice_defaults', JSON.stringify(invoiceDefaults))
-    flash('Billing')
+    patchSettings({ invoiceDefaults }, 'Billing')
   }
 
   function saveCRM() {
-    localStorage.setItem('gravhub_pipeline_stages', JSON.stringify(pipelineStages))
-    localStorage.setItem('gravhub_service_types', JSON.stringify(serviceTypes))
-    localStorage.setItem('gravhub_contact_tags', JSON.stringify(contactTags))
-    flash('CRM Setup')
+    patchSettings({ pipelineStages, serviceTypes, contactTags }, 'CRM Setup')
   }
 
   async function submitInvite() {

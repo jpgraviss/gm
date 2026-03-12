@@ -44,7 +44,7 @@ const taskPriorityConfig: Record<ContactTask['priority'], { label: string; color
 
 // ─── Edit Contact Panel ───────────────────────────────────────────────────────
 
-const REPS = ['Sarah Chen', 'Marcus Webb']
+const REPS = ['Jonathan Graviss', 'JG Graviss']
 
 function EditContactPanel({
   contact,
@@ -320,8 +320,8 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
     setAddingTask(false)
   }
 
-  function handleSaveActivity(activity: LoggedActivity) {
-    setLocalActivities(prev => [{
+  async function handleSaveActivity(activity: LoggedActivity) {
+    const entry = {
       id: activity.id,
       type: activity.type,
       title: activity.title,
@@ -335,21 +335,48 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       contactName: contact.fullName,
       companyId: contact.companyId,
       companyName: contact.companyName,
-    }, ...prev])
+    }
+    setLocalActivities(prev => [entry, ...prev])
     setLoggingActivity(false)
     setTab('activity')
+    const now = new Date().toISOString()
+    try {
+      await fetch('/api/crm/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      })
+      // Update contact's lastActivity date
+      fetch(`/api/crm/contacts/${contact.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lastActivity: now }),
+      }).catch(() => {})
+    } catch {/* activity already shown locally */}
+  }
+
+  function persistTags(tags: string[]) {
+    fetch(`/api/crm/contacts/${contact.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags }),
+    }).catch(() => {})
   }
 
   function handleAddTag() {
     const tag = newTag.trim()
     if (!tag || localTags.includes(tag)) return
-    setLocalTags(prev => [...prev, tag])
+    const updated = [...localTags, tag]
+    setLocalTags(updated)
     setNewTag('')
     setAddingTag(false)
+    persistTags(updated)
   }
 
   function handleRemoveTag(tag: string) {
-    setLocalTags(prev => prev.filter(t => t !== tag))
+    const updated = localTags.filter(t => t !== tag)
+    setLocalTags(updated)
+    persistTags(updated)
   }
 
   // Cross-linked data

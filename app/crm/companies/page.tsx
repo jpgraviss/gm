@@ -50,21 +50,32 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, 
     () => (crmActivities ?? []).filter(a => a.companyId === company.id)
   )
 
+  function persistTags(tags: string[]) {
+    fetch(`/api/crm/companies/${company.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags }),
+    }).catch(() => {})
+  }
+
   function handleAddTag() {
     const tag = newTag.trim()
     if (!tag || localTags.includes(tag)) return
-    setLocalTags(prev => [...prev, tag])
+    const updated = [...localTags, tag]
+    setLocalTags(updated)
     setNewTag('')
     setAddingTag(false)
+    persistTags(updated)
   }
 
   function handleRemoveTag(tag: string) {
-    setLocalTags(prev => prev.filter(t => t !== tag))
+    const updated = localTags.filter(t => t !== tag)
+    setLocalTags(updated)
+    persistTags(updated)
   }
 
-  function handleAddContact(data: NewContactFormData) {
-    const newContact: CRMContact = {
-      id: `contact-${Date.now()}`,
+  async function handleAddContact(data: NewContactFormData) {
+    const payload = {
       companyId: company.id,
       companyName: company.name,
       firstName: data.firstName,
@@ -73,21 +84,30 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, 
       title: data.title,
       emails: data.email ? [data.email] : [],
       phones: data.phone ? [data.phone] : [],
-      linkedIn: data.linkedIn || undefined,
-      website: data.website || undefined,
+      linkedIn: data.linkedIn || null,
+      website: data.website || null,
       isPrimary: false,
       owner: data.owner,
       tags: [],
       contactNotes: [],
       contactTasks: [],
-      createdDate: new Date().toISOString().split('T')[0],
     }
-    setExtraContacts(prev => [...prev, newContact])
+    try {
+      const res = await fetch('/api/crm/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const saved: CRMContact = res.ok ? await res.json() : { ...payload, id: `contact-${Date.now()}`, createdDate: new Date().toISOString().split('T')[0] }
+      setExtraContacts(prev => [...prev, saved])
+    } catch {
+      setExtraContacts(prev => [...prev, { ...payload, id: `contact-${Date.now()}`, createdDate: new Date().toISOString().split('T')[0] } as CRMContact])
+    }
     setAddingContact(false)
   }
 
-  function handleSaveActivity(activity: LoggedActivity) {
-    setLocalActivities(prev => [{
+  async function handleSaveActivity(activity: LoggedActivity) {
+    const entry = {
       id: activity.id,
       type: activity.type,
       title: activity.title,
@@ -99,9 +119,17 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, 
       duration: activity.duration,
       companyId: company.id,
       companyName: company.name,
-    }, ...prev])
+    }
+    setLocalActivities(prev => [entry, ...prev])
     setLoggingActivity(false)
     setTab('activity')
+    try {
+      await fetch('/api/crm/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      })
+    } catch {/* activity already shown locally */}
   }
 
   // Cross-linked data

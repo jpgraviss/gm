@@ -62,7 +62,6 @@ export default function CalendarPage() {
     : null
 
   useEffect(() => {
-    setLoading(true)
     const params = userSlug ? `?slug=${userSlug}` : ''
     fetch(`/api/bookings${params}`)
       .then(r => r.json())

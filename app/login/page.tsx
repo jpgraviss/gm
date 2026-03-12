@@ -112,7 +112,9 @@ export default function LoginPage() {
   // If user is logged in and needs to change password, show that mode
   useEffect(() => {
     if (!loading && user && mustChangePassword) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEmail(user.email)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMode('change-password')
     }
   }, [user, loading, mustChangePassword])
@@ -243,7 +245,7 @@ export default function LoginPage() {
                     style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em' }}>
                     RESET PASSWORD
                   </h2>
-                  <p className="text-gray-500 text-sm">Enter your email and we'll send a reset link.</p>
+                  <p className="text-gray-500 text-sm">Enter your email and we&apos;ll send a reset link.</p>
                 </div>
                 <form onSubmit={handleForgotSubmit} className="flex flex-col gap-4">
                   <div>
@@ -290,7 +292,7 @@ export default function LoginPage() {
                 <p className="text-gray-500 text-sm mb-2">
                   If <strong>{forgotEmail}</strong> has a GravHub account, a reset link is on its way.
                 </p>
-                <p className="text-gray-400 text-xs mb-6">The link expires in 24 hours. Check your spam folder if it doesn't arrive.</p>
+                <p className="text-gray-400 text-xs mb-6">The link expires in 24 hours. Check your spam folder if it doesn&apos;t arrive.</p>
                 <button
                   onClick={() => { setMode('login'); setForgotEmail('') }}
                   className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-semibold"

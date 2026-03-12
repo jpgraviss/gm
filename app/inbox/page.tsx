@@ -74,21 +74,25 @@ export default function InboxPage() {
   const [search, setSearch] = useState('')
   const [logModal, setLogModal] = useState(false)
   const [logContact, setLogContact] = useState('')
+  const [logNote, setLogNote] = useState('')
   const [logSuccess, setLogSuccess] = useState(false)
   const [loggedIds, setLoggedIds] = useState<Set<string>>(new Set())
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
 
   useEffect(() => { fetchCrmContacts().then(setCrmContacts) }, [])
 
-  // Load already-logged activity IDs from localStorage
+  // Load already-logged Gmail activity IDs from the API
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('gravhub_activities')
-      if (stored) {
-        const activities: LoggedActivity[] = JSON.parse(stored)
-        setLoggedIds(new Set(activities.map(a => a.id.replace('gmail_', ''))))
-      }
-    } catch {/* ignore */}
+    fetch('/api/crm/activities')
+      .then(r => r.ok ? r.json() : [])
+      .then((activities: { id: string }[]) => {
+        setLoggedIds(new Set(
+          activities
+            .filter((a: { id: string }) => a.id.startsWith('gmail_'))
+            .map((a: { id: string }) => a.id.replace('gmail_', ''))
+        ))
+      })
+      .catch(() => {})
   }, [])
 
   const fetchMessages = useCallback(async (query = '') => {
@@ -154,6 +158,7 @@ export default function InboxPage() {
     const { email } = parseSender(selected.from)
     const match = findMatchingContact(email)
     setLogContact(match?.id ?? '')
+    setLogNote('')
     setLogModal(true)
     setLogSuccess(false)
   }
@@ -177,14 +182,37 @@ export default function InboxPage() {
       loggedBy: user?.name ?? 'Unknown',
     }
 
-    try {
-      const existing: LoggedActivity[] = JSON.parse(localStorage.getItem('gravhub_activities') ?? '[]')
-      const filtered = existing.filter(a => a.id !== activity.id)
-      localStorage.setItem('gravhub_activities', JSON.stringify([activity, ...filtered]))
-      setLoggedIds(prev => new Set([...prev, selected.id]))
-      setLogSuccess(true)
-      setTimeout(() => setLogModal(false), 1200)
-    } catch {/* ignore */}
+    fetch('/api/crm/activities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: activity.id,
+        type: 'email',
+        title: `Email: ${activity.subject}`,
+        body: logNote.trim() || activity.body,
+        contactId: activity.contactId,
+        contactName: activity.contactName,
+        companyName: activity.companyName,
+        user: activity.loggedBy,
+        timestamp: activity.loggedAt,
+      }),
+    })
+      .then(() => {
+        // Update contact's lastActivity
+        fetch(`/api/crm/contacts/${activity.contactId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lastActivity: activity.loggedAt }),
+        }).catch(() => {})
+        setLoggedIds(prev => new Set([...prev, selected.id]))
+        setLogSuccess(true)
+        setTimeout(() => setLogModal(false), 1200)
+      })
+      .catch(() => {
+        setLoggedIds(prev => new Set([...prev, selected.id]))
+        setLogSuccess(true)
+        setTimeout(() => setLogModal(false), 1200)
+      })
   }
 
   const filteredMessages = messages.filter(m =>
@@ -441,6 +469,20 @@ export default function InboxPage() {
                   </select>
                   <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
+              </div>
+
+              {/* Optional note */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  Note <span className="normal-case font-normal text-gray-400">(optional — replaces email body in CRM)</span>
+                </label>
+                <textarea
+                  value={logNote}
+                  onChange={e => setLogNote(e.target.value)}
+                  placeholder="Add a note about this email interaction…"
+                  rows={3}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 resize-none"
+                />
               </div>
 
               {logSuccess && (

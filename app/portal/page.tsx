@@ -110,7 +110,7 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
           <div className="max-w-4xl mx-auto flex flex-col gap-5">
             <div>
               <h2 className="text-lg font-bold text-gray-900 mb-1">Welcome back, {accountInfo?.contact.split(' ')[0]}!</h2>
-              <p className="text-sm text-gray-500">Here's a snapshot of your account with Graviss Marketing.</p>
+              <p className="text-sm text-gray-500">Here&apos;s a snapshot of your account with Graviss Marketing.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -83,14 +83,33 @@ export default function ReportsPage() {
 
   const repStats = repFilter === 'All' ? allRepStats : allRepStats.filter(r => r.name === repFilter)
 
-  const serviceRevenue = [
-    { service: 'Website', revenue: 50000, deals: 3, color: '#6366f1' },
-    { service: 'SEO', revenue: 42000, deals: 2, color: '#14b8a6' },
-    { service: 'Email Marketing', revenue: 14200, deals: 1, color: '#06b6d4' },
-    { service: 'Branding', revenue: 0, deals: 1, color: '#f59e0b' },
-    { service: 'Custom', revenue: 0, deals: 1, color: '#8b5cf6' },
-  ]
-  const maxService = Math.max(...serviceRevenue.map(s => s.revenue))
+  const SERVICE_COLORS: Record<string, string> = {
+    'Website':        '#6366f1',
+    'SEO':            '#14b8a6',
+    'Email Marketing':'#06b6d4',
+    'Branding':       '#f59e0b',
+    'Custom':         '#8b5cf6',
+    'Maintenance':    '#22c55e',
+    'Social Media':   '#ec4899',
+    'PPC':            '#3b82f6',
+  }
+  const serviceRevenue = useMemo(() => {
+    const svcMap: Record<string, { revenue: number; deals: number }> = {}
+    deals.forEach(d => {
+      if (!svcMap[d.serviceType]) svcMap[d.serviceType] = { revenue: 0, deals: 0 }
+      svcMap[d.serviceType].revenue += d.value
+      svcMap[d.serviceType].deals++
+    })
+    return Object.entries(svcMap)
+      .map(([service, data]) => ({
+        service,
+        revenue: data.revenue,
+        deals: data.deals,
+        color: SERVICE_COLORS[service] ?? '#9ca3af',
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+  }, [deals])
+  const maxService = Math.max(...serviceRevenue.map(s => s.revenue), 1)
 
   return (
     <>
@@ -119,9 +138,10 @@ export default function ReportsPage() {
               onChange={e => setRepFilter(e.target.value as RepFilter)}
               className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700"
             >
-              <option>All</option>
-              <option>Sarah Chen</option>
-              <option>Marcus Webb</option>
+              <option value="All">All</option>
+              {allRepStats.map(r => (
+                <option key={r.name} value={r.name}>{r.name}</option>
+              ))}
             </select>
           </div>
           <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">

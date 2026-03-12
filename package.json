@@ -12,9 +12,11 @@
     "@hello-pangea/dnd": "^18.0.1",
     "@supabase/supabase-js": "^2.98.0",
     "html2canvas": "^1.4.1",
+    "intuit-oauth": "^4.2.2",
     "jspdf": "^4.2.0",
     "lucide-react": "^0.562.0",
     "next": "16.1.1",
+    "node-quickbooks": "^2.0.48",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "resend": "^6.9.3"

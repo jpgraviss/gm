@@ -1045,7 +1045,7 @@ export default function PipelinePage() {
   const [proposalModalDeal, setProposalModalDeal] = useState<LocalDeal | null>(null)
   const [contractModalDeal, setContractModalDeal] = useState<LocalDeal | null>(null)
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => { setMounted(true) }, []) // eslint-disable-line react-hooks/set-state-in-effect
 
   useEffect(() => {
     fetch('/api/deals')

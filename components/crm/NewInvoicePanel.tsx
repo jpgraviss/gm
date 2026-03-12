@@ -46,15 +46,14 @@ interface Props {
 
 export default function NewInvoicePanel({ onSave, onClose }: Props) {
   const today = new Date().toISOString().split('T')[0]
-  const thirtyDaysOut = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
 
-  const [form, setForm] = useState<NewInvoiceFormData>({
+  const [form, setForm] = useState<NewInvoiceFormData>(() => ({
     company: '',
     serviceType: 'Website',
     amount: '',
-    dueDate: thirtyDaysOut,
+    dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
     contractId: '',
-  })
+  }))
 
   const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])

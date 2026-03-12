@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchInvoices, fetchProjects, fetchProposals } from '@/lib/supabase'
@@ -58,10 +58,13 @@ function ContractPanel({
     : 0
 
   // Duration progress
-  const startMs = new Date(contract.startDate).getTime()
-  const renewalMs = new Date(contract.renewalDate).getTime()
-  const nowMs = Date.now()
-  const durationPct = Math.min(100, Math.max(0, Math.round(((nowMs - startMs) / (renewalMs - startMs)) * 100)))
+  const durationPct = useMemo(() => {
+    const startMs = new Date(contract.startDate).getTime()
+    const renewalMs = new Date(contract.renewalDate).getTime()
+    // eslint-disable-next-line react-hooks/purity
+    const nowMs = Date.now()
+    return Math.min(100, Math.max(0, Math.round(((nowMs - startMs) / (renewalMs - startMs)) * 100)))
+  }, [contract.startDate, contract.renewalDate])
 
   const invoicePaid = linkedInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0)
   const invoiceOutstanding = linkedInvoices.filter(i => ['Sent', 'Overdue', 'Pending'].includes(i.status)).reduce((s, i) => s + i.amount, 0)

@@ -471,7 +471,7 @@ function SequencePanel({
               {seq.enrolledCount === 0 ? (
                 <div className="text-center py-12">
                   <TrendingUp size={24} className="text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">No stats yet — sequence hasn't run</p>
+                  <p className="text-sm text-gray-400">No stats yet — sequence hasn&apos;t run</p>
                 </div>
               ) : (
                 <>
@@ -526,7 +526,8 @@ function SequencePanel({
             <div className="flex flex-col gap-2">
               {enrolledContacts.map(c => {
                 const activeDeal = deals.find(d => d.company === c.companyName && !d.stage.startsWith('Closed'))
-                const stepNum = Math.floor(Math.random() * seq.steps.filter(s => s.type === 'email').length) + 1
+                const emailSteps = seq.steps.filter(s => s.type === 'email').length
+                const stepNum = emailSteps > 0 ? (c.id.charCodeAt(0) % emailSteps) + 1 : 1
                 return (
                   <div key={c.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                     <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
@@ -538,7 +539,7 @@ function SequencePanel({
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-xs font-medium text-gray-600">
-                        Step {stepNum} of {seq.steps.filter(s => s.type === 'email').length}
+                        Step {stepNum} of {emailSteps}
                       </p>
                       {activeDeal && (
                         <p className="text-[11px] text-emerald-600 font-medium">{activeDeal.stage}</p>

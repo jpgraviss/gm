@@ -11,6 +11,101 @@ import {
 import { formatCurrency, contractStatusColors, invoiceStatusColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import type { RevenueMonth } from '@/lib/types'
+import { useAuth } from '@/contexts/AuthContext'
+
+// ─── Greeting ─────────────────────────────────────────────────────────────────
+
+interface Greeting { headline: string; sub: string; emoji: string }
+
+function buildGreeting(fullName: string, now: Date): Greeting {
+  const firstName = fullName.split(' ')[0]
+  const hour = now.getHours()
+  const day  = now.getDay() // 0=Sun … 6=Sat
+
+  const timePrefix =
+    hour >= 5  && hour < 12 ? 'Good Morning'           :
+    hour >= 12 && hour < 17 ? 'Good Afternoon'          :
+    hour >= 17 && hour < 23 ? 'Good Evening'            :
+    'Burning the midnight oil' // midnight – 5am
+
+  const timeEmoji =
+    hour >= 5  && hour < 12 ? '☀️'  :
+    hour >= 12 && hour < 17 ? '🌤️' :
+    hour >= 17 && hour < 23 ? '🌆'  :
+    '🌙'
+
+  const dayMeta: Record<number, { label: string; msg: string; emoji: string }> = {
+    0: { label: 'Happy Sunday',    msg: 'Hope you\'re recharging — big week ahead.',        emoji: '😎' },
+    1: { label: 'Happy Monday',    msg: 'New week, new wins. Let\'s make it count.',         emoji: '🚀' },
+    2: { label: 'Happy Tuesday',   msg: 'Momentum is everything — keep it rolling.',         emoji: '💪' },
+    3: { label: 'Happy Wednesday', msg: 'Halfway there. You\'re crushing it.',               emoji: '⚡' },
+    4: { label: 'Happy Thursday',  msg: 'Almost at the finish line — push through.',         emoji: '🎯' },
+    5: { label: 'Happy Friday',    msg: 'Last push of the week. Finish strong.',             emoji: '🎉' },
+    6: { label: 'Happy Saturday',  msg: 'Hustle day or rest day — you earned the choice.',   emoji: '🌟' },
+  }
+
+  const { label: dayLabel, msg, emoji: dayEmoji } = dayMeta[day]
+
+  // Weekends: lead with Happy [Day]
+  if (day === 0 || day === 6) {
+    return { headline: `${dayLabel}, ${firstName}!`, sub: msg, emoji: dayEmoji }
+  }
+
+  // Friday: blend celebration with time greeting
+  if (day === 5) {
+    return { headline: `${timePrefix}, ${firstName}!`, sub: `${dayLabel} — ${msg}`, emoji: dayEmoji }
+  }
+
+  // Weekdays: time-based greeting with day sub-line
+  return { headline: `${timePrefix}, ${firstName}!`, sub: `${dayLabel} — ${msg}`, emoji: timeEmoji }
+}
+
+function GreetingBanner({ name }: { name: string }) {
+  const [visible, setVisible]   = useState(false)
+  const [greeting, setGreeting] = useState<Greeting>({ headline: '', sub: '', emoji: '' })
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('gravhub_login_at')
+      if (!raw) return
+      const loginAt = parseInt(raw, 10)
+      const elapsed = Date.now() - loginAt
+      const THREE_MIN = 3 * 60 * 1000
+      if (elapsed >= THREE_MIN) return
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setGreeting(buildGreeting(name, new Date())) // user's local timezone
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setVisible(true)
+      const timer = setTimeout(() => setVisible(false), THREE_MIN - elapsed)
+      return () => clearTimeout(timer)
+    } catch {/* ignore */}
+  }, [name])
+
+  if (!visible) return null
+
+  return (
+    <div
+      className="rounded-xl px-6 py-4 flex items-center justify-between"
+      style={{
+        background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)',
+        border: '1px solid #d1fae5',
+        borderLeft: '4px solid #015035',
+      }}
+    >
+      <div>
+        <p style={{ fontSize: '22px', fontWeight: 800, color: '#111827', lineHeight: 1.25, margin: 0 }}>
+          {greeting.headline}
+        </p>
+        <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px', marginBottom: 0 }}>
+          {greeting.sub}
+        </p>
+      </div>
+      <span style={{ fontSize: '48px', lineHeight: 1, userSelect: 'none' }} aria-hidden>
+        {greeting.emoji}
+      </span>
+    </div>
+  )
+}
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
@@ -108,7 +203,81 @@ const emptyData: DashboardData = {
   revenueByMonth: [],
 }
 
+// ─── Live ET Clock ────────────────────────────────────────────────────────────
+
+const ET_LOCALE  = 'en-US'
+const ET_TZ      = 'America/New_York'
+const WEEK_DAYS  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+const MONTHS     = ['January','February','March','April','May','June','July','August','September','October','November','December']
+
+function getWeekNumber(d: Date): number {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7))
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1))
+  return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+}
+
+function getNowET(): Date {
+  // Returns a Date whose local values (getHours, etc.) reflect ET
+  const etString = new Date().toLocaleString(ET_LOCALE, { timeZone: ET_TZ })
+  return new Date(etString)
+}
+
+function LiveClock() {
+  const [now, setNow] = useState<Date | null>(null)
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNow(getNowET())
+    const id = setInterval(() => setNow(getNowET()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  if (!now) return null
+
+  const dayName  = WEEK_DAYS[now.getDay()]
+  const month    = MONTHS[now.getMonth()]
+  const date     = now.getDate()
+  const year     = now.getFullYear()
+  const week     = getWeekNumber(now)
+  const h        = now.getHours()
+  const m        = now.getMinutes()
+  const s        = now.getSeconds()
+  const ampm     = h >= 12 ? 'PM' : 'AM'
+  const h12      = h % 12 || 12
+  const mm       = String(m).padStart(2, '0')
+  const ss       = String(s).padStart(2, '0')
+  const suffix   = date === 1 ? 'st' : date === 2 ? 'nd' : date === 3 ? 'rd' : 'th'
+
+  return (
+    <div
+      className="rounded-xl px-5 py-3 flex items-center justify-between"
+      style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}
+    >
+      {/* Date block */}
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span style={{ fontSize: '15px', fontWeight: 700, color: '#111827' }}>
+          {dayName}, {month} {date}{suffix}, {year}
+        </span>
+        <span style={{ fontSize: '12px', color: '#9ca3af' }}>·</span>
+        <span style={{ fontSize: '12px', color: '#6b7280' }}>Week {week}</span>
+        <span style={{ fontSize: '12px', color: '#9ca3af' }}>·</span>
+        <span style={{ fontSize: '12px', color: '#6b7280' }}>Q{Math.ceil((now.getMonth() + 1) / 3)}</span>
+      </div>
+      {/* Live time */}
+      <div className="flex items-baseline gap-1 flex-shrink-0">
+        <span style={{ fontSize: '15px', fontWeight: 700, color: '#015035', fontVariantNumeric: 'tabular-nums' }}>
+          {h12}:{mm}:{ss}
+        </span>
+        <span style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280' }}>{ampm}</span>
+        <span style={{ fontSize: '11px', color: '#9ca3af', marginLeft: '2px' }}>ET</span>
+      </div>
+    </div>
+  )
+}
+
 export default function DashboardPage() {
+  const { user } = useAuth()
   const [data, setData] = useState<DashboardData>(emptyData)
 
   useEffect(() => {
@@ -128,6 +297,10 @@ export default function DashboardPage() {
     <>
       <Header title="Dashboard" subtitle="Graviss Marketing — Executive Overview" />
       <div className="page-content">
+
+        {/* Greeting + Clock */}
+        {user && <GreetingBanner name={user.name} />}
+        <LiveClock />
 
         {/* KPI Row */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">

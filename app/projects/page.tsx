@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import Header from '@/components/layout/Header'
 // data loaded from API
 import { projectStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
@@ -9,10 +9,13 @@ import type { Project, ProjectStatus } from '@/lib/types'
 import {
   X, CheckCircle, Calendar, ChevronRight, LayoutList, KanbanSquare,
   AlertTriangle, TrendingUp, StickyNote, Plus, Globe, BarChart2,
-  Share2, Mail, Palette, Wrench, ChevronDown,
+  Share2, Mail, Palette, Wrench, ChevronDown, Pencil, Trash2,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+const DEPARTMENTS = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
+const OWNERS = ['Jonathan Graviss', 'JG Graviss']
 
 const statusOrder: ProjectStatus[] = [
   'Not Started', 'In Progress', 'Awaiting Client', 'Completed', 'Launched', 'In Maintenance',
@@ -125,17 +128,31 @@ function ProjectDetailPanel({
   project,
   onClose,
   onUpdateStatus,
+  onDelete,
+  onUpdate,
 }: {
   project: Project
   onClose: () => void
   onUpdateStatus: (id: string, status: ProjectStatus) => void
+  onDelete?: (id: string) => void
+  onUpdate?: (id: string, updates: Partial<Project>) => void
 }) {
   const [tab, setTab] = useState<'overview' | 'milestones' | 'tasks' | 'notes'>('overview')
   const [showStatusPicker, setShowStatusPicker] = useState(false)
   const [localTasks, setLocalTasks] = useState(project.tasks)
-  const [notes, setNotes] = useState<Array<{ id: string; text: string; date: string; author: string }>>([])
+  const [notes, setNotes] = useState<Array<{ id: string; text: string; date: string; author: string }>>((project as any).notes ?? [])
   const [noteText, setNoteText] = useState('')
   const [showNoteForm, setShowNoteForm] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [editingOverview, setEditingOverview] = useState(false)
+  const [overview, setOverview] = useState((project as any).overview ?? '')
+  const [showAddMilestone, setShowAddMilestone] = useState(false)
+  const [newMilestoneName, setNewMilestoneName] = useState('')
+  const [newMilestoneDue, setNewMilestoneDue] = useState('')
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskDue, setNewTaskDue] = useState('')
+  const [newTaskPriority, setNewTaskPriority] = useState<'High' | 'Medium' | 'Low'>('Medium')
 
   const today = new Date().toISOString().split('T')[0]
   const overdueTasks = localTasks.filter(t => !t.completed && t.dueDate < today)
@@ -149,15 +166,15 @@ function ProjectDetailPanel({
 
   const saveNote = () => {
     if (!noteText.trim()) return
-    setNotes(prev => [
-      ...prev,
-      {
-        id: `note-${Date.now()}`,
-        text: noteText.trim(),
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        author: 'You',
-      },
-    ])
+    const newNote = {
+      id: `note-${Date.now()}`,
+      text: noteText.trim(),
+      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      author: 'You',
+    }
+    const updatedNotes = [...notes, newNote]
+    setNotes(updatedNotes)
+    onUpdate?.(project.id, { notes: updatedNotes } as any)
     setNoteText('')
     setShowNoteForm(false)
   }
@@ -184,6 +201,11 @@ function ProjectDetailPanel({
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <ProgressRing pct={project.progress} size={54} />
+              {onDelete && (
+                <button onClick={() => setConfirmDelete(true)} className="p-1.5 rounded-lg hover:bg-white/10 ml-1" title="Delete project">
+                  <Trash2 size={15} className="text-red-400" />
+                </button>
+              )}
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 ml-1">
                 <X size={18} className="text-white/60" />
               </button>
@@ -286,7 +308,7 @@ function ProjectDetailPanel({
           {/* ── Milestones ── */}
           {tab === 'milestones' && (
             <div className="flex flex-col gap-1">
-              {project.milestones.map((m, i) => {
+              {(project.milestones ?? []).map((m, i) => {
                 const isLast = i === project.milestones.length - 1
                 const nextIncomplete = project.milestones.findIndex(ms => !ms.completed)
                 const isCurrent = !m.completed && i === nextIncomplete
@@ -341,6 +363,53 @@ function ProjectDetailPanel({
                   </div>
                 )
               })}
+
+              {showAddMilestone ? (
+                <div className="flex flex-col gap-2 mt-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <input
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+                    placeholder="Milestone name"
+                    value={newMilestoneName}
+                    onChange={e => setNewMilestoneName(e.target.value)}
+                    autoFocus
+                  />
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+                    value={newMilestoneDue}
+                    onChange={e => setNewMilestoneDue(e.target.value)}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (!newMilestoneName.trim() || !newMilestoneDue) return
+                        const newMilestone = { id: `ms-${Date.now()}`, name: newMilestoneName.trim(), dueDate: newMilestoneDue, completed: false }
+                        onUpdate?.(project.id, { milestones: [...project.milestones, newMilestone] })
+                        setNewMilestoneName('')
+                        setNewMilestoneDue('')
+                        setShowAddMilestone(false)
+                      }}
+                      className="flex-1 py-2 rounded-xl text-white text-sm font-semibold"
+                      style={{ background: '#015035' }}
+                    >
+                      Add
+                    </button>
+                    <button
+                      onClick={() => { setShowAddMilestone(false); setNewMilestoneName(''); setNewMilestoneDue('') }}
+                      className="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAddMilestone(true)}
+                  className="w-full mt-2 py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} /> Add Milestone
+                </button>
+              )}
             </div>
           )}
 
@@ -397,6 +466,72 @@ function ProjectDetailPanel({
                   </div>
                 )
               })}
+
+              {showAddTask ? (
+                <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <input
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+                    placeholder="Task title"
+                    value={newTaskTitle}
+                    onChange={e => setNewTaskTitle(e.target.value)}
+                    autoFocus
+                  />
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+                    value={newTaskDue}
+                    onChange={e => setNewTaskDue(e.target.value)}
+                  />
+                  <select
+                    value={newTaskPriority}
+                    onChange={e => setNewTaskPriority(e.target.value as 'High' | 'Medium' | 'Low')}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white"
+                  >
+                    <option value="High">High Priority</option>
+                    <option value="Medium">Medium Priority</option>
+                    <option value="Low">Low Priority</option>
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (!newTaskTitle.trim() || !newTaskDue) return
+                        const newTask = {
+                          id: `task-${Date.now()}`,
+                          title: newTaskTitle.trim(),
+                          dueDate: newTaskDue,
+                          priority: newTaskPriority,
+                          completed: false,
+                          assignee: 'Team',
+                        }
+                        const updatedTasks = [...localTasks, newTask]
+                        setLocalTasks(updatedTasks)
+                        onUpdate?.(project.id, { tasks: updatedTasks })
+                        setNewTaskTitle('')
+                        setNewTaskDue('')
+                        setNewTaskPriority('Medium')
+                        setShowAddTask(false)
+                      }}
+                      className="flex-1 py-2 rounded-xl text-white text-sm font-semibold"
+                      style={{ background: '#015035' }}
+                    >
+                      Add
+                    </button>
+                    <button
+                      onClick={() => { setShowAddTask(false); setNewTaskTitle(''); setNewTaskDue(''); setNewTaskPriority('Medium') }}
+                      className="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAddTask(true)}
+                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} /> Add Task
+                </button>
+              )}
             </div>
           )}
 
@@ -463,6 +598,31 @@ function ProjectDetailPanel({
             </div>
           )}
         </div>
+
+        {/* Confirm Delete Dialog */}
+        {confirmDelete && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
+            <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setConfirmDelete(false)} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 pointer-events-auto p-6">
+              <h3 className="text-base font-bold text-gray-900 mb-2">Delete Project?</h3>
+              <p className="text-sm text-gray-500 mb-5">This will permanently delete <span className="font-semibold text-gray-800">{project.company}</span>. This action cannot be undone.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { onDelete?.(project.id); setConfirmDelete(false) }}
+                  className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold bg-red-600 hover:bg-red-700"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0 relative">
@@ -670,11 +830,19 @@ function ServiceTypeGroup({
 
 function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p: Project) => void }) {
   const [company, setCompany] = useState('')
+  const [companies, setCompanies] = useState<string[]>([])
   const [serviceType, setServiceType] = useState<Project['serviceType']>('Website')
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
   const [launchDate, setLaunchDate] = useState('')
-  const [team, setTeam] = useState('')
+  const [selectedTeam, setSelectedTeam] = useState<string[]>(['Jonathan Graviss'])
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/crm/companies')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setCompanies(data.map((c: { name: string }) => c.name)) })
+      .catch(() => {})
+  }, [])
 
   const canSave = company.trim() && launchDate
 
@@ -688,7 +856,7 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
       status: 'Not Started' as ProjectStatus,
       startDate,
       launchDate,
-      assignedTeam: team.split(',').map(t => t.trim()).filter(Boolean),
+      assignedTeam: selectedTeam,
       progress: 0,
       milestones: [],
       tasks: [],
@@ -722,8 +890,11 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
         <div className="p-5 flex flex-col gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company Name *</label>
-            <input value={company} onChange={e => setCompany(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="Acme Corp" />
+            <select value={company} onChange={e => setCompany(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+              <option value="">— Select a company —</option>
+              {companies.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
@@ -747,9 +918,28 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Assigned Team (comma-separated)</label>
-            <input value={team} onChange={e => setTeam(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="Jonathan Graviss, JG Graviss" />
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Owners</label>
+            <div className="flex gap-3 flex-wrap mb-3">
+              {OWNERS.map(o => (
+                <label key={o} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input type="checkbox" checked={selectedTeam.includes(o)}
+                    onChange={e => setSelectedTeam(prev => e.target.checked ? [...prev, o] : prev.filter(x => x !== o))}
+                    className="rounded border-gray-300 text-green-700 focus:ring-green-700" />
+                  {o}
+                </label>
+              ))}
+            </div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Departments</label>
+            <div className="flex flex-wrap gap-2">
+              {DEPARTMENTS.map(d => (
+                <label key={d} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border cursor-pointer transition-colors ${selectedTeam.includes(d) ? 'bg-green-50 border-green-600 text-green-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                  <input type="checkbox" checked={selectedTeam.includes(d)}
+                    onChange={e => setSelectedTeam(prev => e.target.checked ? [...prev, d] : prev.filter(x => x !== d))}
+                    className="hidden" />
+                  {d}
+                </label>
+              ))}
+            </div>
           </div>
         </div>
         <div className="px-5 pb-5 flex gap-2">
@@ -794,6 +984,22 @@ export default function ProjectsPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
+    }).catch(() => {})
+  }
+
+  async function handleDeleteProject(id: string) {
+    setLocalProjects(prev => prev.filter(p => p.id !== id))
+    setSelected(null)
+    fetch(`/api/projects/${id}`, { method: 'DELETE' }).catch(() => {})
+  }
+
+  function handleUpdateProject(id: string, updates: Partial<Project>) {
+    setLocalProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } as Project : p))
+    setSelected(prev => prev?.id === id ? { ...prev, ...updates } as Project : prev)
+    fetch(`/api/projects/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
     }).catch(() => {})
   }
 
@@ -971,6 +1177,8 @@ export default function ProjectsPage() {
           project={selected}
           onClose={() => setSelected(null)}
           onUpdateStatus={updateProjectStatus}
+          onDelete={handleDeleteProject}
+          onUpdate={handleUpdateProject}
         />
       )}
 

@@ -178,6 +178,8 @@ create table if not exists public.projects (
   progress               integer not null default 0,
   milestones             jsonb not null default '[]',
   tasks                  jsonb not null default '[]',
+  notes                  jsonb not null default '[]',
+  overview               text not null default '',
   created_at             timestamptz not null default now()
 );
 

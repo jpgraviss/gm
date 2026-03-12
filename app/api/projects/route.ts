@@ -16,6 +16,8 @@ function mapProject(row: any) {
     progress:             row.progress ?? 0,
     milestones:           row.milestones ?? [],
     tasks:                row.tasks ?? [],
+    notes:                row.notes ?? [],
+    overview:             row.overview ?? '',
   }
 }
 
@@ -49,6 +51,8 @@ export async function POST(req: NextRequest) {
       progress:      body.progress ?? 0,
       milestones:    body.milestones ?? [],
       tasks:         body.tasks ?? [],
+      notes:         body.notes ?? [],
+      overview:      body.overview ?? '',
     })
     .select()
     .single()

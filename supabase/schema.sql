@@ -410,6 +410,22 @@ create table if not exists public.sequences (
 alter table public.sequences enable row level security;
 create policy "auth_read_sequences" on public.sequences for select to authenticated using (true);
 
+-- ─── Sequence Enrollments ─────────────────────────────────────────────────────
+create table if not exists public.sequence_enrollments (
+  id            text primary key,
+  sequence_id   text not null references public.sequences(id) on delete cascade,
+  contact_id    text,
+  contact_name  text not null default '',
+  contact_email text not null,
+  enrolled_at   timestamptz not null default now(),
+  current_step  integer not null default 0,
+  status        text not null default 'active',
+  next_send_at  timestamptz,
+  last_sent_at  timestamptz
+);
+alter table public.sequence_enrollments enable row level security;
+create policy "auth_read_enrollments" on public.sequence_enrollments for select to authenticated using (true);
+
 -- ─── Portal Clients ───────────────────────────────────────────────────────────
 create table if not exists public.portal_clients (
   id         text primary key,

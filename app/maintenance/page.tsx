@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { fetchCrmContacts, fetchContracts, fetchInvoices } from '@/lib/supabase'
 import { formatCurrency, serviceTypeColors, formatDate } from '@/lib/utils'
@@ -34,16 +34,43 @@ function AddRecordPanel({
   onSave: (r: Omit<MaintenanceRecord, 'id'>) => void
   onClose: () => void
 }) {
+  const [crmCompanies, setCrmCompanies] = useState<string[]>([])
+  const defaultEnd = initial?.endDate ?? (() => {
+    const d = new Date(initial?.startDate ?? new Date())
+    d.setMonth(d.getMonth() + (initial?.contractDuration ?? 12))
+    return d.toISOString().split('T')[0]
+  })()
+
   const [form, setForm] = useState({
     company: initial?.company ?? '',
     serviceType: initial?.serviceType ?? 'Website',
     startDate: initial?.startDate ?? new Date().toISOString().split('T')[0],
+    endDate: defaultEnd,
     monthlyFee: initial?.monthlyFee?.toString() ?? '350',
-    contractDuration: initial?.contractDuration?.toString() ?? '12',
     cancellationWindow: initial?.cancellationWindow?.toString() ?? '30',
+    cancellationFeeOverride: initial?.cancellationFee?.toString() ?? '',
+    paymentTerms: initial?.paymentTerms ?? 'Net 30',
     status: initial?.status ?? ('Active' as MaintenanceStatus),
     nextBillingDate: initial?.nextBillingDate ?? new Date().toISOString().split('T')[0],
   })
+
+  useEffect(() => {
+    fetch('/api/crm/companies').then(r => r.json()).then(d => {
+      if (Array.isArray(d)) setCrmCompanies(d.map((c: { name: string }) => c.name))
+    }).catch(() => {})
+  }, [])
+
+  // Auto-calculate duration in months from start → end dates
+  const autoMonths = useMemo(() => {
+    const s = new Date(form.startDate)
+    const e = new Date(form.endDate)
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return 0
+    return Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24 * 30.44))
+  }, [form.startDate, form.endDate])
+
+  // Default cancellation fee = 3x monthly
+  const defaultCancellationFee = (parseFloat(form.monthlyFee) || 0) * 3
+  const cancellationFee = form.cancellationFeeOverride ? parseFloat(form.cancellationFeeOverride) : defaultCancellationFee
 
   function save() {
     if (!form.company) return
@@ -51,16 +78,20 @@ function AddRecordPanel({
       company: form.company,
       serviceType: form.serviceType as MaintenanceRecord['serviceType'],
       startDate: form.startDate,
+      endDate: form.endDate,
       monthlyFee: parseFloat(form.monthlyFee) || 0,
-      contractDuration: parseInt(form.contractDuration) || 12,
+      contractDuration: autoMonths,
       cancellationWindow: parseInt(form.cancellationWindow) || 30,
+      cancellationFee,
+      paymentTerms: form.paymentTerms,
       status: form.status,
       nextBillingDate: form.nextBillingDate,
     })
   }
 
-  const serviceTypes = ['Website', 'SEO', 'Social Media', 'Email Marketing', 'Development', 'Content', 'Design', 'General']
+  const serviceTypes = ['Website', 'SEO', 'Social Media', 'Email Marketing', 'Branding', 'Custom', 'General']
   const statuses: MaintenanceStatus[] = ['Active', 'Onboarding', 'Pending Cancellation', 'Cancelled', 'Past']
+  const paymentTermOptions = ['Net 30', 'End of service', 'End of 30 days', 'Due on receipt', 'Net 15', 'Custom']
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
@@ -71,39 +102,34 @@ function AddRecordPanel({
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10"><X size={16} className="text-white/60" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+          {/* Company — from CRM */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company Name *</label>
-            <input value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="Acme Corp" />
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company *</label>
+            <select value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value }))}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+              <option value="">— Select a company —</option>
+              {crmCompanies.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
               <select value={form.serviceType} onChange={e => setForm(p => ({ ...p, serviceType: e.target.value as MaintenanceRecord['serviceType'] }))}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700">
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
                 {serviceTypes.map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Status</label>
               <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value as MaintenanceStatus }))}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700">
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
                 {statuses.map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Monthly Fee ($)</label>
-              <input type="number" value={form.monthlyFee} onChange={e => setForm(p => ({ ...p, monthlyFee: e.target.value }))}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="350" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Duration (months)</label>
-              <input type="number" value={form.contractDuration} onChange={e => setForm(p => ({ ...p, contractDuration: e.target.value }))}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="12" />
-            </div>
-          </div>
+
+          {/* Contract dates + auto-calculated duration */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Start Date</label>
@@ -111,15 +137,61 @@ function AddRecordPanel({
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Next Billing Date</label>
-              <input type="date" value={form.nextBillingDate} onChange={e => setForm(p => ({ ...p, nextBillingDate: e.target.value }))}
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">End Date</label>
+              <input type="date" value={form.endDate} onChange={e => setForm(p => ({ ...p, endDate: e.target.value }))}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
             </div>
           </div>
+          {autoMonths > 0 && (
+            <p className="text-xs text-gray-400 -mt-2">
+              Contract duration: <span className="font-semibold text-gray-700">{autoMonths} months</span> (auto-calculated)
+            </p>
+          )}
+
+          {/* Monthly fee */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cancellation Window (days)</label>
-            <input type="number" value={form.cancellationWindow} onChange={e => setForm(p => ({ ...p, cancellationWindow: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="30" />
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Monthly Fee ($)</label>
+            <input type="number" value={form.monthlyFee} onChange={e => setForm(p => ({ ...p, monthlyFee: e.target.value }))}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="350" />
+          </div>
+
+          {/* Cancellation */}
+          <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex flex-col gap-3">
+            <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide">Cancellation Terms</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Notice Window (days)</label>
+                <input type="number" value={form.cancellationWindow} onChange={e => setForm(p => ({ ...p, cancellationWindow: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white" placeholder="30" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                  Cancellation Fee ($)
+                </label>
+                <input type="number" value={form.cancellationFeeOverride} onChange={e => setForm(p => ({ ...p, cancellationFeeOverride: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white"
+                  placeholder={`${defaultCancellationFee.toFixed(2)} (3× monthly)`} />
+              </div>
+            </div>
+            <p className="text-[11px] text-amber-700">
+              Default fee: <strong>${defaultCancellationFee.toFixed(2)}</strong> (3× monthly rate). Leave blank to use default, or enter a custom amount per contract terms.
+            </p>
+          </div>
+
+          {/* Payment terms */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Payment Terms</label>
+            <select value={form.paymentTerms} onChange={e => setForm(p => ({ ...p, paymentTerms: e.target.value }))}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+              {paymentTermOptions.map(o => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+
+          {/* Next billing date */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Next Billing Date</label>
+            <input type="date" value={form.nextBillingDate} onChange={e => setForm(p => ({ ...p, nextBillingDate: e.target.value }))}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
           </div>
         </div>
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
@@ -273,9 +345,11 @@ function MaintenancePanel({
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { label: 'Start Date', value: formatDate(record.startDate) },
-                    { label: 'End Date', value: formatDate(endDate.toISOString().split('T')[0]) },
+                    { label: 'End Date', value: record.endDate ? formatDate(record.endDate) : formatDate(endDate.toISOString().split('T')[0]) },
                     { label: 'Duration', value: `${record.contractDuration} months` },
                     { label: 'Cancel Window', value: `${record.cancellationWindow} days notice` },
+                    { label: 'Cancel Fee', value: record.cancellationFee ? formatCurrency(record.cancellationFee) : formatCurrency(record.monthlyFee * 3) },
+                    { label: 'Payment Terms', value: record.paymentTerms ?? 'Net 30' },
                   ].map(f => (
                     <div key={f.label} className="bg-white rounded-lg p-2.5 border border-gray-100">
                       <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{f.label}</p>

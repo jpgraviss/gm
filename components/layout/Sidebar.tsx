@@ -104,7 +104,7 @@ export default function Sidebar() {
       <div className="px-3 py-4 border-b border-white/[0.08] flex items-center gap-2.5 min-w-0 flex-shrink-0">
         <div
           className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: '#015035' }}
+          style={{ background: 'var(--brand-primary, #015035)' }}
         >
           <span className="text-white text-xs font-bold" style={{ fontFamily: 'var(--font-heading)' }}>G</span>
         </div>
@@ -186,7 +186,7 @@ export default function Sidebar() {
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg">
             <div
               className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-              style={{ background: user.isAdmin ? '#f59e0b' : '#015035' }}
+              style={{ background: user.isAdmin ? '#f59e0b' : 'var(--brand-primary, #015035)' }}
             >
               {user.initials}
             </div>

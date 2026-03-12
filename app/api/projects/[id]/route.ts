@@ -12,6 +12,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.tasks !== undefined)                update.tasks = body.tasks
   if (body.assignedTeam !== undefined)         update.assigned_team = body.assignedTeam
   if (body.notes !== undefined)               update.notes = body.notes
+  if (body.overview !== undefined)            update.overview = body.overview
   if (body.launchDate !== undefined)           update.launch_date = body.launchDate
   if (body.maintenanceStartDate !== undefined) update.maintenance_start_date = body.maintenanceStartDate
   const { data, error } = await db.from('projects').update(update).eq('id', id).select().single()

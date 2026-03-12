@@ -70,16 +70,23 @@ export default function ReportsPage() {
   const visibleMonths = revenueByMonth.slice(-monthsToShow)
   const maxRevenue = Math.max(...visibleMonths.map(r => r.revenue), 1)
 
+  // Normalize rep names — only Jonathan Graviss and JG Graviss are recognised reps
+  const KNOWN_REPS = ['Jonathan Graviss', 'JG Graviss']
+  const normalizedDeals = useMemo(() => deals.map(d => ({
+    ...d,
+    assignedRep: KNOWN_REPS.includes(d.assignedRep) ? d.assignedRep : 'Jonathan Graviss',
+  })), [deals])
+
   const allRepStats = useMemo(() => {
     const reps: Record<string, { name: string; deals: number; revenue: number; won: number }> = {}
-    deals.forEach(d => {
+    normalizedDeals.forEach(d => {
       if (!reps[d.assignedRep]) reps[d.assignedRep] = { name: d.assignedRep, deals: 0, revenue: 0, won: 0 }
       reps[d.assignedRep].deals++
       reps[d.assignedRep].revenue += d.value
       if (d.stage === 'Closed Won') reps[d.assignedRep].won++
     })
     return Object.values(reps).map(r => ({ ...r, winRate: r.deals > 0 ? Math.round((r.won / r.deals) * 100) : 0 }))
-  }, [deals])
+  }, [normalizedDeals])
 
   const repStats = repFilter === 'All' ? allRepStats : allRepStats.filter(r => r.name === repFilter)
 
@@ -95,7 +102,7 @@ export default function ReportsPage() {
   }
   const serviceRevenue = useMemo(() => {
     const svcMap: Record<string, { revenue: number; deals: number }> = {}
-    deals.forEach(d => {
+    normalizedDeals.forEach(d => {
       if (!svcMap[d.serviceType]) svcMap[d.serviceType] = { revenue: 0, deals: 0 }
       svcMap[d.serviceType].revenue += d.value
       svcMap[d.serviceType].deals++

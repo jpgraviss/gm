@@ -38,6 +38,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // /book/* routes are public — clients book without logging in
   const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/')
 
+  // Inject brand CSS variables from settings
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const branding = data?.branding
+        if (branding?.primaryColor) {
+          document.documentElement.style.setProperty('--brand-primary', branding.primaryColor)
+        }
+        if (branding?.secondaryColor) {
+          document.documentElement.style.setProperty('--brand-secondary', branding.secondaryColor)
+        }
+      })
+      .catch(() => {/* use CSS defaults */})
+  }, [])
+
   useEffect(() => {
     if (loading) return
     if (!user && !isPublic) {

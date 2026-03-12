@@ -289,6 +289,44 @@ function ProjectDetailPanel({
                 </div>
               </div>
 
+              {/* Project Overview / description */}
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Overview</p>
+                  {!editingOverview && (
+                    <button onClick={() => setEditingOverview(true)} className="p-1 rounded hover:bg-gray-200">
+                      <Pencil size={12} className="text-gray-400" />
+                    </button>
+                  )}
+                </div>
+                {editingOverview ? (
+                  <div className="flex flex-col gap-2">
+                    <textarea
+                      value={overview}
+                      onChange={e => setOverview(e.target.value)}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 resize-none"
+                      placeholder="Add project overview or description…"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => setEditingOverview(false)} className="px-3 py-1.5 text-xs text-gray-500 rounded-lg border border-gray-200 hover:bg-gray-100">Cancel</button>
+                      <button
+                        onClick={() => {
+                          onUpdate?.(project.id, { overview } as any)
+                          setEditingOverview(false)
+                        }}
+                        className="px-3 py-1.5 text-xs text-white rounded-lg"
+                        style={{ background: '#015035' }}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600">{overview || <span className="text-gray-400 italic">No overview yet — click the pencil to add one.</span>}</p>
+                )}
+              </div>
+
               {overdueTasks.length > 0 && (
                 <div className="p-3 rounded-xl bg-red-50 border border-red-100 flex items-start gap-2">
                   <AlertTriangle size={16} className="text-red-500 flex-shrink-0 mt-0.5" />

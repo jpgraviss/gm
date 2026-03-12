@@ -23,15 +23,15 @@ function buildGreeting(fullName: string, now: Date): Greeting {
   const day  = now.getDay() // 0=Sun … 6=Sat
 
   const timePrefix =
-    hour >= 5  && hour < 12 ? 'Good Morning'  :
-    hour >= 12 && hour < 17 ? 'Good Afternoon' :
-    hour >= 17 && hour < 21 ? 'Good Evening'   :
-    'Hello'
+    hour >= 5  && hour < 12 ? 'Good Morning'           :
+    hour >= 12 && hour < 17 ? 'Good Afternoon'          :
+    hour >= 17 && hour < 23 ? 'Good Evening'            :
+    'Burning the midnight oil' // midnight – 5am
 
   const timeEmoji =
     hour >= 5  && hour < 12 ? '☀️'  :
     hour >= 12 && hour < 17 ? '🌤️' :
-    hour >= 17 && hour < 21 ? '🌆'  :
+    hour >= 17 && hour < 23 ? '🌆'  :
     '🌙'
 
   const dayMeta: Record<number, { label: string; msg: string; emoji: string }> = {

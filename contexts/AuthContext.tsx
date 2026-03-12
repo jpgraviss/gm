@@ -145,6 +145,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(profile)
       if (profile.userType === 'staff') fetchMembers()
+      // Record last login date for portal clients
+      if (profile.userType === 'client' && profile.id) {
+        const today = new Date().toISOString().split('T')[0]
+        fetch(`/api/portal-clients/${profile.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lastLogin: today, access: 'Active' }),
+        }).catch(() => {})
+      }
       try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
       return { ok: true }
     } catch (err) {

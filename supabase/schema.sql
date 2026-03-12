@@ -178,6 +178,8 @@ create table if not exists public.projects (
   progress               integer not null default 0,
   milestones             jsonb not null default '[]',
   tasks                  jsonb not null default '[]',
+  notes                  jsonb not null default '[]',
+  overview               text not null default '',
   created_at             timestamptz not null default now()
 );
 
@@ -187,9 +189,12 @@ create table if not exists public.maintenance_records (
   company             text not null default '',
   service_type        text not null default 'Website',
   start_date          text,
+  end_date            text,
   monthly_fee         numeric not null default 0,
   contract_duration   integer not null default 12,
   cancellation_window integer not null default 30,
+  cancellation_fee    numeric,
+  payment_terms       text,
   status              text not null default 'Active',
   next_billing_date   text,
   documents           jsonb not null default '[]',

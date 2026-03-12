@@ -138,6 +138,8 @@ function DealPanel({
   onClose,
   onAdvanceStage,
   onUpdateDeal,
+  onDeleteDeal,
+  onDeleteCompany,
   crmActivities,
   crmCompanies,
   crmContacts,
@@ -148,6 +150,8 @@ function DealPanel({
   onClose: () => void
   onAdvanceStage: (dealId: string, newStage: string) => void
   onUpdateDeal?: (id: string, updates: Partial<LocalDeal>) => void
+  onDeleteDeal?: (id: string) => void
+  onDeleteCompany?: (companyId: string) => void
   crmActivities: CRMActivity[]
   crmCompanies: CRMCompany[]
   crmContacts: CRMContact[]
@@ -156,6 +160,15 @@ function DealPanel({
   const [tab, setTab] = useState<'overview' | 'activity' | 'tasks'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [creatingProposal, setCreatingProposal] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<'deal' | 'company' | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({
+    value: String(deal.value),
+    probability: String(deal.probability),
+    closeDate: deal.closeDate,
+    stage: deal.stage,
+    serviceType: deal.serviceType,
+  })
   const [localActivities, setLocalActivities] = useState(
     () => (crmActivities ?? []).filter(a => a.companyId === (crmCompanies ?? []).find(c => c.name === deal.company)?.id).slice(0, 8)
   )
@@ -175,6 +188,24 @@ function DealPanel({
   const stageColor = pipelineStages.find(s => s.name === deal.stage)?.color
     ?? DEFAULT_STAGE_COLORS[deal.stage]
     ?? '#9ca3af'
+
+  function handleSaveDealEdit() {
+    if (!onUpdateDeal) return
+    const updates: Partial<LocalDeal> = {
+      value: parseFloat(editForm.value) || 0,
+      probability: parseInt(editForm.probability) || 0,
+      closeDate: editForm.closeDate,
+      stage: editForm.stage,
+      serviceType: editForm.serviceType as LocalDeal['serviceType'],
+    }
+    onUpdateDeal(deal.id, updates)
+    fetch(`/api/deals/${deal.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    }).catch(() => {})
+    setEditing(false)
+  }
 
   function handleSaveActivity(activity: LoggedActivity) {
     setLocalActivities(prev => [{
@@ -218,9 +249,29 @@ function DealPanel({
               </h2>
               <p className="text-gray-500 text-sm mt-0.5">{deal.contact.title} — {deal.contact.name}</p>
             </div>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-50">
-              <X size={18} className="text-gray-400" />
-            </button>
+            <div className="flex items-center gap-1">
+              {onUpdateDeal && (
+                <button
+                  onClick={() => { setEditing(e => !e); setEditForm({ value: String(deal.value), probability: String(deal.probability), closeDate: deal.closeDate, stage: deal.stage, serviceType: deal.serviceType }) }}
+                  className="p-2 rounded-lg hover:bg-gray-50"
+                  title="Edit deal"
+                >
+                  <Pencil size={15} className="text-gray-400" />
+                </button>
+              )}
+              {onDeleteDeal && (
+                <button
+                  onClick={() => setConfirmDelete('deal')}
+                  className="p-2 rounded-lg hover:bg-red-50"
+                  title="Delete deal"
+                >
+                  <Trash2 size={15} className="text-red-400" />
+                </button>
+              )}
+              <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-50">
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-2 mt-4">
             <div className="bg-gray-50 rounded-xl p-3 text-center">
@@ -256,20 +307,42 @@ function DealPanel({
             <div className="flex flex-col gap-4">
               {/* Deal info */}
               <div className="p-4 bg-gray-50 rounded-xl">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Deal Info</p>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Deal Info</p>
+                  {editing && (
+                    <div className="flex gap-1.5">
+                      <button onClick={handleSaveDealEdit} className="text-xs font-semibold text-white px-2.5 py-1 rounded-lg" style={{ background: '#015035' }}>Save</button>
+                      <button onClick={() => setEditing(false)} className="text-xs text-gray-500 px-2.5 py-1 rounded-lg border border-gray-200 hover:bg-gray-100">Cancel</button>
+                    </div>
+                  )}
+                </div>
                 <div className="flex flex-col gap-2.5">
                   <InfoRow icon={<DollarSign size={14} />} label="Value" value={
-                    <span className="font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
-                      {formatCurrency(deal.value)}
-                    </span>
+                    editing ? (
+                      <input type="number" value={editForm.value} onChange={e => setEditForm(f => ({ ...f, value: e.target.value }))}
+                        className="text-sm border border-gray-200 rounded-lg px-2 py-1 w-28 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                    ) : (
+                      <span className="font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>{formatCurrency(deal.value)}</span>
+                    )
                   } />
                   <InfoRow icon={<TrendingUp size={14} />} label="Probability" value={
-                    <div className="flex items-center gap-2">
-                      <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${deal.probability}%`, background: '#015035' }} />
+                    editing ? (
+                      <input type="number" min={0} max={100} value={editForm.probability} onChange={e => setEditForm(f => ({ ...f, probability: e.target.value }))}
+                        className="text-sm border border-gray-200 rounded-lg px-2 py-1 w-20 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${deal.probability}%`, background: '#015035' }} />
+                        </div>
+                        <span className="text-sm font-semibold">{deal.probability}%</span>
                       </div>
-                      <span className="text-sm font-semibold">{deal.probability}%</span>
-                    </div>
+                    )
+                  } />
+                  <InfoRow icon={<Calendar size={14} />} label="Close Date" value={
+                    editing ? (
+                      <input type="date" value={editForm.closeDate} onChange={e => setEditForm(f => ({ ...f, closeDate: e.target.value }))}
+                        className="text-sm border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                    ) : new Date(deal.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                   } />
                   <InfoRow icon={<User size={14} />} label="Assigned Rep" value={
                     onUpdateDeal ? (
@@ -349,9 +422,19 @@ function DealPanel({
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Company</p>
-                    <Link href="/crm/companies" className="text-xs text-blue-500 hover:underline flex items-center gap-1">
-                      View <ChevronRight size={11} />
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      {onDeleteCompany && (
+                        <button
+                          onClick={() => setConfirmDelete('company')}
+                          className="text-xs text-red-400 hover:text-red-600 flex items-center gap-1"
+                        >
+                          <Trash2 size={11} /> Delete
+                        </button>
+                      )}
+                      <Link href="/crm/companies" className="text-xs text-blue-500 hover:underline flex items-center gap-1">
+                        View <ChevronRight size={11} />
+                      </Link>
+                    </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
@@ -467,6 +550,50 @@ function DealPanel({
         onSave={(_data: NewProposalFormData) => setCreatingProposal(false)}
         onClose={() => setCreatingProposal(false)}
       />
+    )}
+
+    {/* Confirm delete dialog */}
+    {confirmDelete && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 bg-black/50 pointer-events-auto" onClick={() => setConfirmDelete(null)} />
+        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xs mx-4 pointer-events-auto p-6 flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+              <Trash2 size={18} className="text-red-500" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-900">
+                Delete {confirmDelete === 'deal' ? 'Deal' : 'Company'}?
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {confirmDelete === 'deal'
+                  ? `Remove the deal for "${deal.company}" permanently.`
+                  : `Remove "${deal.company}" and all its data permanently.`}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                if (confirmDelete === 'deal' && onDeleteDeal) {
+                  onDeleteDeal(deal.id)
+                  onClose()
+                } else if (confirmDelete === 'company' && onDeleteCompany) {
+                  const comp = crmCompanies.find(c => c.name === deal.company)
+                  if (comp) onDeleteCompany(comp.id)
+                }
+                setConfirmDelete(null)
+              }}
+              className="flex-1 py-2 rounded-xl text-white text-sm font-semibold bg-red-500 hover:bg-red-600"
+            >
+              Delete
+            </button>
+            <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
     )}
   </>
   )
@@ -821,6 +948,18 @@ export default function PipelinePage() {
 
   function handleUpdateDeal(id: string, updates: Partial<LocalDeal>) {
     setLocalDeals(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d))
+    setSelectedDeal(prev => prev?.id === id ? { ...prev, ...updates } as LocalDeal : prev)
+  }
+
+  async function handleDeleteDeal(id: string) {
+    setLocalDeals(prev => prev.filter(d => d.id !== id))
+    setSelectedDeal(null)
+    fetch(`/api/deals/${id}`, { method: 'DELETE' }).catch(() => {})
+  }
+
+  async function handleDeleteCompany(companyId: string) {
+    setCrmCompanies(prev => prev.filter(c => c.id !== companyId))
+    fetch(`/api/crm/companies/${companyId}`, { method: 'DELETE' }).catch(() => {})
   }
 
   return (
@@ -958,6 +1097,8 @@ export default function PipelinePage() {
           onClose={() => setSelectedDeal(null)}
           onAdvanceStage={handleAdvanceStage}
           onUpdateDeal={handleUpdateDeal}
+          onDeleteDeal={handleDeleteDeal}
+          onDeleteCompany={handleDeleteCompany}
           crmActivities={crmActivities}
           crmCompanies={crmCompanies}
           crmContacts={crmContacts}

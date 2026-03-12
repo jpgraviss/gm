@@ -13,6 +13,8 @@
 }
 
 :root {
+  --brand-primary: #015035;
+  --brand-secondary: #FFF3EA;
   --brand-green: #015035;
   --brand-dark: #012b1e;
   --brand-tan: #FFF3EA;
@@ -64,7 +66,7 @@ html, body {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: var(--kpi-accent, #015035);
+  background: var(--kpi-accent, var(--brand-primary, #015035));
 }
 .kpi-card:hover {
   box-shadow: var(--shadow-card-hover);
@@ -133,7 +135,7 @@ html, body {
   transition: all 0.15s;
 }
 .deal-card:hover {
-  border-color: #015035;
+  border-color: var(--brand-primary, #015035);
   box-shadow: 0 3px 14px rgba(1,80,53,0.12);
   transform: translateY(-1px);
 }
@@ -162,9 +164,9 @@ html, body {
   border: 1px solid transparent;
   transition: all 0.15s;
 }
-.tab-btn.active { background: #015035; color: white; border-color: #015035; }
+.tab-btn.active { background: var(--brand-primary, #015035); color: white; border-color: var(--brand-primary, #015035); }
 .tab-btn:not(.active) { background: white; color: #6b7280; border-color: #e5e7eb; }
-.tab-btn:not(.active):hover { border-color: #015035; color: #015035; }
+.tab-btn:not(.active):hover { border-color: var(--brand-primary, #015035); color: var(--brand-primary, #015035); }
 
 /* Filter pills */
 .filter-pill {
@@ -178,8 +180,8 @@ html, body {
   background: white;
   color: #6b7280;
 }
-.filter-pill:hover { border-color: #015035; color: #015035; }
-.filter-pill.active { background: #012b1e; color: white; border-color: #012b1e; }
+.filter-pill:hover { border-color: var(--brand-primary, #015035); color: var(--brand-primary, #015035); }
+.filter-pill.active { background: var(--brand-primary, #015035); color: white; border-color: var(--brand-primary, #015035); }
 
 /* Inputs */
 input, select, textarea { font-family: var(--font-body); }

@@ -320,6 +320,9 @@ export default function SettingsPage() {
 
   function saveBranding() {
     patchSettings({ branding }, 'Branding')
+    // Apply immediately so the change reflects across the app without a reload
+    document.documentElement.style.setProperty('--brand-primary', branding.primaryColor)
+    document.documentElement.style.setProperty('--brand-secondary', branding.secondaryColor)
   }
 
   function saveQbSync() {

@@ -9,8 +9,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.status !== undefined)             update.status = body.status
   if (body.monthlyFee !== undefined)         update.monthly_fee = body.monthlyFee
   if (body.nextBillingDate !== undefined)    update.next_billing_date = body.nextBillingDate
-  if (body.documents !== undefined)         update.documents = body.documents
+  if (body.documents !== undefined)          update.documents = body.documents
   if (body.cancellationWindow !== undefined) update.cancellation_window = body.cancellationWindow
+  if (body.endDate !== undefined)            update.end_date = body.endDate
+  if (body.cancellationFee !== undefined)    update.cancellation_fee = body.cancellationFee
+  if (body.paymentTerms !== undefined)       update.payment_terms = body.paymentTerms
+  if (body.contractDuration !== undefined)   update.contract_duration = body.contractDuration
   const { data, error } = await db.from('maintenance_records').update(update).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)

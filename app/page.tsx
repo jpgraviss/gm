@@ -107,6 +107,113 @@ function GreetingBanner({ name }: { name: string }) {
   )
 }
 
+// ─── Magic Moment Toast (11:11 · 4:44) ────────────────────────────────────────
+
+function MagicMomentToast({ name }: { name: string }) {
+  const firstName = name.split(' ')[0]
+  const [moment, setMoment] = useState<null | '11:11' | '4:44'>(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    function check() {
+      const now = new Date()
+      const h = now.getHours()
+      const m = now.getMinutes()
+      if ((h === 11 || h === 23) && m === 11) {
+        setMoment('11:11')
+        setVisible(true)
+      } else if ((h === 4 || h === 16) && m === 44) {
+        setMoment('4:44')
+        setVisible(true)
+      } else {
+        setVisible(false)
+      }
+    }
+    check()
+    const id = setInterval(check, 10_000) // check every 10s
+    return () => clearInterval(id)
+  }, [])
+
+  if (!visible || !moment) return null
+
+  const is1111 = moment === '11:11'
+
+  return (
+    <div
+      className="fixed bottom-6 right-6 z-50 max-w-sm w-full rounded-2xl shadow-2xl overflow-hidden"
+      style={{
+        background: is1111
+          ? 'linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 50%, #0d1f3c 100%)'
+          : 'linear-gradient(135deg, #0a0a0a 0%, #1c1000 50%, #3d1a00 100%)',
+        border: is1111 ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(245,158,11,0.4)',
+        boxShadow: is1111
+          ? '0 0 40px rgba(168,85,247,0.25), 0 20px 60px rgba(0,0,0,0.5)'
+          : '0 0 40px rgba(245,158,11,0.25), 0 20px 60px rgba(0,0,0,0.5)',
+      }}
+    >
+      {/* Shimmer line */}
+      <div
+        className="h-0.5 w-full"
+        style={{
+          background: is1111
+            ? 'linear-gradient(90deg, transparent, #a855f7, #ec4899, #a855f7, transparent)'
+            : 'linear-gradient(90deg, transparent, #f59e0b, #fbbf24, #f59e0b, transparent)',
+        }}
+      />
+
+      <div className="p-5">
+        {is1111 ? (
+          <>
+            <div className="flex items-center gap-2 mb-3">
+              <span style={{ fontSize: '28px' }}>✨</span>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-0.5" style={{ color: '#a855f7' }}>
+                  11:11 · Make A Wish
+                </p>
+                <p className="text-white text-lg font-bold leading-tight">
+                  Make A Wish, {firstName}!
+                </p>
+              </div>
+            </div>
+            <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              The universe just aligned for you. 11:11 is your reminder that what you focus on, you attract — so dream boldly, {firstName}. Exciting times are ahead. 🚀
+            </p>
+            <div className="mt-3 flex items-center gap-1.5">
+              {['✨','⭐','✨','⭐','✨'].map((s, i) => (
+                <span key={i} style={{ fontSize: '14px', opacity: 0.6 + i * 0.1 }}>{s}</span>
+              ))}
+              <span className="text-[10px] font-semibold ml-1" style={{ color: 'rgba(168,85,247,0.8)' }}>EXCITING TIMES</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 mb-3">
+              <span style={{ fontSize: '28px' }}>👑</span>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-0.5" style={{ color: '#f59e0b' }}>
+                  4:44 · Keep Building
+                </p>
+                <p className="text-white text-lg font-bold leading-tight">
+                  444 — Foundation Time, {firstName}.
+                </p>
+              </div>
+            </div>
+            <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              4:44 is the angel number of hustle, legacy, and building something that lasts. You&apos;re not just working — you&apos;re laying the foundation. Stay locked in. 💎
+            </p>
+            <div className="mt-3 flex items-center gap-1.5">
+              {['🔥','💎','🔥','💎','🔥'].map((s, i) => (
+                <span key={i} style={{ fontSize: '14px', opacity: 0.6 + i * 0.1 }}>{s}</span>
+              ))}
+              <span className="text-[10px] font-semibold ml-1" style={{ color: 'rgba(245,158,11,0.8)' }}>STAY LOCKED IN</span>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
 function KpiCard({
@@ -301,6 +408,7 @@ export default function DashboardPage() {
 
         {/* Greeting + Clock */}
         {user && <GreetingBanner name={user.name} />}
+        {user && <MagicMomentToast name={user.name} />}
         <LiveClock />
 
         {/* KPI Row */}

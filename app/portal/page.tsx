@@ -628,6 +628,7 @@ export default function PortalPage() {
   const [inviteStatus, setInviteStatus] = useState<Record<string, string>>({})
   const [addingClient, setAddingClient] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [showLoginList, setShowLoginList] = useState(false)
 
   useEffect(() => {
     fetch('/api/portal-clients')
@@ -638,6 +639,10 @@ export default function PortalPage() {
       })
       .catch(() => {})
   }, [])
+
+  // Clients who logged in during the current calendar month
+  const thisMonthPrefix = new Date().toISOString().slice(0, 7) // "YYYY-MM"
+  const loggedInThisMonth = clients.filter(c => c.lastLogin && c.lastLogin.startsWith(thisMonthPrefix))
 
   async function sendPortalInvite(client: PortalClient, isResend = false, tempPassword?: string) {
     setInviteStatus(prev => ({ ...prev, [client.company]: 'sending' }))
@@ -738,21 +743,70 @@ export default function PortalPage() {
         {/* Portal Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {[
-            { label: 'Active Client Accounts', value: clients.filter(c => c.access === 'Active').length.toString(), icon: <Globe size={16} />, color: '#015035' },
-            { label: 'Portal Logins This Month', value: '12', icon: <Eye size={16} />, color: '#3b82f6' },
-            { label: 'Invitations Pending', value: clients.filter(c => c.access === 'Invited').length.toString(), icon: <Lock size={16} />, color: '#f59e0b' },
+            { label: 'Active Client Accounts', value: clients.filter(c => c.access === 'Active').length.toString(), icon: <Globe size={16} />, color: '#015035', onClick: undefined },
+            { label: 'Portal Logins This Month', value: loggedInThisMonth.length.toString(), icon: <Eye size={16} />, color: '#3b82f6', onClick: () => setShowLoginList(true) },
+            { label: 'Invitations Pending', value: clients.filter(c => c.access === 'Invited').length.toString(), icon: <Lock size={16} />, color: '#f59e0b', onClick: undefined },
           ].map(m => (
-            <div key={m.label} className="metric-card flex items-center gap-4">
+            <div
+              key={m.label}
+              className={`metric-card flex items-center gap-4${m.onClick ? ' cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+              onClick={m.onClick}
+            >
               <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${m.color}18` }}>
                 <span style={{ color: m.color }}>{m.icon}</span>
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{m.value}</p>
-                <p className="text-xs text-gray-500 font-medium">{m.label}</p>
+                <p className="text-xs font-medium" style={{ color: m.onClick ? m.color : '#6b7280' }}>{m.label}{m.onClick ? ' →' : ''}</p>
               </div>
             </div>
           ))}
         </div>
+
+        {/* Portal Logins modal */}
+        {showLoginList && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setShowLoginList(false)} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100" style={{ background: '#012b1e' }}>
+                <div>
+                  <h2 className="text-white text-sm font-bold">Portal Logins This Month</h2>
+                  <p className="text-white/50 text-[11px] mt-0.5">{loggedInThisMonth.length} client{loggedInThisMonth.length !== 1 ? 's' : ''} logged in · {new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}</p>
+                </div>
+                <button onClick={() => setShowLoginList(false)} className="p-1.5 rounded-lg hover:bg-white/10">
+                  <X size={16} className="text-white/60" />
+                </button>
+              </div>
+              <div className="max-h-96 overflow-y-auto divide-y divide-gray-100">
+                {loggedInThisMonth.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+                    <Eye size={28} className="text-gray-300 mb-3" />
+                    <p className="text-sm font-semibold text-gray-500">No portal logins yet this month</p>
+                    <p className="text-xs text-gray-400 mt-1">Logins will appear here as clients access their portals.</p>
+                  </div>
+                ) : loggedInThisMonth.map(c => (
+                  <div key={c.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                      {c.company[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900">{c.company}</p>
+                      <p className="text-xs text-gray-500">{c.contact} · {c.service}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-xs font-semibold text-blue-600">Last login</p>
+                      <p className="text-xs text-gray-500">{new Date(c.lastLogin + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                <p className="text-xs text-gray-500">{clients.filter(c => c.access === 'Active').length - loggedInThisMonth.length} active client{clients.filter(c => c.access === 'Active').length - loggedInThisMonth.length !== 1 ? 's' : ''} have not logged in this month</p>
+                <button onClick={() => setShowLoginList(false)} className="text-xs font-semibold text-gray-600 hover:text-gray-800">Close</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Client List */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

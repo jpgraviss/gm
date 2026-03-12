@@ -11,7 +11,7 @@ import type { Invoice, InvoiceStatus, Contract, RevenueMonth } from '@/lib/types
 import {
   DollarSign, AlertCircle, CheckCircle, Clock, Send, RefreshCw,
   X, ExternalLink, ScrollText, Calendar, Zap, ArrowDownToLine,
-  RotateCcw, Link2,
+  RotateCcw, Link2, Info,
 } from 'lucide-react'
 
 const statuses: InvoiceStatus[] = ['Pending', 'Sent', 'Overdue', 'Paid']
@@ -173,43 +173,22 @@ function InvoicePanel({ invoice, onClose, onUpdateStatus, contracts, allInvoices
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex-shrink-0 p-4 border-t border-gray-100 flex gap-2">
-          {invoice.status === 'Pending' && (
-            <button
-              onClick={() => onUpdateStatus(invoice.id, 'Sent')}
-              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
-              style={{ background: '#015035' }}
-            >
-              Send Invoice
+        {/* Footer — view only, all changes happen in QuickBooks */}
+        <div className="flex-shrink-0 p-4 border-t border-gray-100 flex flex-col gap-2">
+          <div className="flex items-start gap-2 p-2.5 bg-blue-50 rounded-lg">
+            <Info size={12} className="text-blue-500 flex-shrink-0 mt-0.5" />
+            <p className="text-[11px] text-blue-700">Invoice data is read-only — all changes are managed in QuickBooks Online.</p>
+          </div>
+          <div className="flex gap-2">
+            {invoice.status === 'Paid' && (
+              <button onClick={() => downloadReceipt(invoice)} className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
+                Download Receipt
+              </button>
+            )}
+            <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors">
+              Close
             </button>
-          )}
-          {invoice.status === 'Sent' && (
-            <button
-              onClick={() => onUpdateStatus(invoice.id, 'Paid')}
-              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
-              style={{ background: '#015035' }}
-            >
-              Mark as Paid
-            </button>
-          )}
-          {invoice.status === 'Overdue' && (
-            <button
-              onClick={() => onUpdateStatus(invoice.id, 'Sent')}
-              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
-              style={{ background: '#ef4444' }}
-            >
-              Send Reminder
-            </button>
-          )}
-          {invoice.status === 'Paid' && (
-            <button onClick={() => downloadReceipt(invoice)} className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
-              Download Receipt
-            </button>
-          )}
-          <button onClick={onClose} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors">
-            Close
-          </button>
+          </div>
         </div>
       </div>
     </div>
@@ -328,7 +307,7 @@ export default function BillingPage() {
 
   return (
     <>
-      <Header title="Billing & Revenue" subtitle="Invoices, payments, and revenue tracking" action={{ label: 'Create Invoice', onClick: () => setCreatingInvoice(true) }} />
+      <Header title="Billing & Revenue" subtitle="View-only · Invoice data synced from QuickBooks Online" />
       <div className="page-content">
 
         {/* KPI cards */}
@@ -546,7 +525,6 @@ export default function BillingPage() {
                   <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Issued</th>
                   <th className="text-left py-2.5 px-4 font-semibold">Due</th>
                   <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Paid</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -586,33 +564,6 @@ export default function BillingPage() {
                         ? <span className="text-xs text-emerald-600">{formatDate(inv.paidDate)}</span>
                         : <span className="text-xs text-gray-300">—</span>}
                     </td>
-                    <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
-                      <div className="flex gap-1.5">
-                        {inv.status === 'Pending' && (
-                          <button
-                            onClick={() => updateInvoiceStatus(inv.id, 'Sent')}
-                            className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors"
-                          >Send</button>
-                        )}
-                        {inv.status === 'Sent' && (
-                          <button
-                            onClick={() => updateInvoiceStatus(inv.id, 'Paid')}
-                            className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md hover:bg-emerald-100 transition-colors"
-                          >Mark Paid</button>
-                        )}
-                        {inv.status === 'Overdue' && (
-                          <button
-                            onClick={() => updateInvoiceStatus(inv.id, 'Sent')}
-                            className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-md hover:bg-red-100 transition-colors"
-                          >Send Reminder</button>
-                        )}
-                        {inv.status === 'Paid' && (
-                          <span className="text-xs text-emerald-600 flex items-center gap-1">
-                            <CheckCircle size={11} /> Collected
-                          </span>
-                        )}
-                      </div>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -628,13 +579,10 @@ export default function BillingPage() {
         <InvoicePanel
           invoice={selectedInvoice}
           onClose={() => setSelectedInvoice(null)}
-          onUpdateStatus={updateInvoiceStatus}
+          onUpdateStatus={() => {}}
           contracts={contracts}
           allInvoices={localInvoices}
         />
-      )}
-      {creatingInvoice && (
-        <NewInvoicePanel onSave={handleNewInvoice} onClose={() => setCreatingInvoice(false)} />
       )}
     </>
   )

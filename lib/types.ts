@@ -210,9 +210,12 @@ export interface MaintenanceRecord {
   company: string
   serviceType: ServiceType
   startDate: string
+  endDate?: string
   monthlyFee: number
-  contractDuration: number
+  contractDuration: number  // auto-computed from startDate → endDate in months
   cancellationWindow: number
+  cancellationFee?: number  // defaults to 3x monthlyFee, configurable per contract terms
+  paymentTerms?: string     // e.g. "Net 30", "End of service", "End of 30 days"
   status: MaintenanceStatus
   nextBillingDate: string
   documents?: AttachedDocument[]

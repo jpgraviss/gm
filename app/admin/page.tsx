@@ -168,6 +168,7 @@ export default function AdminPage() {
   const [showBackupModal, setShowBackupModal] = useState(false)
   const [exportModule, setExportModule] = useState('All')
   const [importFile, setImportFile] = useState<File | null>(null)
+  const [importType, setImportType] = useState<'contacts' | 'companies' | 'pipeline'>('contacts')
   const [importProgress, setImportProgress] = useState<{ done: number; total: number; error: string } | null>(null)
   const [cacheCleared, setCacheCleared] = useState(false)
   const [backupDone, setBackupDone] = useState(false)
@@ -212,72 +213,92 @@ export default function AdminPage() {
     fetchQBStatus()
   }, [])
 
+  function parseCSVLine(line: string): string[] {
+    const result: string[] = []
+    let current = '', inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') { inQuotes = !inQuotes }
+      else if (ch === ',' && !inQuotes) { result.push(current.trim()); current = '' }
+      else { current += ch }
+    }
+    result.push(current.trim())
+    return result
+  }
+
+  function downloadCSVTemplate(type: 'contacts' | 'companies' | 'pipeline') {
+    const templates: Record<string, string> = {
+      contacts: 'first_name,last_name,email,phone,title,company_name\nJane,Doe,jane@example.com,555-1234,CEO,Acme Inc\n',
+      companies: 'name,industry,website,phone,hq,size,annual_revenue\nAcme Inc,Technology,https://acme.com,555-5678,Austin TX,50,2500000\n',
+      pipeline: 'company,contact,stage,value,service_type,close_date,assigned_rep,probability\nAcme Inc,Jane Doe,Lead,5000,Website,2024-06-30,Jonathan Graviss,25\n',
+    }
+    const blob = new Blob([templates[type]], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `gravhub-${type}-template.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function handleImport() {
     if (!importFile) return
     const text = await importFile.text()
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
     if (lines.length < 2) { setImportProgress({ done: 0, total: 0, error: 'CSV file is empty or has no data rows.' }); return }
 
-    // Parse CSV properly (handles quoted fields with commas inside)
-    function parseCSVLine(line: string): string[] {
-      const result: string[] = []
-      let current = '', inQuotes = false
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i]
-        if (ch === '"') { inQuotes = !inQuotes }
-        else if (ch === ',' && !inQuotes) { result.push(current.trim()); current = '' }
-        else { current += ch }
-      }
-      result.push(current.trim())
-      return result
-    }
-
-    // HubSpot → GravHub field name mapping (covers common HubSpot export column names)
-    const HUBSPOT_MAP: Record<string, string> = {
+    // Field name normalisation maps per type
+    const CONTACT_MAP: Record<string, string> = {
       firstname: 'first_name', first_name: 'first_name',
       lastname: 'last_name', last_name: 'last_name',
-      email: 'email', 'email_address': 'email',
-      phone: 'phone', 'phone_number': 'phone', mobilephone: 'phone',
+      email: 'email', email_address: 'email',
+      phone: 'phone', phone_number: 'phone', mobilephone: 'phone',
       jobtitle: 'title', job_title: 'title', title: 'title',
       company: 'company_name', company_name: 'company_name', associated_company: 'company_name',
-      'hs_lead_status': 'status', lifecyclestage: 'status',
-      website: 'website', 'company_website': 'website',
-      city: 'hq', state: 'hq', country: 'hq',
-      industry: 'industry',
-      numberofemployees: 'size', num_employees: 'size', size: 'size',
-      annualrevenue: 'annual_revenue',
-      hubspot_owner_assigneddate: '',   // drop
-      'hs_object_id': '',               // drop
-      'hs_createdate': '',              // drop
-      createdate: '',                   // drop
-      lastmodifieddate: '',             // drop
-      'hs_lastmodifieddate': '',        // drop
-      name: 'name',
-      'company_name_col': 'name',
+      hs_lead_status: '', lifecyclestage: '', hs_object_id: '', hs_createdate: '',
+      createdate: '', lastmodifieddate: '', hs_lastmodifieddate: '', hubspot_owner_assigneddate: '',
     }
+
+    const COMPANY_MAP: Record<string, string> = {
+      name: 'name', company_name: 'name',
+      industry: 'industry',
+      website: 'website', company_website: 'website',
+      phone: 'phone', phone_number: 'phone',
+      city: 'hq', state: 'hq', country: 'hq', hq: 'hq',
+      numberofemployees: 'size', num_employees: 'size', size: 'size',
+      annualrevenue: 'annual_revenue', annual_revenue: 'annual_revenue',
+      hs_object_id: '', hs_createdate: '', createdate: '', lastmodifieddate: '',
+    }
+
+    const PIPELINE_MAP: Record<string, string> = {
+      company: 'company', company_name: 'company',
+      contact: 'contact', contact_name: 'contact',
+      stage: 'stage', deal_stage: 'stage',
+      value: 'value', deal_value: 'value', amount: 'value',
+      service_type: 'service_type', servicetype: 'service_type', type: 'service_type',
+      close_date: 'close_date', closedate: 'close_date', expected_close: 'close_date',
+      assigned_rep: 'assigned_rep', assignedrep: 'assigned_rep', owner: 'assigned_rep',
+      probability: 'probability', win_probability: 'probability',
+    }
+
+    const fieldMap = importType === 'contacts' ? CONTACT_MAP : importType === 'companies' ? COMPANY_MAP : PIPELINE_MAP
 
     const rawHeaders = parseCSVLine(lines[0])
     const headers = rawHeaders.map(h => {
       const norm = h.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
-      return HUBSPOT_MAP[norm] ?? norm
+      return fieldMap[norm] ?? norm
     })
 
     const rows = lines.slice(1)
-    // Detect type by mapped headers
-    const isContacts = headers.includes('first_name') || headers.includes('last_name')
-    const isCompanies = !isContacts && headers.includes('name')
-    if (!isContacts && !isCompanies) {
-      setImportProgress({ done: 0, total: rows.length, error: 'Could not detect type. For contacts include "first_name"/"last_name" (or HubSpot "firstname"/"lastname"). For companies include "name".' })
-      return
-    }
     setImportProgress({ done: 0, total: rows.length, error: '' })
     let done = 0
+
     for (const line of rows) {
       const values = parseCSVLine(line)
       const row: Record<string, string> = {}
       headers.forEach((h, i) => { if (h) row[h] = values[i] ?? '' })
       try {
-        if (isContacts) {
+        if (importType === 'contacts') {
           await fetch('/api/crm/contacts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -295,12 +316,12 @@ export default function AdminPage() {
               contactTasks: [],
             }),
           })
-        } else {
+        } else if (importType === 'companies') {
           await fetch('/api/crm/companies', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              name:          row.name,
+              name:          row.name ?? '',
               industry:      row.industry ?? '',
               website:       row.website ?? null,
               phone:         row.phone ?? null,
@@ -310,6 +331,25 @@ export default function AdminPage() {
               status:        'Prospect',
               owner:         'Jonathan Graviss',
               tags:          [],
+            }),
+          })
+        } else {
+          // pipeline / deals
+          const VALID_STAGES = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
+          const stage = VALID_STAGES.find(s => s.toLowerCase() === (row.stage ?? '').toLowerCase()) ?? 'Lead'
+          await fetch('/api/deals', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              company:     row.company ?? '',
+              contact:     row.contact ? { name: row.contact, email: '', phone: '', title: '' } : null,
+              stage,
+              value:       row.value ? parseFloat(row.value.replace(/[^0-9.]/g, '')) : 0,
+              serviceType: row.service_type || 'General',
+              closeDate:   row.close_date || null,
+              assignedRep: row.assigned_rep || 'Jonathan Graviss',
+              probability: row.probability ? parseInt(row.probability) : 0,
+              notes:       [],
             }),
           })
         }
@@ -1192,29 +1232,76 @@ export default function AdminPage() {
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
           <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setShowImportModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 pointer-events-auto overflow-hidden">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 pointer-events-auto overflow-hidden">
             <div className="p-5 border-b" style={{ background: '#012b1e' }}>
               <div className="flex items-center justify-between">
                 <h3 className="text-white text-sm font-bold">Import Data</h3>
-                <button onClick={() => setShowImportModal(false)} className="p-1 rounded hover:bg-white/10"><X size={15} className="text-white/60" /></button>
+                <button onClick={() => { setShowImportModal(false); setImportFile(null); setImportProgress(null) }} className="p-1 rounded hover:bg-white/10"><X size={15} className="text-white/60" /></button>
               </div>
             </div>
+
+            {/* Type tabs */}
+            <div className="flex border-b border-gray-100">
+              {(['contacts', 'companies', 'pipeline'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => { setImportType(t); setImportFile(null); setImportProgress(null) }}
+                  className={`flex-1 py-2.5 text-xs font-semibold capitalize transition-colors ${importType === t ? 'border-b-2 text-green-800' : 'text-gray-400 hover:text-gray-600'}`}
+                  style={importType === t ? { borderBottomColor: '#015035' } : {}}
+                >
+                  {t === 'pipeline' ? 'Pipeline / Deals' : t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
+            </div>
+
             <div className="p-5 flex flex-col gap-4">
-              <p className="text-xs text-gray-500">Upload a CSV file to import contacts or companies in bulk.</p>
+              {/* Format hint per type */}
+              <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-xs text-gray-500 leading-relaxed">
+                {importType === 'contacts' && (
+                  <><span className="font-semibold text-gray-700">Required columns:</span> first_name, last_name<br />
+                  <span className="font-semibold text-gray-700">Optional:</span> email, phone, title, company_name<br />
+                  Also accepts <span className="font-medium text-gray-600">HubSpot exports</span> (firstname, lastname, jobtitle, etc.)</>
+                )}
+                {importType === 'companies' && (
+                  <><span className="font-semibold text-gray-700">Required columns:</span> name<br />
+                  <span className="font-semibold text-gray-700">Optional:</span> industry, website, phone, hq, size, annual_revenue<br />
+                  Also accepts <span className="font-medium text-gray-600">HubSpot company exports</span></>
+                )}
+                {importType === 'pipeline' && (
+                  <><span className="font-semibold text-gray-700">Required columns:</span> company, stage<br />
+                  <span className="font-semibold text-gray-700">Optional:</span> contact, value, service_type, close_date, assigned_rep, probability<br />
+                  Valid stages: Lead, Qualified, Proposal Sent, Contract Sent, Closed Won, Closed Lost</>
+                )}
+              </div>
+
+              {/* Template download */}
+              <button
+                onClick={() => downloadCSVTemplate(importType)}
+                className="flex items-center gap-1.5 text-xs font-medium text-green-800 hover:underline w-fit"
+              >
+                <Download size={12} /> Download {importType} template CSV
+              </button>
+
+              {/* File input */}
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">CSV File</label>
-                <input type="file" accept=".csv"
-                  onChange={e => setImportFile(e.target.files?.[0] ?? null)}
+                <input
+                  key={importType}
+                  type="file"
+                  accept=".csv"
+                  onChange={e => { setImportFile(e.target.files?.[0] ?? null); setImportProgress(null) }}
                   className="w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:text-white file:cursor-pointer"
                   style={{ '--file-bg': '#015035' } as React.CSSProperties}
                 />
               </div>
+
               {importFile && !importProgress && (
                 <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
                   <CheckCircle size={14} className="text-green-600" />
                   <p className="text-xs text-green-700 font-medium">{importFile.name} ready to import</p>
                 </div>
               )}
+
               {importProgress && (
                 <div className="flex flex-col gap-1.5">
                   {importProgress.error ? (
@@ -1229,8 +1316,8 @@ export default function AdminPage() {
                   )}
                 </div>
               )}
-              <p className="text-xs text-gray-400">Accepts GravHub CSV or <span className="font-medium text-gray-500">HubSpot exports</span> — columns are auto-mapped and unneeded fields are ignored.<br />Contacts: firstname/last_name, email, phone, jobtitle, company<br />Companies: name, industry, website, phone, city/state, numberofemployees</p>
             </div>
+
             <div className="px-5 pb-5 flex gap-2">
               <button
                 onClick={handleImport}
@@ -1238,7 +1325,7 @@ export default function AdminPage() {
                 className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-40"
                 style={{ background: '#015035' }}
               >
-                Import
+                Import {importType === 'pipeline' ? 'Deals' : importType.charAt(0).toUpperCase() + importType.slice(1)}
               </button>
               <button onClick={() => { setShowImportModal(false); setImportFile(null); setImportProgress(null) }} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
             </div>

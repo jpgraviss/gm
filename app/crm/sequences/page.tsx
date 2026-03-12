@@ -73,7 +73,7 @@ function SequencePanel({
 }: {
   seq: EmailSequence
   onClose: () => void
-  onUpdate: (updated: EmailSequence) => void
+  onUpdate: (updated: EmailSequence) => void | Promise<void>
   onDelete: (id: string) => void
   deals: Deal[]
   crmContacts: CRMContact[]
@@ -654,6 +654,16 @@ function SequencePanel({
           >
             <Copy size={14} /> Duplicate
           </button>
+          <button
+            onClick={() => {
+              if (window.confirm(`Delete "${seq.name}"? This cannot be undone.`)) {
+                onDelete(seq.id)
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50"
+          >
+            Delete
+          </button>
           <button onClick={onClose} className="ml-auto px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
             Close
           </button>
@@ -804,6 +814,14 @@ export default function SequencesPage() {
     setCreatingSeq(false)
   }
 
+  async function deleteSequence(id: string) {
+    // Optimistic update
+    setLocalSequences(prev => prev.filter(s => s.id !== id))
+    setSelectedSeq(null)
+    // Persist to Supabase
+    fetch(`/api/sequences/${id}`, { method: 'DELETE' }).catch(() => {})
+  }
+
   const filtered = statusFilter === 'All' ? localSequences : localSequences.filter(s => s.status === statusFilter)
 
   return (
@@ -949,6 +967,7 @@ export default function SequencesPage() {
           seq={localSequences.find(s => s.id === selectedSeq.id) ?? selectedSeq}
           onClose={() => setSelectedSeq(null)}
           onUpdate={updateSequence}
+          onDelete={deleteSequence}
           deals={deals}
           crmContacts={crmContacts}
         />

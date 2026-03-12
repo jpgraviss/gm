@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       subject: isResend
         ? `Reminder: Your ${company} client portal is ready`
         : `Your Graviss Marketing client portal is ready`,
-      html: portalInviteHtml({ company, contactName, service, portalUrl, isResend, tempPassword }),
+      html: portalInviteHtml({ company, contactName, email, service, portalUrl, isResend, tempPassword }),
     })
 
     if (error) {
@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
 function portalInviteHtml({
   company,
   contactName,
+  email,
   service,
   portalUrl,
   isResend,
@@ -45,6 +46,7 @@ function portalInviteHtml({
 }: {
   company: string
   contactName: string
+  email: string
   service: string
   portalUrl: string
   isResend?: boolean
@@ -125,7 +127,7 @@ function portalInviteHtml({
               <tr>
                 <td style="padding:20px 24px;">
                   <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;">Your Login Credentials</p>
-                  <p style="margin:8px 0 4px;font-size:13px;color:#78350f;">Email: <strong>${contactName ? '' : ''}</strong> <span style="font-family:monospace;">${'(your email address)'}</span></p>
+                  <p style="margin:8px 0 4px;font-size:13px;color:#78350f;">Email: <strong style="font-family:monospace;">${email}</strong></p>
                   <p style="margin:4px 0 8px;font-size:13px;color:#78350f;">Password: <strong style="font-family:monospace;font-size:16px;letter-spacing:0.1em;">${tempPassword}</strong></p>
                   <p style="margin:0;font-size:12px;color:#92400e;">Please change your password after your first login.</p>
                 </td>

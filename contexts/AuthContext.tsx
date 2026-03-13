@@ -49,7 +49,7 @@ function rowToAuthUser(row: any, avatar?: string): AuthUser {
     name:     row.name,
     role:     row.role,
     initials: row.initials ?? '',
-    unit:     row.unit,
+    unit:     row.unit ?? 'Delivery/Operations',
     isAdmin:  row.is_admin ?? false,
     avatar,
     userType: 'staff',

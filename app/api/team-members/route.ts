@@ -8,7 +8,7 @@ function mapMember(row: any) {
     name:      row.name,
     email:     row.email,
     role:      row.role,
-    unit:      row.unit,
+    unit:      row.unit ?? 'Delivery/Operations',
     initials:  row.initials ?? '',
     status:    row.status ?? 'Active',
     isAdmin:   row.is_admin ?? false,

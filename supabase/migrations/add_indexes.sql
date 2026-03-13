@@ -52,6 +52,4 @@ CREATE INDEX IF NOT EXISTS idx_sequences_status ON public.sequences(status);
 CREATE INDEX IF NOT EXISTS idx_sequence_enrollments_sequence_id ON public.sequence_enrollments(sequence_id);
 CREATE INDEX IF NOT EXISTS idx_sequence_enrollments_status ON public.sequence_enrollments(status);
 
--- Calendar (bookings already has indexes from schema_calendar.sql)
-CREATE INDEX IF NOT EXISTS idx_calendar_settings_slug ON public.calendar_settings(slug);
-CREATE INDEX IF NOT EXISTS idx_calendar_settings_user_email ON public.calendar_settings(user_email);
+-- Calendar indexes will be added when calendar_settings table is created

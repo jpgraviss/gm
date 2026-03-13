@@ -16,6 +16,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
   if (error?.code === 'PGRST116') {
     return NextResponse.json({ error: 'Calendar not found' }, { status: 404 })
   }
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[calendar/settings/:slug GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch calendar settings' }, { status: 500 })
+  }
   return NextResponse.json(data)
 }

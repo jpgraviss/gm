@@ -15,7 +15,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.messages !== undefined)   update.messages = body.messages
   if (body.linkedTaskId !== undefined) update.linked_task_id = body.linkedTaskId
   const { data, error } = await db.from('tickets').update(update).eq('id', id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[tickets PATCH]', error)
+    return NextResponse.json({ error: 'Failed to update ticket' }, { status: 500 })
+  }
   return NextResponse.json(data)
 }
 
@@ -23,6 +26,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('tickets').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[tickets DELETE]', error)
+    return NextResponse.json({ error: 'Failed to delete ticket' }, { status: 500 })
+  }
   return NextResponse.json({ deleted: id })
 }

@@ -25,7 +25,10 @@ export async function GET(req: NextRequest) {
   let query = db.from('deals').select('*').order('created_at', { ascending: false })
   if (stage) query = query.eq('stage', stage)
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[deals GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch deals' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapDeal))
 }
 
@@ -49,6 +52,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[deals POST]', error)
+    return NextResponse.json({ error: 'Failed to create deal' }, { status: 500 })
+  }
   return NextResponse.json(mapDeal(data), { status: 201 })
 }

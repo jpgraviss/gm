@@ -15,7 +15,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.renewalDate !== undefined)       update.renewal_date = body.renewalDate
 
   const { data, error } = await db.from('contracts').update(update).eq('id', id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[contracts/:id PATCH]', error)
+    return NextResponse.json({ error: 'Failed to update contract' }, { status: 500 })
+  }
   return NextResponse.json(data)
 }
 
@@ -23,6 +26,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('contracts').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[contracts/:id DELETE]', error)
+    return NextResponse.json({ error: 'Failed to delete contract' }, { status: 500 })
+  }
   return NextResponse.json({ deleted: id })
 }

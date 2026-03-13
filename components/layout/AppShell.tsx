@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUI } from '@/contexts/UIContext'
 import Sidebar from './Sidebar'
+import { ShieldAlert, X } from 'lucide-react'
 
 const PUBLIC_ROUTES = ['/login']
 
@@ -30,7 +31,7 @@ function isRouteAllowed(pathname: string, user: { isAdmin: boolean; unit: string
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
+  const { user, loading, impersonatedBy, exitImpersonation } = useAuth()
   const { sidebarOpen, closeSidebar } = useUI()
   const router = useRouter()
   const pathname = usePathname()
@@ -137,6 +138,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         className="flex-1 flex flex-col min-w-0 overflow-x-hidden"
         style={{ background: '#f4f5f7' }}
       >
+        {/* Super Admin impersonation banner */}
+        {impersonatedBy && (
+          <div className="flex items-center justify-between gap-2 px-4 py-2 flex-shrink-0" style={{ background: '#7c3aed', color: '#fff' }}>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <ShieldAlert size={15} />
+              <span>Super Admin view — logged in as <strong>{user?.name}</strong> ({user?.role})</span>
+              <span className="text-purple-200 text-xs font-normal ml-1">· Your session is still active as {impersonatedBy.name}</span>
+            </div>
+            <button
+              onClick={exitImpersonation}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors"
+              style={{ background: 'rgba(255,255,255,0.2)' }}
+            >
+              <X size={12} /> Exit — Return as {impersonatedBy.name}
+            </button>
+          </div>
+        )}
         {children}
       </main>
     </div>

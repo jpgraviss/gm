@@ -31,7 +31,10 @@ export async function GET(req: NextRequest) {
   if (companyId) query = query.eq('company_id', companyId)
   if (contactId) query = query.eq('contact_id', contactId)
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[crm/activities GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch activities' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapActivity))
 }
 
@@ -59,6 +62,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[crm/activities POST]', error)
+    return NextResponse.json({ error: 'Failed to create activity' }, { status: 500 })
+  }
   return NextResponse.json(mapActivity(data), { status: 201 })
 }

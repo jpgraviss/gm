@@ -27,7 +27,10 @@ export async function GET(req: NextRequest) {
   let query = db.from('maintenance_records').select('*').order('created_at', { ascending: false })
   if (status) query = query.eq('status', status)
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[maintenance GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch maintenance records' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapRecord))
 }
 
@@ -53,6 +56,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[maintenance POST]', error)
+    return NextResponse.json({ error: 'Failed to create maintenance record' }, { status: 500 })
+  }
   return NextResponse.json(mapRecord(data), { status: 201 })
 }

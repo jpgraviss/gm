@@ -21,7 +21,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.rejectedDate !== undefined)                update.rejected_date = body.rejectedDate
 
   const { data, error } = await db.from('proposals').update(update).eq('id', id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[proposals/:id PATCH]', error)
+    return NextResponse.json({ error: 'Failed to update proposal' }, { status: 500 })
+  }
   return NextResponse.json(data)
 }
 
@@ -29,6 +32,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('proposals').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[proposals/:id DELETE]', error)
+    return NextResponse.json({ error: 'Failed to delete proposal' }, { status: 500 })
+  }
   return NextResponse.json({ deleted: id })
 }

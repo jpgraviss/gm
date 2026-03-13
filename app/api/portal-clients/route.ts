@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { createServiceClient } from '@/lib/supabase'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,7 +21,10 @@ export async function GET() {
     .from('portal_clients')
     .select('*')
     .order('created_at', { ascending: true })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[portal-clients GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch portal clients' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapClient))
 }
 
@@ -28,8 +32,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const db = createServiceClient()
 
-  // Generate temp password and create Supabase Auth user so client can log in
-  const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4).toUpperCase()
+  // Generate a cryptographically secure temp password for client login
+  const tempPassword = crypto.randomBytes(16).toString('base64url')
   if (body.email) {
     const { error: authError } = await db.auth.admin.createUser({
       email: body.email,
@@ -38,7 +42,8 @@ export async function POST(req: NextRequest) {
     })
     // If user already exists in auth (e.g. re-adding), ignore the conflict error
     if (authError && !authError.message.includes('already')) {
-      return NextResponse.json({ error: authError.message }, { status: 500 })
+      console.error('[portal-clients POST] auth error:', authError)
+      return NextResponse.json({ error: 'Failed to create client auth account' }, { status: 500 })
     }
   }
 
@@ -55,6 +60,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[portal-clients POST]', error)
+    return NextResponse.json({ error: 'Failed to create portal client' }, { status: 500 })
+  }
   return NextResponse.json({ ...mapClient(data), tempPassword }, { status: 201 })
 }

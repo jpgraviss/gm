@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
         created_date:    new Date().toISOString().split('T')[0],
       })
 
-      if (error) { errors.push(`Contact ${firstName} ${lastName}: ${error.message}`); continue }
+      if (error) { console.error('[crm/import POST] contact insert', error); errors.push(`Contact ${firstName} ${lastName}: import failed`); continue }
       inserted++
       if (email) existingEmails.add(email)
       existingNameKeys.add(nameKey)
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
         created_date:   new Date().toISOString().split('T')[0],
       })
 
-      if (error) { errors.push(`Company ${name}: ${error.message}`); continue }
+      if (error) { console.error('[crm/import POST] company insert', error); errors.push(`Company ${name}: import failed`); continue }
       inserted++
       existingNames.add(name.toLowerCase())
     }
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
         last_activity: new Date().toISOString().split('T')[0],
       })
 
-      if (error) { errors.push(`Deal ${company}: ${error.message}`); continue }
+      if (error) { console.error('[crm/import POST] deal insert', error); errors.push(`Deal ${company}: import failed`); continue }
       inserted++
       existingKeys.add(key)
     }

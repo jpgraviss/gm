@@ -33,7 +33,10 @@ export async function GET() {
     .from('proposals')
     .select('*')
     .order('created_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[proposals GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch proposals' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapProposal))
 }
 
@@ -57,6 +60,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[proposals POST]', error)
+    return NextResponse.json({ error: 'Failed to create proposal' }, { status: 500 })
+  }
   return NextResponse.json(mapProposal(data), { status: 201 })
 }

@@ -27,7 +27,10 @@ export async function GET(req: NextRequest) {
   let query = db.from('contracts').select('*').order('created_at', { ascending: false })
   if (company) query = query.eq('company', company)
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[contracts GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch contracts' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapContract))
 }
 
@@ -51,6 +54,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[contracts POST]', error)
+    return NextResponse.json({ error: 'Failed to create contract' }, { status: 500 })
+  }
   return NextResponse.json(mapContract(data), { status: 201 })
 }

@@ -19,7 +19,7 @@ export async function POST() {
       errors:         result.errors,
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Sync failed'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error('[quickbooks/sync POST]', err)
+    return NextResponse.json({ error: 'Sync failed' }, { status: 500 })
   }
 }

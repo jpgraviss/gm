@@ -23,7 +23,10 @@ export async function GET(req: NextRequest) {
     .select('*')
     .order('created_at', { ascending: false })
     .limit(limit)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[audit-logs GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch audit logs' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapLog))
 }
 
@@ -42,6 +45,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[audit-logs POST]', error)
+    return NextResponse.json({ error: 'Failed to create audit log' }, { status: 500 })
+  }
   return NextResponse.json(mapLog(data), { status: 201 })
 }

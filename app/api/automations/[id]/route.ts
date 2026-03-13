@@ -13,7 +13,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.runs    !== undefined) update.runs     = body.runs
   if (body.lastRun !== undefined) update.last_run = body.lastRun
   const { data, error } = await db.from('automations').update(update).eq('id', id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[automations/:id PATCH]', error)
+    return NextResponse.json({ error: 'Failed to update automation' }, { status: 500 })
+  }
   return NextResponse.json(data)
 }
 
@@ -21,6 +24,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('automations').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[automations/:id DELETE]', error)
+    return NextResponse.json({ error: 'Failed to delete automation' }, { status: 500 })
+  }
   return NextResponse.json({ deleted: id })
 }

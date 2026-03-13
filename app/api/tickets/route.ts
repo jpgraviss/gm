@@ -30,7 +30,10 @@ export async function GET(req: NextRequest) {
   let query = db.from('tickets').select('*').order('created_at', { ascending: false })
   if (status) query = query.eq('status', status)
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[tickets GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch tickets' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapTicket))
 }
 
@@ -59,6 +62,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[tickets POST]', error)
+    return NextResponse.json({ error: 'Failed to create ticket' }, { status: 500 })
+  }
   return NextResponse.json(mapTicket(data), { status: 201 })
 }

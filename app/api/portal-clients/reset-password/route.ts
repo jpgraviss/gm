@@ -9,7 +9,10 @@ export async function POST(req: NextRequest) {
 
   // Find the Supabase auth user by email
   const { data: { users }, error: listErr } = await db.auth.admin.listUsers()
-  if (listErr) return NextResponse.json({ error: listErr.message }, { status: 500 })
+  if (listErr) {
+    console.error('[portal-clients/reset-password POST]', listErr)
+    return NextResponse.json({ error: 'Failed to look up user' }, { status: 500 })
+  }
 
   const authUser = users.find(u => u.email?.toLowerCase() === email.toLowerCase())
   if (!authUser) return NextResponse.json({ error: 'No auth account found for this email' }, { status: 404 })
@@ -17,7 +20,10 @@ export async function POST(req: NextRequest) {
   const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4).toUpperCase()
 
   const { error: updateErr } = await db.auth.admin.updateUserById(authUser.id, { password: tempPassword })
-  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+  if (updateErr) {
+    console.error('[portal-clients/reset-password POST]', updateErr)
+    return NextResponse.json({ error: 'Failed to reset password' }, { status: 500 })
+  }
 
   return NextResponse.json({ tempPassword })
 }

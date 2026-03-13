@@ -51,7 +51,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }))
 
   const { error: insertErr } = await db.from('sequence_enrollments').insert(rows)
-  if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 })
+  if (insertErr) {
+    console.error('[sequences/enroll POST]', insertErr)
+    return NextResponse.json({ error: 'Failed to enroll contacts' }, { status: 500 })
+  }
 
   // Update sequence aggregate counts
   await db

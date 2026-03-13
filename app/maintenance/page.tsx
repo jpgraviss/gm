@@ -86,6 +86,7 @@ function AddRecordPanel({
       paymentTerms: form.paymentTerms,
       status: form.status,
       nextBillingDate: form.nextBillingDate,
+      documents: initial?.documents ?? [],
     })
   }
 
@@ -632,9 +633,14 @@ export default function MaintenancePage() {
         body: JSON.stringify(data),
       })
       const saved = await res.json()
-      setRecords(prev => [saved, ...prev])
+      if (res.ok && saved.id) {
+        setRecords(prev => [saved, ...prev])
+      } else {
+        // API error — persist locally with a temp id so the user can see the record
+        setRecords(prev => [{ ...data, id: `mr-${Date.now()}`, documents: data.documents ?? [] }, ...prev])
+      }
     } catch {
-      setRecords(prev => [{ ...data, id: `mr-${Date.now()}` }, ...prev])
+      setRecords(prev => [{ ...data, id: `mr-${Date.now()}`, documents: data.documents ?? [] }, ...prev])
     }
     setAddingRecord(false)
   }

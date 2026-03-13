@@ -36,7 +36,7 @@ declare global {
   }
 }
 
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '667334631499-o7tofbtcbgm17vumqe33q8k5j46s9lp2.apps.googleusercontent.com'
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''
 
 export default function LoginPage() {
   const { login, loginWithGoogle, user, loading, mustChangePassword, changePassword } = useAuth()
@@ -70,7 +70,7 @@ export default function LoginPage() {
     if (result.ok) {
       router.push('/')
     } else {
-      setError(result.error ?? 'Google sign-in failed. Ensure you are using a @gravissmarketing.com account.')
+      setError(result.error ?? 'Google sign-in failed. Please try again.')
     }
   }, [loginWithGoogle, router])
 

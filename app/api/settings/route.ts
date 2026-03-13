@@ -10,7 +10,10 @@ export async function GET() {
     .select('*')
     .eq('id', SETTINGS_ID)
     .maybeSingle()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[settings GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 })
+  }
   return NextResponse.json(data ?? {})
 }
 
@@ -34,6 +37,9 @@ export async function PATCH(req: NextRequest) {
     .upsert({ id: SETTINGS_ID, ...updates }, { onConflict: 'id' })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[settings PATCH]', error)
+    return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 })
+  }
   return NextResponse.json(data)
 }

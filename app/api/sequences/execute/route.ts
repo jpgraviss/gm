@@ -15,7 +15,10 @@ export async function POST() {
     .eq('status', 'active')
     .lte('next_send_at', now.toISOString())
 
-  if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
+  if (fetchErr) {
+    console.error('[sequences/execute POST]', fetchErr)
+    return NextResponse.json({ error: 'Failed to execute sequences' }, { status: 500 })
+  }
   if (!enrollments?.length) return NextResponse.json({ processed: 0, sent: 0, completed: 0 })
 
   // Fetch all relevant sequences in one query

@@ -32,7 +32,7 @@ export async function POST() {
 
     return NextResponse.json({ success: true })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Disconnect failed'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error('[quickbooks/disconnect POST]', err)
+    return NextResponse.json({ error: 'Failed to disconnect QuickBooks' }, { status: 500 })
   }
 }

@@ -19,7 +19,8 @@ export async function POST(req: NextRequest) {
 
     if (!listRes.ok) {
       const err = await listRes.json()
-      return NextResponse.json({ error: err.error?.message ?? 'Gmail API error' }, { status: listRes.status })
+      console.error('[gmail/messages POST]', err)
+      return NextResponse.json({ error: 'Gmail API error' }, { status: listRes.status })
     }
 
     const listData = await listRes.json() as { messages?: { id: string; threadId: string }[]; nextPageToken?: string }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { createServiceClient } from '@/lib/supabase'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,7 +23,10 @@ export async function GET() {
     .from('team_members')
     .select('*')
     .order('name')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[admin/users GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapUser))
 }
 
@@ -31,15 +35,18 @@ export async function POST(req: NextRequest) {
   const db = createServiceClient()
   const initials = body.initials ?? body.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
 
-  // Create Supabase Auth user with temporary password
-  const tempPassword = body.tempPassword ?? Math.random().toString(36).slice(-10)
+  // Create Supabase Auth user with a cryptographically secure temporary password
+  const tempPassword = body.tempPassword ?? crypto.randomBytes(16).toString('base64url')
   const { data: authData, error: authError } = await db.auth.admin.createUser({
     email: body.email,
     password: tempPassword,
     email_confirm: true,
     user_metadata: { name: body.name, role: body.role, unit: body.unit },
   })
-  if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
+  if (authError) {
+    console.error('[admin/users POST] auth error:', authError)
+    return NextResponse.json({ error: 'Failed to create auth user' }, { status: 500 })
+  }
 
   const userId = authData.user?.id ?? `tm-${Date.now()}`
 
@@ -57,6 +64,11 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[admin/users POST]', error)
+    return NextResponse.json({ error: 'Failed to create team member profile' }, { status: 500 })
+  }
+  // Return the temp password so the admin can share it securely (e.g. via invite email).
+  // The frontend should send the invite email and never display the password in the UI.
   return NextResponse.json({ ...mapUser(data), tempPassword }, { status: 201 })
 }

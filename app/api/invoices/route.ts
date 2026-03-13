@@ -27,7 +27,10 @@ export async function GET(req: NextRequest) {
   if (status)     query = query.eq('status', status)
   if (company)    query = query.eq('company', company)
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[invoices GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch invoices' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapInvoice))
 }
 
@@ -48,6 +51,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[invoices POST]', error)
+    return NextResponse.json({ error: 'Failed to create invoice' }, { status: 500 })
+  }
   return NextResponse.json(mapInvoice(data), { status: 201 })
 }

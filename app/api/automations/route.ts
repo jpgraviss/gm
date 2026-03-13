@@ -20,7 +20,10 @@ export async function GET() {
     .from('automations')
     .select('*')
     .order('created_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[automations GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch automations' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapAutomation))
 }
 
@@ -40,6 +43,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[automations POST]', error)
+    return NextResponse.json({ error: 'Failed to create automation' }, { status: 500 })
+  }
   return NextResponse.json(mapAutomation(data), { status: 201 })
 }

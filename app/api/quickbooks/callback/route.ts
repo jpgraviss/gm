@@ -37,9 +37,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.redirect(`${origin}/settings?tab=integrations&qb_connected=true`)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'unknown_error'
+    console.error('[quickbooks/callback GET]', err)
     return NextResponse.redirect(
-      `${origin}/settings?tab=integrations&qb_error=${encodeURIComponent(msg)}`,
+      `${origin}/settings?tab=integrations&qb_error=connection_failed`,
     )
   }
 }

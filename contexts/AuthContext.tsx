@@ -169,39 +169,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithGoogle = async (credential: string): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const payloadB64 = credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-      const payload = JSON.parse(atob(payloadB64)) as {
-        email: string; name: string; picture?: string; sub: string
-      }
-      const email = payload.email.toLowerCase()
+      // Verify the Google credential server-side and look up the user profile
+      // in both team_members (staff) and portal_clients (clients).
+      const res = await fetch('/api/auth/google-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential }),
+      })
 
-      if (!email.endsWith('@gravissmarketing.com')) {
-        // Check if this is a portal client — allow Google SSO for clients too
-        const clientRes = await fetch('/api/portal-clients')
-        if (clientRes.ok) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const clients: any[] = await clientRes.json()
-          const clientRow = clients.find(c => c.email?.toLowerCase() === email)
-          if (clientRow) {
-            setUser(clientToAuthUser(clientRow))
-            try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
-            return { ok: true }
-          }
-        }
-        return { ok: false, error: 'Access is restricted to Graviss Marketing team members.' }
+      const data = await res.json()
+
+      if (!res.ok || !data.user) {
+        return { ok: false, error: data.error ?? 'Google sign-in failed. Please try again.' }
       }
 
-      // Use the API route (service role) so RLS doesn't block unauthenticated reads
-      const res = await fetch('/api/team-members')
-      const members: { email: string }[] = res.ok ? await res.json() : []
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const row = members.find((m: any) => m.email?.toLowerCase() === email)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const profile = row ? rowToAuthUser(row as any, payload.picture) : null
-      if (!profile) return { ok: false, error: 'No team member profile found. Contact your administrator.' }
-
+      const profile: AuthUser = data.user
       setUser(profile)
-      fetchMembers()
+      if (profile.userType === 'staff') fetchMembers()
       try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
       return { ok: true }
     } catch {
@@ -254,7 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const connectGmail = useCallback(() => {
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '667334631499-o7tofbtcbgm17vumqe33q8k5j46s9lp2.apps.googleusercontent.com'
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''
     if (!clientId) return
 
     const g = (window as unknown as { google?: { accounts?: { oauth2?: { initTokenClient: (cfg: object) => { requestAccessToken: () => void } } } } }).google

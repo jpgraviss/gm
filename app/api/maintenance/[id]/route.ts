@@ -16,7 +16,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.paymentTerms !== undefined)       update.payment_terms = body.paymentTerms
   if (body.contractDuration !== undefined)   update.contract_duration = body.contractDuration
   const { data, error } = await db.from('maintenance_records').update(update).eq('id', id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[maintenance/:id PATCH]', error)
+    return NextResponse.json({ error: 'Failed to update maintenance record' }, { status: 500 })
+  }
   return NextResponse.json(data)
 }
 
@@ -24,6 +27,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('maintenance_records').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[maintenance/:id DELETE]', error)
+    return NextResponse.json({ error: 'Failed to delete maintenance record' }, { status: 500 })
+  }
   return NextResponse.json({ deleted: id })
 }

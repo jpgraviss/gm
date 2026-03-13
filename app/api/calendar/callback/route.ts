@@ -41,13 +41,16 @@ export async function GET(req: NextRequest) {
       google_token_expiry:  new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
     }, { onConflict: 'user_email' })
 
-    if (dbError) throw new Error(dbError.message)
+    if (dbError) {
+      console.error('[calendar/callback GET]', dbError)
+      return NextResponse.redirect(`${origin}/settings/calendar?error=connection_failed`)
+    }
 
     return NextResponse.redirect(`${origin}/settings/calendar?connected=true`)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'unknown_error'
+    console.error('[calendar/callback GET]', err)
     return NextResponse.redirect(
-      `${origin}/settings/calendar?error=${encodeURIComponent(msg)}`,
+      `${origin}/settings/calendar?error=connection_failed`,
     )
   }
 }

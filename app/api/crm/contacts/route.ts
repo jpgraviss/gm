@@ -36,7 +36,10 @@ export async function GET(req: NextRequest) {
   if (companyId) query = query.eq('company_id', companyId)
 
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[crm/contacts GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch contacts' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapContact))
 }
 
@@ -68,6 +71,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[crm/contacts POST]', error)
+    return NextResponse.json({ error: 'Failed to create contact' }, { status: 500 })
+  }
   return NextResponse.json(mapContact(data), { status: 201 })
 }

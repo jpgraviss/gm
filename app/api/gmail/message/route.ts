@@ -69,7 +69,8 @@ export async function POST(req: NextRequest) {
 
     if (!msgRes.ok) {
       const err = await msgRes.json()
-      return NextResponse.json({ error: err.error?.message ?? 'Gmail API error' }, { status: msgRes.status })
+      console.error('[gmail/message POST]', err)
+      return NextResponse.json({ error: 'Gmail API error' }, { status: msgRes.status })
     }
 
     const msg = await msgRes.json() as {

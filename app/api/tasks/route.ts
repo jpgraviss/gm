@@ -29,7 +29,10 @@ export async function GET(req: NextRequest) {
   if (status)     query = query.eq('status', status)
   if (assignedTo) query = query.eq('assigned_to', assignedTo)
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[tasks GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapTask))
 }
 
@@ -54,6 +57,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[tasks POST]', error)
+    return NextResponse.json({ error: 'Failed to create task' }, { status: 500 })
+  }
   return NextResponse.json(mapTask(data), { status: 201 })
 }

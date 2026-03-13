@@ -27,7 +27,10 @@ export async function GET() {
     .from('sequences')
     .select('*')
     .order('created_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[sequences GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch sequences' }, { status: 500 })
+  }
   return NextResponse.json((data ?? []).map(mapSequence))
 }
 
@@ -55,6 +58,9 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[sequences POST]', error)
+    return NextResponse.json({ error: 'Failed to create sequence' }, { status: 500 })
+  }
   return NextResponse.json(mapSequence(data), { status: 201 })
 }

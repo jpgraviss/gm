@@ -23,6 +23,10 @@ export default function ClientPortalPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [clientInvoices, setClientInvoices] = useState<any[]>([])
   const [accountInfo, setAccountInfo] = useState<{ service: string } | null>(null)
+  const [ticketSubject, setTicketSubject] = useState('')
+  const [ticketMessage, setTicketMessage] = useState('')
+  const [ticketSubmitting, setTicketSubmitting] = useState(false)
+  const [ticketSuccess, setTicketSuccess] = useState(false)
 
   useEffect(() => {
     if (!company) return
@@ -173,7 +177,7 @@ export default function ClientPortalPage() {
                     </p>
                     <p className="text-xs text-orange-600 font-medium mb-3">{openInvoices.length} invoice{openInvoices.length > 1 ? 's' : ''} outstanding</p>
                     <button onClick={() => setActiveTab('billing')} className="w-full py-2 rounded-xl text-white text-xs font-semibold" style={{ background: '#015035' }}>
-                      Pay Now
+                      View Invoices
                     </button>
                   </>
                 ) : (
@@ -247,7 +251,7 @@ export default function ClientPortalPage() {
                   <p className="text-sm font-semibold text-orange-800">{formatCurrency(openInvoices.reduce((s, i) => s + i.amount, 0))} outstanding</p>
                   <p className="text-xs text-orange-600">{openInvoices.length} invoice{openInvoices.length > 1 ? 's' : ''} awaiting payment</p>
                 </div>
-                <button className="px-4 py-2 rounded-xl text-white text-xs font-semibold" style={{ background: '#015035' }}>Pay Now</button>
+                <span className="text-xs font-semibold text-orange-700">Payment due</span>
               </div>
             )}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -265,9 +269,6 @@ export default function ClientPortalPage() {
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <p className="text-sm font-bold text-gray-900">{formatCurrency(inv.amount)}</p>
                         <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
-                        {inv.status !== 'Paid' && (
-                          <button className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50">Pay</button>
-                        )}
                         <button className="text-xs text-gray-400 hover:text-gray-600"><Download size={13} /></button>
                       </div>
                     </div>
@@ -286,16 +287,59 @@ export default function ClientPortalPage() {
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-800 mb-1">Submit a Request</h3>
               <p className="text-xs text-gray-400 mb-4">Have a question or need a change? Send us a message.</p>
-              <div className="flex flex-col gap-3">
-                <input placeholder="Subject / brief description..." className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400" />
-                <textarea placeholder="Describe your request in detail..." rows={4} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400" />
-                <div className="flex items-center justify-between">
-                  <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors">
-                    <Upload size={12} /> Attach file
-                  </button>
-                  <button className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ background: '#015035' }}>Submit Request</button>
+              {ticketSuccess ? (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                  <CheckCircle size={24} className="mx-auto mb-2 text-emerald-600" />
+                  <p className="text-sm font-semibold text-emerald-800">Request submitted!</p>
+                  <p className="text-xs text-emerald-600 mt-1">Our team will get back to you shortly.</p>
+                  <button onClick={() => { setTicketSuccess(false); setTicketSubject(''); setTicketMessage('') }} className="mt-3 text-xs text-emerald-700 underline">Submit another</button>
                 </div>
-              </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <input
+                    value={ticketSubject}
+                    onChange={e => setTicketSubject(e.target.value)}
+                    placeholder="Subject / brief description..."
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+                  />
+                  <textarea
+                    value={ticketMessage}
+                    onChange={e => setTicketMessage(e.target.value)}
+                    placeholder="Describe your request in detail..."
+                    rows={4}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
+                  />
+                  <div className="flex items-center justify-end">
+                    <button
+                      disabled={ticketSubmitting || !ticketSubject.trim()}
+                      onClick={async () => {
+                        setTicketSubmitting(true)
+                        try {
+                          const res = await fetch('/api/tickets', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              subject: ticketSubject.trim(),
+                              company,
+                              contactName,
+                              contactEmail: user?.email ?? '',
+                              source: 'Portal',
+                              messages: ticketMessage.trim() ? [{ from: contactName, body: ticketMessage.trim(), date: new Date().toISOString() }] : [],
+                            }),
+                          })
+                          if (res.ok) setTicketSuccess(true)
+                        } finally {
+                          setTicketSubmitting(false)
+                        }
+                      }}
+                      className="px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                      style={{ background: '#015035' }}
+                    >
+                      {ticketSubmitting ? 'Submitting...' : 'Submit Request'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

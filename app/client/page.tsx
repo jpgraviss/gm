@@ -27,6 +27,8 @@ export default function ClientPortalPage() {
   const [ticketMessage, setTicketMessage] = useState('')
   const [ticketSubmitting, setTicketSubmitting] = useState(false)
   const [ticketSuccess, setTicketSuccess] = useState(false)
+  const [files, setFiles] = useState<{ name: string; size: number; createdAt: string; url: string | null }[]>([])
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     if (!company) return
@@ -38,6 +40,7 @@ export default function ClientPortalPage() {
       const match = clients.find(c => c.company === company)
       if (match) setAccountInfo({ service: match.service })
     }).catch(() => {})
+    fetch(`/api/files?company=${q}`).then(r => r.json()).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => {})
   }, [company])
 
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
@@ -350,11 +353,57 @@ export default function ClientPortalPage() {
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-800">Shared Files & Documents</h3>
-                <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded-lg">
-                  <Upload size={12} /> Upload
-                </button>
+                <label className={`flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded-lg cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <Upload size={12} /> {uploading ? 'Uploading…' : 'Upload'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      setUploading(true)
+                      try {
+                        const formData = new FormData()
+                        formData.append('file', file)
+                        formData.append('company', company)
+                        const res = await fetch('/api/files', { method: 'POST', body: formData })
+                        if (res.ok) {
+                          const saved = await res.json()
+                          setFiles(prev => [{ name: saved.name, size: saved.size, createdAt: new Date().toISOString(), url: saved.url }, ...prev])
+                        }
+                      } finally {
+                        setUploading(false)
+                        e.target.value = ''
+                      }
+                    }}
+                  />
+                </label>
               </div>
-              <div className="py-12 text-center text-gray-400 text-sm">No files shared yet</div>
+              {files.length > 0 ? (
+                <div className="divide-y divide-gray-100">
+                  {files.map(f => (
+                    <div key={f.name} className="flex items-center gap-3 px-5 py-3.5">
+                      <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                        <FileText size={14} className="text-gray-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{f.name}</p>
+                        <p className="text-[11px] text-gray-400">
+                          {f.size > 1048576 ? `${(f.size / 1048576).toFixed(1)} MB` : `${Math.round(f.size / 1024)} KB`}
+                          {f.createdAt ? ` · ${new Date(f.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+                        </p>
+                      </div>
+                      {f.url && (
+                        <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-400 hover:text-gray-600">
+                          <Download size={14} />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-gray-400 text-sm">No files shared yet. Upload documents using the button above.</div>
+              )}
             </div>
           </div>
         )}

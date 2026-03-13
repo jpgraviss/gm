@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { UIProvider } from '@/contexts/UIContext'
+import { ToastProvider } from '@/components/ui/Toast'
 import AppShell from '@/components/layout/AppShell'
 
 export const metadata: Metadata = {
@@ -30,9 +31,11 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <UIProvider>
-            <AppShell>
-              {children}
-            </AppShell>
+            <ToastProvider>
+              <AppShell>
+                {children}
+              </AppShell>
+            </ToastProvider>
           </UIProvider>
         </AuthProvider>
       </body>

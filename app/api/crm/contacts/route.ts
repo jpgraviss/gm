@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { fireAutomations } from '@/lib/automations-engine'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {
@@ -75,5 +76,7 @@ export async function POST(req: NextRequest) {
     console.error('[crm/contacts POST]', error)
     return NextResponse.json({ error: 'Failed to create contact' }, { status: 500 })
   }
+  fireAutomations('contact_created', { contactId: data.id, company: data.company_name, ...data })
+
   return NextResponse.json(mapContact(data), { status: 201 })
 }

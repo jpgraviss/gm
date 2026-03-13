@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { logAudit } from '@/lib/audit'
 
 const SETTINGS_ID = 'global'
 
@@ -41,5 +42,6 @@ export async function PATCH(req: NextRequest) {
     console.error('[settings PATCH]', error)
     return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 })
   }
+  logAudit({ userName: 'admin', action: 'updated_settings', module: 'settings', type: 'action' })
   return NextResponse.json(data)
 }

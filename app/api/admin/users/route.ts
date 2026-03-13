@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createServiceClient } from '@/lib/supabase'
+import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapUser(row: any) {
@@ -70,5 +71,6 @@ export async function POST(req: NextRequest) {
   }
   // Return the temp password so the admin can share it securely (e.g. via invite email).
   // The frontend should send the invite email and never display the password in the UI.
+  logAudit({ userName: 'admin', action: 'created_user', module: 'admin', type: 'action', metadata: { email: body.email, role: body.role } })
   return NextResponse.json({ ...mapUser(data), tempPassword }, { status: 201 })
 }

@@ -1,5 +1,7 @@
 // ─── Google Calendar API helpers (server-side only) ──────────────────────────
 
+import { encrypt, decrypt } from './encryption'
+
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_CALENDAR  = 'https://www.googleapis.com/calendar/v3'
 
@@ -104,11 +106,15 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
 export async function getValidAccessToken(settings: CalendarSettings): Promise<string | null> {
   if (!settings.google_refresh_token) return null
 
+  // Decrypt tokens read from the database
+  const decryptedAccessToken = settings.google_access_token ? decrypt(settings.google_access_token) : null
+  const decryptedRefreshToken = decrypt(settings.google_refresh_token)
+
   // If token is still valid (with 2-min buffer), use it
-  if (settings.google_access_token && settings.google_token_expiry) {
+  if (decryptedAccessToken && settings.google_token_expiry) {
     const expiry = new Date(settings.google_token_expiry)
     if (expiry.getTime() > Date.now() + 120_000) {
-      return settings.google_access_token
+      return decryptedAccessToken
     }
   }
 
@@ -116,10 +122,10 @@ export async function getValidAccessToken(settings: CalendarSettings): Promise<s
   try {
     const { createServiceClient } = await import('./supabase')
     const db  = createServiceClient()
-    const token = await refreshAccessToken(settings.google_refresh_token)
+    const token = await refreshAccessToken(decryptedRefreshToken)
     const expiry = new Date(Date.now() + 3600 * 1000).toISOString()
     await db.from('calendar_settings').update({
-      google_access_token: token,
+      google_access_token: encrypt(token),
       google_token_expiry: expiry,
     }).eq('slug', settings.slug)
     return token

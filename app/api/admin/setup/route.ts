@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { logAudit } from '@/lib/audit'
 
 const BASE_USERS = [
   {
@@ -142,5 +143,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  logAudit({ userName: 'system', action: 'admin_setup_executed', module: 'admin', type: 'warning', metadata: { users: results.map(r => r.email) } })
   return NextResponse.json({ results })
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { logAudit } from '@/lib/audit'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -34,5 +35,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     console.error('[admin/users/:id DELETE]', error)
     return NextResponse.json({ error: 'Failed to deactivate user' }, { status: 500 })
   }
+  logAudit({ userName: 'admin', action: 'deleted_user', module: 'admin', type: 'warning', metadata: { userId: id } })
   return NextResponse.json(data)
 }

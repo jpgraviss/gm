@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { exchangeCodeForTokens } from '@/lib/google-calendar'
 import { createServiceClient } from '@/lib/supabase'
+import { encrypt } from '@/lib/encryption'
 
 // GET /api/calendar/callback?code=...&state=...
 // Handles the Google OAuth redirect, stores tokens, redirects to settings page
@@ -36,8 +37,8 @@ export async function GET(req: NextRequest) {
       user_email:           userEmail,
       user_name:            userName,
       slug,
-      google_refresh_token: tokens.refresh_token,
-      google_access_token:  tokens.access_token,
+      google_refresh_token: encrypt(tokens.refresh_token),
+      google_access_token:  encrypt(tokens.access_token),
       google_token_expiry:  new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
     }, { onConflict: 'user_email' })
 

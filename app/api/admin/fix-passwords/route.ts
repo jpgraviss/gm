@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { logAudit } from '@/lib/audit'
 
 const USERS_TO_FIX = [
   { email: 'jonathan@gravissmarketing.com', password: process.env.JONATHAN_PASSWORD ?? '' },
@@ -68,5 +69,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  logAudit({ userName: 'system', action: 'passwords_reset', module: 'admin', type: 'warning', metadata: { users: results.map(r => r.email) } })
   return NextResponse.json({ results })
 }

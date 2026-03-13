@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { logAudit } from '@/lib/audit'
 
 export async function POST(req: NextRequest) {
   const { email } = await req.json()
@@ -25,5 +26,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to reset password' }, { status: 500 })
   }
 
+  logAudit({ userName: 'system', action: 'client_password_reset', module: 'portal', type: 'warning', metadata: { email } })
   return NextResponse.json({ tempPassword })
 }

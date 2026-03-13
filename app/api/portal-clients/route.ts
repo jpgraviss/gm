@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createServiceClient } from '@/lib/supabase'
+import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapClient(row: any) {
@@ -64,5 +65,6 @@ export async function POST(req: NextRequest) {
     console.error('[portal-clients POST]', error)
     return NextResponse.json({ error: 'Failed to create portal client' }, { status: 500 })
   }
+  logAudit({ userName: 'admin', action: 'created_portal_client', module: 'portal', type: 'action', metadata: { email: body.email, company: body.company } })
   return NextResponse.json({ ...mapClient(data), tempPassword }, { status: 201 })
 }

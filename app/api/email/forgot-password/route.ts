@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
+import { logAudit } from '@/lib/audit'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest) {
       // Still return success to prevent enumeration
     }
 
+    logAudit({ userName: 'system', action: 'forgot_password_requested', module: 'auth', type: 'info', metadata: { email } })
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error('Forgot password error:', err)

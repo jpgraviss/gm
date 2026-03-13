@@ -203,6 +203,12 @@ export default function BillingPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [creatingInvoice, setCreatingInvoice] = useState(false)
 
+  // Billable time entries
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [billableSummary, setBillableSummary] = useState<any[]>([])
+  const [showBillable, setShowBillable] = useState(false)
+  const [creatingFromTime, setCreatingFromTime] = useState(false)
+
   // QuickBooks
   const [qbConnected, setQbConnected]     = useState(false)
   const [qbStatus, setQbStatus]           = useState<{ lastSync: string | null; invoicesSynced: number; paymentsSynced: number } | null>(null)
@@ -246,6 +252,7 @@ export default function BillingPage() {
     fetchContracts().then(setContracts)
     fetchRevenueByMonth().then(setRevenueByMonth)
     fetchQBStatus()
+    fetch('/api/time-entries/billable-summary').then(r => r.json()).then(d => { if (Array.isArray(d)) setBillableSummary(d) }).catch(() => {})
   }, [])
 
   function updateInvoiceStatus(id: string, status: InvoiceStatus) {
@@ -283,6 +290,50 @@ export default function BillingPage() {
       setLocalInvoices(prev => [{ id: `inv-${Date.now()}`, ...payload } as Invoice, ...prev])
     }
     setCreatingInvoice(false)
+  }
+
+  async function createInvoiceFromTime(group: { projectName: string; totalHours: number; totalMinutes: number; entries: { id: string }[] }) {
+    setCreatingFromTime(true)
+    try {
+      const totalDecimalHours = group.totalHours + group.totalMinutes / 60
+      const hourlyRate = 150 // Default hourly rate — could be configurable
+      const amount = Math.round(totalDecimalHours * hourlyRate * 100) / 100
+      const today = new Date().toISOString().split('T')[0]
+      const dueDate = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
+
+      const res = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: group.projectName,
+          amount,
+          status: 'Pending',
+          dueDate,
+          issuedDate: today,
+          serviceType: 'Time & Materials',
+          description: `${totalDecimalHours.toFixed(1)} hours of billable work`,
+        }),
+      })
+      const saved = await res.json()
+      setLocalInvoices(prev => [saved, ...prev])
+
+      // Mark time entries as invoiced
+      for (const entry of group.entries) {
+        await fetch(`/api/time-entries/${entry.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoiced: true, invoiceId: saved.id }),
+        })
+      }
+
+      // Refresh billable summary
+      setBillableSummary(prev => prev.filter(g => g.projectName !== group.projectName))
+    } catch (err) {
+      console.error('Failed to create invoice from time:', err)
+      alert('Failed to create invoice from time entries.')
+    } finally {
+      setCreatingFromTime(false)
+    }
   }
 
   const filtered = statusFilter === 'All' ? localInvoices : localInvoices.filter(i => i.status === statusFilter)
@@ -496,6 +547,47 @@ export default function BillingPage() {
             </a>
           </div>
         </div>
+
+        {/* Unbilled Time Entries */}
+        {billableSummary.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Clock size={14} className="text-amber-500" />
+                <h3 className="text-sm font-semibold text-gray-800">Unbilled Time</h3>
+                <span className="text-xs text-gray-400 ml-1">{billableSummary.reduce((s, g) => s + g.entryCount, 0)} entries</span>
+              </div>
+              <button
+                onClick={() => setShowBillable(!showBillable)}
+                className="text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                {showBillable ? 'Collapse' : 'Expand'}
+              </button>
+            </div>
+            {showBillable && (
+              <div className="divide-y divide-gray-100">
+                {billableSummary.map(group => (
+                  <div key={group.projectName} className="flex items-center justify-between px-5 py-3.5">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{group.projectName}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {group.totalHours}h {group.totalMinutes}m · {group.entryCount} {group.entryCount === 1 ? 'entry' : 'entries'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => createInvoiceFromTime(group)}
+                      disabled={creatingFromTime}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                      style={{ background: '#015035' }}
+                    >
+                      <ScrollText size={12} /> {creatingFromTime ? 'Creating…' : 'Create Invoice'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Invoice Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

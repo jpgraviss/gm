@@ -15,6 +15,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.billable !== undefined)    update.billable = body.billable
   if (body.projectId !== undefined)   update.project_id = body.projectId
   if (body.projectName !== undefined) update.project_name = body.projectName
+  if (body.invoiced !== undefined)    update.invoiced = body.invoiced
+  if (body.invoiceId !== undefined)   update.invoice_id = body.invoiceId
 
   const { data, error } = await db.from('time_entries').update(update).eq('id', id).select().single()
   if (error) {

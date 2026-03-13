@@ -575,26 +575,52 @@ export default function ContractsPage() {
     ))
   }
 
-  function updateContractStatus(id: string, status: ContractStatus) {
+  async function updateContractStatus(id: string, status: ContractStatus) {
     const today = new Date().toISOString().split('T')[0]
+
+    // If sending for signature, email the client first
+    if (status === 'Sent') {
+      try {
+        const emailRes = await fetch('/api/email/send-contract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contractId: id }),
+        })
+        if (!emailRes.ok) {
+          const err = await emailRes.json()
+          alert(`Could not send contract email: ${err.error ?? 'Unknown error'}`)
+          return
+        }
+      } catch {
+        alert('Failed to send contract email. Please try again.')
+        return
+      }
+    }
+
+    const patchData = {
+      status,
+      ...(status === 'Signed by Client' ? { clientSigned: today } : {}),
+      ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
+    }
+
     setLocalContracts(prev => prev.map(c => {
       if (c.id !== id) return c
-      return {
-        ...c,
-        status,
-        ...(status === 'Signed by Client' ? { clientSigned: today } : {}),
-        ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
-      }
+      return { ...c, ...patchData }
     }))
     setSelected(prev => {
       if (!prev || prev.id !== id) return prev
-      return {
-        ...prev,
-        status,
-        ...(status === 'Signed by Client' ? { clientSigned: today } : {}),
-        ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
-      }
+      return { ...prev, ...patchData }
     })
+
+    try {
+      await fetch(`/api/contracts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patchData),
+      })
+    } catch (err) {
+      console.error('Failed to PATCH contract status:', err)
+    }
   }
 
   function handleNewContract(data: NewContractFormData) {

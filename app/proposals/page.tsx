@@ -476,6 +476,26 @@ export default function ProposalsPage() {
 
   async function updateProposalStatus(id: string, status: ProposalStatus) {
     const today = new Date().toISOString().split('T')[0]
+
+    // If sending to client, send the email first
+    if (status === 'Sent') {
+      try {
+        const emailRes = await fetch('/api/email/send-proposal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proposalId: id }),
+        })
+        if (!emailRes.ok) {
+          const err = await emailRes.json()
+          alert(`Could not send proposal email: ${err.error ?? 'Unknown error'}`)
+          return
+        }
+      } catch {
+        alert('Failed to send proposal email. Please try again.')
+        return
+      }
+    }
+
     const datePatch = {
       ...(status === 'Pending Approval' ? { submittedForApprovalDate: today } : {}),
       ...(status === 'Approved' ? { approvedDate: today, approvedBy: 'Jonathan Graviss' } : {}),

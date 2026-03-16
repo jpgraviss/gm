@@ -118,7 +118,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user?.email) {
-        const profile = await loadProfileByEmail(session.user.email)
+        let profile = await loadProfileByEmail(session.user.email)
+        // Auto-provision on session restore for @gravissmarketing.com users
+        if (!profile && session.user.email.toLowerCase().endsWith('@gravissmarketing.com')) {
+          try {
+            const res = await fetch('/api/auth/auto-provision', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: session.user.email.toLowerCase() }),
+            })
+            if (res.ok) profile = await loadProfileByEmail(session.user.email)
+          } catch {/* ignore */}
+        }
         if (profile) {
           setUser(profile)
           if (profile.userType === 'staff') fetchMembers()
@@ -145,7 +156,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signInWithPassword({ email: email.toLowerCase().trim(), password })
       if (error) return { ok: false, error: 'Incorrect email or password.' }
 
-      const profile = await loadProfileByEmail(email)
+      let profile = await loadProfileByEmail(email)
+
+      // Auto-provision team_members row for @gravissmarketing.com users
+      if (!profile && email.toLowerCase().trim().endsWith('@gravissmarketing.com')) {
+        try {
+          const provRes = await fetch('/api/auth/auto-provision', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email.toLowerCase().trim() }),
+          })
+          if (provRes.ok) {
+            profile = await loadProfileByEmail(email)
+          }
+        } catch {/* auto-provision failed, fall through */}
+      }
+
       if (!profile) return { ok: false, error: 'No account found for this email. Contact your administrator.' }
 
       setUser(profile)

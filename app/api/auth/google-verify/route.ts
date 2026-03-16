@@ -49,6 +49,32 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (!teamRow) {
+        // Auto-provision: create team_members row for authenticated @gravissmarketing.com user
+        const { data: { users } } = await db.auth.admin.listUsers()
+        const authUser = users?.find(u => u.email?.toLowerCase() === email)
+        if (authUser) {
+          const name = payload.name || email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+          const initials = name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 3) || 'GM'
+          await db.from('team_members').insert({
+            id: authUser.id, name, email, role: 'Team Member',
+            unit: 'Leadership/Admin', initials, status: 'Active', is_admin: false,
+          })
+          // Re-fetch the newly created row
+          const { data: newRow } = await db
+            .from('team_members')
+            .select('id, email, name, role, unit, initials, is_admin, status')
+            .eq('email', email)
+            .single()
+          if (newRow) {
+            return NextResponse.json({
+              user: {
+                id: newRow.id, email: newRow.email, name: newRow.name,
+                role: newRow.role, unit: newRow.unit, initials: newRow.initials ?? '',
+                isAdmin: newRow.is_admin ?? false, avatar: payload.picture, userType: 'staff',
+              },
+            })
+          }
+        }
         return NextResponse.json(
           { error: 'No team member profile found. Contact your administrator.' },
           { status: 403 }

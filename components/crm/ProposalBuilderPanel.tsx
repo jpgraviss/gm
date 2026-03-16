@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { X, Download, Save, FileText, Plus, Minus, Check } from 'lucide-react'
 import type { Proposal, ProposalLineItem, ServiceType } from '@/lib/types'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 
 // ─── Pricing Constants ────────────────────────────────────────────────────────
 
@@ -51,8 +52,6 @@ interface Props {
   initialRep?: string
   initialData?: Proposal
 }
-
-const ALL_REPS = ['Jonathan Graviss', 'JG Graviss']
 
 function fmt(val: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val)
@@ -314,6 +313,7 @@ function PdfTemplate(p: PdfProps) {
 // ─── Main Builder Component ───────────────────────────────────────────────────
 
 export default function ProposalBuilderPanel({ onSave, onClose, initialCompany = '', initialRep = 'Jaycee Graviss', initialData }: Props) {
+  const ALL_REPS = useTeamMembers()
   // Client info
   const [company, setCompany]           = useState(initialData?.company ?? initialCompany)
   const [contactName, setContactName]   = useState('')

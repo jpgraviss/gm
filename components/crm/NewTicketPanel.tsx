@@ -4,10 +4,10 @@ import { useState, useEffect } from 'react'
 import { X, User, Tag, ChevronLeft } from 'lucide-react'
 import { fetchCrmCompanies } from '@/lib/supabase'
 import type { ServiceType, CRMCompany } from '@/lib/types'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const
-const ASSIGNEES = ['JG Graviss', 'Jonathan Graviss']
 
 export interface NewTicketFormData {
   subject: string
@@ -50,6 +50,7 @@ interface Props {
 }
 
 export default function NewTicketPanel({ onSave, onClose }: Props) {
+  const ASSIGNEES = useTeamMembers()
   const [form, setForm] = useState<NewTicketFormData>({
     subject: '',
     company: '',

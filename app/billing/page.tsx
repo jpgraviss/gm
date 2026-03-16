@@ -6,13 +6,13 @@ import Header from '@/components/layout/Header'
 import { fetchContracts, fetchRevenueByMonth } from '@/lib/supabase'
 import { formatCurrency, invoiceStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import NewInvoicePanel, { type NewInvoiceFormData } from '@/components/crm/NewInvoicePanel'
 import type { Invoice, InvoiceStatus, Contract, RevenueMonth } from '@/lib/types'
 import {
   DollarSign, AlertCircle, CheckCircle, Clock, Send, RefreshCw,
   X, ExternalLink, ScrollText, Calendar, Zap, ArrowDownToLine,
   RotateCcw, Link2, Info,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 const statuses: InvoiceStatus[] = ['Pending', 'Sent', 'Overdue', 'Paid']
 
@@ -196,17 +196,23 @@ function InvoicePanel({ invoice, onClose, onUpdateStatus, contracts, allInvoices
 }
 
 export default function BillingPage() {
+  const { toast } = useToast()
   const [localInvoices, setLocalInvoices] = useState<Invoice[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
   const [revenueByMonth, setRevenueByMonth] = useState<RevenueMonth[]>([])
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'All'>('All')
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
-  const [creatingInvoice, setCreatingInvoice] = useState(false)
+
+  // Billable time summary (view-only)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [billableSummary, setBillableSummary] = useState<any[]>([])
+  const [showBillable, setShowBillable] = useState(false)
 
   // QuickBooks
   const [qbConnected, setQbConnected]     = useState(false)
   const [qbStatus, setQbStatus]           = useState<{ lastSync: string | null; invoicesSynced: number; paymentsSynced: number } | null>(null)
   const [qbSyncing, setQbSyncing]         = useState(false)
+  const [loading, setLoading] = useState(true)
 
   function fetchQBStatus() {
     fetch('/api/quickbooks/status')
@@ -220,7 +226,7 @@ export default function BillingPage() {
           setQbStatus(null)
         }
       })
-      .catch(() => {})
+      .catch(() => toast('Failed to load QuickBooks status', 'error'))
   }
 
   async function handleQBSync() {
@@ -231,7 +237,7 @@ export default function BillingPage() {
       if (data.success) {
         fetchQBStatus()
         // Refresh invoices after sync
-        fetch('/api/invoices').then(r => r.json()).then(d => { if (Array.isArray(d)) setLocalInvoices(d) }).catch(() => {})
+        fetch('/api/invoices').then(r => r.json()).then(d => { if (Array.isArray(d)) setLocalInvoices(d) }).catch(() => toast('Failed to load invoices', 'error'))
       }
     } catch { /* ignore */ } finally {
       setQbSyncing(false)
@@ -242,48 +248,13 @@ export default function BillingPage() {
     fetch('/api/invoices')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalInvoices(data) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load invoices', 'error'))
+      .finally(() => setLoading(false))
     fetchContracts().then(setContracts)
     fetchRevenueByMonth().then(setRevenueByMonth)
     fetchQBStatus()
+    fetch('/api/time-entries/billable-summary').then(r => r.json()).then(d => { if (Array.isArray(d)) setBillableSummary(d) }).catch(() => toast('Failed to load billable time summary', 'error'))
   }, [])
-
-  function updateInvoiceStatus(id: string, status: InvoiceStatus) {
-    const today = new Date().toISOString().split('T')[0]
-    const patch = { status, ...(status === 'Paid' ? { paidDate: today } : {}) }
-    setLocalInvoices(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
-    setSelectedInvoice(prev => prev?.id === id ? { ...prev, ...patch } : prev)
-    fetch(`/api/invoices/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    }).catch(() => {})
-  }
-
-  async function handleNewInvoice(data: NewInvoiceFormData) {
-    const today = new Date().toISOString().split('T')[0]
-    const payload = {
-      contractId: data.contractId || null,
-      company: data.company,
-      amount: Number(data.amount),
-      status: 'Pending',
-      dueDate: data.dueDate,
-      issuedDate: today,
-      serviceType: data.serviceType,
-    }
-    try {
-      const res = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const saved = await res.json()
-      setLocalInvoices(prev => [saved, ...prev])
-    } catch {
-      setLocalInvoices(prev => [{ id: `inv-${Date.now()}`, ...payload } as Invoice, ...prev])
-    }
-    setCreatingInvoice(false)
-  }
 
   const filtered = statusFilter === 'All' ? localInvoices : localInvoices.filter(i => i.status === statusFilter)
   const maxRevenue = Math.max(1, ...revenueByMonth.map(r => r.revenue || 0))
@@ -294,7 +265,9 @@ export default function BillingPage() {
     overdue: localInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + i.amount, 0),
     collected: localInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0),
     outstanding: localInvoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0),
-    mrr: 3417,
+    mrr: contracts
+      .filter(c => ['Fully Executed', 'Active'].includes(c.status) && c.duration > 0)
+      .reduce((sum, c) => sum + c.value / c.duration, 0),
   }
 
   // Revenue by service breakdown (computed from invoices)
@@ -304,6 +277,8 @@ export default function BillingPage() {
     { service: 'Email Marketing', amount: localInvoices.filter(i => i.serviceType === 'Email Marketing' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
   ].filter(s => s.amount > 0)
   const maxService = Math.max(1, ...serviceBreakdown.map(s => s.amount || 0))
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>
@@ -496,6 +471,42 @@ export default function BillingPage() {
             </a>
           </div>
         </div>
+
+        {/* Unbilled Time Entries */}
+        {billableSummary.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Clock size={14} className="text-amber-500" />
+                <h3 className="text-sm font-semibold text-gray-800">Unbilled Time</h3>
+                <span className="text-xs text-gray-400 ml-1">{billableSummary.reduce((s, g) => s + g.entryCount, 0)} entries</span>
+              </div>
+              <button
+                onClick={() => setShowBillable(!showBillable)}
+                className="text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                {showBillable ? 'Collapse' : 'Expand'}
+              </button>
+            </div>
+            {showBillable && (
+              <div className="divide-y divide-gray-100">
+                {billableSummary.map(group => (
+                  <div key={group.projectName} className="flex items-center justify-between px-5 py-3.5">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{group.projectName}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {group.totalHours}h {group.totalMinutes}m · {group.entryCount} {group.entryCount === 1 ? 'entry' : 'entries'}
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-amber-600 px-2.5 py-1 rounded-full bg-amber-50">
+                      Not yet invoiced in QB
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Invoice Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

@@ -8,8 +8,10 @@ import {
   Globe, CheckCircle, FolderKanban, FileText, MessageSquare,
   Download, Upload, Bell, ChevronDown, ChevronRight, X, AlertTriangle, LogOut,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 export default function ClientPortalPage() {
+  const { toast } = useToast()
   const { user, logout } = useAuth()
   const company = user?.company ?? ''
   const contactName = user?.name ?? ''
@@ -23,17 +25,24 @@ export default function ClientPortalPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [clientInvoices, setClientInvoices] = useState<any[]>([])
   const [accountInfo, setAccountInfo] = useState<{ service: string } | null>(null)
+  const [ticketSubject, setTicketSubject] = useState('')
+  const [ticketMessage, setTicketMessage] = useState('')
+  const [ticketSubmitting, setTicketSubmitting] = useState(false)
+  const [ticketSuccess, setTicketSuccess] = useState(false)
+  const [files, setFiles] = useState<{ name: string; size: number; createdAt: string; url: string | null }[]>([])
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     if (!company) return
     const q = encodeURIComponent(company)
-    fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => {})
-    fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => {})
-    fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => {})
+    fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => toast('Failed to load project data', 'error'))
+    fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => toast('Failed to load contract data', 'error'))
+    fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => toast('Failed to load invoices', 'error'))
     fetch('/api/portal-clients').then(r => r.json()).then((clients: { company: string; service: string }[]) => {
       const match = clients.find(c => c.company === company)
       if (match) setAccountInfo({ service: match.service })
-    }).catch(() => {})
+    }).catch(() => toast('Failed to load account info', 'error'))
+    fetch(`/api/files?company=${q}`).then(r => r.json()).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => toast('Failed to load files', 'error'))
   }, [company])
 
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
@@ -173,7 +182,7 @@ export default function ClientPortalPage() {
                     </p>
                     <p className="text-xs text-orange-600 font-medium mb-3">{openInvoices.length} invoice{openInvoices.length > 1 ? 's' : ''} outstanding</p>
                     <button onClick={() => setActiveTab('billing')} className="w-full py-2 rounded-xl text-white text-xs font-semibold" style={{ background: '#015035' }}>
-                      Pay Now
+                      View Invoices
                     </button>
                   </>
                 ) : (
@@ -247,7 +256,7 @@ export default function ClientPortalPage() {
                   <p className="text-sm font-semibold text-orange-800">{formatCurrency(openInvoices.reduce((s, i) => s + i.amount, 0))} outstanding</p>
                   <p className="text-xs text-orange-600">{openInvoices.length} invoice{openInvoices.length > 1 ? 's' : ''} awaiting payment</p>
                 </div>
-                <button className="px-4 py-2 rounded-xl text-white text-xs font-semibold" style={{ background: '#015035' }}>Pay Now</button>
+                <span className="text-xs font-semibold text-orange-700">Payment due</span>
               </div>
             )}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -265,10 +274,6 @@ export default function ClientPortalPage() {
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <p className="text-sm font-bold text-gray-900">{formatCurrency(inv.amount)}</p>
                         <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
-                        {inv.status !== 'Paid' && (
-                          <button className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50">Pay</button>
-                        )}
-                        <button className="text-xs text-gray-400 hover:text-gray-600"><Download size={13} /></button>
                       </div>
                     </div>
                   ))}
@@ -286,16 +291,59 @@ export default function ClientPortalPage() {
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-800 mb-1">Submit a Request</h3>
               <p className="text-xs text-gray-400 mb-4">Have a question or need a change? Send us a message.</p>
-              <div className="flex flex-col gap-3">
-                <input placeholder="Subject / brief description..." className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400" />
-                <textarea placeholder="Describe your request in detail..." rows={4} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400" />
-                <div className="flex items-center justify-between">
-                  <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors">
-                    <Upload size={12} /> Attach file
-                  </button>
-                  <button className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ background: '#015035' }}>Submit Request</button>
+              {ticketSuccess ? (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                  <CheckCircle size={24} className="mx-auto mb-2 text-emerald-600" />
+                  <p className="text-sm font-semibold text-emerald-800">Request submitted!</p>
+                  <p className="text-xs text-emerald-600 mt-1">Our team will get back to you shortly.</p>
+                  <button onClick={() => { setTicketSuccess(false); setTicketSubject(''); setTicketMessage('') }} className="mt-3 text-xs text-emerald-700 underline">Submit another</button>
                 </div>
-              </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <input
+                    value={ticketSubject}
+                    onChange={e => setTicketSubject(e.target.value)}
+                    placeholder="Subject / brief description..."
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+                  />
+                  <textarea
+                    value={ticketMessage}
+                    onChange={e => setTicketMessage(e.target.value)}
+                    placeholder="Describe your request in detail..."
+                    rows={4}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
+                  />
+                  <div className="flex items-center justify-end">
+                    <button
+                      disabled={ticketSubmitting || !ticketSubject.trim()}
+                      onClick={async () => {
+                        setTicketSubmitting(true)
+                        try {
+                          const res = await fetch('/api/tickets', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              subject: ticketSubject.trim(),
+                              company,
+                              contactName,
+                              contactEmail: user?.email ?? '',
+                              source: 'Portal',
+                              messages: ticketMessage.trim() ? [{ from: contactName, body: ticketMessage.trim(), date: new Date().toISOString() }] : [],
+                            }),
+                          })
+                          if (res.ok) setTicketSuccess(true)
+                        } finally {
+                          setTicketSubmitting(false)
+                        }
+                      }}
+                      className="px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                      style={{ background: '#015035' }}
+                    >
+                      {ticketSubmitting ? 'Submitting...' : 'Submit Request'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -306,11 +354,57 @@ export default function ClientPortalPage() {
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-800">Shared Files & Documents</h3>
-                <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded-lg">
-                  <Upload size={12} /> Upload
-                </button>
+                <label className={`flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded-lg cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <Upload size={12} /> {uploading ? 'Uploading…' : 'Upload'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      setUploading(true)
+                      try {
+                        const formData = new FormData()
+                        formData.append('file', file)
+                        formData.append('company', company)
+                        const res = await fetch('/api/files', { method: 'POST', body: formData })
+                        if (res.ok) {
+                          const saved = await res.json()
+                          setFiles(prev => [{ name: saved.name, size: saved.size, createdAt: new Date().toISOString(), url: saved.url }, ...prev])
+                        }
+                      } finally {
+                        setUploading(false)
+                        e.target.value = ''
+                      }
+                    }}
+                  />
+                </label>
               </div>
-              <div className="py-12 text-center text-gray-400 text-sm">No files shared yet</div>
+              {files.length > 0 ? (
+                <div className="divide-y divide-gray-100">
+                  {files.map(f => (
+                    <div key={f.name} className="flex items-center gap-3 px-5 py-3.5">
+                      <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                        <FileText size={14} className="text-gray-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{f.name}</p>
+                        <p className="text-[11px] text-gray-400">
+                          {f.size > 1048576 ? `${(f.size / 1048576).toFixed(1)} MB` : `${Math.round(f.size / 1024)} KB`}
+                          {f.createdAt ? ` · ${new Date(f.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+                        </p>
+                      </div>
+                      {f.url && (
+                        <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-400 hover:text-gray-600">
+                          <Download size={14} />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-gray-400 text-sm">No files shared yet. Upload documents using the button above.</div>
+              )}
             </div>
           </div>
         )}

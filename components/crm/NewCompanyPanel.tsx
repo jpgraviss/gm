@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { X, Check, Plus, Minus, ChevronDown, ChevronUp, ChevronLeft, Calculator } from 'lucide-react'
 import type { CompanySize, CompanyStatus } from '@/lib/types'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 
 // ─── Pricing Constants ─────────────────────────────────────────────────────────
 
@@ -69,7 +70,6 @@ export interface NewCompanyFormData {
   proposal?: ProposalDraft
 }
 
-const REPS = ['Jonathan Graviss', 'JG Graviss']
 const STATUSES: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned']
 const SIZES: CompanySize[] = ['1-10', '11-50', '51-200', '201-500', '500+']
 const INDUSTRIES = [
@@ -107,6 +107,7 @@ interface Props {
 }
 
 export default function NewCompanyPanel({ onSave, onClose }: Props) {
+  const REPS = useTeamMembers()
   // ─── Company form state ───────────────────────────────────────────────────
   const [form, setForm] = useState<Omit<NewCompanyFormData, 'proposal'>>({
     name: '',
@@ -117,7 +118,7 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
     size: '1-10',
     annualRevenue: '',
     status: 'Prospect',
-    owner: REPS[0],
+    owner: REPS[0] ?? '',
     description: '',
   })
 

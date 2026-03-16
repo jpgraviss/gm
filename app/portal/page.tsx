@@ -9,6 +9,7 @@ import {
   ChevronDown, X, AlertTriangle, FileText, MessageSquare, Bell,
   ArrowLeft, Settings, LogOut, ChevronRight, Upload, Download, Trash2,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 // ─── Client data ──────────────────────────────────────────────────────────────
 
@@ -189,6 +190,7 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
 // ─── Client Portal View ───────────────────────────────────────────────────────
 
 function ClientPortalView({ company, accountInfo, onExit }: { company: string; accountInfo: PortalClient | undefined; onExit: () => void }) {
+  const { toast } = useToast()
   const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files'>('overview')
   const [showWelcome, setShowWelcome] = useState(true)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -200,9 +202,9 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
 
   useEffect(() => {
     const q = encodeURIComponent(company)
-    fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => {})
-    fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => {})
-    fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => {})
+    fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => toast('Failed to load project data', 'error'))
+    fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => toast('Failed to load contract data', 'error'))
+    fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => toast('Failed to load invoices', 'error'))
   }, [company])
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
@@ -622,6 +624,7 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
 // ─── Main Admin Page ───────────────────────────────────────────────────────────
 
 export default function PortalPage() {
+  const { toast } = useToast()
   const [viewAsClient, setViewAsClient] = useState(false)
   const [clients, setClients] = useState<PortalClient[]>([])
   const [previewCompany, setPreviewCompany] = useState('')
@@ -637,7 +640,7 @@ export default function PortalPage() {
         setClients(data)
         if (data.length > 0) setPreviewCompany(data.find(c => c.access === 'Active')?.company ?? data[0].company)
       })
-      .catch(() => {})
+      .catch(() => toast('Failed to load portal clients', 'error'))
   }, [])
 
   // Clients who logged in during the current calendar month

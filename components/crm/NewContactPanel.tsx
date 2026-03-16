@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { X, ChevronLeft } from 'lucide-react'
 import { fetchCrmCompanies } from '@/lib/supabase'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 import type { CRMCompany } from '@/lib/types'
 
 export interface NewContactFormData {
@@ -18,8 +19,6 @@ export interface NewContactFormData {
   owner: string
   notes: string
 }
-
-const REPS = ['Jonathan Graviss', 'JG Graviss']
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{children}</label>
@@ -51,6 +50,7 @@ interface Props {
 }
 
 export default function NewContactPanel({ onSave, onClose }: Props) {
+  const REPS = useTeamMembers()
   const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
 
   useEffect(() => { fetchCrmCompanies().then(setCrmCompanies) }, [])
@@ -65,7 +65,7 @@ export default function NewContactPanel({ onSave, onClose }: Props) {
     companyName: '',
     linkedIn: '',
     website: '',
-    owner: REPS[0],
+    owner: REPS[0] ?? '',
     notes: '',
   })
 

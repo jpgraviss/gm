@@ -14,6 +14,8 @@ function mapEntry(row: any) {
     hours:       row.hours,
     minutes:     row.minutes,
     billable:    row.billable,
+    invoiced:    row.invoiced ?? false,
+    invoiceId:   row.invoice_id ?? undefined,
   }
 }
 

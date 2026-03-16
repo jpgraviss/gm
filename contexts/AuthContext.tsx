@@ -49,7 +49,7 @@ function rowToAuthUser(row: any, avatar?: string): AuthUser {
     name:     row.name,
     role:     row.role,
     initials: row.initials ?? '',
-    unit:     row.unit,
+    unit:     row.unit ?? 'Delivery/Operations',
     isAdmin:  row.is_admin ?? false,
     avatar,
     userType: 'staff',
@@ -70,6 +70,46 @@ function clientToAuthUser(row: any): AuthUser {
     userType: 'client',
     company:  row.company,
   }
+}
+
+/**
+ * Auto-create a team_members row for an authenticated @gravissmarketing.com user
+ * who has a Supabase Auth account but no profile row yet.
+ * Uses the client-side authenticated session so it works from the browser.
+ */
+async function autoProvisionTeamMember(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  email: string,
+): Promise<AuthUser | { __diagError: string } | null> {
+  try {
+    const { data: { user: authUser }, error: userErr } = await supabase.auth.getUser()
+    if (userErr) return { __diagError: `getUser: ${userErr.message}` }
+    if (!authUser) return { __diagError: 'getUser returned null' }
+
+    const name = (authUser.user_metadata?.name as string) ||
+      email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+    const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3) || 'GM'
+
+    const { error } = await supabase.from('team_members').insert({
+      id:       authUser.id,
+      name,
+      email,
+      role:     'Team Member',
+      unit:     'Leadership/Admin',
+      initials,
+      status:   'Active',
+      is_admin: false,
+    })
+    if (error) return { __diagError: `insert: ${error.message} (${error.code})` }
+
+    const { data: row, error: selErr } = await supabase
+      .from('team_members')
+      .select('*')
+      .eq('email', email)
+      .single()
+    if (selErr) return { __diagError: `select: ${selErr.message}` }
+    return row ? rowToAuthUser(row) : { __diagError: 'select returned no row' }
+  } catch (e) { return { __diagError: `exception: ${e instanceof Error ? e.message : String(e)}` } }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -118,7 +158,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user?.email) {
-        const profile = await loadProfileByEmail(session.user.email)
+        let profile = await loadProfileByEmail(session.user.email)
+        // Auto-provision on session restore for @gravissmarketing.com users
+        if (!profile && session.user.email.toLowerCase().endsWith('@gravissmarketing.com')) {
+          const result = await autoProvisionTeamMember(supabase, session.user.email.toLowerCase())
+          if (result && !('__diagError' in result)) profile = result
+        }
         if (profile) {
           setUser(profile)
           if (profile.userType === 'staff') fetchMembers()
@@ -145,7 +190,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signInWithPassword({ email: email.toLowerCase().trim(), password })
       if (error) return { ok: false, error: 'Incorrect email or password.' }
 
-      const profile = await loadProfileByEmail(email)
+      let profile = await loadProfileByEmail(email)
+
+      // Auto-provision team_members row for @gravissmarketing.com users
+      if (!profile && email.toLowerCase().trim().endsWith('@gravissmarketing.com')) {
+        const result = await autoProvisionTeamMember(supabase, email.toLowerCase().trim())
+        if (result && '__diagError' in result) {
+          return { ok: false, error: `Auto-provision failed: ${result.__diagError}` }
+        }
+        profile = result
+      }
+
       if (!profile) return { ok: false, error: 'No account found for this email. Contact your administrator.' }
 
       setUser(profile)

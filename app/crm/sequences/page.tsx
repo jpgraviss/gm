@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useToast } from '@/components/ui/Toast'
 import Header from '@/components/layout/Header'
 import { fetchDeals, fetchCrmContacts } from '@/lib/supabase'
 import type { Deal, CRMContact } from '@/lib/types'
@@ -780,6 +781,8 @@ function NewSequenceModal({ onSave, onClose }: { onSave: (s: EmailSequence) => v
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SequencesPage() {
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
   const [localSequences, setLocalSequences] = useState<EmailSequence[]>([])
   const [selectedSeq, setSelectedSeq] = useState<EmailSequence | null>(null)
   const [statusFilter, setStatusFilter] = useState<SequenceStatus | 'All'>('All')
@@ -788,7 +791,7 @@ export default function SequencesPage() {
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
 
   useEffect(() => {
-    fetch('/api/sequences').then(r => r.json()).then(setLocalSequences).catch(() => {})
+    fetch('/api/sequences').then(r => r.json()).then(setLocalSequences).catch(() => toast('Failed to load sequences', 'error')).finally(() => setLoading(false))
     fetchDeals().then(setDeals)
     fetchCrmContacts().then(setCrmContacts)
   }, [])
@@ -833,6 +836,8 @@ export default function SequencesPage() {
   }
 
   const filtered = statusFilter === 'All' ? localSequences : localSequences.filter(s => s.status === statusFilter)
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

@@ -12,6 +12,7 @@ import {
   X, CheckCircle, Clock, AlertCircle, ScrollText, Calendar, DollarSign, User,
   ExternalLink, FileText, FolderKanban, Send, RefreshCw, Shield, Plus, FilePlus2,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 const allStatuses: ContractStatus[] = [
   'Draft', 'Sent', 'Viewed', 'Signed by Client', 'Countersign Needed', 'Fully Executed', 'Expired',
@@ -537,6 +538,7 @@ function ContractPanel({
 }
 
 export default function ContractsPage() {
+  const { toast } = useToast()
   const [localContracts, setLocalContracts] = useState<Contract[]>([])
   const [selected, setSelected] = useState<Contract | null>(null)
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'All'>('All')
@@ -545,12 +547,14 @@ export default function ContractsPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [proposals, setProposals] = useState<Proposal[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch('/api/contracts')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalContracts(data) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load contracts', 'error'))
+      .finally(() => setLoading(false))
     fetchInvoices().then(setInvoices)
     fetchProjects().then(setProjects)
     fetchProposals().then(setProposals)
@@ -575,26 +579,52 @@ export default function ContractsPage() {
     ))
   }
 
-  function updateContractStatus(id: string, status: ContractStatus) {
+  async function updateContractStatus(id: string, status: ContractStatus) {
     const today = new Date().toISOString().split('T')[0]
+
+    // If sending for signature, email the client first
+    if (status === 'Sent') {
+      try {
+        const emailRes = await fetch('/api/email/send-contract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contractId: id }),
+        })
+        if (!emailRes.ok) {
+          const err = await emailRes.json()
+          alert(`Could not send contract email: ${err.error ?? 'Unknown error'}`)
+          return
+        }
+      } catch {
+        alert('Failed to send contract email. Please try again.')
+        return
+      }
+    }
+
+    const patchData = {
+      status,
+      ...(status === 'Signed by Client' ? { clientSigned: today } : {}),
+      ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
+    }
+
     setLocalContracts(prev => prev.map(c => {
       if (c.id !== id) return c
-      return {
-        ...c,
-        status,
-        ...(status === 'Signed by Client' ? { clientSigned: today } : {}),
-        ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
-      }
+      return { ...c, ...patchData }
     }))
     setSelected(prev => {
       if (!prev || prev.id !== id) return prev
-      return {
-        ...prev,
-        status,
-        ...(status === 'Signed by Client' ? { clientSigned: today } : {}),
-        ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
-      }
+      return { ...prev, ...patchData }
     })
+
+    try {
+      await fetch(`/api/contracts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patchData),
+      })
+    } catch (err) {
+      console.error('Failed to PATCH contract status:', err)
+    }
   }
 
   function handleNewContract(data: NewContractFormData) {
@@ -636,6 +666,8 @@ export default function ContractsPage() {
     { label: 'Total Contract Value', value: formatCurrency(localContracts.reduce((s, c) => s + c.value, 0)), icon: <DollarSign size={16} />, color: '#015035', sub: 'All contracts' },
     { label: 'Executed Value', value: formatCurrency(activeValue), icon: <CheckCircle size={16} />, color: '#3b82f6', sub: 'Fully executed' },
   ]
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

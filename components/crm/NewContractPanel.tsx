@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react'
 import { X, DollarSign, User, Calendar, ChevronLeft } from 'lucide-react'
 import { fetchCrmCompanies } from '@/lib/supabase'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 import type { ServiceType, CRMCompany } from '@/lib/types'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
-const REPS = ['Jonathan Graviss', 'JG Graviss']
 const BILLING_STRUCTURES = ['One-Time', 'Monthly Retainer', 'Quarterly', 'Annual']
 
 export interface NewContractFormData {
@@ -49,11 +49,12 @@ interface Props {
 }
 
 export default function NewContractPanel({ onSave, onClose }: Props) {
+  const REPS = useTeamMembers()
   const today = new Date().toISOString().split('T')[0]
   const [form, setForm] = useState<NewContractFormData>({
     company: '',
     serviceType: 'Website',
-    assignedRep: REPS[0],
+    assignedRep: REPS[0] ?? '',
     value: '',
     billingStructure: 'Monthly Retainer',
     duration: '12',

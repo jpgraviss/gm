@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { fireAutomations } from '@/lib/automations-engine'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -19,6 +20,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     console.error('[deals/:id PATCH]', error)
     return NextResponse.json({ error: 'Failed to update deal' }, { status: 500 })
   }
+
+  if (body.stage !== undefined) {
+    fireAutomations('deal_stage_changed', { dealId: id, stage: body.stage, ...data })
+  }
+
   return NextResponse.json(data)
 }
 

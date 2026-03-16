@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { fireAutomations } from '@/lib/automations-engine'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -25,6 +26,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     console.error('[proposals/:id PATCH]', error)
     return NextResponse.json({ error: 'Failed to update proposal' }, { status: 500 })
   }
+
+  // Fire automation triggers on status changes
+  if (body.status === 'Accepted') {
+    fireAutomations('proposal_accepted', { proposalId: id, ...data })
+  } else if (body.status === 'Declined') {
+    fireAutomations('proposal_declined', { proposalId: id, ...data })
+  }
+
   return NextResponse.json(data)
 }
 

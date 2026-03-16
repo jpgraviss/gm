@@ -7,9 +7,10 @@ const TAG_LENGTH = 16
 function getKey(): Buffer {
   const key = process.env.TOKEN_ENCRYPTION_KEY
   if (!key) {
-    // If no encryption key is set, return a deterministic fallback so the app
-    // still works in development. In production, set TOKEN_ENCRYPTION_KEY.
-    console.warn('[encryption] TOKEN_ENCRYPTION_KEY not set — using insecure fallback')
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('TOKEN_ENCRYPTION_KEY must be set in production')
+    }
+    console.warn('[encryption] TOKEN_ENCRYPTION_KEY not set — using insecure dev fallback')
     return crypto.createHash('sha256').update('gravhub-dev-key').digest()
   }
   return crypto.createHash('sha256').update(key).digest()

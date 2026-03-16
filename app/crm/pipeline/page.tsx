@@ -13,14 +13,14 @@ import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivi
 import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
 import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/types'
+import { useToast } from '@/components/ui/Toast'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 import {
   X, Phone, Mail, Calendar, TrendingUp, DollarSign,
   FileText, ScrollText, User, ChevronRight, ChevronLeft, Plus,
   CheckCircle2, Circle, AlertCircle, Settings,
   GripVertical, Pencil, Trash2, Check,
 } from 'lucide-react'
-
-const ALL_REPS = ['Jonathan Graviss', 'JG Graviss']
 
 // ─── Pipeline Config Types ────────────────────────────────────────────────────
 
@@ -157,6 +157,8 @@ function DealPanel({
   crmContacts: CRMContact[]
   contracts: Contract[]
 }) {
+  const { toast } = useToast()
+  const ALL_REPS = useTeamMembers()
   const [tab, setTab] = useState<'overview' | 'activity' | 'tasks'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [creatingProposal, setCreatingProposal] = useState(false)
@@ -203,7 +205,7 @@ function DealPanel({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to save deal changes', 'error'))
     setEditing(false)
   }
 
@@ -864,6 +866,9 @@ function ManagePipelinesPanel({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PipelinePage() {
+  const ALL_REPS = useTeamMembers()
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
   const [pipelines, setPipelines] = useState<PipelineConfig[]>(initialPipelines)
   const [activePipelineId, setActivePipelineId] = useState('sales')
@@ -883,7 +888,8 @@ export default function PipelinePage() {
     fetch('/api/deals')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load deals', 'error'))
+      .finally(() => setLoading(false))
     fetch('/api/settings')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
@@ -891,7 +897,7 @@ export default function PipelinePage() {
           setPipelines(d.pipelines)
         }
       })
-      .catch(() => {})
+      .catch(() => toast('Failed to load pipeline settings', 'error'))
     fetchCrmActivities().then(setCrmActivities)
     fetchCrmCompanies().then(setCrmCompanies)
     fetchCrmContacts().then(setCrmContacts)
@@ -916,7 +922,7 @@ export default function PipelinePage() {
     if (!newStageName) return
     setLocalDeals(prev => prev.map(d => d.id === draggableId ? { ...d, stage: newStageName } : d))
     setSelectedDeal(prev => prev?.id === draggableId ? { ...prev, stage: newStageName } : prev)
-    fetch(`/api/deals/${draggableId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: newStageName }) }).catch(() => {})
+    fetch(`/api/deals/${draggableId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: newStageName }) }).catch(() => toast('Failed to update deal stage', 'error'))
   }
 
   async function handleNewDeal(data: NewDealData) {
@@ -943,7 +949,7 @@ export default function PipelinePage() {
 
   function handleAdvanceStage(dealId: string, newStage: string) {
     setLocalDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage } : d))
-    fetch(`/api/deals/${dealId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: newStage }) }).catch(() => {})
+    fetch(`/api/deals/${dealId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: newStage }) }).catch(() => toast('Failed to advance deal stage', 'error'))
   }
 
   function handleUpdateDeal(id: string, updates: Partial<LocalDeal>) {
@@ -954,13 +960,15 @@ export default function PipelinePage() {
   async function handleDeleteDeal(id: string) {
     setLocalDeals(prev => prev.filter(d => d.id !== id))
     setSelectedDeal(null)
-    fetch(`/api/deals/${id}`, { method: 'DELETE' }).catch(() => {})
+    fetch(`/api/deals/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete deal', 'error'))
   }
 
   async function handleDeleteCompany(companyId: string) {
     setCrmCompanies(prev => prev.filter(c => c.id !== companyId))
-    fetch(`/api/crm/companies/${companyId}`, { method: 'DELETE' }).catch(() => {})
+    fetch(`/api/crm/companies/${companyId}`, { method: 'DELETE' }).catch(() => toast('Failed to delete company', 'error'))
   }
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

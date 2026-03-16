@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 type AutoStatus = 'Active' | 'Triggered' | 'Paused'
 
@@ -179,11 +180,13 @@ function NewAutomationPanel({ onSave, onClose }: { onSave: (a: Automation) => vo
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AutomationPage() {
+  const { toast } = useToast()
   const [automations, setAutomations] = useState<Automation[]>([])
   const [creatingAutomation, setCreatingAutomation] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/automations').then(r => r.json()).then(setAutomations).catch(() => {})
+    fetch('/api/automations').then(r => r.json()).then(setAutomations).catch(() => toast('Failed to load automations', 'error')).finally(() => setLoading(false))
   }, [])
 
   async function toggleStatus(id: string) {
@@ -215,6 +218,8 @@ export default function AutomationPage() {
   const triggered = automations.filter(a => a.status === 'Triggered').length
   const totalRuns = automations.reduce((s, a) => s + a.runs, 0)
   const paused = automations.filter(a => a.status === 'Paused').length
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

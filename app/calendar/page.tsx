@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchTeamMembers } from '@/lib/supabase'
 import type { TeamMember } from '@/lib/types'
+import { useToast } from '@/components/ui/Toast'
 
 interface Booking {
   id: string
@@ -47,6 +48,7 @@ function isUpcoming(date: string, startTime: string) {
 
 export default function CalendarPage() {
   const { user } = useAuth()
+  const { toast } = useToast()
   const [bookings, setBookings]     = useState<Booking[]>([])
   const [loading, setLoading]       = useState(true)
   const [selected, setSelected]     = useState<Booking | null>(null)
@@ -85,7 +87,7 @@ export default function CalendarPage() {
         const stored = (d?.gcal_links && typeof d.gcal_links === 'object') ? d.gcal_links as Record<string, string> : {}
         setGcalLinks({ ...defaults, ...stored })
       })
-      .catch(() => {})
+      .catch(() => toast('Failed to load calendar settings', 'error'))
     fetchTeamMembers().then(setTeamMembers)
   }, [])
 

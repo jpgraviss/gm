@@ -3,11 +3,10 @@
 import { useState, useEffect } from 'react'
 import { X, DollarSign, User, FileText, ChevronLeft } from 'lucide-react'
 import { fetchCrmCompanies } from '@/lib/supabase'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 import type { ServiceType, CRMCompany } from '@/lib/types'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
-const REPS = ['Jonathan Graviss', 'JG Graviss']
-
 export interface NewProposalFormData {
   company: string
   serviceType: ServiceType
@@ -46,10 +45,11 @@ interface Props {
 }
 
 export default function NewProposalPanel({ onSave, onClose }: Props) {
+  const REPS = useTeamMembers()
   const [form, setForm] = useState<NewProposalFormData>({
     company: '',
     serviceType: 'Website',
-    assignedRep: REPS[0],
+    assignedRep: REPS[0] ?? '',
     value: '',
     notes: '',
   })

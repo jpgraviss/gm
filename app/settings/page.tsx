@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/components/ui/Toast'
 import {
   Users, Shield, Bell, Palette, Building, Plus, Pencil, Link2,
   CheckCircle, AlertCircle, RefreshCw, Plug, Globe, Tag,
@@ -138,9 +139,11 @@ function loadLS<T>(key: string, fallback: T): T {
 }
 
 export default function SettingsPage() {
+  const { toast } = useToast()
   const { gmailToken, gmailEmail, connectGmail, disconnectGmail, addUser, members: authMembers } = useAuth()
   const searchParams   = useSearchParams()
   const router         = useRouter()
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     if (typeof window !== 'undefined' && searchParams.get('tab') === 'integrations') return 'Integrations'
     return 'Company'
@@ -154,7 +157,7 @@ export default function SettingsPage() {
   const [qbMessage, setQbMessage]       = useState<string | null>(null)
 
   const fetchQBStatus = useCallback(() => {
-    fetch('/api/quickbooks/status')
+    return fetch('/api/quickbooks/status')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d?.connected) {
@@ -165,10 +168,10 @@ export default function SettingsPage() {
           setQbStatus(null)
         }
       })
-      .catch(() => {})
+      .catch(() => toast('Failed to load QuickBooks status', 'error'))
   }, [])
 
-  useEffect(() => { fetchQBStatus() }, [fetchQBStatus])
+  useEffect(() => { fetchQBStatus().finally(() => setLoading(false)) }, [fetchQBStatus])
 
   // Handle OAuth callback params
   useEffect(() => {
@@ -297,7 +300,7 @@ export default function SettingsPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to save settings', 'error'))
     flash(label)
   }
 
@@ -369,6 +372,8 @@ export default function SettingsPage() {
   function removeMember(id: string) {
     setMembers(prev => prev.filter(m => m.id !== id))
   }
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

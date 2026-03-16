@@ -15,6 +15,8 @@ import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivi
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMContact, ContactNote, ContactTask, CRMCompany, Deal, Contract, Project, CRMActivity } from '@/lib/types'
+import { useToast } from '@/components/ui/Toast'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 import {
   X, Phone, Mail, User, Search, Plus, ScrollText,
   ChevronRight, ChevronLeft, Linkedin, StickyNote, CheckSquare,
@@ -44,8 +46,6 @@ const taskPriorityConfig: Record<ContactTask['priority'], { label: string; color
 
 // ─── Edit Contact Panel ───────────────────────────────────────────────────────
 
-const REPS = ['Jonathan Graviss', 'JG Graviss']
-
 function EditContactPanel({
   contact,
   onSave,
@@ -57,6 +57,7 @@ function EditContactPanel({
   onDelete: (id: string) => void
   onClose: () => void
 }) {
+  const REPS = useTeamMembers()
   const [form, setForm] = useState({
     firstName: contact.firstName,
     lastName: contact.lastName,
@@ -265,6 +266,7 @@ function EditContactPanel({
 // ─── Contact Detail Panel ─────────────────────────────────────────────────────
 
 function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts, projects, crmActivities }: { contact: CRMContact; onClose: () => void; onEdit?: () => void; crmCompanies: CRMCompany[]; deals: Deal[]; contracts: Contract[]; projects: Project[]; crmActivities: CRMActivity[] }) {
+  const { toast } = useToast()
   const [tab, setTab] = useState<'overview' | 'pipeline' | 'contracts' | 'notes' | 'tasks' | 'activity'>('overview')
   const [taskDone, setTaskDone] = useState<Set<string>>(
     new Set((contact.contactTasks ?? []).filter(t => t.completed).map(t => t.id))
@@ -351,7 +353,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lastActivity: now }),
-      }).catch(() => {})
+      }).catch(() => toast('Failed to update contact activity date', 'error'))
     } catch {/* activity already shown locally */}
   }
 
@@ -360,7 +362,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tags }),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to save contact tags', 'error'))
   }
 
   function handleAddTag() {
@@ -962,6 +964,8 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ContactsPage() {
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedContact, setSelectedContact] = useState<CRMContact | null>(null)
   const [editingContact, setEditingContact] = useState<CRMContact | null>(null)
@@ -978,7 +982,8 @@ export default function ContactsPage() {
     fetch('/api/crm/contacts')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalContacts(data) })
-      .catch(() => {/* keep static fallback */})
+      .catch(() => toast('Failed to load contacts', 'error'))
+      .finally(() => setLoading(false))
     fetchCrmCompanies().then(setCrmCompanies)
     fetchDeals().then(setDeals)
     fetchContracts().then(setContracts)
@@ -994,14 +999,14 @@ export default function ContactsPage() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to save contact changes', 'error'))
   }
 
   async function handleDelete(id: string) {
     setLocalContacts(prev => prev.filter(c => c.id !== id))
     setEditingContact(null)
     if (selectedContact?.id === id) setSelectedContact(null)
-    await fetch(`/api/crm/contacts/${id}`, { method: 'DELETE' }).catch(() => {})
+    await fetch(`/api/crm/contacts/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete contact', 'error'))
   }
 
   async function handleNewContact(data: NewContactFormData) {
@@ -1045,6 +1050,8 @@ export default function ContactsPage() {
     c.title.toLowerCase().includes(search.toLowerCase()) ||
     c.emails.join(' ').toLowerCase().includes(search.toLowerCase())
   )
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

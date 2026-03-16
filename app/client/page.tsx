@@ -272,7 +272,6 @@ export default function ClientPortalPage() {
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <p className="text-sm font-bold text-gray-900">{formatCurrency(inv.amount)}</p>
                         <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
-                        <button className="text-xs text-gray-400 hover:text-gray-600"><Download size={13} /></button>
                       </div>
                     </div>
                   ))}

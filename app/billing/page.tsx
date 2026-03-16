@@ -6,7 +6,6 @@ import Header from '@/components/layout/Header'
 import { fetchContracts, fetchRevenueByMonth } from '@/lib/supabase'
 import { formatCurrency, invoiceStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import NewInvoicePanel, { type NewInvoiceFormData } from '@/components/crm/NewInvoicePanel'
 import type { Invoice, InvoiceStatus, Contract, RevenueMonth } from '@/lib/types'
 import {
   DollarSign, AlertCircle, CheckCircle, Clock, Send, RefreshCw,
@@ -201,13 +200,11 @@ export default function BillingPage() {
   const [revenueByMonth, setRevenueByMonth] = useState<RevenueMonth[]>([])
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'All'>('All')
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
-  const [creatingInvoice, setCreatingInvoice] = useState(false)
 
-  // Billable time entries
+  // Billable time summary (view-only)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [billableSummary, setBillableSummary] = useState<any[]>([])
   const [showBillable, setShowBillable] = useState(false)
-  const [creatingFromTime, setCreatingFromTime] = useState(false)
 
   // QuickBooks
   const [qbConnected, setQbConnected]     = useState(false)
@@ -254,87 +251,6 @@ export default function BillingPage() {
     fetchQBStatus()
     fetch('/api/time-entries/billable-summary').then(r => r.json()).then(d => { if (Array.isArray(d)) setBillableSummary(d) }).catch(() => {})
   }, [])
-
-  function updateInvoiceStatus(id: string, status: InvoiceStatus) {
-    const today = new Date().toISOString().split('T')[0]
-    const patch = { status, ...(status === 'Paid' ? { paidDate: today } : {}) }
-    setLocalInvoices(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
-    setSelectedInvoice(prev => prev?.id === id ? { ...prev, ...patch } : prev)
-    fetch(`/api/invoices/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    }).catch(() => {})
-  }
-
-  async function handleNewInvoice(data: NewInvoiceFormData) {
-    const today = new Date().toISOString().split('T')[0]
-    const payload = {
-      contractId: data.contractId || null,
-      company: data.company,
-      amount: Number(data.amount),
-      status: 'Pending',
-      dueDate: data.dueDate,
-      issuedDate: today,
-      serviceType: data.serviceType,
-    }
-    try {
-      const res = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const saved = await res.json()
-      setLocalInvoices(prev => [saved, ...prev])
-    } catch {
-      setLocalInvoices(prev => [{ id: `inv-${Date.now()}`, ...payload } as Invoice, ...prev])
-    }
-    setCreatingInvoice(false)
-  }
-
-  async function createInvoiceFromTime(group: { projectName: string; totalHours: number; totalMinutes: number; entries: { id: string }[] }) {
-    setCreatingFromTime(true)
-    try {
-      const totalDecimalHours = group.totalHours + group.totalMinutes / 60
-      const hourlyRate = 150 // Default hourly rate — could be configurable
-      const amount = Math.round(totalDecimalHours * hourlyRate * 100) / 100
-      const today = new Date().toISOString().split('T')[0]
-      const dueDate = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
-
-      const res = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          company: group.projectName,
-          amount,
-          status: 'Pending',
-          dueDate,
-          issuedDate: today,
-          serviceType: 'Time & Materials',
-          description: `${totalDecimalHours.toFixed(1)} hours of billable work`,
-        }),
-      })
-      const saved = await res.json()
-      setLocalInvoices(prev => [saved, ...prev])
-
-      // Mark time entries as invoiced
-      for (const entry of group.entries) {
-        await fetch(`/api/time-entries/${entry.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ invoiced: true, invoiceId: saved.id }),
-        })
-      }
-
-      // Refresh billable summary
-      setBillableSummary(prev => prev.filter(g => g.projectName !== group.projectName))
-    } catch (err) {
-      console.error('Failed to create invoice from time:', err)
-      alert('Failed to create invoice from time entries.')
-    } finally {
-      setCreatingFromTime(false)
-    }
-  }
 
   const filtered = statusFilter === 'All' ? localInvoices : localInvoices.filter(i => i.status === statusFilter)
   const maxRevenue = Math.max(1, ...revenueByMonth.map(r => r.revenue || 0))
@@ -574,14 +490,9 @@ export default function BillingPage() {
                         {group.totalHours}h {group.totalMinutes}m · {group.entryCount} {group.entryCount === 1 ? 'entry' : 'entries'}
                       </p>
                     </div>
-                    <button
-                      onClick={() => createInvoiceFromTime(group)}
-                      disabled={creatingFromTime}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                      style={{ background: '#015035' }}
-                    >
-                      <ScrollText size={12} /> {creatingFromTime ? 'Creating…' : 'Create Invoice'}
-                    </button>
+                    <span className="text-xs font-semibold text-amber-600 px-2.5 py-1 rounded-full bg-amber-50">
+                      Not yet invoiced in QB
+                    </span>
                   </div>
                 ))}
               </div>

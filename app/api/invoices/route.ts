@@ -16,6 +16,7 @@ function mapInvoice(row: any) {
   }
 }
 
+// Read-only — invoice data comes from QuickBooks sync
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const contractId = searchParams.get('contractId')
@@ -32,28 +33,4 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch invoices' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapInvoice))
-}
-
-export async function POST(req: NextRequest) {
-  const body = await req.json()
-  const db = createServiceClient()
-  const { data, error } = await db
-    .from('invoices')
-    .insert({
-      id:          `inv-${Date.now()}`,
-      contract_id: body.contractId ?? null,
-      company:     body.company,
-      amount:      body.amount ?? 0,
-      status:      body.status ?? 'Pending',
-      due_date:    body.dueDate ?? null,
-      issued_date: body.issuedDate ?? new Date().toISOString().split('T')[0],
-      service_type: body.serviceType ?? 'General',
-    })
-    .select()
-    .single()
-  if (error) {
-    console.error('[invoices POST]', error)
-    return NextResponse.json({ error: 'Failed to create invoice' }, { status: 500 })
-  }
-  return NextResponse.json(mapInvoice(data), { status: 201 })
 }

@@ -190,15 +190,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signInWithPassword({ email: email.toLowerCase().trim(), password })
       if (error) return { ok: false, error: 'Incorrect email or password.' }
 
-      let profile = await loadProfileByEmail(email)
-
-      // Auto-provision team_members row for @gravissmarketing.com users
-      if (!profile && email.toLowerCase().trim().endsWith('@gravissmarketing.com')) {
-        const result = await autoProvisionTeamMember(supabase, email.toLowerCase().trim())
-        if (result && '__diagError' in result) {
-          return { ok: false, error: `Auto-provision failed: ${result.__diagError}` }
+      // Use server-side profile lookup (bypasses RLS, matches Google SSO approach)
+      let profile: AuthUser | null = null
+      try {
+        const res = await fetch('/api/auth/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.toLowerCase().trim() }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.user) profile = data.user as AuthUser
+        } else {
+          const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+          return { ok: false, error: errData.error || 'Profile lookup failed.' }
         }
-        profile = result
+      } catch {
+        // Fallback to client-side lookup
+        profile = await loadProfileByEmail(email)
       }
 
       if (!profile) return { ok: false, error: 'No account found for this email. Contact your administrator.' }

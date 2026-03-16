@@ -37,6 +37,7 @@ const PUBLIC_PREFIXES = [
   '/api/portal-clients/reset-password',
   '/api/quickbooks/callback',  // QB OAuth callback
   '/api/auth/auto-provision',  // Auto-create team_members profile on first login
+  '/api/auth/profile',         // Server-side profile lookup during login
 ]
 
 const ADMIN_SETUP_PREFIXES = [

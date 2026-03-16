@@ -161,7 +161,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let profile = await loadProfileByEmail(session.user.email)
         // Auto-provision on session restore for @gravissmarketing.com users
         if (!profile && session.user.email.toLowerCase().endsWith('@gravissmarketing.com')) {
-          profile = await autoProvisionTeamMember(supabase, session.user.email.toLowerCase())
+          const result = await autoProvisionTeamMember(supabase, session.user.email.toLowerCase())
+          if (result && !('__diagError' in result)) profile = result
         }
         if (profile) {
           setUser(profile)

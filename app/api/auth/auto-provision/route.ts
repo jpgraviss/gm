@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
 
     // Derive a name and initials from the email or user metadata
     const metaName = authUser.user_metadata?.name as string | undefined
-    const name = metaName || emailLower.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-    const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3) || 'GM'
+    const name = metaName || emailLower.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+    const initials = name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 3) || 'GM'
 
     const { error: insertErr } = await db.from('team_members').insert({
       id:       authUser.id,

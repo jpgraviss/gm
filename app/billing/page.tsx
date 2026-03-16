@@ -239,7 +239,7 @@ export default function BillingPage() {
         // Refresh invoices after sync
         fetch('/api/invoices').then(r => r.json()).then(d => { if (Array.isArray(d)) setLocalInvoices(d) }).catch(() => toast('Failed to load invoices', 'error'))
       }
-    } catch { /* ignore */ } finally {
+    } catch { toast('QuickBooks sync failed', 'error') } finally {
       setQbSyncing(false)
     }
   }

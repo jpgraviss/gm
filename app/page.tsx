@@ -12,6 +12,7 @@ import { formatCurrency, contractStatusColors, invoiceStatusColors } from '@/lib
 import StatusBadge from '@/components/ui/StatusBadge'
 import type { RevenueMonth } from '@/lib/types'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/components/ui/Toast'
 
 // ─── Greeting ─────────────────────────────────────────────────────────────────
 
@@ -386,13 +387,16 @@ function LiveClock() {
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const { toast } = useToast()
   const [data, setData] = useState<DashboardData>(emptyData)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch('/api/dashboard')
       .then(r => r.json())
       .then(d => { if (d.metrics) setData(d) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load dashboard data', 'error'))
+      .finally(() => setLoading(false))
   }, [])
 
   const m = data.metrics
@@ -400,6 +404,8 @@ export default function DashboardPage() {
     ['Sent', 'Viewed', 'Countersign Needed', 'Signed by Client'].includes(c.status)
   )
   const overdueInvoices = data.recentInvoices.filter(i => i.status === 'Overdue')
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

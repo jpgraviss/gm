@@ -12,6 +12,7 @@ import {
   Plus, Upload, Paperclip, Trash2, Edit2,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useToast } from '@/components/ui/Toast'
 
 const statusColors: Record<string, string> = {
   Active: 'bg-green-100 text-green-700',
@@ -34,6 +35,7 @@ function AddRecordPanel({
   onSave: (r: Omit<MaintenanceRecord, 'id'>) => void
   onClose: () => void
 }) {
+  const { toast } = useToast()
   const [crmCompanies, setCrmCompanies] = useState<string[]>([])
   const defaultEnd = initial?.endDate ?? (() => {
     const d = new Date(initial?.startDate ?? new Date())
@@ -57,7 +59,7 @@ function AddRecordPanel({
   useEffect(() => {
     fetch('/api/crm/companies').then(r => r.json()).then(d => {
       if (Array.isArray(d)) setCrmCompanies(d.map((c: { name: string }) => c.name))
-    }).catch(() => {})
+    }).catch(() => toast('Failed to load companies', 'error'))
   }, [])
 
   // Auto-calculate duration in months from start → end dates
@@ -590,6 +592,8 @@ function MaintenancePanel({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function MaintenancePage() {
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
   const [records, setRecords] = useState<MaintenanceRecord[]>([])
   const [selected, setSelected] = useState<MaintenanceRecord | null>(null)
   const [addingRecord, setAddingRecord] = useState(false)
@@ -603,7 +607,8 @@ export default function MaintenancePage() {
     fetch('/api/maintenance')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setRecords(data) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load maintenance records', 'error'))
+      .finally(() => setLoading(false))
     fetchCrmContacts().then(setCrmContacts)
     fetchContracts().then(setContracts)
     fetchInvoices().then(setInvoices)
@@ -646,7 +651,7 @@ export default function MaintenancePage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to save maintenance record changes', 'error'))
     setEditingRecord(null)
     setSelected(null)
   }
@@ -657,7 +662,7 @@ export default function MaintenancePage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'Cancelled' }),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to confirm cancellation', 'error'))
     setSelected(null)
   }
 
@@ -668,8 +673,10 @@ export default function MaintenancePage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ monthlyFee: fee, nextBillingDate: nextDate }),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to update billing details', 'error'))
   }
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

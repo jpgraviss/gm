@@ -12,6 +12,7 @@ import {
   ToggleRight, Server, Wifi, Clock, X,
 } from 'lucide-react'
 // data loaded from API
+import { useToast } from '@/components/ui/Toast'
 import { formatCurrency } from '@/lib/utils'
 
 type AdminTab = 'overview' | 'users' | 'integrations' | 'permissions' | 'config' | 'audit'
@@ -143,15 +144,19 @@ function IntegrationCard({
 }
 
 export default function AdminPage() {
+  const { toast } = useToast()
   const { user, loginAs } = useAuth()
   const router = useRouter()
+
+  const [loading, setLoading] = useState(true)
 
   // Load users from database on mount
   useEffect(() => {
     fetch('/api/admin/users')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setUsers(data as AdminUser[]) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load users', 'error'))
+      .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [tab, setTab] = useState<AdminTab>('overview')
@@ -192,7 +197,7 @@ export default function AdminPage() {
           setQbStatus(null)
         }
       })
-      .catch(() => {})
+      .catch(() => toast('Failed to load QuickBooks status', 'error'))
   }
 
   async function handleQBSync() {
@@ -209,7 +214,7 @@ export default function AdminPage() {
     fetch('/api/audit-logs?limit=50')
       .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setAuditLog(data) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load audit logs', 'error'))
     fetchQBStatus()
   }, [])
 
@@ -415,6 +420,8 @@ export default function AdminPage() {
   function deactivateUser(id: string) {
     setUsers(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'Active' ? 'Inactive' : 'Active' } : u))
   }
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   // Guard: only Super Admin
   if (!user?.isAdmin) {

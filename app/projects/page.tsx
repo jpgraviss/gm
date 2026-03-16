@@ -11,11 +11,12 @@ import {
   AlertTriangle, TrendingUp, StickyNote, Plus, Globe, BarChart2,
   Share2, Mail, Palette, Wrench, ChevronDown, Pencil, Trash2,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEPARTMENTS = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
-const OWNERS = ['Jonathan Graviss', 'JG Graviss']
 
 const statusOrder: ProjectStatus[] = [
   'Not Started', 'In Progress', 'Awaiting Client', 'Completed', 'Launched', 'In Maintenance',
@@ -867,19 +868,21 @@ function ServiceTypeGroup({
 // ─── New Project Modal ────────────────────────────────────────────────────────
 
 function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p: Project) => void }) {
+  const { toast } = useToast()
+  const OWNERS = useTeamMembers()
   const [company, setCompany] = useState('')
   const [companies, setCompanies] = useState<string[]>([])
   const [serviceType, setServiceType] = useState<Project['serviceType']>('Website')
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
   const [launchDate, setLaunchDate] = useState('')
-  const [selectedTeam, setSelectedTeam] = useState<string[]>(['Jonathan Graviss'])
+  const [selectedTeam, setSelectedTeam] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     fetch('/api/crm/companies')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setCompanies(data.map((c: { name: string }) => c.name)) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load companies', 'error'))
   }, [])
 
   const canSave = company.trim() && launchDate
@@ -999,6 +1002,8 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ProjectsPage() {
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
   const [localProjects, setLocalProjects] = useState<Project[]>([])
   const [selected, setSelected] = useState<Project | null>(null)
   const [creatingProject, setCreatingProject] = useState(false)
@@ -1010,7 +1015,8 @@ export default function ProjectsPage() {
     fetch('/api/projects')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalProjects(data) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load projects', 'error'))
+      .finally(() => setLoading(false))
   }, [])
 
   const today = new Date().toISOString().split('T')[0]
@@ -1022,13 +1028,13 @@ export default function ProjectsPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to update project status', 'error'))
   }
 
   async function handleDeleteProject(id: string) {
     setLocalProjects(prev => prev.filter(p => p.id !== id))
     setSelected(null)
-    fetch(`/api/projects/${id}`, { method: 'DELETE' }).catch(() => {})
+    fetch(`/api/projects/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete project', 'error'))
   }
 
   function handleUpdateProject(id: string, updates: Partial<Project>) {
@@ -1038,7 +1044,7 @@ export default function ProjectsPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to update project', 'error'))
   }
 
   // Metrics
@@ -1059,6 +1065,8 @@ export default function ProjectsPage() {
   })
 
   const visibleStatuses = statusFilter === 'All' ? statusOrder : [statusFilter]
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

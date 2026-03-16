@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { formatCurrency } from '@/lib/utils'
+import { useToast } from '@/components/ui/Toast'
 import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download } from 'lucide-react'
 import type { Deal, Invoice, Project, Renewal, RevenueMonth } from '@/lib/types'
 
@@ -20,6 +21,8 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
 }
 
 export default function ReportsPage() {
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>('6M')
   const [repFilter, setRepFilter] = useState<RepFilter>('All')
   const [deals, setDeals] = useState<Deal[]>([])
@@ -41,7 +44,8 @@ export default function ReportsPage() {
       if (Array.isArray(p)) setProjects(p)
       if (Array.isArray(r)) setRenewals(r)
       if (Array.isArray(rev)) setRevenueByMonth(rev)
-    }).catch(() => {})
+    }).catch(() => toast('Failed to load report data', 'error'))
+      .finally(() => setLoading(false))
   }, [])
 
   function exportCSV() {
@@ -70,11 +74,10 @@ export default function ReportsPage() {
   const visibleMonths = revenueByMonth.slice(-monthsToShow)
   const maxRevenue = Math.max(...visibleMonths.map(r => r.revenue), 1)
 
-  // Normalize rep names — only Jonathan Graviss and JG Graviss are recognised reps
-  const KNOWN_REPS = ['Jonathan Graviss', 'JG Graviss']
+  // Use deal rep names as-is — all team members are valid reps
   const normalizedDeals = useMemo(() => deals.map(d => ({
     ...d,
-    assignedRep: KNOWN_REPS.includes(d.assignedRep) ? d.assignedRep : 'Jonathan Graviss',
+    assignedRep: d.assignedRep || 'Unassigned',
   })), [deals])
 
   const allRepStats = useMemo(() => {
@@ -117,6 +120,8 @@ export default function ReportsPage() {
       .sort((a, b) => b.revenue - a.revenue)
   }, [deals])
   const maxService = Math.max(...serviceRevenue.map(s => s.revenue), 1)
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

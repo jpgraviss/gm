@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { Clock, Plus, X, ChevronLeft, ChevronRight, DollarSign, Ban, Users, Check, Pencil, Trash2 } from 'lucide-react'
 import type { TimeEntry, TeamServiceLine, TeamMember, Project } from '@/lib/types'
 import { fetchTeamMembers, fetchProjects } from '@/lib/supabase'
+import { useToast } from '@/components/ui/Toast'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -266,6 +267,8 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projec
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TimeTrackingPage() {
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<TimeEntry[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -277,7 +280,8 @@ export default function TimeTrackingPage() {
     fetch('/api/time-entries')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setEntries(data) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load time entries', 'error'))
+      .finally(() => setLoading(false))
     fetchTeamMembers().then(setTeamMembers)
     fetchProjects().then(setProjects)
   }, [])
@@ -343,7 +347,7 @@ export default function TimeTrackingPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(entry),
-      }).catch(() => {})
+      }).catch(() => toast('Failed to update time entry', 'error'))
       setEntries(prev => prev.map(e => e.id === entry.id ? entry : e))
     }
     setShowLog(false)
@@ -351,7 +355,7 @@ export default function TimeTrackingPage() {
   }
 
   function handleDelete(id: string) {
-    fetch(`/api/time-entries/${id}`, { method: 'DELETE' }).catch(() => {})
+    fetch(`/api/time-entries/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete time entry', 'error'))
     setEntries(prev => prev.filter(e => e.id !== id))
   }
 
@@ -377,6 +381,8 @@ export default function TimeTrackingPage() {
     d.setDate(d.getDate() + 7)
     setAnchor(d)
   }
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <div className="min-h-screen bg-[#f9fafb]">

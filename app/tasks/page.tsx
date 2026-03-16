@@ -8,6 +8,7 @@ import {
   CheckSquare, Clock, AlertCircle, CheckCircle2, Plus, X, ChevronRight, ChevronLeft,
   Building2, User, Calendar, Flag, Tag, Trash2, Circle,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -345,6 +346,7 @@ type FilterTab = 'All' | 'Due Today' | 'Overdue' | 'In Progress' | 'Pending' | '
 const categories: AppTaskCategory[] = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'General']
 
 export default function TasksPage() {
+  const { toast } = useToast()
   const [tasks, setTasks] = useState<AppTask[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [filterTab, setFilterTab] = useState<FilterTab>('All')
@@ -352,12 +354,14 @@ export default function TasksPage() {
   const [filterAssignee, setFilterAssignee] = useState<string>('All')
   const [selectedTask, setSelectedTask] = useState<AppTask | null>(null)
   const [creatingTask, setCreatingTask] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch('/api/tasks')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setTasks(data) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load tasks', 'error'))
+      .finally(() => setLoading(false))
     fetchTeamMembers().then(setTeamMembers)
   }, [])
 
@@ -410,6 +414,8 @@ export default function TasksPage() {
     if (priortyOrder[a.priority] !== priortyOrder[b.priority]) return priortyOrder[a.priority] - priortyOrder[b.priority]
     return a.dueDate.localeCompare(b.dueDate)
   })
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

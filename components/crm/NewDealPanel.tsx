@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { X, DollarSign, User, Calendar, TrendingUp, ChevronLeft } from 'lucide-react'
 import { fetchCrmCompanies } from '@/lib/supabase'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 import type { ServiceType, DealStage, CRMCompany } from '@/lib/types'
 
 export interface NewDealData {
@@ -22,8 +23,6 @@ export interface NewDealData {
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 const STAGES: DealStage[] = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
-const REPS = ['Jonathan Graviss', 'JG Graviss']
-
 const STAGE_PROBS: Record<DealStage, string> = {
   Lead: '20',
   Qualified: '40',
@@ -63,6 +62,7 @@ interface Props {
 }
 
 export default function NewDealPanel({ onSave, onClose }: Props) {
+  const REPS = useTeamMembers()
   const [form, setForm] = useState<NewDealData>({
     company: '',
     contactName: '',
@@ -73,7 +73,7 @@ export default function NewDealPanel({ onSave, onClose }: Props) {
     stage: 'Lead',
     value: '',
     closeDate: '',
-    assignedRep: REPS[0],
+    assignedRep: REPS[0] ?? '',
     probability: STAGE_PROBS['Lead'],
     notes: '',
   })

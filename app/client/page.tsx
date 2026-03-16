@@ -8,8 +8,10 @@ import {
   Globe, CheckCircle, FolderKanban, FileText, MessageSquare,
   Download, Upload, Bell, ChevronDown, ChevronRight, X, AlertTriangle, LogOut,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 export default function ClientPortalPage() {
+  const { toast } = useToast()
   const { user, logout } = useAuth()
   const company = user?.company ?? ''
   const contactName = user?.name ?? ''
@@ -33,14 +35,14 @@ export default function ClientPortalPage() {
   useEffect(() => {
     if (!company) return
     const q = encodeURIComponent(company)
-    fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => {})
-    fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => {})
-    fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => {})
+    fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => toast('Failed to load project data', 'error'))
+    fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => toast('Failed to load contract data', 'error'))
+    fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => toast('Failed to load invoices', 'error'))
     fetch('/api/portal-clients').then(r => r.json()).then((clients: { company: string; service: string }[]) => {
       const match = clients.find(c => c.company === company)
       if (match) setAccountInfo({ service: match.service })
-    }).catch(() => {})
-    fetch(`/api/files?company=${q}`).then(r => r.json()).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => {})
+    }).catch(() => toast('Failed to load account info', 'error'))
+    fetch(`/api/files?company=${q}`).then(r => r.json()).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => toast('Failed to load files', 'error'))
   }, [company])
 
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')

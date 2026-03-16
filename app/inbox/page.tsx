@@ -5,6 +5,7 @@ import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchCrmContacts } from '@/lib/supabase'
 import type { CRMContact } from '@/lib/types'
+import { useToast } from '@/components/ui/Toast'
 import {
   Mail, RefreshCw, X, ChevronDown, Search, Link2,
   Inbox as InboxIcon, AlertCircle, CheckCircle, ExternalLink,
@@ -65,6 +66,7 @@ function isUnread(msg: GmailMessage) {
 }
 
 export default function InboxPage() {
+  const { toast } = useToast()
   const { gmailToken, gmailEmail, connectGmail, disconnectGmail, user } = useAuth()
   const [messages, setMessages] = useState<GmailMessage[]>([])
   const [loading, setLoading] = useState(false)
@@ -92,7 +94,7 @@ export default function InboxPage() {
             .map((a: { id: string }) => a.id.replace('gmail_', ''))
         ))
       })
-      .catch(() => {})
+      .catch(() => toast('Failed to load logged activities', 'error'))
   }, [])
 
   const fetchMessages = useCallback(async (query = '') => {
@@ -203,7 +205,7 @@ export default function InboxPage() {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ lastActivity: activity.loggedAt }),
-        }).catch(() => {})
+        }).catch(() => toast('Failed to update contact activity', 'error'))
         setLoggedIds(prev => new Set([...prev, selected.id]))
         setLogSuccess(true)
         setTimeout(() => setLogModal(false), 1200)

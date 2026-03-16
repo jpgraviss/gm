@@ -12,6 +12,7 @@ import {
   Eye, Send, CheckCircle, XCircle, FileText, DollarSign, Calendar, User, X,
   Clock, ExternalLink, Mail, Phone, TrendingUp, AlertTriangle, Edit2, ShieldCheck,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 const statusOrder: ProposalStatus[] = ['Draft', 'Pending Approval', 'Approved', 'Sent', 'Viewed', 'Accepted', 'Declined']
 
@@ -457,6 +458,7 @@ function ProposalPanel({
 }
 
 export default function ProposalsPage() {
+  const { toast } = useToast()
   const [localProposals, setLocalProposals] = useState<Proposal[]>([])
   const [selected, setSelected] = useState<Proposal | null>(null)
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'All'>('All')
@@ -464,12 +466,14 @@ export default function ProposalsPage() {
   const [editingProposal, setEditingProposal] = useState<Proposal | null>(null)
   const [deals, setDeals] = useState<Deal[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch('/api/proposals')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalProposals(data) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load proposals', 'error'))
+      .finally(() => setLoading(false))
     fetchDeals().then(setDeals)
     fetchContracts().then(setContracts)
   }, [])
@@ -627,6 +631,8 @@ export default function ProposalsPage() {
     { label: 'Accepted Value', value: formatCurrency(acceptedValue), icon: <CheckCircle size={16} />, color: '#22c55e', sub: 'Ready for contract' },
     { label: 'Needs Approval', value: pendingApprovalCount.toString(), icon: <ShieldCheck size={16} />, color: '#f59e0b', sub: 'Awaiting review' },
   ]
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

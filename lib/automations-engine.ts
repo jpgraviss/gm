@@ -17,6 +17,8 @@ const TRIGGER_MAP: Record<string, string> = {
   'project_launched':     'Project Status = Launched',
   'deal_stage_changed':   'Deal Stage Changed',
   'contact_created':      'Contact Created',
+  'renewal_90':           'Renewal Date Within 90 Days',
+  'renewal_30':           'Renewal Date Within 30 Days',
 }
 
 interface AutomationRow {

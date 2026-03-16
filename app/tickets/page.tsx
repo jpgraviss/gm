@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header'
 
 import NewTicketPanel, { type NewTicketFormData } from '@/components/crm/NewTicketPanel'
 import { formatDate } from '@/lib/utils'
+import { useToast } from '@/components/ui/Toast'
 import {
   MessageSquare, CheckCircle, Clock, AlertTriangle, X, ExternalLink,
   Plus, ChevronRight, ArrowUpRight, Send, User, Tag, FolderKanban,
@@ -255,6 +256,8 @@ function TicketPanel({
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TicketsPage() {
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
   const [localTickets, setLocalTickets] = useState<Ticket[]>([])
   const [selected, setSelected] = useState<Ticket | null>(null)
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'All'>('All')
@@ -264,7 +267,8 @@ export default function TicketsPage() {
     fetch('/api/tickets')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalTickets(data) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load tickets', 'error'))
+      .finally(() => setLoading(false))
   }, [])
 
   function sendReply(id: string, body: string, isInternal: boolean) {
@@ -288,7 +292,7 @@ export default function TicketsPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: newMessages }),
-      }).catch(() => {})
+      }).catch(() => toast('Failed to send reply', 'error'))
     }
     setSelected(prev => prev?.id === id ? { ...prev, messages: [...prev.messages, newMsg] } : prev)
   }
@@ -300,7 +304,7 @@ export default function TicketsPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to update ticket status', 'error'))
   }
 
   async function handleNewTicket(data: NewTicketFormData) {
@@ -348,6 +352,8 @@ export default function TicketsPage() {
 
   const openUrgent = localTickets.filter(t => t.status === 'Open' && t.priority === 'Urgent').length
   const unassigned = localTickets.filter(t => !t.assignedTo && t.status !== 'Resolved' && t.status !== 'Closed').length
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

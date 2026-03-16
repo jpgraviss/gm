@@ -17,6 +17,7 @@ import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewCo
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMCompany, CRMContact, CompanyStatus, Deal, Contract, Invoice, Project, CRMActivity } from '@/lib/types'
+import { useToast } from '@/components/ui/Toast'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
@@ -38,6 +39,7 @@ const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Cli
 // ─── Company Detail Panel ─────────────────────────────────────────────────────
 
 function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, contracts, invoices, projects, crmActivities }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void; crmContacts: CRMContact[]; deals: Deal[]; contracts: Contract[]; invoices: Invoice[]; projects: Project[]; crmActivities: CRMActivity[] }) {
+  const { toast } = useToast()
   const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'activity'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
@@ -55,7 +57,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, 
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tags }),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to save company tags', 'error'))
   }
 
   function handleAddTag() {
@@ -690,6 +692,8 @@ function EditCompanyPanel({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CompaniesPage() {
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('All')
   const [selectedCompany, setSelectedCompany] = useState<CRMCompany | null>(null)
@@ -708,7 +712,8 @@ export default function CompaniesPage() {
     fetch('/api/crm/companies')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
-      .catch(() => {/* keep static fallback */})
+      .catch(() => toast('Failed to load companies', 'error'))
+      .finally(() => setLoading(false))
     fetchCrmContacts().then(setCrmContacts)
     fetchDeals().then(setDeals)
     fetchContracts().then(setContracts)
@@ -725,7 +730,7 @@ export default function CompaniesPage() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => {})
+    }).catch(() => toast('Failed to save company changes', 'error'))
   }
 
   async function handleNewCompany(data: NewCompanyFormData) {
@@ -764,7 +769,7 @@ export default function CompaniesPage() {
     if (!confirm('Delete this company? This action cannot be undone.')) return
     setLocalCompanies(prev => prev.filter(c => c.id !== id))
     if (selectedCompany?.id === id) setSelectedCompany(null)
-    await fetch(`/api/crm/companies/${id}`, { method: 'DELETE' }).catch(() => {})
+    await fetch(`/api/crm/companies/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete company', 'error'))
   }
 
   const filtered = localCompanies.filter(c => {
@@ -775,6 +780,8 @@ export default function CompaniesPage() {
     const matchStatus = statusFilter === 'All' || c.status === statusFilter
     return matchSearch && matchStatus
   })
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

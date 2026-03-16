@@ -12,6 +12,7 @@ import {
   X, ExternalLink, ScrollText, Calendar, Zap, ArrowDownToLine,
   RotateCcw, Link2, Info,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 const statuses: InvoiceStatus[] = ['Pending', 'Sent', 'Overdue', 'Paid']
 
@@ -195,6 +196,7 @@ function InvoicePanel({ invoice, onClose, onUpdateStatus, contracts, allInvoices
 }
 
 export default function BillingPage() {
+  const { toast } = useToast()
   const [localInvoices, setLocalInvoices] = useState<Invoice[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
   const [revenueByMonth, setRevenueByMonth] = useState<RevenueMonth[]>([])
@@ -210,6 +212,7 @@ export default function BillingPage() {
   const [qbConnected, setQbConnected]     = useState(false)
   const [qbStatus, setQbStatus]           = useState<{ lastSync: string | null; invoicesSynced: number; paymentsSynced: number } | null>(null)
   const [qbSyncing, setQbSyncing]         = useState(false)
+  const [loading, setLoading] = useState(true)
 
   function fetchQBStatus() {
     fetch('/api/quickbooks/status')
@@ -223,7 +226,7 @@ export default function BillingPage() {
           setQbStatus(null)
         }
       })
-      .catch(() => {})
+      .catch(() => toast('Failed to load QuickBooks status', 'error'))
   }
 
   async function handleQBSync() {
@@ -234,7 +237,7 @@ export default function BillingPage() {
       if (data.success) {
         fetchQBStatus()
         // Refresh invoices after sync
-        fetch('/api/invoices').then(r => r.json()).then(d => { if (Array.isArray(d)) setLocalInvoices(d) }).catch(() => {})
+        fetch('/api/invoices').then(r => r.json()).then(d => { if (Array.isArray(d)) setLocalInvoices(d) }).catch(() => toast('Failed to load invoices', 'error'))
       }
     } catch { /* ignore */ } finally {
       setQbSyncing(false)
@@ -245,11 +248,12 @@ export default function BillingPage() {
     fetch('/api/invoices')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLocalInvoices(data) })
-      .catch(() => {})
+      .catch(() => toast('Failed to load invoices', 'error'))
+      .finally(() => setLoading(false))
     fetchContracts().then(setContracts)
     fetchRevenueByMonth().then(setRevenueByMonth)
     fetchQBStatus()
-    fetch('/api/time-entries/billable-summary').then(r => r.json()).then(d => { if (Array.isArray(d)) setBillableSummary(d) }).catch(() => {})
+    fetch('/api/time-entries/billable-summary').then(r => r.json()).then(d => { if (Array.isArray(d)) setBillableSummary(d) }).catch(() => toast('Failed to load billable time summary', 'error'))
   }, [])
 
   const filtered = statusFilter === 'All' ? localInvoices : localInvoices.filter(i => i.status === statusFilter)
@@ -261,7 +265,9 @@ export default function BillingPage() {
     overdue: localInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + i.amount, 0),
     collected: localInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0),
     outstanding: localInvoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0),
-    mrr: 3417,
+    mrr: contracts
+      .filter(c => ['Fully Executed', 'Active'].includes(c.status) && c.duration > 0)
+      .reduce((sum, c) => sum + c.value / c.duration, 0),
   }
 
   // Revenue by service breakdown (computed from invoices)
@@ -271,6 +277,8 @@ export default function BillingPage() {
     { service: 'Email Marketing', amount: localInvoices.filter(i => i.serviceType === 'Email Marketing' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
   ].filter(s => s.amount > 0)
   const maxService = Math.max(1, ...serviceBreakdown.map(s => s.amount || 0))
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>

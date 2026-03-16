@@ -80,10 +80,11 @@ function clientToAuthUser(row: any): AuthUser {
 async function autoProvisionTeamMember(
   supabase: ReturnType<typeof getSupabaseClient>,
   email: string,
-): Promise<AuthUser | null> {
+): Promise<AuthUser | { __diagError: string } | null> {
   try {
-    const { data: { user: authUser } } = await supabase.auth.getUser()
-    if (!authUser) return null
+    const { data: { user: authUser }, error: userErr } = await supabase.auth.getUser()
+    if (userErr) return { __diagError: `getUser: ${userErr.message}` }
+    if (!authUser) return { __diagError: 'getUser returned null' }
 
     const name = (authUser.user_metadata?.name as string) ||
       email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -99,15 +100,16 @@ async function autoProvisionTeamMember(
       status:   'Active',
       is_admin: false,
     })
-    if (error) return null
+    if (error) return { __diagError: `insert: ${error.message} (${error.code})` }
 
-    const { data: row } = await supabase
+    const { data: row, error: selErr } = await supabase
       .from('team_members')
       .select('*')
       .eq('email', email)
       .single()
-    return row ? rowToAuthUser(row) : null
-  } catch { return null }
+    if (selErr) return { __diagError: `select: ${selErr.message}` }
+    return row ? rowToAuthUser(row) : { __diagError: 'select returned no row' }
+  } catch (e) { return { __diagError: `exception: ${e instanceof Error ? e.message : String(e)}` } }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -191,7 +193,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Auto-provision team_members row for @gravissmarketing.com users
       if (!profile && email.toLowerCase().trim().endsWith('@gravissmarketing.com')) {
-        profile = await autoProvisionTeamMember(supabase, email.toLowerCase().trim())
+        const result = await autoProvisionTeamMember(supabase, email.toLowerCase().trim())
+        if (result && '__diagError' in result) {
+          return { ok: false, error: `Auto-provision failed: ${result.__diagError}` }
+        }
+        profile = result
       }
 
       if (!profile) return { ok: false, error: 'No account found for this email. Contact your administrator.' }

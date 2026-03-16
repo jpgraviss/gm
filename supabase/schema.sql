@@ -355,6 +355,8 @@ alter table public.revenue_months      enable row level security;
 
 -- Authenticated users: full read access
 create policy "auth_read_team_members"        on public.team_members        for select to authenticated using (true);
+-- Allow authenticated users to self-provision their own team_members row (id must match auth.uid())
+create policy "auth_self_insert_team_members" on public.team_members        for insert to authenticated with check (id = auth.uid()::text);
 create policy "auth_read_crm_companies"       on public.crm_companies       for select to authenticated using (true);
 create policy "auth_read_crm_contacts"        on public.crm_contacts        for select to authenticated using (true);
 create policy "auth_read_crm_activities"      on public.crm_activities      for select to authenticated using (true);

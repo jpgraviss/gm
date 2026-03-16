@@ -72,6 +72,44 @@ function clientToAuthUser(row: any): AuthUser {
   }
 }
 
+/**
+ * Auto-create a team_members row for an authenticated @gravissmarketing.com user
+ * who has a Supabase Auth account but no profile row yet.
+ * Uses the client-side authenticated session so it works from the browser.
+ */
+async function autoProvisionTeamMember(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  email: string,
+): Promise<AuthUser | null> {
+  try {
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    if (!authUser) return null
+
+    const name = (authUser.user_metadata?.name as string) ||
+      email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+    const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3) || 'GM'
+
+    const { error } = await supabase.from('team_members').insert({
+      id:       authUser.id,
+      name,
+      email,
+      role:     'Team Member',
+      unit:     'Leadership/Admin',
+      initials,
+      status:   'Active',
+      is_admin: false,
+    })
+    if (error) return null
+
+    const { data: row } = await supabase
+      .from('team_members')
+      .select('*')
+      .eq('email', email)
+      .single()
+    return row ? rowToAuthUser(row) : null
+  } catch { return null }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]                   = useState<AuthUser | null>(null)
   const [loading, setLoading]             = useState(true)
@@ -121,14 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let profile = await loadProfileByEmail(session.user.email)
         // Auto-provision on session restore for @gravissmarketing.com users
         if (!profile && session.user.email.toLowerCase().endsWith('@gravissmarketing.com')) {
-          try {
-            const res = await fetch('/api/auth/auto-provision', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: session.user.email.toLowerCase() }),
-            })
-            if (res.ok) profile = await loadProfileByEmail(session.user.email)
-          } catch {/* ignore */}
+          profile = await autoProvisionTeamMember(supabase, session.user.email.toLowerCase())
         }
         if (profile) {
           setUser(profile)
@@ -160,16 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Auto-provision team_members row for @gravissmarketing.com users
       if (!profile && email.toLowerCase().trim().endsWith('@gravissmarketing.com')) {
-        try {
-          const provRes = await fetch('/api/auth/auto-provision', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email.toLowerCase().trim() }),
-          })
-          if (provRes.ok) {
-            profile = await loadProfileByEmail(email)
-          }
-        } catch {/* auto-provision failed, fall through */}
+        profile = await autoProvisionTeamMember(supabase, email.toLowerCase().trim())
       }
 
       if (!profile) return { ok: false, error: 'No account found for this email. Contact your administrator.' }

@@ -138,7 +138,7 @@ function portalInviteHtml({
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
                 <td align="center">
-                  <a href="${portalUrl}" style="display:inline-block;background:#015035;color:#ffffff;font-size:14px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
+                  <a href="${portalUrl}/client-login" style="display:inline-block;background:#015035;color:#ffffff;font-size:14px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
                     Access Your Client Portal →
                   </a>
                 </td>

@@ -261,13 +261,11 @@ type LogRenewalPayload = {
 
 function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (payload: LogRenewalPayload) => void }) {
   const teamMembers = useTeamMembers()
-  const today = new Date().toISOString().split('T')[0]
-  const oneYearFromToday = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
   const [company, setCompany] = useState('')
   const [serviceType, setServiceType] = useState('Website')
-  const [startDate, setStartDate] = useState(today)
-  const [expirationDate, setExpirationDate] = useState(oneYearFromToday)
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [expirationDate, setExpirationDate] = useState(() => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
   const [value, setValue] = useState('')
   const [assignedRep, setAssignedRep] = useState('')
   const [notes, setNotes] = useState('')

@@ -143,7 +143,7 @@ export default function InboxPage() {
         const full = await res.json()
         setSelected(full)
       }
-    } catch {/* keep snippet */}
+    } catch { toast('Failed to load message details', 'error') }
     finally {
       setLoadingDetail(false)
     }

@@ -354,7 +354,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lastActivity: now }),
       }).catch(() => toast('Failed to update contact activity date', 'error'))
-    } catch {/* activity already shown locally */}
+    } catch { console.warn('Failed to persist activity to server') }
   }
 
   function persistTags(tags: string[]) {
@@ -1050,6 +1050,8 @@ export default function ContactsPage() {
     c.title.toLowerCase().includes(search.toLowerCase()) ||
     c.emails.join(' ').toLowerCase().includes(search.toLowerCase())
   )
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 

@@ -361,7 +361,7 @@ export default function SettingsPage() {
           invitedBy: 'Jonathan Graviss',
         }),
       })
-    } catch {/* non-blocking */}
+    } catch { console.warn('Invitation email failed to send') }
 
     setInviteSending(false)
     setInviteForm({ name: '', email: '', role: 'Team Member', unit: 'Sales', tempPassword: '' })

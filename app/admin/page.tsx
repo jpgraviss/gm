@@ -205,7 +205,7 @@ export default function AdminPage() {
     try {
       await fetch('/api/quickbooks/sync', { method: 'POST' })
       fetchQBStatus()
-    } catch { /* ignore */ } finally {
+    } catch { toast('QuickBooks sync failed', 'error') } finally {
       setQbSyncing(false)
     }
   }

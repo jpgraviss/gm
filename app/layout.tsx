@@ -6,8 +6,8 @@ import { ToastProvider } from '@/components/ui/Toast'
 import AppShell from '@/components/layout/AppShell'
 
 export const metadata: Metadata = {
-  title: 'GravHub — Graviss Marketing OS',
-  description: 'Unified internal operating system for Graviss Marketing',
+  title: 'GravHub — Run Your Agency Like a Machine',
+  description: 'Every lead. Every dollar. Every renewal. Zero gaps. The operating system that turns chaos into closed deals.',
 }
 
 export default function RootLayout({

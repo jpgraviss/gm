@@ -195,8 +195,8 @@ export default function LoginPage() {
             EVERY DOLLAR.<br />EVERY PROJECT.<br />EVERY RENEWAL.
           </h1>
           <p className="text-white/60 text-base leading-relaxed max-w-sm">
-            GravHub is the unified internal operating system for Graviss Marketing —
-            connecting every lead to every renewal with zero gaps.
+            One platform. Every lead, every deal, every dollar tracked from first touch
+            to final renewal. No gaps. No excuses. Just results.
           </p>
         </div>
 
@@ -372,7 +372,7 @@ export default function LoginPage() {
                     style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em' }}>
                     SIGN IN
                   </h2>
-                  <p className="text-gray-500 text-sm">Access the Graviss Marketing operating system</p>
+                  <p className="text-gray-500 text-sm">Your revenue command center awaits</p>
                 </div>
 
                 {/* ── Google Sign-In (official GIS rendered button) ── */}
@@ -478,7 +478,7 @@ export default function LoginPage() {
           </div>
 
           <p className="text-center text-xs text-gray-400 mt-5">
-            GravHub &copy; 2026 · Graviss Marketing · Internal Platform
+            GravHub &copy; 2026 · Graviss Marketing
           </p>
         </div>
       </div>

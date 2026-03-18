@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       const { data: teamRow } = await db
         .from('team_members')
         .select('id, email, name, role, unit, initials, is_admin, status')
-        .eq('email', email)
+        .ilike('email', email)
         .single()
 
       if (!teamRow) {
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
           const { data: newRow } = await db
             .from('team_members')
             .select('id, email, name, role, unit, initials, is_admin, status')
-            .eq('email', email)
+            .ilike('email', email)
             .single()
           if (newRow) {
             return NextResponse.json({
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     const { data: clientRow } = await db
       .from('portal_clients')
       .select('id, email, company, contact, service, access')
-      .eq('email', email)
+      .ilike('email', email)
       .single()
 
     if (!clientRow) {

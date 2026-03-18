@@ -18,52 +18,42 @@ import { useToast } from '@/components/ui/Toast'
 
 interface Greeting { headline: string; sub: string; emoji: string }
 
-function buildGreeting(fullName: string, now: Date): Greeting {
-  const firstName = fullName.split(' ')[0]
+const ROTATING_MESSAGES: { sub: string; emoji: string }[] = [
+  { sub: 'Revenue doesn\'t sleep. Neither does GravHub.',             emoji: '🔥' },
+  { sub: 'Every deal in your pipeline is a future payday.',           emoji: '💰' },
+  { sub: 'Outwork yesterday. Outclose tomorrow.',                     emoji: '🚀' },
+  { sub: 'Your pipeline is your paycheck — keep it full.',            emoji: '📈' },
+  { sub: 'Closed is the only stage that pays.',                       emoji: '🎯' },
+  { sub: 'Speed to lead. Speed to close. Speed to invoice.',          emoji: '⚡' },
+  { sub: 'The follow-up you skip is the deal you lose.',              emoji: '📞' },
+  { sub: 'A stale pipeline is a broke pipeline.',                     emoji: '💀' },
+  { sub: 'Renewals are revenue you already earned. Go collect.',      emoji: '💎' },
+  { sub: 'You\'re not just selling — you\'re building an empire.',    emoji: '👑' },
+  { sub: 'The difference between good and great? One more follow-up.',emoji: '💪' },
+  { sub: 'Opportunities don\'t expire — but your competitors don\'t wait.', emoji: '⏳' },
+  { sub: 'Today\'s proposal is next month\'s revenue.',               emoji: '📝' },
+  { sub: 'Track everything. Miss nothing. Close more.',               emoji: '🔒' },
+  { sub: 'Your CRM is only as strong as the reps using it.',          emoji: '🏋️' },
+]
+
+function buildGreeting(firstName: string, now: Date): Greeting {
   const hour = now.getHours()
-  const day  = now.getDay() // 0=Sun … 6=Sat
 
   const timePrefix =
     hour >= 5  && hour < 12 ? 'Good Morning'           :
     hour >= 12 && hour < 17 ? 'Good Afternoon'          :
     hour >= 17 && hour < 23 ? 'Good Evening'            :
-    'Burning the midnight oil' // midnight – 5am
+    'Burning the midnight oil'
 
-  const timeEmoji =
-    hour >= 5  && hour < 12 ? '☀️'  :
-    hour >= 12 && hour < 17 ? '🌤️' :
-    hour >= 17 && hour < 23 ? '🌆'  :
-    '🌙'
-
-  const dayMeta: Record<number, { label: string; msg: string; emoji: string }> = {
-    0: { label: 'Happy Sunday',    msg: 'Hope you\'re recharging — big week ahead.',        emoji: '😎' },
-    1: { label: 'Happy Monday',    msg: 'New week, new wins. Let\'s make it count.',         emoji: '🚀' },
-    2: { label: 'Happy Tuesday',   msg: 'Momentum is everything — keep it rolling.',         emoji: '💪' },
-    3: { label: 'Happy Wednesday', msg: 'Halfway there. You\'re crushing it.',               emoji: '⚡' },
-    4: { label: 'Happy Thursday',  msg: 'Almost at the finish line — push through.',         emoji: '🎯' },
-    5: { label: 'Happy Friday',    msg: 'Last push of the week. Finish strong.',             emoji: '🎉' },
-    6: { label: 'Happy Saturday',  msg: 'Hustle day or rest day — you earned the choice.',   emoji: '🌟' },
-  }
-
-  const { label: dayLabel, msg, emoji: dayEmoji } = dayMeta[day]
-
-  // Weekends: lead with Happy [Day]
-  if (day === 0 || day === 6) {
-    return { headline: `${dayLabel}, ${firstName}!`, sub: msg, emoji: dayEmoji }
-  }
-
-  // Friday: blend celebration with time greeting
-  if (day === 5) {
-    return { headline: `${timePrefix}, ${firstName}!`, sub: `${dayLabel} — ${msg}`, emoji: dayEmoji }
-  }
-
-  // Weekdays: time-based greeting with day sub-line
-  return { headline: `${timePrefix}, ${firstName}!`, sub: `${dayLabel} — ${msg}`, emoji: timeEmoji }
+  return { headline: `${timePrefix}, ${firstName}!`, sub: '', emoji: '' }
 }
 
 function GreetingBanner({ name }: { name: string }) {
+  const firstName = name.split(' ')[0]
   const [visible, setVisible]   = useState(false)
-  const [greeting, setGreeting] = useState<Greeting>({ headline: '', sub: '', emoji: '' })
+  const [headline, setHeadline] = useState('')
+  const [msgIndex, setMsgIndex] = useState(() => Math.floor(Math.random() * ROTATING_MESSAGES.length))
+  const [fade, setFade]         = useState(true)
 
   useEffect(() => {
     try {
@@ -74,15 +64,30 @@ function GreetingBanner({ name }: { name: string }) {
       const THREE_MIN = 3 * 60 * 1000
       if (elapsed >= THREE_MIN) return
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setGreeting(buildGreeting(name, new Date())) // user's local timezone
+      setHeadline(buildGreeting(firstName, new Date()).headline)
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setVisible(true)
-      const timer = setTimeout(() => setVisible(false), THREE_MIN - elapsed)
-      return () => clearTimeout(timer)
+      const hideTimer = setTimeout(() => setVisible(false), THREE_MIN - elapsed)
+      return () => clearTimeout(hideTimer)
     } catch {/* ignore */}
-  }, [name])
+  }, [firstName])
+
+  // Rotate sub-message every 30 seconds
+  useEffect(() => {
+    if (!visible) return
+    const interval = setInterval(() => {
+      setFade(false)
+      setTimeout(() => {
+        setMsgIndex(prev => (prev + 1) % ROTATING_MESSAGES.length)
+        setFade(true)
+      }, 300)
+    }, 30_000)
+    return () => clearInterval(interval)
+  }, [visible])
 
   if (!visible) return null
+
+  const currentMsg = ROTATING_MESSAGES[msgIndex]
 
   return (
     <div
@@ -95,14 +100,27 @@ function GreetingBanner({ name }: { name: string }) {
     >
       <div>
         <p style={{ fontSize: '22px', fontWeight: 800, color: '#111827', lineHeight: 1.25, margin: 0 }}>
-          {greeting.headline}
+          {headline}
         </p>
-        <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px', marginBottom: 0 }}>
-          {greeting.sub}
+        <p
+          style={{
+            fontSize: '13px', color: '#6b7280', marginTop: '4px', marginBottom: 0,
+            transition: 'opacity 0.3s ease',
+            opacity: fade ? 1 : 0,
+          }}
+        >
+          {currentMsg.sub}
         </p>
       </div>
-      <span style={{ fontSize: '48px', lineHeight: 1, userSelect: 'none' }} aria-hidden>
-        {greeting.emoji}
+      <span
+        style={{
+          fontSize: '48px', lineHeight: 1, userSelect: 'none',
+          transition: 'opacity 0.3s ease',
+          opacity: fade ? 1 : 0,
+        }}
+        aria-hidden
+      >
+        {currentMsg.emoji}
       </span>
     </div>
   )

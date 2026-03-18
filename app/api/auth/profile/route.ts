@@ -14,11 +14,11 @@ export async function POST(req: NextRequest) {
     const db = createServiceClient()
     const emailLower = email.toLowerCase().trim()
 
-    // Check team_members (staff)
+    // Check team_members (staff) — case-insensitive
     const { data: teamRow } = await db
       .from('team_members')
       .select('id, email, name, role, unit, initials, is_admin, status')
-      .eq('email', emailLower)
+      .ilike('email', emailLower)
       .single()
 
     if (teamRow) {
@@ -36,11 +36,11 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Check portal_clients
+    // Check portal_clients — case-insensitive
     const { data: clientRow } = await db
       .from('portal_clients')
       .select('id, email, company, contact, service, access')
-      .eq('email', emailLower)
+      .ilike('email', emailLower)
       .single()
 
     if (clientRow) {
@@ -85,7 +85,31 @@ export async function POST(req: NextRequest) {
             },
           })
         }
-        return NextResponse.json({ error: `Auto-provision insert failed: ${insertErr.message}` }, { status: 500 })
+
+        // Duplicate key — row exists with different casing, re-query
+        if (insertErr.code === '23505') {
+          const { data: existingRow } = await db
+            .from('team_members')
+            .select('id, email, name, role, unit, initials, is_admin, status')
+            .ilike('email', emailLower)
+            .single()
+          if (existingRow) {
+            return NextResponse.json({
+              user: {
+                id:       existingRow.id,
+                email:    existingRow.email,
+                name:     existingRow.name,
+                role:     existingRow.role,
+                unit:     existingRow.unit,
+                initials: existingRow.initials ?? '',
+                isAdmin:  existingRow.is_admin ?? false,
+                userType: 'staff',
+              },
+            })
+          }
+        }
+
+        return NextResponse.json({ error: `Auto-provision failed: ${insertErr.message}` }, { status: 500 })
       }
     }
 

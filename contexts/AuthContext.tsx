@@ -105,7 +105,7 @@ async function autoProvisionTeamMember(
     const { data: row, error: selErr } = await supabase
       .from('team_members')
       .select('*')
-      .eq('email', email)
+      .ilike('email', email)
       .single()
     if (selErr) return { __diagError: `select: ${selErr.message}` }
     return row ? rowToAuthUser(row) : { __diagError: 'select returned no row' }
@@ -133,14 +133,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: teamData } = await supabase
         .from('team_members')
         .select('*')
-        .eq('email', email.toLowerCase())
+        .ilike('email', email.toLowerCase())
         .single()
       if (teamData) return rowToAuthUser(teamData, avatar)
 
       const { data: clientData } = await supabase
         .from('portal_clients')
         .select('*')
-        .eq('email', email.toLowerCase())
+        .ilike('email', email.toLowerCase())
         .single()
       if (clientData) return clientToAuthUser(clientData)
 

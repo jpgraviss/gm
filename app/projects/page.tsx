@@ -141,12 +141,12 @@ function ProjectDetailPanel({
   const [tab, setTab] = useState<'overview' | 'milestones' | 'tasks' | 'notes'>('overview')
   const [showStatusPicker, setShowStatusPicker] = useState(false)
   const [localTasks, setLocalTasks] = useState(project.tasks)
-  const [notes, setNotes] = useState<Array<{ id: string; text: string; date: string; author: string }>>((project as any).notes ?? [])
+  const [notes, setNotes] = useState<Array<{ id: string; text: string; date: string; author: string }>>(project.notes ?? [])
   const [noteText, setNoteText] = useState('')
   const [showNoteForm, setShowNoteForm] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editingOverview, setEditingOverview] = useState(false)
-  const [overview, setOverview] = useState((project as any).overview ?? '')
+  const [overview, setOverview] = useState(project.overview ?? '')
   const [showAddMilestone, setShowAddMilestone] = useState(false)
   const [newMilestoneName, setNewMilestoneName] = useState('')
   const [newMilestoneDue, setNewMilestoneDue] = useState('')
@@ -175,7 +175,7 @@ function ProjectDetailPanel({
     }
     const updatedNotes = [...notes, newNote]
     setNotes(updatedNotes)
-    onUpdate?.(project.id, { notes: updatedNotes } as any)
+    onUpdate?.(project.id, { notes: updatedNotes })
     setNoteText('')
     setShowNoteForm(false)
   }
@@ -313,7 +313,7 @@ function ProjectDetailPanel({
                       <button onClick={() => setEditingOverview(false)} className="px-3 py-1.5 text-xs text-gray-500 rounded-lg border border-gray-200 hover:bg-gray-100">Cancel</button>
                       <button
                         onClick={() => {
-                          onUpdate?.(project.id, { overview } as any)
+                          onUpdate?.(project.id, { overview })
                           setEditingOverview(false)
                         }}
                         className="px-3 py-1.5 text-xs text-white rounded-lg"

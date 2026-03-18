@@ -31,22 +31,27 @@ export default function ClientPortalPage() {
   const [ticketSuccess, setTicketSuccess] = useState(false)
   const [files, setFiles] = useState<{ name: string; size: number; createdAt: string; url: string | null }[]>([])
   const [uploading, setUploading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!company) return
+    if (!company) { setLoading(false); return }
     const q = encodeURIComponent(company)
-    fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => toast('Failed to load project data', 'error'))
-    fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => toast('Failed to load contract data', 'error'))
-    fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => toast('Failed to load invoices', 'error'))
-    fetch('/api/portal-clients').then(r => r.json()).then((clients: { company: string; service: string }[]) => {
-      const match = clients.find(c => c.company === company)
-      if (match) setAccountInfo({ service: match.service })
-    }).catch(() => toast('Failed to load account info', 'error'))
-    fetch(`/api/files?company=${q}`).then(r => r.json()).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => toast('Failed to load files', 'error'))
+    Promise.all([
+      fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => toast('Failed to load project data', 'error')),
+      fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => toast('Failed to load contract data', 'error')),
+      fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => toast('Failed to load invoices', 'error')),
+      fetch('/api/portal-clients').then(r => r.json()).then((clients: { company: string; service: string }[]) => {
+        const match = clients.find(c => c.company === company)
+        if (match) setAccountInfo({ service: match.service })
+      }).catch(() => toast('Failed to load account info', 'error')),
+      fetch(`/api/files?company=${q}`).then(r => r.json()).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => toast('Failed to load files', 'error')),
+    ]).finally(() => setLoading(false))
   }, [company])
 
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: '#f8fafc' }}>

@@ -73,7 +73,7 @@ export default function CalendarPage() {
     fetch(`/api/bookings${params}`)
       .then(r => r.json())
       .then(d => { setBookings(Array.isArray(d) ? d : []); setLoading(false) })
-      .catch(() => setLoading(false))
+      .catch(() => { toast('Failed to load bookings', 'error'); setLoading(false) })
   }, [userSlug])
 
   useEffect(() => {

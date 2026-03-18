@@ -514,7 +514,30 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
                             Pay
                           </button>
                         )}
-                        <button className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                        <button
+                          className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                          title="Download invoice"
+                          onClick={() => {
+                            const w = window.open('', '_blank', 'width=600,height=700')
+                            if (!w) return
+                            w.document.write(`<!DOCTYPE html><html><head><title>Invoice ${inv.id.toUpperCase()}</title><style>body{font-family:'Montserrat',Arial,sans-serif;margin:40px;color:#1a1a1a}
+.header{background:#012b1e;color:#fff;padding:28px 32px;border-radius:10px 10px 0 0}.header h1{margin:0 0 4px;font-size:20px}.header p{margin:0;font-size:12px;opacity:.6}
+.body{border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;padding:28px 32px}.row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f3f4f6;font-size:13px}
+.row:last-of-type{border-bottom:none}.label{color:#6b7280}.value{font-weight:600;color:#111827}.amount{font-size:28px;font-weight:800;color:#015035;text-align:center;padding:20px 0 10px}
+.badge{text-align:center;margin:16px 0 0}.badge span{display:inline-block;border:4px solid ${inv.status === 'Paid' ? '#015035' : '#f59e0b'};color:${inv.status === 'Paid' ? '#015035' : '#f59e0b'};font-size:28px;font-weight:900;letter-spacing:.2em;padding:6px 24px;border-radius:6px;transform:rotate(-8deg);opacity:.85}
+@media print{body{margin:0}}</style></head><body>
+<div class="header"><h1>GravHub Invoice</h1><p>${inv.id.toUpperCase()}</p></div>
+<div class="body"><div class="amount">$${Number(inv.amount).toLocaleString('en-US',{minimumFractionDigits:2})}</div>
+<div class="row"><span class="label">Company</span><span class="value">${company}</span></div>
+<div class="row"><span class="label">Status</span><span class="value">${inv.status}</span></div>
+<div class="row"><span class="label">Issued</span><span class="value">${inv.issuedDate ?? '—'}</span></div>
+<div class="row"><span class="label">Due Date</span><span class="value">${inv.dueDate ?? '—'}</span></div>
+${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span class="value">${inv.paidDate}</span></div>` : ''}
+<div class="badge"><span>${inv.status === 'Paid' ? 'PAID' : inv.status.toUpperCase()}</span></div></div>
+<script>window.onload=function(){window.print();window.close()}<\/script></body></html>`)
+                            w.document.close()
+                          }}
+                        >
                           <Download size={13} />
                         </button>
                       </div>
@@ -607,7 +630,10 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
                       <p className="text-xs text-gray-400">{file.size} · {file.date}</p>
                     </div>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{file.type}</span>
-                    <button className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1.5 rounded-lg hover:bg-gray-100">
+                    <button
+                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1.5 rounded-lg hover:bg-gray-100"
+                      onClick={() => toast(`Download for "${file.name}" is not yet available`, 'info')}
+                    >
                       <Download size={13} />
                     </button>
                   </div>
@@ -632,6 +658,7 @@ export default function PortalPage() {
   const [addingClient, setAddingClient] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [showLoginList, setShowLoginList] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch('/api/portal-clients')
@@ -641,6 +668,7 @@ export default function PortalPage() {
         if (data.length > 0) setPreviewCompany(data.find(c => c.access === 'Active')?.company ?? data[0].company)
       })
       .catch(() => toast('Failed to load portal clients', 'error'))
+      .finally(() => setLoading(false))
   }, [])
 
   // Clients who logged in during the current calendar month
@@ -702,6 +730,8 @@ export default function PortalPage() {
     setClients(prev => prev.filter(c => c.id !== id))
     setDeleteConfirm(null)
   }
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   if (viewAsClient) {
     return <ClientPortalView company={previewCompany} accountInfo={clients.find(c => c.company === previewCompany)} onExit={() => setViewAsClient(false)} />

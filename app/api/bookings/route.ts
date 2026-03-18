@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
         }),
       })
     }
-  } catch { /* non-fatal */ }
+  } catch (e) { console.warn('Booking confirmation email failed:', e) }
 
   return NextResponse.json(booking, { status: 201 })
 }

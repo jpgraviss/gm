@@ -203,6 +203,8 @@ export interface Project {
   progress: number
   milestones: Milestone[]
   tasks: Task[]
+  notes?: Array<{ id: string; text: string; date: string; author: string }>
+  overview?: string
 }
 
 export interface MaintenanceRecord {

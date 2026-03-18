@@ -10,6 +10,17 @@ import type { Deal, Invoice, Project, Renewal, RevenueMonth } from '@/lib/types'
 type DateRange = '3M' | '6M' | '12M'
 type RepFilter = 'All' | string
 
+const SERVICE_COLORS: Record<string, string> = {
+  'Website':        '#6366f1',
+  'SEO':            '#14b8a6',
+  'Email Marketing':'#06b6d4',
+  'Branding':       '#f59e0b',
+  'Custom':         '#8b5cf6',
+  'Maintenance':    '#22c55e',
+  'Social Media':   '#ec4899',
+  'PPC':            '#3b82f6',
+}
+
 function MiniBar({ value, max, color }: { value: number; max: number; color: string }) {
   return (
     <div className="flex items-center gap-2 flex-1">
@@ -93,16 +104,6 @@ export default function ReportsPage() {
 
   const repStats = repFilter === 'All' ? allRepStats : allRepStats.filter(r => r.name === repFilter)
 
-  const SERVICE_COLORS: Record<string, string> = {
-    'Website':        '#6366f1',
-    'SEO':            '#14b8a6',
-    'Email Marketing':'#06b6d4',
-    'Branding':       '#f59e0b',
-    'Custom':         '#8b5cf6',
-    'Maintenance':    '#22c55e',
-    'Social Media':   '#ec4899',
-    'PPC':            '#3b82f6',
-  }
   const serviceRevenue = useMemo(() => {
     const svcMap: Record<string, { revenue: number; deals: number }> = {}
     normalizedDeals.forEach(d => {
@@ -118,7 +119,7 @@ export default function ReportsPage() {
         color: SERVICE_COLORS[service] ?? '#9ca3af',
       }))
       .sort((a, b) => b.revenue - a.revenue)
-  }, [deals])
+  }, [normalizedDeals])
   const maxService = Math.max(...serviceRevenue.map(s => s.revenue), 1)
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>

@@ -131,7 +131,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(entry),
       })
-    } catch {/* activity already shown locally */}
+    } catch { console.warn('Failed to persist activity to server') }
   }
 
   // Cross-linked data
@@ -780,6 +780,8 @@ export default function CompaniesPage() {
     const matchStatus = statusFilter === 'All' || c.status === statusFilter
     return matchSearch && matchStatus
   })
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 

@@ -205,7 +205,7 @@ export default function AdminPage() {
     try {
       await fetch('/api/quickbooks/sync', { method: 'POST' })
       fetchQBStatus()
-    } catch { /* ignore */ } finally {
+    } catch { toast('QuickBooks sync failed', 'error') } finally {
       setQbSyncing(false)
     }
   }
@@ -358,9 +358,11 @@ export default function AdminPage() {
             }),
           })
         }
-      } catch {/* continue on error */}
+      } catch {
+        setImportProgress(prev => prev ? { ...prev, error: `Failed to import row ${done + 1}` } : null)
+      }
       done++
-      setImportProgress({ done, total: rows.length, error: '' })
+      setImportProgress(prev => prev ? { ...prev, done } : null)
     }
     setTimeout(() => { setShowImportModal(false); setImportFile(null); setImportProgress(null) }, 1500)
   }

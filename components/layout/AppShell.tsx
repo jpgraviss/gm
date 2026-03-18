@@ -7,7 +7,7 @@ import { useUI } from '@/contexts/UIContext'
 import Sidebar from './Sidebar'
 import { ShieldAlert, X } from 'lucide-react'
 
-const PUBLIC_ROUTES = ['/login']
+const PUBLIC_ROUTES = ['/login', '/client-login']
 
 // Pages restricted to specific units. Admins (isAdmin=true) always have full access.
 // If a route prefix is listed, users whose unit is NOT in the allowed list get redirected to /.
@@ -58,8 +58,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return
     if (!user && !isPublic) {
-      router.replace('/login')
+      router.replace(pathname === '/client' ? '/client-login' : '/login')
     } else if (user && pathname === '/login') {
+      router.replace(user.userType === 'client' ? '/client' : '/')
+    } else if (user && pathname === '/client-login') {
       router.replace(user.userType === 'client' ? '/client' : '/')
     } else if (user && user.userType === 'client' && pathname !== '/client') {
       router.replace('/client')

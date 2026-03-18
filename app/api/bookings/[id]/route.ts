@@ -14,7 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (booking?.google_event_id && booking.calendar_settings) {
       const accessToken = await getValidAccessToken(booking.calendar_settings as unknown as CalendarSettings)
       if (accessToken) {
-        await deleteGoogleEvent(accessToken, booking.google_event_id).catch(() => null)
+        await deleteGoogleEvent(accessToken, booking.google_event_id).catch(e => console.warn('Failed to delete Google event:', e))
       }
     }
   }

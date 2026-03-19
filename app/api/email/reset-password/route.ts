@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     // stored in a DB with an expiry; here we create a readable temp token)
     const token = Buffer.from(`${email}:${Date.now()}`).toString('base64url')
     const loginUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
-    const resetUrl = `${loginUrl}/login?reset=${token}`
+    const resetUrl = `${loginUrl}/team-login?reset=${token}`
 
     const { data, error } = await resend.emails.send({
       from: 'GravHub <noreply@app.gravissmarketing.com>',

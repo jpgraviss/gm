@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     // Generate reset token and send if we have a valid email format
     const token = Buffer.from(`${email}:${Date.now()}`).toString('base64url')
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
-    const resetUrl = `${appUrl}/login?reset=${token}`
+    const resetUrl = `${appUrl}/team-login?reset=${token}`
 
     const { error } = await resend.emails.send({
       from: 'GravHub <noreply@app.gravissmarketing.com>',

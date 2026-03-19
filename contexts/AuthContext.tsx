@@ -21,7 +21,7 @@ interface AuthContextType {
   user: AuthUser | null
   loading: boolean
   mustChangePassword: boolean
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean }>
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean; userType?: string }>
   loginWithGoogle: (credential: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
   changePassword: (email: string, newPassword: string) => void
@@ -184,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   }, [fetchMembers, loadProfileByEmail])
 
-  const login = async (email: string, password: string): Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean }> => {
+  const login = async (email: string, password: string): Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean; userType?: string }> => {
     try {
       const supabase = getSupabaseClient()
       const { error } = await supabase.auth.signInWithPassword({ email: email.toLowerCase().trim(), password })
@@ -224,7 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }).catch(() => {})
       }
       try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
-      return { ok: true }
+      return { ok: true, userType: profile.userType }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed. Please try again.'
       return { ok: false, error: msg }

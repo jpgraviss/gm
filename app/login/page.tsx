@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import { Eye, EyeOff, Lock, Mail, AlertCircle, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
+import { Eye, EyeOff, Lock, Mail, AlertCircle, ArrowRight, Globe } from 'lucide-react'
 
 // Minimal type shim for Google Identity Services
 declare global {
@@ -39,7 +40,7 @@ declare global {
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''
 
 export default function LoginPage() {
-  const { login, loginWithGoogle, user, loading, mustChangePassword, changePassword } = useAuth()
+  const { login, loginWithGoogle, user, loading, changePassword } = useAuth()
   const router = useRouter()
 
   const [mode, setMode] = useState<'login' | 'forgot' | 'sent' | 'change-password'>('login')
@@ -58,7 +59,9 @@ export default function LoginPage() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (!loading && user) router.replace('/')
+    if (!loading && user) {
+      router.replace(user.userType === 'client' ? '/client' : '/')
+    }
   }, [user, loading, router])
 
   // Stable callback ref so the GIS callback doesn't go stale
@@ -68,7 +71,7 @@ export default function LoginPage() {
     const result = await loginWithGoogle(credential)
     setGoogleLoading(false)
     if (result.ok) {
-      router.push('/')
+      router.push('/client')
     } else {
       setError(result.error ?? 'Google sign-in failed. Please try again.')
     }
@@ -89,7 +92,6 @@ export default function LoginPage() {
         cancel_on_tap_outside: true,
       })
 
-      // Render the official Google button inside our container div
       window.google.accounts.id.renderButton(googleBtnRef.current, {
         theme: 'outline',
         size: 'large',
@@ -109,16 +111,6 @@ export default function LoginPage() {
     }
   }, [handleGoogleCredential])
 
-  // If user is logged in and needs to change password, show that mode
-  useEffect(() => {
-    if (!loading && user && mustChangePassword) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setEmail(user.email)
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setMode('change-password')
-    }
-  }, [user, loading, mustChangePassword])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !password) {
@@ -133,10 +125,10 @@ export default function LoginPage() {
         setMode('change-password')
         setSubmitting(false)
       } else {
-        router.push('/')
+        router.push(result.userType === 'client' ? '/client' : '/')
       }
     } else {
-      setError(result.error ?? 'Login failed.')
+      setError(result.error ?? 'Login failed. Please check your credentials.')
       setSubmitting(false)
     }
   }
@@ -168,7 +160,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email: forgotEmail }),
       })
     } catch {
-      // Fail silently — always show confirmation
+      // Fail silently — always show confirmation for security
     }
     setSubmitting(false)
     setMode('sent')
@@ -192,25 +184,25 @@ export default function LoginPage() {
         <div>
           <h1 className="text-white text-4xl font-bold leading-tight mb-5"
             style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em', lineHeight: 1.15 }}>
-            EVERY DOLLAR.<br />EVERY PROJECT.<br />EVERY RENEWAL.
+            YOUR PROJECT.<br />YOUR INVOICES.<br />ALL IN ONE PLACE.
           </h1>
           <p className="text-white/60 text-base leading-relaxed max-w-sm">
-            One platform. Every lead, every deal, every dollar tracked from first touch
-            to final renewal. No gaps. No excuses. Just results.
+            Access your project status, billing history, support tickets, and shared files
+            through your Graviss Marketing client portal.
           </p>
         </div>
 
         {/* Feature list */}
         <div className="flex flex-col gap-3">
           {[
-            'Full revenue lifecycle control',
-            'Real-time pipeline & contract tracking',
-            'Automated billing & project delivery',
-            'Renewal forecasting & retention',
+            'Real-time project progress tracking',
+            'View invoices & payment history',
+            'Submit support tickets',
+            'Access shared files & deliverables',
           ].map(f => (
             <div key={f} className="flex items-center gap-3">
               <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#015035' }}>
-                <span className="text-white text-[9px] font-bold">✓</span>
+                <span className="text-white text-[9px] font-bold">&#10003;</span>
               </div>
               <span className="text-white/70 text-sm">{f}</span>
             </div>
@@ -238,7 +230,7 @@ export default function LoginPage() {
                   onClick={() => { setMode('login'); setError(''); setForgotEmail('') }}
                   className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mb-6 transition-colors"
                 >
-                  ← Back to Sign In
+                  &larr; Back to Sign In
                 </button>
                 <div className="mb-6">
                   <h2 className="text-xl font-bold text-gray-900 mb-1"
@@ -256,7 +248,7 @@ export default function LoginPage() {
                         type="email"
                         value={forgotEmail}
                         onChange={e => setForgotEmail(e.target.value)}
-                        placeholder="you@gravissmarketing.com"
+                        placeholder="your@email.com"
                         className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
                         autoFocus
                         disabled={submitting}
@@ -270,7 +262,7 @@ export default function LoginPage() {
                     style={{ background: '#015035' }}
                   >
                     {submitting ? (
-                      <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Sending…</>
+                      <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Sending&hellip;</>
                     ) : (
                       <>Send Reset Link <ArrowRight size={15} /></>
                     )}
@@ -290,7 +282,7 @@ export default function LoginPage() {
                   CHECK YOUR EMAIL
                 </h2>
                 <p className="text-gray-500 text-sm mb-2">
-                  If <strong>{forgotEmail}</strong> has a GravHub account, a reset link is on its way.
+                  If <strong>{forgotEmail}</strong> has an account, a reset link is on its way.
                 </p>
                 <p className="text-gray-400 text-xs mb-6">The link expires in 24 hours. Check your spam folder if it doesn&apos;t arrive.</p>
                 <button
@@ -314,7 +306,7 @@ export default function LoginPage() {
                     style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em' }}>
                     SET YOUR PASSWORD
                   </h2>
-                  <p className="text-gray-500 text-sm">Your account was created with a temporary password. Please set a new password to continue.</p>
+                  <p className="text-gray-500 text-sm">Welcome! Please set a new password to access your client portal.</p>
                 </div>
                 <form onSubmit={handleChangePassword} className="flex flex-col gap-4">
                   <div>
@@ -368,11 +360,15 @@ export default function LoginPage() {
             {mode === 'login' && (
               <>
                 <div className="mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Globe size={16} style={{ color: '#015035' }} />
+                    <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#015035' }}>Client Portal</span>
+                  </div>
                   <h2 className="text-xl font-bold text-gray-900 mb-1"
                     style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em' }}>
                     SIGN IN
                   </h2>
-                  <p className="text-gray-500 text-sm">Your revenue command center awaits</p>
+                  <p className="text-gray-500 text-sm">Access your project dashboard, invoices, and files</p>
                 </div>
 
                 {/* ── Google Sign-In (official GIS rendered button) ── */}
@@ -410,7 +406,7 @@ export default function LoginPage() {
                         type="email"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
-                        placeholder="you@gravissmarketing.com"
+                        placeholder="your@email.com"
                         className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
                         autoComplete="email"
                         autoFocus
@@ -436,7 +432,7 @@ export default function LoginPage() {
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={e => setPassword(e.target.value)}
-                        placeholder="••••••••••"
+                        placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"
                         className="w-full pl-9 pr-10 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
                         autoComplete="current-password"
                         disabled={submitting}
@@ -468,7 +464,7 @@ export default function LoginPage() {
                     {submitting ? (
                       <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Signing in...</>
                     ) : (
-                      <>Sign In to GravHub <ArrowRight size={15} /></>
+                      <>Sign In to Portal <ArrowRight size={15} /></>
                     )}
                   </button>
                 </form>
@@ -477,9 +473,14 @@ export default function LoginPage() {
 
           </div>
 
-          <p className="text-center text-xs text-gray-400 mt-5">
-            GravHub &copy; 2026 · Graviss Marketing
-          </p>
+          <div className="flex items-center justify-between mt-5 px-1">
+            <p className="text-xs text-gray-400">
+              Graviss Marketing Client Portal &copy; 2026
+            </p>
+            <Link href="/team-login" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+              Team Login &rarr;
+            </Link>
+          </div>
         </div>
       </div>
     </div>

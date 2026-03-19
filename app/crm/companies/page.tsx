@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 import { fetchCrmCompanies, fetchCrmContacts, fetchDeals, fetchContracts, fetchInvoices, fetchProjects, fetchCrmActivities } from '@/lib/supabase'
 import {
   formatCurrency, stageColors, serviceTypeColors, contractStatusColors,
@@ -553,6 +554,7 @@ function EditCompanyPanel({
   onSave: (updated: CRMCompany) => void
   onClose: () => void
 }) {
+  const REPS = useTeamMembers()
   const [form, setForm] = useState({
     name: company.name,
     industry: company.industry,
@@ -659,8 +661,11 @@ function EditCompanyPanel({
 
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Owner / Account Rep</label>
-            <input value={form.owner} onChange={e => set('owner', e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            <select value={form.owner} onChange={e => set('owner', e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              {!REPS.includes(form.owner) && form.owner && <option value={form.owner}>{form.owner}</option>}
+              {REPS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
           </div>
 
           <div>

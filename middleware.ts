@@ -89,14 +89,14 @@ export function middleware(req: NextRequest) {
   }
 
   // ── All other API routes: require authentication ─────────────────────────
-  // Check for Supabase auth cookie or Authorization header.
-  // The Supabase client library sets cookies automatically on login.
+  // Check for Supabase auth cookie, gravhub session cookie, or Authorization header.
   const hasAuthCookie = req.cookies.getAll().some(c =>
     c.name.startsWith('sb-') && c.name.endsWith('-auth-token')
   )
+  const hasGravhubCookie = req.cookies.has('gravhub-auth')
   const hasAuthHeader = !!req.headers.get('authorization')
 
-  if (!hasAuthCookie && !hasAuthHeader) {
+  if (!hasAuthCookie && !hasGravhubCookie && !hasAuthHeader) {
     return NextResponse.json(
       { error: 'Authentication required' },
       { status: 401 }

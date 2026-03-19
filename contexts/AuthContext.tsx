@@ -112,6 +112,17 @@ async function autoProvisionTeamMember(
   } catch (e) { return { __diagError: `exception: ${e instanceof Error ? e.message : String(e)}` } }
 }
 
+// ── Auth cookie helpers ────────────────────────────────────────────────────
+// The middleware checks for this cookie to allow authenticated API calls.
+// Supabase JS stores the session in localStorage (not cookies), so without
+// this bridge cookie the middleware blocks every API request with a 401.
+function setAuthCookie() {
+  try { document.cookie = 'gravhub-auth=1; path=/; max-age=604800; SameSite=Lax' } catch {/* SSR guard */}
+}
+function clearAuthCookie() {
+  try { document.cookie = 'gravhub-auth=; path=/; max-age=0; SameSite=Lax' } catch {/* SSR guard */}
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]                   = useState<AuthUser | null>(null)
   const [loading, setLoading]             = useState(true)
@@ -156,24 +167,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const supabase = getSupabaseClient()
 
+    // Helper: load profile and set user + cookie
+    const restoreProfile = async (email: string, avatar?: string) => {
+      let profile = await loadProfileByEmail(email, avatar)
+      // Auto-provision on session restore for @gravissmarketing.com users
+      if (!profile && email.toLowerCase().endsWith('@gravissmarketing.com')) {
+        const result = await autoProvisionTeamMember(supabase, email.toLowerCase())
+        if (result && !('__diagError' in result)) profile = result
+      }
+      if (profile) {
+        setUser(profile)
+        setAuthCookie()
+        if (profile.userType === 'staff') fetchMembers()
+      }
+      return profile
+    }
+
+    // Also try to restore Google SSO users (no Supabase session, profile in localStorage)
+    const tryRestoreGoogleUser = () => {
+      try {
+        const stored = localStorage.getItem('gravhub_user')
+        if (stored) {
+          const parsed = JSON.parse(stored) as AuthUser
+          if (parsed?.email && parsed?.id) {
+            setUser(parsed)
+            setAuthCookie()
+            if (parsed.userType === 'staff') fetchMembers()
+            return true
+          }
+        }
+      } catch {/* ignore */}
+      return false
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user?.email) {
-        let profile = await loadProfileByEmail(session.user.email)
-        // Auto-provision on session restore for @gravissmarketing.com users
-        if (!profile && session.user.email.toLowerCase().endsWith('@gravissmarketing.com')) {
-          const result = await autoProvisionTeamMember(supabase, session.user.email.toLowerCase())
-          if (result && !('__diagError' in result)) profile = result
-        }
-        if (profile) {
-          setUser(profile)
-          if (profile.userType === 'staff') fetchMembers()
-        }
+        await restoreProfile(session.user.email)
+      } else {
+        // No Supabase session — try restoring a Google SSO user from localStorage
+        tryRestoreGoogleUser()
       }
       setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || !session) setUser(null)
+      if (event === 'SIGNED_OUT' || !session) {
+        setUser(null)
+        clearAuthCookie()
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        // Restore profile on sign-in or token refresh (e.g. page reload)
+        if (session?.user?.email) {
+          await restoreProfile(session.user.email)
+        }
+      }
     })
 
     try {
@@ -213,6 +259,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!profile) return { ok: false, error: 'No account found for this email. Contact your administrator.' }
 
       setUser(profile)
+      setAuthCookie()
+      try { localStorage.setItem('gravhub_user', JSON.stringify(profile)) } catch {/* ignore */}
       if (profile.userType === 'staff') fetchMembers()
       // Record last login date for portal clients
       if (profile.userType === 'client' && profile.id) {
@@ -249,6 +297,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const profile: AuthUser = data.user
       setUser(profile)
+      setAuthCookie()
+      try { localStorage.setItem('gravhub_user', JSON.stringify(profile)) } catch {/* ignore */}
       if (profile.userType === 'staff') fetchMembers()
       try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
       return { ok: true }
@@ -297,6 +347,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setImpersonatedBy(null)
     setGmailToken(null)
     setGmailEmail(null)
+    clearAuthCookie()
+    try { localStorage.removeItem('gravhub_user') } catch {/* ignore */}
     try { localStorage.removeItem('gravhub_gmail_email') } catch {/* ignore */}
     try { sessionStorage.removeItem('gravhub_login_at') } catch {/* ignore */}
   }

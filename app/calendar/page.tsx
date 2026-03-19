@@ -71,7 +71,7 @@ export default function CalendarPage() {
   useEffect(() => {
     const params = userSlug ? `?slug=${userSlug}` : ''
     fetch(`/api/bookings${params}`)
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(d => { setBookings(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(() => { toast('Failed to load bookings', 'error'); setLoading(false) })
   }, [userSlug])
@@ -88,7 +88,7 @@ export default function CalendarPage() {
         setGcalLinks({ ...defaults, ...stored })
       })
       .catch(() => toast('Failed to load calendar settings', 'error'))
-    fetchTeamMembers().then(setTeamMembers)
+    fetchTeamMembers().then(d => { if (Array.isArray(d)) setTeamMembers(d) }).catch(() => {})
   }, [])
 
   const filtered = bookings.filter(b => {

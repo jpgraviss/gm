@@ -186,7 +186,7 @@ export default function AutomationPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/automations').then(r => r.json()).then(setAutomations).catch(() => toast('Failed to load automations', 'error')).finally(() => setLoading(false))
+    fetch('/api/automations').then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setAutomations(d) }).catch(() => toast('Failed to load automations', 'error')).finally(() => setLoading(false))
   }, [])
 
   async function toggleStatus(id: string) {

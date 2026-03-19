@@ -791,7 +791,7 @@ export default function SequencesPage() {
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
 
   useEffect(() => {
-    fetch('/api/sequences').then(r => r.json()).then(setLocalSequences).catch(() => toast('Failed to load sequences', 'error')).finally(() => setLoading(false))
+    fetch('/api/sequences').then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setLocalSequences(d) }).catch(() => toast('Failed to load sequences', 'error')).finally(() => setLoading(false))
     fetchDeals().then(setDeals)
     fetchCrmContacts().then(setCrmContacts)
   }, [])
@@ -836,8 +836,6 @@ export default function SequencesPage() {
   }
 
   const filtered = statusFilter === 'All' ? localSequences : localSequences.filter(s => s.status === statusFilter)
-
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 

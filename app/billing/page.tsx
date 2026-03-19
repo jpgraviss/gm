@@ -250,10 +250,10 @@ export default function BillingPage() {
       .then(data => { if (Array.isArray(data)) setLocalInvoices(data) })
       .catch(() => toast('Failed to load invoices', 'error'))
       .finally(() => setLoading(false))
-    fetchContracts().then(setContracts)
-    fetchRevenueByMonth().then(setRevenueByMonth)
+    fetchContracts().then(d => { if (Array.isArray(d)) setContracts(d) }).catch(() => {})
+    fetchRevenueByMonth().then(d => { if (Array.isArray(d)) setRevenueByMonth(d) }).catch(() => {})
     fetchQBStatus()
-    fetch('/api/time-entries/billable-summary').then(r => r.json()).then(d => { if (Array.isArray(d)) setBillableSummary(d) }).catch(() => toast('Failed to load billable time summary', 'error'))
+    fetch('/api/time-entries/billable-summary').then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setBillableSummary(d) }).catch(() => toast('Failed to load billable time summary', 'error'))
   }, [])
 
   const filtered = statusFilter === 'All' ? localInvoices : localInvoices.filter(i => i.status === statusFilter)

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
   if (error) {
     console.error('[bookings GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch bookings' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch bookings' }, { status: 500 })
   }
   return NextResponse.json(data)
 }
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
 
   if (insertErr) {
     console.error('[bookings POST]', insertErr)
-    return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 })
+    return NextResponse.json({ error: insertErr?.message || 'Failed to create booking' }, { status: 500 })
   }
 
   // Send confirmation email via Resend (best-effort)

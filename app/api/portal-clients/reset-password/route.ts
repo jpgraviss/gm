@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   const { data: { users }, error: listErr } = await db.auth.admin.listUsers()
   if (listErr) {
     console.error('[portal-clients/reset-password POST]', listErr)
-    return NextResponse.json({ error: 'Failed to look up user' }, { status: 500 })
+    return NextResponse.json({ error: listErr?.message || 'Failed to look up user' }, { status: 500 })
   }
 
   const authUser = users.find(u => u.email?.toLowerCase() === email.toLowerCase())
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const { error: updateErr } = await db.auth.admin.updateUserById(authUser.id, { password: tempPassword })
   if (updateErr) {
     console.error('[portal-clients/reset-password POST]', updateErr)
-    return NextResponse.json({ error: 'Failed to reset password' }, { status: 500 })
+    return NextResponse.json({ error: updateErr?.message || 'Failed to reset password' }, { status: 500 })
   }
 
   logAudit({ userName: 'system', action: 'client_password_reset', module: 'portal', type: 'warning', metadata: { email } })

@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
   if (error) {
     console.error('[time-entries GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch time entries' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch time entries' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapEntry))
 }
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[time-entries POST]', error)
-    return NextResponse.json({ error: 'Failed to create time entry' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create time entry' }, { status: 500 })
   }
   return NextResponse.json(mapEntry(data), { status: 201 })
 }

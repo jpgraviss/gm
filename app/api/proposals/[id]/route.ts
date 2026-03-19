@@ -24,7 +24,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { data, error } = await db.from('proposals').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[proposals/:id PATCH]', error)
-    return NextResponse.json({ error: 'Failed to update proposal' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update proposal' }, { status: 500 })
   }
 
   // Fire automation triggers on status changes
@@ -43,7 +43,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { error } = await db.from('proposals').delete().eq('id', id)
   if (error) {
     console.error('[proposals/:id DELETE]', error)
-    return NextResponse.json({ error: 'Failed to delete proposal' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to delete proposal' }, { status: 500 })
   }
   return NextResponse.json({ deleted: id })
 }

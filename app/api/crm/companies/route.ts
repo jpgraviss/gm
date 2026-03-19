@@ -32,7 +32,7 @@ export async function GET() {
     .order('name')
   if (error) {
     console.error('[crm/companies GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch companies' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch companies' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapCompany))
 }
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[crm/companies POST]', error)
-    return NextResponse.json({ error: 'Failed to create company' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create company' }, { status: 500 })
   }
   return NextResponse.json(mapCompany(data), { status: 201 })
 }

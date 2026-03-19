@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
   if (error) {
     console.error('[renewals GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch renewals' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch renewals' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapRenewal))
 }
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[renewals POST]', error)
-    return NextResponse.json({ error: 'Failed to create renewal' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create renewal' }, { status: 500 })
   }
   return NextResponse.json(mapRenewal(data), { status: 201 })
 }

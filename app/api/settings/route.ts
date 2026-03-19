@@ -13,7 +13,7 @@ export async function GET() {
     .maybeSingle()
   if (error) {
     console.error('[settings GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch settings' }, { status: 500 })
   }
   return NextResponse.json(data ?? {})
 }
@@ -40,7 +40,7 @@ export async function PATCH(req: NextRequest) {
     .single()
   if (error) {
     console.error('[settings PATCH]', error)
-    return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update settings' }, { status: 500 })
   }
   logAudit({ userName: 'admin', action: 'updated_settings', module: 'settings', type: 'action' })
   return NextResponse.json(data)

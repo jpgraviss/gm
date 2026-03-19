@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (error?.code === 'PGRST116') return NextResponse.json(null) // not found
   if (error) {
     console.error('[calendar/settings GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch calendar settings' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch calendar settings' }, { status: 500 })
   }
   return NextResponse.json(data)
 }
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     console.error('[calendar/settings POST]', error)
-    return NextResponse.json({ error: 'Failed to save calendar settings' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to save calendar settings' }, { status: 500 })
   }
   return NextResponse.json(data)
 }

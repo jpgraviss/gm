@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     // Look up the Supabase Auth user to get their UUID
     const { data: { users }, error: listErr } = await db.auth.admin.listUsers()
     if (listErr) {
-      return NextResponse.json({ error: 'Failed to list users' }, { status: 500 })
+      return NextResponse.json({ error: listErr?.message || 'Failed to list users' }, { status: 500 })
     }
     const authUser = users?.find(u => u.email?.toLowerCase() === emailLower)
     if (!authUser) {

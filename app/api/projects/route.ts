@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
   if (error) {
     console.error('[projects GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch projects' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapProject))
 }
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[projects POST]', error)
-    return NextResponse.json({ error: 'Failed to create project' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create project' }, { status: 500 })
   }
   return NextResponse.json(mapProject(data), { status: 201 })
 }

@@ -37,14 +37,15 @@ export default function ClientPortalPage() {
     if (!company) { setLoading(false); return }
     const q = encodeURIComponent(company)
     Promise.all([
-      fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => toast('Failed to load project data', 'error')),
-      fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => toast('Failed to load contract data', 'error')),
-      fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => toast('Failed to load invoices', 'error')),
-      fetch('/api/portal-clients').then(r => r.json()).then((clients: { company: string; service: string }[]) => {
+      fetch(`/api/projects?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setProject(d[0] ?? null) }).catch(() => toast('Failed to load project data', 'error')),
+      fetch(`/api/contracts?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setContract(d[0] ?? null) }).catch(() => toast('Failed to load contract data', 'error')),
+      fetch(`/api/invoices?company=${q}`).then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setClientInvoices(d) }).catch(() => toast('Failed to load invoices', 'error')),
+      fetch('/api/portal-clients').then(r => r.ok ? r.json() : []).then((clients: { company: string; service: string }[]) => {
+        if (!Array.isArray(clients)) return
         const match = clients.find(c => c.company === company)
         if (match) setAccountInfo({ service: match.service })
       }).catch(() => toast('Failed to load account info', 'error')),
-      fetch(`/api/files?company=${q}`).then(r => r.json()).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => toast('Failed to load files', 'error')),
+      fetch(`/api/files?company=${q}`).then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => toast('Failed to load files', 'error')),
     ]).finally(() => setLoading(false))
   }, [company])
 
@@ -60,7 +61,7 @@ export default function ClientPortalPage() {
       <div className="flex-shrink-0 px-3 py-3 sm:px-6 sm:py-4 flex items-center justify-between shadow-sm" style={{ background: '#012b1e' }}>
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
-            {company[0]}
+            {company?.[0] ?? ''}
           </div>
           <div>
             <p className="text-white font-bold text-sm" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{company}</p>

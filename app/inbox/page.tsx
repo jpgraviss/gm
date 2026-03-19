@@ -81,7 +81,7 @@ export default function InboxPage() {
   const [loggedIds, setLoggedIds] = useState<Set<string>>(new Set())
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
 
-  useEffect(() => { fetchCrmContacts().then(setCrmContacts) }, [])
+  useEffect(() => { fetchCrmContacts().then(d => { if (Array.isArray(d)) setCrmContacts(d) }).catch(() => {}) }, [])
 
   // Load already-logged Gmail activity IDs from the API
   useEffect(() => {

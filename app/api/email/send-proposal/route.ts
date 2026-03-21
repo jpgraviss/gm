@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     // Find the primary contact for this company
     const { data: contacts } = await db
-      .from('contacts')
+      .from('crm_contacts')
       .select('*')
       .eq('company_name', proposal.company)
       .order('is_primary', { ascending: false })

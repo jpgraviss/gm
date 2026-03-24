@@ -485,3 +485,34 @@ create table if not exists public.quickbooks_config (
 alter table public.quickbooks_config enable row level security;
 create policy "auth_read_qb_config"  on public.quickbooks_config for select to authenticated using (true);
 create policy "auth_write_qb_config" on public.quickbooks_config for all    to authenticated using (true) with check (true);
+
+-- ─── Document Templates ─────────────────────────────────────────────────────
+create table if not exists public.document_templates (
+  id         text primary key,
+  name       text not null,
+  type       text not null,              -- 'proposal' | 'contract' | 'addendum'
+  body       text not null default '',   -- full template text with placeholders
+  version    integer not null default 1,
+  is_default boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.document_templates enable row level security;
+create policy "auth_read_document_templates"  on public.document_templates for select to authenticated using (true);
+create policy "auth_write_document_templates" on public.document_templates for all    to authenticated using (true) with check (true);
+
+-- ─── AI Chat History ────────────────────────────────────────────────────────
+create table if not exists public.ai_conversations (
+  id         text primary key,
+  user_id    text not null,
+  user_name  text not null default '',
+  title      text not null default 'New conversation',
+  messages   jsonb not null default '[]',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.ai_conversations enable row level security;
+create policy "auth_read_ai_conversations"  on public.ai_conversations for select to authenticated using (true);
+create policy "auth_write_ai_conversations" on public.ai_conversations for all    to authenticated using (true) with check (true);

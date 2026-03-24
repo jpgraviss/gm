@@ -423,6 +423,30 @@ create table if not exists public.quickbooks_config (
 );
 
 
+-- ─── Document Templates ─────────────────────────────────────────────────────
+create table if not exists public.document_templates (
+  id         text primary key,
+  name       text not null,
+  type       text not null,
+  body       text not null default '',
+  version    integer not null default 1,
+  is_default boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ─── AI Chat History ────────────────────────────────────────────────────────
+create table if not exists public.ai_conversations (
+  id         text primary key,
+  user_id    text not null,
+  user_name  text not null default '',
+  title      text not null default 'New conversation',
+  messages   jsonb not null default '[]',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- PART 2: ROW LEVEL SECURITY
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -451,6 +475,8 @@ alter table public.sequence_enrollments enable row level security;
 alter table public.portal_clients       enable row level security;
 alter table public.app_settings         enable row level security;
 alter table public.quickbooks_config    enable row level security;
+alter table public.document_templates  enable row level security;
+alter table public.ai_conversations    enable row level security;
 
 -- Drop existing policies first (idempotent — ignore errors for non-existent ones)
 DO $$ BEGIN
@@ -494,6 +520,12 @@ DO $$ BEGIN
   -- quickbooks
   DROP POLICY IF EXISTS "auth_read_qb_config"           ON public.quickbooks_config;
   DROP POLICY IF EXISTS "auth_write_qb_config"          ON public.quickbooks_config;
+  -- document templates
+  DROP POLICY IF EXISTS "auth_read_document_templates"  ON public.document_templates;
+  DROP POLICY IF EXISTS "auth_write_document_templates" ON public.document_templates;
+  -- ai conversations
+  DROP POLICY IF EXISTS "auth_read_ai_conversations"    ON public.ai_conversations;
+  DROP POLICY IF EXISTS "auth_write_ai_conversations"   ON public.ai_conversations;
 END $$;
 
 -- Authenticated users: read access to all tables
@@ -524,6 +556,10 @@ create policy "auth_read_app_settings"        on public.app_settings        for 
 create policy "auth_write_app_settings"       on public.app_settings        for all    to authenticated using (true) with check (true);
 create policy "auth_read_qb_config"           on public.quickbooks_config   for select to authenticated using (true);
 create policy "auth_write_qb_config"          on public.quickbooks_config   for all    to authenticated using (true) with check (true);
+create policy "auth_read_document_templates"  on public.document_templates  for select to authenticated using (true);
+create policy "auth_write_document_templates" on public.document_templates  for all    to authenticated using (true) with check (true);
+create policy "auth_read_ai_conversations"    on public.ai_conversations    for select to authenticated using (true);
+create policy "auth_write_ai_conversations"   on public.ai_conversations    for all    to authenticated using (true) with check (true);
 
 -- Anon access for public booking pages
 create policy "anon_read_bookings"            on public.bookings            for select to anon using (true);

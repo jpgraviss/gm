@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUI } from '@/contexts/UIContext'
 import Sidebar from './Sidebar'
-import { ShieldAlert, X } from 'lucide-react'
+import AssistantPanel from '@/components/ai/AssistantPanel'
+import { ShieldAlert, X, Sparkles } from 'lucide-react'
 
 const PUBLIC_ROUTES = ['/login', '/team-login']
 
@@ -33,6 +34,7 @@ function isRouteAllowed(pathname: string, user: { isAdmin: boolean; unit: string
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading, impersonatedBy, exitImpersonation } = useAuth()
   const { sidebarOpen, closeSidebar } = useUI()
+  const [assistantOpen, setAssistantOpen] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -159,6 +161,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         )}
         {children}
       </main>
+
+      {/* AI Assistant FAB */}
+      {!assistantOpen && (
+        <button
+          onClick={() => setAssistantOpen(true)}
+          className="fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+          style={{ background: '#015035' }}
+          title="Open AI Assistant"
+        >
+          <Sparkles size={20} className="text-white" />
+        </button>
+      )}
+
+      {/* AI Assistant Panel */}
+      <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </div>
   )
 }

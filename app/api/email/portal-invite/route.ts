@@ -1,26 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
+import { createServiceClient } from '@/lib/supabase'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(req: NextRequest) {
   try {
-    const { company, contactName, email, service, isResend, tempPassword } = await req.json()
+    const { company, contactName, email, service, isResend: isResendInvite } = await req.json()
 
     if (!company || !email) {
       return NextResponse.json({ error: 'company and email are required' }, { status: 400 })
     }
 
-    const portalUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+
+    // Generate a magic link for the client
+    const db = createServiceClient()
+    const { data: linkData, error: linkError } = await db.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+      options: { redirectTo: `${appUrl}/auth/confirm` },
+    })
+
+    let magicLinkUrl = `${appUrl}/login`
+    if (!linkError && linkData?.properties?.hashed_token) {
+      const token = linkData.properties.hashed_token
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+      magicLinkUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=magiclink&redirect_to=${encodeURIComponent(`${appUrl}/auth/confirm`)}`
+    }
 
     const { data, error } = await resend.emails.send({
       from: 'GravHub <noreply@app.gravissmarketing.com>',
       replyTo: 'info@gravissmarketing.com',
       to: [email],
-      subject: isResend
+      subject: isResendInvite
         ? `Reminder: Your ${company} client portal is ready`
         : `Your Graviss Marketing client portal is ready`,
-      html: portalInviteHtml({ company, contactName, email, service, portalUrl, isResend, tempPassword }),
+      html: portalInviteHtml({ company, contactName, email, service, signInUrl: magicLinkUrl, isResend: isResendInvite }),
     })
 
     if (error) {
@@ -40,17 +56,15 @@ function portalInviteHtml({
   contactName,
   email,
   service,
-  portalUrl,
+  signInUrl,
   isResend,
-  tempPassword,
 }: {
   company: string
   contactName: string
   email: string
   service: string
-  portalUrl: string
+  signInUrl: string
   isResend?: boolean
-  tempPassword?: string
 }) {
   return `<!DOCTYPE html>
 <html>
@@ -83,7 +97,7 @@ function portalInviteHtml({
         <tr>
           <td style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;padding:16px 40px;">
             <p style="margin:0;font-size:14px;color:#1b5e20;font-weight:600;">
-              ${isResend ? '🔔 Reminder: Your portal is waiting for you' : '🎉 Your dedicated client portal is ready'}
+              ${isResend ? 'Reminder: Your portal is waiting for you' : 'Your dedicated client portal is ready'}
             </p>
           </td>
         </tr>
@@ -121,30 +135,30 @@ function portalInviteHtml({
               </tr>
             </table>
 
-            ${tempPassword ? `
-            <!-- Login credentials -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;margin-bottom:28px;">
+            <!-- Login info -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;margin-bottom:28px;">
               <tr>
                 <td style="padding:20px 24px;">
-                  <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;">Your Login Credentials</p>
-                  <p style="margin:8px 0 4px;font-size:13px;color:#78350f;">Email: <strong style="font-family:monospace;">${email}</strong></p>
-                  <p style="margin:4px 0 8px;font-size:13px;color:#78350f;">Password: <strong style="font-family:monospace;font-size:16px;letter-spacing:0.1em;">${tempPassword}</strong></p>
-                  <p style="margin:0;font-size:12px;color:#92400e;">Please change your password after your first login.</p>
+                  <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.05em;">Your Portal Email</p>
+                  <p style="margin:0;font-size:16px;font-weight:600;color:#0c4a6e;font-family:monospace;">${email}</p>
                 </td>
               </tr>
-            </table>` : ''}
+            </table>
 
             <!-- CTA -->
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
                 <td align="center">
-                  <a href="${portalUrl}/login" style="display:inline-block;background:#015035;color:#ffffff;font-size:14px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
+                  <a href="${signInUrl}" style="display:inline-block;background:#015035;color:#ffffff;font-size:14px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
                     Access Your Client Portal →
                   </a>
                 </td>
               </tr>
             </table>
 
+            <p style="margin:0 0 8px;color:#9ca3af;font-size:13px;line-height:1.5;">
+              No password needed — just click the button above to sign in. Future sign-ins work the same way: enter your email and we'll send you a link.
+            </p>
             <p style="margin:0;color:#9ca3af;font-size:13px;line-height:1.5;">
               Questions? Reply to this email or contact your account manager directly.
               This portal is exclusively for <strong>${company}</strong>.
@@ -156,7 +170,7 @@ function portalInviteHtml({
         <tr>
           <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 40px;text-align:center;">
             <p style="margin:0;font-size:12px;color:#9ca3af;">
-              &copy; ${new Date().getFullYear()} Graviss Marketing · <a href="mailto:info@gravissmarketing.com" style="color:#015035;">info@gravissmarketing.com</a>
+              &copy; ${new Date().getFullYear()} Graviss Marketing &middot; <a href="mailto:info@gravissmarketing.com" style="color:#015035;">info@gravissmarketing.com</a>
             </p>
           </td>
         </tr>

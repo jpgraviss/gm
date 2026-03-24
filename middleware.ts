@@ -39,6 +39,7 @@ const PUBLIC_PREFIXES = [
   '/api/drive/callback',       // Google Drive OAuth callback
   '/api/auth/auto-provision',  // Auto-create team_members profile on first login
   '/api/auth/profile',         // Server-side profile lookup during login
+  '/api/auth/verify-email',    // Check if email exists (magic link pre-check)
 ]
 
 const ADMIN_SETUP_PREFIXES = [

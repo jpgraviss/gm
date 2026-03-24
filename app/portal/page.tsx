@@ -675,23 +675,9 @@ export default function PortalPage() {
   const thisMonthPrefix = new Date().toISOString().slice(0, 7) // "YYYY-MM"
   const loggedInThisMonth = clients.filter(c => c.lastLogin && c.lastLogin.startsWith(thisMonthPrefix))
 
-  async function sendPortalInvite(client: PortalClient, isResend = false, tempPassword?: string) {
+  async function sendPortalInvite(client: PortalClient, isResend = false) {
     setInviteStatus(prev => ({ ...prev, [client.company]: 'sending' }))
     try {
-      // On resend, reset the client's password first so they get new credentials
-      let password = tempPassword
-      if (isResend && client.email) {
-        const resetRes = await fetch('/api/portal-clients/reset-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: client.email }),
-        })
-        if (resetRes.ok) {
-          const resetData = await resetRes.json()
-          password = resetData.tempPassword
-        }
-      }
-
       const res = await fetch('/api/email/portal-invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -701,7 +687,6 @@ export default function PortalPage() {
           email: client.email,
           service: client.service,
           isResend,
-          tempPassword: password,
         }),
       })
       if (res.ok) {
@@ -969,7 +954,7 @@ export default function PortalPage() {
         <AddClientPanel
           onClose={() => setAddingClient(false)}
           onSave={newClient => setClients(prev => [...prev, newClient])}
-          onInvite={(client, tempPassword) => sendPortalInvite(client, false, tempPassword)}
+          onInvite={(client) => sendPortalInvite(client, false)}
         />
       )}
     </>

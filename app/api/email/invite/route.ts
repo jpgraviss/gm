@@ -1,14 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
+import { createServiceClient } from '@/lib/supabase'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, role, unit, invitedBy, tempPassword } = await req.json()
+    const { name, email, role, unit, invitedBy } = await req.json()
 
     if (!name || !email) {
       return NextResponse.json({ error: 'name and email are required' }, { status: 400 })
+    }
+
+    // Generate a magic link for the user
+    const db = createServiceClient()
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+    const { data: linkData, error: linkError } = await db.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+      options: { redirectTo: `${appUrl}/auth/confirm` },
+    })
+
+    // Build the magic link URL from the token
+    let magicLinkUrl = `${appUrl}/team-login`
+    if (!linkError && linkData?.properties?.hashed_token) {
+      const token = linkData.properties.hashed_token
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+      magicLinkUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=magiclink&redirect_to=${encodeURIComponent(`${appUrl}/auth/confirm`)}`
     }
 
     const { data, error } = await resend.emails.send({
@@ -16,7 +34,7 @@ export async function POST(req: NextRequest) {
       replyTo: 'info@gravissmarketing.com',
       to: [email],
       subject: `You've been invited to GravHub`,
-      html: inviteEmailHtml({ name, role, unit, invitedBy: invitedBy ?? 'the GravHub admin', tempPassword }),
+      html: inviteEmailHtml({ name, role, unit, invitedBy: invitedBy ?? 'the GravHub admin', signInUrl: magicLinkUrl }),
     })
 
     if (error) {
@@ -36,15 +54,14 @@ function inviteEmailHtml({
   role,
   unit,
   invitedBy,
-  tempPassword,
+  signInUrl,
 }: {
   name: string
   role: string
   unit: string
   invitedBy: string
-  tempPassword?: string
+  signInUrl: string
 }) {
-  const loginUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -67,7 +84,7 @@ function inviteEmailHtml({
             <h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Welcome to GravHub, ${name}!</h2>
             <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6;">
               ${invitedBy} has added you to GravHub — the internal operations platform for Graviss Marketing.
-              Your account is ready.
+              Your account is ready. Click the button below to sign in instantly.
             </p>
 
             <!-- Role Card -->
@@ -90,29 +107,20 @@ function inviteEmailHtml({
               </tr>
             </table>
 
-            ${tempPassword ? `
-            <!-- Temp Password -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;margin-bottom:28px;">
-              <tr>
-                <td style="padding:16px 20px;">
-                  <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;">Temporary Password</p>
-                  <p style="margin:0;font-size:18px;font-weight:700;color:#78350f;font-family:monospace;letter-spacing:0.08em;">${tempPassword}</p>
-                  <p style="margin:6px 0 0;font-size:12px;color:#92400e;">Please change this after your first login.</p>
-                </td>
-              </tr>
-            </table>` : ''}
-
             <!-- CTA -->
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
                 <td align="center">
-                  <a href="${loginUrl}" style="display:inline-block;background:#015035;color:#ffffff;font-size:14px;font-weight:700;padding:14px 36px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
-                    Log In to GravHub →
+                  <a href="${signInUrl}" style="display:inline-block;background:#015035;color:#ffffff;font-size:14px;font-weight:700;padding:14px 36px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
+                    Sign In to GravHub →
                   </a>
                 </td>
               </tr>
             </table>
 
+            <p style="margin:0 0 8px;color:#9ca3af;font-size:13px;line-height:1.5;">
+              No password needed — just click the button above to sign in. Future sign-ins work the same way: enter your email and we'll send you a link.
+            </p>
             <p style="margin:0;color:#9ca3af;font-size:13px;line-height:1.5;">
               If you weren't expecting this invitation, you can safely ignore this email.
               Need help? Contact <a href="mailto:jonathan@gravissmarketing.com" style="color:#015035;">jonathan@gravissmarketing.com</a>.
@@ -124,7 +132,7 @@ function inviteEmailHtml({
         <tr>
           <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 40px;text-align:center;">
             <p style="margin:0;font-size:12px;color:#9ca3af;">
-              &copy; ${new Date().getFullYear()} Graviss Marketing · GravHub Platform
+              &copy; ${new Date().getFullYear()} Graviss Marketing &middot; GravHub Platform
             </p>
           </td>
         </tr>

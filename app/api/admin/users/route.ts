@@ -36,11 +36,11 @@ export async function POST(req: NextRequest) {
   const db = createServiceClient()
   const initials = body.initials ?? body.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
 
-  // Create Supabase Auth user with a cryptographically secure temporary password
-  const tempPassword = body.tempPassword ?? crypto.randomBytes(16).toString('base64url')
+  // Create Supabase Auth user with a random password (users sign in via magic link)
+  const randomPassword = crypto.randomBytes(32).toString('base64url')
   const { data: authData, error: authError } = await db.auth.admin.createUser({
     email: body.email,
-    password: tempPassword,
+    password: randomPassword,
     email_confirm: true,
     user_metadata: { name: body.name, role: body.role, unit: body.unit },
   })
@@ -69,8 +69,6 @@ export async function POST(req: NextRequest) {
     console.error('[admin/users POST]', error)
     return NextResponse.json({ error: error?.message || 'Failed to create team member profile' }, { status: 500 })
   }
-  // Return the temp password so the admin can share it securely (e.g. via invite email).
-  // The frontend should send the invite email and never display the password in the UI.
   logAudit({ userName: 'admin', action: 'created_user', module: 'admin', type: 'action', metadata: { email: body.email, role: body.role } })
-  return NextResponse.json({ ...mapUser(data), tempPassword }, { status: 201 })
+  return NextResponse.json(mapUser(data), { status: 201 })
 }

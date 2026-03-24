@@ -399,10 +399,11 @@ Guidelines:
       })
 
       if (!res.ok) {
-        const err = await res.json()
-        console.error('[ai/chat] Anthropic API error:', err)
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        console.error('[ai/chat] Anthropic API error:', res.status, JSON.stringify(err))
+        const detail = err?.error?.message || err?.error?.type || `HTTP ${res.status}`
         return NextResponse.json({
-          reply: 'Sorry, there was an error communicating with the AI. Please try again.',
+          reply: `Sorry, there was an error communicating with the AI (${detail}). Please try again.`,
           source: 'error',
         })
       }

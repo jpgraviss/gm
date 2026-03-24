@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     // Find the primary contact for this company
     const { data: contacts } = await db
-      .from('contacts')
+      .from('crm_contacts')
       .select('*')
       .eq('company_name', proposal.company)
       .order('is_primary', { ascending: false })
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error('[email/send-proposal POST]', error)
-      return NextResponse.json({ error: 'Failed to send proposal email' }, { status: 500 })
+      return NextResponse.json({ error: error?.message || 'Failed to send proposal email' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, id: data?.id, sentTo: recipientEmail })

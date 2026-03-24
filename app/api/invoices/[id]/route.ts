@@ -15,7 +15,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { data, error } = await db.from('invoices').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[invoices/:id PATCH]', error)
-    return NextResponse.json({ error: 'Failed to update invoice' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update invoice' }, { status: 500 })
   }
 
   if (body.status === 'Paid') {

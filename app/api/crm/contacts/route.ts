@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
   if (error) {
     console.error('[crm/contacts GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch contacts' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch contacts' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapContact))
 }
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[crm/contacts POST]', error)
-    return NextResponse.json({ error: 'Failed to create contact' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create contact' }, { status: 500 })
   }
   fireAutomations('contact_created', { contactId: data.id, company: data.company_name, ...data })
 

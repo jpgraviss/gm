@@ -17,7 +17,7 @@ export async function POST() {
 
   if (fetchErr) {
     console.error('[sequences/execute POST]', fetchErr)
-    return NextResponse.json({ error: 'Failed to execute sequences' }, { status: 500 })
+    return NextResponse.json({ error: fetchErr?.message || 'Failed to execute sequences' }, { status: 500 })
   }
   if (!enrollments?.length) return NextResponse.json({ processed: 0, sent: 0, completed: 0 })
 

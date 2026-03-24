@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     console.error('[files GET]', error)
-    return NextResponse.json({ error: 'Failed to list files' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to list files' }, { status: 500 })
   }
 
   // Generate signed URLs for each file
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     console.error('[files POST]', error)
-    return NextResponse.json({ error: 'Failed to upload file' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to upload file' }, { status: 500 })
   }
 
   const { data: urlData } = await db.storage.from(BUCKET).createSignedUrl(filePath, 3600)

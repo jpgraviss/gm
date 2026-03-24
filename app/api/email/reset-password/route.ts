@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error('[email/reset-password POST]', error)
-      return NextResponse.json({ error: 'Failed to send reset password email' }, { status: 500 })
+      return NextResponse.json({ error: error?.message || 'Failed to send reset password email' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, id: data?.id })

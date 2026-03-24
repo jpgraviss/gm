@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
   if (error) {
     console.error('[crm/activities GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch activities' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch activities' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapActivity))
 }
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[crm/activities POST]', error)
-    return NextResponse.json({ error: 'Failed to create activity' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create activity' }, { status: 500 })
   }
   return NextResponse.json(mapActivity(data), { status: 201 })
 }

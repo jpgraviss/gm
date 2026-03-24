@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     .limit(limit)
   if (error) {
     console.error('[audit-logs GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch audit logs' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch audit logs' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapLog))
 }
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[audit-logs POST]', error)
-    return NextResponse.json({ error: 'Failed to create audit log' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create audit log' }, { status: 500 })
   }
   return NextResponse.json(mapLog(data), { status: 201 })
 }

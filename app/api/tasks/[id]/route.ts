@@ -15,7 +15,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { data, error } = await db.from('app_tasks').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[tasks/:id PATCH]', error)
-    return NextResponse.json({ error: 'Failed to update task' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update task' }, { status: 500 })
   }
   return NextResponse.json(data)
 }
@@ -26,7 +26,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { error } = await db.from('app_tasks').delete().eq('id', id)
   if (error) {
     console.error('[tasks/:id DELETE]', error)
-    return NextResponse.json({ error: 'Failed to delete task' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to delete task' }, { status: 500 })
   }
   return NextResponse.json({ deleted: id })
 }

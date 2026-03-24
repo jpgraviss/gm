@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
   if (error) {
     console.error('[contracts GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch contracts' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch contracts' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapContract))
 }
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[contracts POST]', error)
-    return NextResponse.json({ error: 'Failed to create contract' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create contract' }, { status: 500 })
   }
   return NextResponse.json(mapContract(data), { status: 201 })
 }

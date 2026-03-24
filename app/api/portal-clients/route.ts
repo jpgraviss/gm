@@ -24,7 +24,7 @@ export async function GET() {
     .order('created_at', { ascending: true })
   if (error) {
     console.error('[portal-clients GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch portal clients' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch portal clients' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapClient))
 }
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     // If user already exists in auth (e.g. re-adding), ignore the conflict error
     if (authError && !authError.message.includes('already')) {
       console.error('[portal-clients POST] auth error:', authError)
-      return NextResponse.json({ error: 'Failed to create client auth account' }, { status: 500 })
+      return NextResponse.json({ error: authError?.message || 'Failed to create client auth account' }, { status: 500 })
     }
   }
 
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[portal-clients POST]', error)
-    return NextResponse.json({ error: 'Failed to create portal client' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create portal client' }, { status: 500 })
   }
   logAudit({ userName: 'admin', action: 'created_portal_client', module: 'portal', type: 'action', metadata: { email: body.email, company: body.company } })
   return NextResponse.json({ ...mapClient(data), tempPassword }, { status: 201 })

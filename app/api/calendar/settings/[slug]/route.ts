@@ -18,7 +18,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
   }
   if (error) {
     console.error('[calendar/settings/:slug GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch calendar settings' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch calendar settings' }, { status: 500 })
   }
   return NextResponse.json(data)
 }

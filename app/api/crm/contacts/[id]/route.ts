@@ -34,6 +34,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const { data, error } = await db
     .from('crm_contacts')
     .update({
+      company_id:      body.companyId ?? null,
+      company_name:    body.companyName ?? '',
       first_name:      body.firstName,
       last_name:       body.lastName,
       full_name:       body.fullName ?? `${body.firstName} ${body.lastName}`,
@@ -56,7 +58,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     .single()
   if (error) {
     console.error('[crm/contacts/:id PUT]', error)
-    return NextResponse.json({ error: 'Failed to update contact' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update contact' }, { status: 500 })
   }
   return NextResponse.json(mapContact(data))
 }
@@ -76,7 +78,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .single()
   if (error) {
     console.error('[crm/contacts/:id PATCH]', error)
-    return NextResponse.json({ error: 'Failed to update contact' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update contact' }, { status: 500 })
   }
   return NextResponse.json(mapContact(data))
 }
@@ -87,7 +89,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { error } = await db.from('crm_contacts').delete().eq('id', id)
   if (error) {
     console.error('[crm/contacts/:id DELETE]', error)
-    return NextResponse.json({ error: 'Failed to delete contact' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to delete contact' }, { status: 500 })
   }
   return NextResponse.json({ success: true })
 }

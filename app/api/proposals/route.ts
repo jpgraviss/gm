@@ -35,7 +35,7 @@ export async function GET() {
     .order('created_at', { ascending: false })
   if (error) {
     console.error('[proposals GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch proposals' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch proposals' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapProposal))
 }
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[proposals POST]', error)
-    return NextResponse.json({ error: 'Failed to create proposal' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create proposal' }, { status: 500 })
   }
   return NextResponse.json(mapProposal(data), { status: 201 })
 }

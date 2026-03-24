@@ -13,7 +13,7 @@ export async function GET() {
 
   if (error) {
     console.error('[time-entries/billable-summary GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch billable summary' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch billable summary' }, { status: 500 })
   }
 
   // Group by project/company

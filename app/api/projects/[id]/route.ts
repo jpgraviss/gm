@@ -18,7 +18,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { data, error } = await db.from('projects').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[projects/:id PATCH]', error)
-    return NextResponse.json({ error: 'Failed to update project' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update project' }, { status: 500 })
   }
   return NextResponse.json(data)
 }
@@ -29,7 +29,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { error } = await db.from('projects').delete().eq('id', id)
   if (error) {
     console.error('[projects/:id DELETE]', error)
-    return NextResponse.json({ error: 'Failed to delete project' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to delete project' }, { status: 500 })
   }
   return NextResponse.json({ deleted: id })
 }

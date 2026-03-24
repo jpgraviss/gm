@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
   if (error) {
     console.error('[invoices GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch invoices' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch invoices' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapInvoice))
 }

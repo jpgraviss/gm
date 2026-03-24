@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { data, error } = await db.from('tickets').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[tickets PATCH]', error)
-    return NextResponse.json({ error: 'Failed to update ticket' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update ticket' }, { status: 500 })
   }
   return NextResponse.json(data)
 }
@@ -28,7 +28,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { error } = await db.from('tickets').delete().eq('id', id)
   if (error) {
     console.error('[tickets DELETE]', error)
-    return NextResponse.json({ error: 'Failed to delete ticket' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to delete ticket' }, { status: 500 })
   }
   return NextResponse.json({ deleted: id })
 }

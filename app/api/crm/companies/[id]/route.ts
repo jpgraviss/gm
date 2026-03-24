@@ -52,7 +52,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     .single()
   if (error) {
     console.error('[crm/companies/:id PUT]', error)
-    return NextResponse.json({ error: 'Failed to update company' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update company' }, { status: 500 })
   }
   return NextResponse.json(mapCompany(data))
 }
@@ -73,7 +73,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .single()
   if (error) {
     console.error('[crm/companies/:id PATCH]', error)
-    return NextResponse.json({ error: 'Failed to update company' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update company' }, { status: 500 })
   }
   return NextResponse.json(mapCompany(data))
 }
@@ -84,7 +84,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { error } = await db.from('crm_companies').delete().eq('id', id)
   if (error) {
     console.error('[crm/companies/:id DELETE]', error)
-    return NextResponse.json({ error: 'Failed to delete company' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to delete company' }, { status: 500 })
   }
   return NextResponse.json({ success: true })
 }

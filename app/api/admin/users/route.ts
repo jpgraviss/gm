@@ -26,7 +26,7 @@ export async function GET() {
     .order('name')
   if (error) {
     console.error('[admin/users GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch users' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapUser))
 }
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   })
   if (authError) {
     console.error('[admin/users POST] auth error:', authError)
-    return NextResponse.json({ error: 'Failed to create auth user' }, { status: 500 })
+    return NextResponse.json({ error: authError?.message || 'Failed to create auth user' }, { status: 500 })
   }
 
   const userId = authData.user?.id ?? `tm-${Date.now()}`
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[admin/users POST]', error)
-    return NextResponse.json({ error: 'Failed to create team member profile' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create team member profile' }, { status: 500 })
   }
   // Return the temp password so the admin can share it securely (e.g. via invite email).
   // The frontend should send the invite email and never display the password in the UI.

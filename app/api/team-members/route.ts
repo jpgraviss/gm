@@ -24,7 +24,7 @@ export async function GET() {
     .order('name')
   if (error) {
     console.error('[team-members GET]', error)
-    return NextResponse.json({ error: 'Failed to fetch team members' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to fetch team members' }, { status: 500 })
   }
   return NextResponse.json((data ?? []).map(mapMember))
 }
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error('[team-members POST]', error)
-    return NextResponse.json({ error: 'Failed to create team member' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to create team member' }, { status: 500 })
   }
   return NextResponse.json(mapMember(data), { status: 201 })
 }

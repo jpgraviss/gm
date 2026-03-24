@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { data, error } = await db.from('sequences').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[sequences/:id PATCH]', error)
-    return NextResponse.json({ error: 'Failed to update sequence' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update sequence' }, { status: 500 })
   }
   return NextResponse.json(data)
 }
@@ -33,7 +33,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { error } = await db.from('sequences').delete().eq('id', id)
   if (error) {
     console.error('[sequences/:id DELETE]', error)
-    return NextResponse.json({ error: 'Failed to delete sequence' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to delete sequence' }, { status: 500 })
   }
   return NextResponse.json({ deleted: id })
 }

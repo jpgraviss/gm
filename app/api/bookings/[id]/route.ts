@@ -28,7 +28,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (error) {
     console.error('[bookings PATCH]', error)
-    return NextResponse.json({ error: 'Failed to update booking' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update booking' }, { status: 500 })
   }
   return NextResponse.json(data)
 }

@@ -271,7 +271,8 @@ export default function LoginPage() {
                 {/* ── Magic link form ── */}
                 <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Email Address</label>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5"
+                      style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.08em' }}>Email Address</label>
                     <div className="relative">
                       <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
@@ -280,6 +281,7 @@ export default function LoginPage() {
                         onChange={e => setEmail(e.target.value)}
                         placeholder="your@email.com"
                         className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                        style={{ fontFamily: 'var(--font-body)' }}
                         autoComplete="email"
                         autoFocus
                         disabled={submitting}

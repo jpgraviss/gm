@@ -20,6 +20,8 @@ interface NavItem {
   allowedUnits?: string[]
   /** If true, this item is visible to contractors */
   contractorVisible?: boolean
+  /** If true, this item is visible to Billing/Finance */
+  billingVisible?: boolean
 }
 
 interface NavSection {
@@ -31,28 +33,28 @@ const navigation: NavSection[] = [
   {
     section: 'Overview',
     items: [
-      { label: 'Dashboard',     href: '/',              icon: <LayoutDashboard size={16} />, contractorVisible: true },
-      { label: 'Tasks',         href: '/tasks',         icon: <CheckSquare size={16} />,     contractorVisible: true },
+      { label: 'Dashboard',     href: '/',              icon: <LayoutDashboard size={16} />, contractorVisible: true, billingVisible: true },
+      { label: 'Tasks',         href: '/tasks',         icon: <CheckSquare size={16} />,     contractorVisible: true, billingVisible: true },
       { label: 'Calendar',      href: '/calendar',      icon: <CalendarDays size={16} /> },
-      { label: 'Time Tracking', href: '/time-tracking', icon: <Clock size={16} />,           contractorVisible: true },
+      { label: 'Time Tracking', href: '/time-tracking', icon: <Clock size={16} />,           contractorVisible: true, billingVisible: true },
     ],
   },
   {
     section: 'CRM',
     items: [
-      { label: 'Pipeline', href: '/crm/pipeline', icon: <TrendingUp size={16} /> },
-      { label: 'Companies', href: '/crm/companies', icon: <Building2 size={16} /> },
-      { label: 'Contacts', href: '/crm/contacts', icon: <Users size={16} /> },
-      { label: 'Sequences', href: '/crm/sequences', icon: <Mail size={16} /> },
-      { label: 'Inbox', href: '/inbox', icon: <Inbox size={16} /> },
+      { label: 'Pipeline',  href: '/crm/pipeline',  icon: <TrendingUp size={16} />, billingVisible: true },
+      { label: 'Companies', href: '/crm/companies', icon: <Building2 size={16} />,  billingVisible: true },
+      { label: 'Contacts',  href: '/crm/contacts',  icon: <Users size={16} />,      billingVisible: true },
+      { label: 'Sequences', href: '/crm/sequences', icon: <Mail size={16} />,       billingVisible: true },
+      { label: 'Inbox',     href: '/inbox',          icon: <Inbox size={16} />,      billingVisible: true },
     ],
   },
   {
     section: 'Revenue',
     items: [
-      { label: 'Proposals', href: '/proposals', icon: <FileText size={16} />,  allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
-      { label: 'Contracts', href: '/contracts', icon: <ScrollText size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
-      { label: 'Billing',   href: '/billing',   icon: <CreditCard size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
+      { label: 'Proposals', href: '/proposals', icon: <FileText size={16} />,  allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Contracts', href: '/contracts', icon: <ScrollText size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Billing',   href: '/billing',   icon: <CreditCard size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
     ],
   },
   {
@@ -66,22 +68,22 @@ const navigation: NavSection[] = [
   {
     section: 'Clients',
     items: [
-      { label: 'Client Portal', href: '/portal', icon: <Globe size={16} /> },
-      { label: 'Tickets', href: '/tickets', icon: <MessageSquare size={16} />, contractorVisible: true },
+      { label: 'Client Portal', href: '/portal',   icon: <Globe size={16} />,          billingVisible: true },
+      { label: 'Tickets',       href: '/tickets',   icon: <MessageSquare size={16} />,  contractorVisible: true, billingVisible: true },
     ],
   },
   {
     section: 'Intel',
     items: [
-      { label: 'Reports',    href: '/reports',    icon: <BarChart3 size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
-      { label: 'Automation', href: '/automation', icon: <Zap size={16} />,       allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
+      { label: 'Reports',    href: '/reports',    icon: <BarChart3 size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Automation', href: '/automation', icon: <Zap size={16} />,       allowedUnits: ['Leadership/Admin'] },
     ],
   },
   {
     section: 'System',
     items: [
       { label: 'Admin Panel', href: '/admin',    icon: <ShieldCheck size={16} />, adminOnly: true },
-      { label: 'Settings',    href: '/settings', icon: <Settings size={16} />,    allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
+      { label: 'Settings',    href: '/settings', icon: <Settings size={16} />,    allowedUnits: ['Leadership/Admin'] },
     ],
   },
 ]
@@ -130,10 +132,12 @@ export default function Sidebar() {
       <nav className="flex-1 px-2 py-3 overflow-y-auto overflow-x-hidden">
         {navigation.map((group) => {
           const isContractor = user?.role === 'Contractor' || user?.unit === 'Contractors'
+          const isBilling = user?.unit === 'Billing/Finance'
           const visibleItems = group.items.filter((item) => {
             if (item.adminOnly && !user?.isAdmin) return false
             if (item.allowedUnits && !user?.isAdmin && !item.allowedUnits.includes(user?.unit ?? '')) return false
             if (isContractor && !item.contractorVisible) return false
+            if (isBilling && !user?.isAdmin && !item.billingVisible) return false
             return true
           })
           if (visibleItems.length === 0) return null

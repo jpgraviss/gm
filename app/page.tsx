@@ -662,40 +662,42 @@ export default function DashboardPage() {
         </div>
 
         {/* Bottom Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className={`grid grid-cols-1 ${user?.isAdmin ? 'lg:grid-cols-3' : ''} gap-4`}>
 
-          {/* Activity feed */}
-          <div className="metric-card lg:col-span-2">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-gray-800 text-sm">Recent Activity</h3>
-              <span className="text-[11px] text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">Live feed</span>
-            </div>
-            <div className="flex flex-col divide-y divide-gray-50">
-              {data.activityFeed.length === 0 ? (
-                <p className="text-xs text-gray-400 py-4 text-center">No activity yet. Start by adding deals or contacts.</p>
-              ) : data.activityFeed.map((item) => {
-                const meta = activityMeta[item.type] ?? activityMeta.action
-                return (
-                  <div key={item.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-                    <div
-                      className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{ background: `${meta.color}14`, color: meta.color }}
-                    >
-                      {meta.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-gray-800 leading-snug">{item.action}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[11px] text-gray-500 font-semibold">{item.user}</span>
-                        <span className="text-gray-300 text-xs">·</span>
-                        <span className="text-[11px] text-gray-400">{item.module}</span>
+          {/* Activity feed — Admin / Super Admin only */}
+          {user?.isAdmin && (
+            <div className="metric-card lg:col-span-2">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-800 text-sm">Recent Activity</h3>
+                <span className="text-[11px] text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">Live feed</span>
+              </div>
+              <div className="flex flex-col divide-y divide-gray-50">
+                {data.activityFeed.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-4 text-center">No activity yet. Start by adding deals or contacts.</p>
+                ) : data.activityFeed.map((item) => {
+                  const meta = activityMeta[item.type] ?? activityMeta.action
+                  return (
+                    <div key={item.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                      <div
+                        className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
+                        style={{ background: `${meta.color}14`, color: meta.color }}
+                      >
+                        {meta.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] text-gray-800 leading-snug">{item.action}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[11px] text-gray-500 font-semibold">{item.user}</span>
+                          <span className="text-gray-300 text-xs">·</span>
+                          <span className="text-[11px] text-gray-400">{item.module}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Right column */}
           <div className="flex flex-col gap-4">

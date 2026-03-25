@@ -14,6 +14,7 @@ import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewCompanyPanel, { type NewCompanyFormData } from '@/components/crm/NewCompanyPanel'
+import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
@@ -22,7 +23,7 @@ import { useToast } from '@/components/ui/Toast'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
-  ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2,
+  ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload,
 } from 'lucide-react'
 
 // ─── Status colors ────────────────────────────────────────────────────────────
@@ -705,6 +706,7 @@ export default function CompaniesPage() {
   const [editingCompany, setEditingCompany] = useState<CRMCompany | null>(null)
   const [localCompanies, setLocalCompanies] = useState<CRMCompany[]>([])
   const [creatingCompany, setCreatingCompany] = useState(false)
+  const [showImport, setShowImport] = useState(false)
 
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
   const [deals, setDeals] = useState<Deal[]>([])
@@ -822,6 +824,12 @@ export default function CompaniesPage() {
               </button>
             ))}
           </div>
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
+          >
+            <Upload size={13} /> Import CSV
+          </button>
           <span className="ml-auto text-sm text-gray-400">{filtered.length} companies</span>
         </div>
 
@@ -961,6 +969,15 @@ export default function CompaniesPage() {
         />
       )}
       {creatingCompany && <NewCompanyPanel onSave={handleNewCompany} onClose={() => setCreatingCompany(false)} />}
+      {showImport && (
+        <HubSpotImportPanel
+          defaultType="companies"
+          onClose={() => setShowImport(false)}
+          onComplete={() => {
+            fetch('/api/crm/companies').then(r => r.json()).then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
+          }}
+        />
+      )}
     </>
   )
 }

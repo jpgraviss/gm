@@ -15,10 +15,11 @@ import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/New
 import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
+import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
 import {
   X, Phone, Mail, Calendar, TrendingUp, DollarSign,
   FileText, ScrollText, User, ChevronRight, ChevronLeft, Plus,
-  CheckCircle2, Circle, AlertCircle, Settings,
+  CheckCircle2, Circle, AlertCircle, Settings, Upload,
   GripVertical, Pencil, Trash2, Check,
 } from 'lucide-react'
 
@@ -877,6 +878,7 @@ export default function PipelinePage() {
   const [filterRep, setFilterRep] = useState('All')
   const [managingPipeline, setManagingPipeline] = useState(false)
   const [creatingDeal, setCreatingDeal] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [crmActivities, setCrmActivities] = useState<CRMActivity[]>([])
   const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
@@ -1018,6 +1020,12 @@ export default function PipelinePage() {
             ))}
           </div>
           <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-1.5 text-sm text-gray-500 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 flex-shrink-0"
+          >
+            <Upload size={13} /> Import CSV
+          </button>
+          <button
             onClick={() => setManagingPipeline(true)}
             className="flex items-center gap-1.5 text-sm text-gray-500 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 flex-shrink-0"
           >
@@ -1118,6 +1126,16 @@ export default function PipelinePage() {
 
       {creatingDeal && (
         <NewDealPanel onSave={handleNewDeal} onClose={() => setCreatingDeal(false)} />
+      )}
+
+      {showImport && (
+        <HubSpotImportPanel
+          defaultType="deals"
+          onClose={() => setShowImport(false)}
+          onComplete={() => {
+            fetch('/api/deals').then(r => r.json()).then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
+          }}
+        />
       )}
 
       {managingPipeline && (

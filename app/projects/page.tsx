@@ -911,13 +911,17 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
       if (res.ok) {
         const saved = await res.json()
         onSave(saved)
+        onClose()
       } else {
-        onSave({ id: `proj-${Date.now()}`, ...payload } as Project)
+        toast('Failed to create project. Please try again.', 'error')
+        setSaving(false)
+        return
       }
     } catch {
-      onSave({ id: `proj-${Date.now()}`, ...payload } as Project)
+      toast('Failed to create project. Please try again.', 'error')
+      setSaving(false)
+      return
     }
-    onClose()
   }
 
   return (

@@ -13,6 +13,7 @@ import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
+import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMContact, ContactNote, ContactTask, CRMCompany, Deal, Contract, Project, CRMActivity } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
@@ -22,7 +23,7 @@ import {
   ChevronRight, ChevronLeft, Linkedin, StickyNote, CheckSquare,
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
-  PhoneCall, Video, Pencil, Trash2,
+  PhoneCall, Video, Pencil, Trash2, Upload,
 } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -971,6 +972,7 @@ export default function ContactsPage() {
   const [editingContact, setEditingContact] = useState<CRMContact | null>(null)
   const [localContacts, setLocalContacts] = useState<CRMContact[]>([])
   const [creatingContact, setCreatingContact] = useState(false)
+  const [showImport, setShowImport] = useState(false)
 
   const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
   const [deals, setDeals] = useState<Deal[]>([])
@@ -1072,6 +1074,12 @@ export default function ContactsPage() {
               className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-full"
             />
           </div>
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
+          >
+            <Upload size={13} /> Import CSV
+          </button>
           <span className="ml-auto text-sm text-gray-400">{filtered.length} contacts</span>
         </div>
 
@@ -1210,6 +1218,15 @@ export default function ContactsPage() {
           onSave={handleEditSave}
           onDelete={handleDelete}
           onClose={() => setEditingContact(null)}
+        />
+      )}
+      {showImport && (
+        <HubSpotImportPanel
+          defaultType="contacts"
+          onClose={() => setShowImport(false)}
+          onComplete={() => {
+            fetch('/api/crm/contacts').then(r => r.json()).then(data => { if (Array.isArray(data)) setLocalContacts(data) })
+          }}
         />
       )}
     </>

@@ -104,8 +104,9 @@ function proposalEmailHtml({
 
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Helvetica Neue',Arial,sans-serif;">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@400;500;600;700;800&display=swap');</style></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
     <tr><td align="center">
       <table width="580" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
@@ -113,15 +114,15 @@ function proposalEmailHtml({
         <!-- Header -->
         <tr>
           <td style="background:#015035;padding:32px 40px;text-align:center;">
-            <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.08em;font-family:Georgia,serif;">GRAVISS MARKETING</h1>
-            <p style="margin:6px 0 0;color:rgba(255,255,255,0.65);font-size:12px;letter-spacing:0.04em;">PROPOSAL</p>
+            <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.08em;font-family:'Syncopate',sans-serif;">GRAVISS MARKETING</h1>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.65);font-size:12px;letter-spacing:0.04em;font-family:'Syncopate',sans-serif;">PROPOSAL</p>
           </td>
         </tr>
 
         <!-- Body -->
         <tr>
           <td style="padding:40px;">
-            <h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Hi ${contactName},</h2>
+            <h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;font-family:'Syncopate',sans-serif;letter-spacing:0.04em;">Hi ${contactName},</h2>
             <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6;">
               Thank you for your interest in working with Graviss Marketing. We&rsquo;ve prepared a ${serviceType} proposal for ${company}.
             </p>

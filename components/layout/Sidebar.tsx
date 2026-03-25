@@ -18,6 +18,8 @@ interface NavItem {
   adminOnly?: boolean
   /** If set, only users whose unit is in this list (or admins) can see/access this item */
   allowedUnits?: string[]
+  /** If true, this item is visible to contractors */
+  contractorVisible?: boolean
 }
 
 interface NavSection {
@@ -29,10 +31,10 @@ const navigation: NavSection[] = [
   {
     section: 'Overview',
     items: [
-      { label: 'Dashboard',   href: '/',         icon: <LayoutDashboard size={16} /> },
-      { label: 'Tasks',       href: '/tasks',     icon: <CheckSquare size={16} /> },
-      { label: 'Calendar',    href: '/calendar',  icon: <CalendarDays size={16} /> },
-      { label: 'Time Tracking', href: '/time-tracking', icon: <Clock size={16} /> },
+      { label: 'Dashboard',     href: '/',              icon: <LayoutDashboard size={16} />, contractorVisible: true },
+      { label: 'Tasks',         href: '/tasks',         icon: <CheckSquare size={16} />,     contractorVisible: true },
+      { label: 'Calendar',      href: '/calendar',      icon: <CalendarDays size={16} /> },
+      { label: 'Time Tracking', href: '/time-tracking', icon: <Clock size={16} />,           contractorVisible: true },
     ],
   },
   {
@@ -56,16 +58,16 @@ const navigation: NavSection[] = [
   {
     section: 'Delivery',
     items: [
-      { label: 'Projects', href: '/projects', icon: <FolderKanban size={16} /> },
-      { label: 'Maintenance', href: '/maintenance', icon: <Wrench size={16} /> },
-      { label: 'Renewals', href: '/renewals', icon: <RefreshCw size={16} /> },
+      { label: 'Projects',    href: '/projects',    icon: <FolderKanban size={16} />, contractorVisible: true },
+      { label: 'Maintenance', href: '/maintenance', icon: <Wrench size={16} />,       contractorVisible: true },
+      { label: 'Renewals',    href: '/renewals',    icon: <RefreshCw size={16} /> },
     ],
   },
   {
     section: 'Clients',
     items: [
       { label: 'Client Portal', href: '/portal', icon: <Globe size={16} /> },
-      { label: 'Tickets', href: '/tickets', icon: <MessageSquare size={16} /> },
+      { label: 'Tickets', href: '/tickets', icon: <MessageSquare size={16} />, contractorVisible: true },
     ],
   },
   {
@@ -127,9 +129,11 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-2 py-3 overflow-y-auto overflow-x-hidden">
         {navigation.map((group) => {
+          const isContractor = user?.role === 'Contractor' || user?.unit === 'Contractors'
           const visibleItems = group.items.filter((item) => {
             if (item.adminOnly && !user?.isAdmin) return false
             if (item.allowedUnits && !user?.isAdmin && !item.allowedUnits.includes(user?.unit ?? '')) return false
+            if (isContractor && !item.contractorVisible) return false
             return true
           })
           if (visibleItems.length === 0) return null

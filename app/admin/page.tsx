@@ -584,7 +584,7 @@ export default function AdminPage() {
                   { label: 'Add User', icon: <Plus size={14} />, action: () => { setTab('users'); setShowAddUser(true) } },
                   { label: 'Export Data', icon: <Download size={14} />, action: () => setShowExportModal(true) },
                   { label: 'Import Data', icon: <Upload size={14} />, action: () => setShowImportModal(true) },
-                  { label: 'Reset Passwords', icon: <Key size={14} />, action: () => setShowBulkResetModal(true) },
+                  { label: 'Send Sign-In Links', icon: <Key size={14} />, action: () => setShowBulkResetModal(true) },
                   { label: 'Clear Cache', icon: <RefreshCw size={14} />, action: () => setShowClearCacheModal(true) },
                   { label: 'System Backup', icon: <Database size={14} />, action: () => setShowBackupModal(true) },
                 ].map(a => (

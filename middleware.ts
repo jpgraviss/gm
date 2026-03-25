@@ -32,8 +32,6 @@ const PUBLIC_PREFIXES = [
   '/api/calendar/slots',       // Public availability check
   '/api/calendar/callback',    // Google OAuth callback
   '/api/bookings',             // Public booking creation (POST) & list
-  '/api/email/forgot-password',
-  '/api/email/reset-password',
   '/api/portal-clients/reset-password',
   '/api/quickbooks/callback',  // QB OAuth callback
   '/api/drive/callback',       // Google Drive OAuth callback

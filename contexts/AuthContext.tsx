@@ -20,12 +20,9 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null
   loading: boolean
-  mustChangePassword: boolean
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean; userType?: string }>
   loginWithGoogle: (credential: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
-  changePassword: (email: string, newPassword: string) => void
-  addUser: (params: { name: string; email: string; role: AuthUser['role']; unit: AuthUser['unit']; password: string }) => void
+  addUser: (params: { name: string; email: string; role: AuthUser['role']; unit: AuthUser['unit'] }) => void
   // Super Admin impersonation
   impersonatedBy: AuthUser | null
   loginAs: (member: AuthUser) => void
@@ -75,7 +72,6 @@ function clientToAuthUser(row: any): AuthUser {
 /**
  * Auto-create a team_members row for an authenticated @gravissmarketing.com user
  * who has a Supabase Auth account but no profile row yet.
- * Uses the client-side authenticated session so it works from the browser.
  */
 async function autoProvisionTeamMember(
   supabase: ReturnType<typeof getSupabaseClient>,
@@ -113,9 +109,6 @@ async function autoProvisionTeamMember(
 }
 
 // ── Auth cookie helpers ────────────────────────────────────────────────────
-// The middleware checks for this cookie to allow authenticated API calls.
-// Supabase JS stores the session in localStorage (not cookies), so without
-// this bridge cookie the middleware blocks every API request with a 401.
 function setAuthCookie() {
   try { document.cookie = 'gravhub-auth=1; path=/; max-age=604800; SameSite=Lax' } catch {/* SSR guard */}
 }
@@ -178,7 +171,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (profile) {
         setUser(profile)
         setAuthCookie()
+        try { localStorage.setItem('gravhub_user', JSON.stringify(profile)) } catch {/* ignore */}
         if (profile.userType === 'staff') fetchMembers()
+        // Record last login for portal clients
+        if (profile.userType === 'client' && profile.id) {
+          const today = new Date().toISOString().split('T')[0]
+          fetch(`/api/portal-clients/${profile.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lastLogin: today, access: 'Active' }),
+          }).catch(() => {})
+        }
       }
       return profile
     }
@@ -215,7 +218,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
         clearAuthCookie()
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        // Restore profile on sign-in or token refresh (e.g. page reload)
         if (session?.user?.email) {
           await restoreProfile(session.user.email)
         }
@@ -230,59 +232,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   }, [fetchMembers, loadProfileByEmail])
 
-  const login = async (email: string, password: string): Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean; userType?: string }> => {
-    try {
-      const supabase = getSupabaseClient()
-      const { error } = await supabase.auth.signInWithPassword({ email: email.toLowerCase().trim(), password })
-      if (error) return { ok: false, error: 'Incorrect email or password.' }
-
-      // Use server-side profile lookup (bypasses RLS, matches Google SSO approach)
-      let profile: AuthUser | null = null
-      try {
-        const res = await fetch('/api/auth/profile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.toLowerCase().trim() }),
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.user) profile = data.user as AuthUser
-        } else {
-          const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-          return { ok: false, error: errData.error || 'Profile lookup failed.' }
-        }
-      } catch {
-        // Fallback to client-side lookup
-        profile = await loadProfileByEmail(email)
-      }
-
-      if (!profile) return { ok: false, error: 'No account found for this email. Contact your administrator.' }
-
-      setUser(profile)
-      setAuthCookie()
-      try { localStorage.setItem('gravhub_user', JSON.stringify(profile)) } catch {/* ignore */}
-      if (profile.userType === 'staff') fetchMembers()
-      // Record last login date for portal clients
-      if (profile.userType === 'client' && profile.id) {
-        const today = new Date().toISOString().split('T')[0]
-        fetch(`/api/portal-clients/${profile.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lastLogin: today, access: 'Active' }),
-        }).catch(() => {})
-      }
-      try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
-      return { ok: true, userType: profile.userType }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Login failed. Please try again.'
-      return { ok: false, error: msg }
-    }
-  }
-
   const loginWithGoogle = async (credential: string): Promise<{ ok: boolean; error?: string }> => {
     try {
-      // Verify the Google credential server-side and look up the user profile
-      // in both team_members (staff) and portal_clients (clients).
       const res = await fetch('/api/auth/google-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -307,22 +258,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const changePassword = useCallback(async (_email: string, newPassword: string) => {
-    const supabase = getSupabaseClient()
-    await supabase.auth.updateUser({ password: newPassword })
-  }, [])
-
   const addUser = useCallback(async (params: {
     name: string
     email: string
     role: AuthUser['role']
     unit: AuthUser['unit']
-    password: string
   }) => {
     await fetch('/api/admin/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...params, tempPassword: params.password }),
+      body: JSON.stringify(params),
     })
     await fetchMembers()
   }, [fetchMembers])
@@ -402,9 +347,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, mustChangePassword: false,
-      login, loginWithGoogle, logout,
-      changePassword, addUser,
+      user, loading,
+      loginWithGoogle, logout,
+      addUser,
       impersonatedBy, loginAs, exitImpersonation,
       gmailToken, gmailEmail, connectGmail, disconnectGmail,
       members,

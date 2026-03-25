@@ -9,7 +9,7 @@ import {
   CheckCircle, AlertTriangle, XCircle, RefreshCw, Plus, Pencil,
   Trash2, Eye, EyeOff, Lock, Globe, Zap, CreditCard, Database,
   Activity, Bell, Building, Download, Upload, Key, ToggleLeft,
-  ToggleRight, Server, Wifi, Clock, X,
+  ToggleRight, Server, Wifi, Clock, X, Mail,
 } from 'lucide-react'
 // data loaded from API
 import { useToast } from '@/components/ui/Toast'
@@ -163,7 +163,7 @@ export default function AdminPage() {
   const [showAddUser, setShowAddUser] = useState(false)
   const [editingUser, setEditingUser] = useState<string | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
-  const [addForm, setAddForm] = useState({ name: '', email: '', password: '', role: 'Team Member', unit: 'Sales' })
+  const [addForm, setAddForm] = useState({ name: '', email: '', role: 'Team Member', unit: 'Sales' })
   const [resetConfirm, setResetConfirm] = useState<string | null>(null)
   const [emailStatus, setEmailStatus] = useState<Record<string, 'sending' | 'sent' | 'error'>>({})
   const [showExportModal, setShowExportModal] = useState(false)
@@ -367,12 +367,12 @@ export default function AdminPage() {
     setTimeout(() => { setShowImportModal(false); setImportFile(null); setImportProgress(null) }, 1500)
   }
 
-  async function sendInviteEmail(name: string, email: string, role: string, unit: string, tempPassword: string) {
+  async function sendInviteEmail(name: string, email: string, role: string, unit: string) {
     try {
       const res = await fetch('/api/email/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, role, unit, invitedBy: user?.name, tempPassword }),
+        body: JSON.stringify({ name, email, role, unit, invitedBy: user?.name }),
       })
       return res.ok
     } catch {
@@ -380,13 +380,13 @@ export default function AdminPage() {
     }
   }
 
-  async function sendResetEmail(targetUser: AdminUser) {
+  async function sendSignInLink(targetUser: AdminUser) {
     setEmailStatus(prev => ({ ...prev, [targetUser.id]: 'sending' }))
     try {
-      const res = await fetch('/api/email/reset-password', {
+      const res = await fetch('/api/email/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: targetUser.name, email: targetUser.email, resetBy: user?.name }),
+        body: JSON.stringify({ name: targetUser.name, email: targetUser.email, role: targetUser.role, unit: targetUser.unit, invitedBy: user?.name }),
       })
       setEmailStatus(prev => ({ ...prev, [targetUser.id]: res.ok ? 'sent' : 'error' }))
       setTimeout(() => setEmailStatus(prev => { const n = { ...prev }; delete n[targetUser.id]; return n }), 4000)
@@ -413,9 +413,9 @@ export default function AdminPage() {
     setUsers(prev => [...prev, newUser])
     // Send invite email in background
     if (addForm.email) {
-      await sendInviteEmail(addForm.name, addForm.email, addForm.role, addForm.unit, addForm.password || 'Welcome1!')
+      await sendInviteEmail(addForm.name, addForm.email, addForm.role, addForm.unit)
     }
-    setAddForm({ name: '', email: '', password: '', role: 'Team Member', unit: 'Sales' })
+    setAddForm({ name: '', email: '', role: 'Team Member', unit: 'Sales' })
     setShowAddUser(false)
   }
 
@@ -586,11 +586,6 @@ export default function AdminPage() {
                       type="email" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" placeholder="email@" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Temp Password</label>
-                    <input value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))}
-                      type="password" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" placeholder="Temporary password" />
-                  </div>
-                  <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
                     <select value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value }))}
                       className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700">
@@ -713,7 +708,7 @@ export default function AdminPage() {
                                   <button
                                     onClick={() => setResetConfirm(resetConfirm === u.id ? null : u.id)}
                                     className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-500 transition-colors"
-                                    title="Reset password"
+                                    title="Send sign-in link"
                                   >
                                     <Key size={13} />
                                   </button>
@@ -779,14 +774,14 @@ export default function AdminPage() {
                             <td colSpan={6} className="px-5 py-3">
                               <div className="flex items-center gap-3 flex-wrap">
                                 <AlertTriangle size={14} className="text-amber-500 flex-shrink-0" />
-                                <span className="text-xs text-gray-700">Send password reset email to <strong>{u.email}</strong>?</span>
+                                <span className="text-xs text-gray-700">Send sign-in link to <strong>{u.email}</strong>?</span>
                                 <button
-                                  onClick={() => sendResetEmail(u)}
+                                  onClick={() => sendSignInLink(u)}
                                   disabled={emailStatus[u.id] === 'sending'}
                                   className="px-3 py-1.5 text-xs font-medium text-white rounded-lg disabled:opacity-60"
                                   style={{ background: '#f59e0b' }}
                                 >
-                                  {emailStatus[u.id] === 'sending' ? 'Sending…' : 'Send Reset Email'}
+                                  {emailStatus[u.id] === 'sending' ? 'Sending…' : 'Send Sign-In Link'}
                                 </button>
                                 <button onClick={() => setResetConfirm(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
                               </div>
@@ -1362,19 +1357,19 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ── Reset Passwords Modal ── */}
+      {/* ── Send Sign-In Link Modal ── */}
       {showBulkResetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
           <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setShowBulkResetModal(false)} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 pointer-events-auto overflow-hidden">
             <div className="p-5 border-b" style={{ background: '#012b1e' }}>
               <div className="flex items-center justify-between">
-                <h3 className="text-white text-sm font-bold">Reset Password</h3>
+                <h3 className="text-white text-sm font-bold">Send Sign-In Link</h3>
                 <button onClick={() => setShowBulkResetModal(false)} className="p-1 rounded hover:bg-white/10"><X size={15} className="text-white/60" /></button>
               </div>
             </div>
             <div className="p-5 flex flex-col gap-4">
-              <p className="text-xs text-gray-500">Select a user to send a password reset email to.</p>
+              <p className="text-xs text-gray-500">Select a user to send a sign-in link to.</p>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Select User</label>
                 <select value={bulkResetTarget} onChange={e => setBulkResetTarget(e.target.value)}
@@ -1383,22 +1378,22 @@ export default function AdminPage() {
                   {users.filter(u => u.id !== 'u0').map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
                 </select>
               </div>
-              <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-700">This will send a password reset email. The user must be active.</p>
+              <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <Mail size={14} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-blue-700">This will send a sign-in link via email. The user can click it to log in instantly.</p>
               </div>
             </div>
             <div className="px-5 pb-5 flex gap-2">
               <button
                 onClick={async () => {
                   const target = users.find(u => u.id === bulkResetTarget)
-                  if (target) { await sendResetEmail(target); setShowBulkResetModal(false); setBulkResetTarget('') }
+                  if (target) { await sendSignInLink(target); setShowBulkResetModal(false); setBulkResetTarget('') }
                 }}
                 disabled={!bulkResetTarget}
                 className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-40"
-                style={{ background: '#f59e0b' }}
+                style={{ background: '#015035' }}
               >
-                Send Reset Email
+                Send Sign-In Link
               </button>
               <button onClick={() => setShowBulkResetModal(false)} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
             </div>

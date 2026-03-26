@@ -398,29 +398,86 @@ export default function AdminPage() {
 
   async function submitAddUser() {
     if (!addForm.name || !addForm.email) return
-    const initials = addForm.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
-    const newUser = {
-      id: `u${Date.now()}`,
-      name: addForm.name,
-      email: addForm.email,
-      role: addForm.role,
-      unit: addForm.unit,
-      status: 'Active',
-      lastLogin: 'Never',
-      initials,
-      isAdmin: false,
+    const isNewAdmin = addForm.role === 'Super Admin'
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: addForm.name,
+          email: addForm.email,
+          role: addForm.role,
+          unit: addForm.unit,
+          isAdmin: isNewAdmin,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        toast(err.error || 'Failed to create user', 'error')
+        return
+      }
+      const created = await res.json()
+      setUsers(prev => [...prev, created])
+      toast(`${addForm.name} has been added`, 'success')
+    } catch {
+      toast('Failed to create user', 'error')
+      return
     }
-    setUsers(prev => [...prev, newUser])
     // Send invite email in background
-    if (addForm.email) {
-      await sendInviteEmail(addForm.name, addForm.email, addForm.role, addForm.unit)
-    }
+    await sendInviteEmail(addForm.name, addForm.email, addForm.role, addForm.unit)
     setAddForm({ name: '', email: '', role: 'Team Member', unit: 'Sales' })
     setShowAddUser(false)
   }
 
-  function deactivateUser(id: string) {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'Active' ? 'Inactive' : 'Active' } : u))
+  async function deactivateUser(id: string) {
+    const target = users.find(u => u.id === id)
+    if (!target) return
+    const newStatus = target.status === 'Active' ? 'Inactive' : 'Active'
+    // Optimistic update
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: newStatus } : u))
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!res.ok) throw new Error()
+      toast(`User ${newStatus === 'Active' ? 'reactivated' : 'deactivated'}`, 'success')
+    } catch {
+      // Rollback
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, status: target.status } : u))
+      toast('Failed to update user status', 'error')
+    }
+  }
+
+  const [removeConfirm, setRemoveConfirm] = useState<string | null>(null)
+
+  async function removeUser(id: string) {
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      setUsers(prev => prev.filter(u => u.id !== id))
+      setRemoveConfirm(null)
+      toast('User archived — will be permanently deleted after 30 days', 'success')
+    } catch {
+      toast('Failed to remove user', 'error')
+    }
+  }
+
+  async function saveUserEdit(id: string, updates: { role?: string; unit?: string; isAdmin?: boolean }) {
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      if (!res.ok) throw new Error()
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u))
+      setEditingUser(null)
+      toast('User updated', 'success')
+    } catch {
+      toast('Failed to update user', 'error')
+    }
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
@@ -527,7 +584,7 @@ export default function AdminPage() {
                   { label: 'Add User', icon: <Plus size={14} />, action: () => { setTab('users'); setShowAddUser(true) } },
                   { label: 'Export Data', icon: <Download size={14} />, action: () => setShowExportModal(true) },
                   { label: 'Import Data', icon: <Upload size={14} />, action: () => setShowImportModal(true) },
-                  { label: 'Reset Passwords', icon: <Key size={14} />, action: () => setShowBulkResetModal(true) },
+                  { label: 'Send Sign-In Links', icon: <Key size={14} />, action: () => setShowBulkResetModal(true) },
                   { label: 'Clear Cache', icon: <RefreshCw size={14} />, action: () => setShowClearCacheModal(true) },
                   { label: 'System Backup', icon: <Database size={14} />, action: () => setShowBackupModal(true) },
                 ].map(a => (
@@ -589,11 +646,15 @@ export default function AdminPage() {
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
                     <select value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value }))}
                       className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700">
-                      <option>Team Member</option>
-                      <option>Department Manager</option>
+                      <option>Super Admin</option>
                       <option>Leadership</option>
+                      <option>Department Manager</option>
+                      <option>Team Member</option>
                       <option>Contractor</option>
                     </select>
+                    {addForm.role === 'Super Admin' && (
+                      <p className="text-[10px] text-amber-600 font-medium mt-1">This user will have full admin privileges</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Unit</label>
@@ -696,7 +757,7 @@ export default function AdminPage() {
                                   <Eye size={11} /> Login As
                                 </button>
                               )}
-                              {u.id !== 'u0' && (
+                              {u.id !== user?.id && (
                                 <>
                                   <button
                                     onClick={() => setEditingUser(editingUser === u.id ? null : u.id)}
@@ -712,17 +773,34 @@ export default function AdminPage() {
                                   >
                                     <Key size={13} />
                                   </button>
+                                  {u.status === 'Active' ? (
+                                    <button
+                                      onClick={() => deactivateUser(u.id)}
+                                      className="p-1.5 rounded-lg hover:bg-orange-50 text-orange-400 transition-colors"
+                                      title="Deactivate user"
+                                    >
+                                      <EyeOff size={13} />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => deactivateUser(u.id)}
+                                      className="p-1.5 rounded-lg hover:bg-green-50 text-green-500 transition-colors"
+                                      title="Reactivate user"
+                                    >
+                                      <CheckCircle size={13} />
+                                    </button>
+                                  )}
                                   <button
-                                    onClick={() => deactivateUser(u.id)}
-                                    className={`p-1.5 rounded-lg transition-colors ${u.status === 'Active' ? 'hover:bg-red-50 text-red-400' : 'hover:bg-green-50 text-green-500'}`}
-                                    title={u.status === 'Active' ? 'Deactivate user' : 'Reactivate user'}
+                                    onClick={() => setRemoveConfirm(removeConfirm === u.id ? null : u.id)}
+                                    className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 transition-colors"
+                                    title="Remove user (30-day archive)"
                                   >
-                                    {u.status === 'Active' ? <Trash2 size={13} /> : <CheckCircle size={13} />}
+                                    <Trash2 size={13} />
                                   </button>
                                 </>
                               )}
-                              {u.id === 'u0' && (
-                                <span className="text-xs text-amber-600 font-semibold">Owner</span>
+                              {u.id === user?.id && (
+                                <span className="text-xs text-amber-600 font-semibold">You</span>
                               )}
                             </div>
                           </td>
@@ -730,42 +808,54 @@ export default function AdminPage() {
                         {editingUser === u.id && (
                           <tr key={`edit-${u.id}`} className="bg-blue-50/40 border-b border-blue-100">
                             <td colSpan={6} className="px-5 py-3">
-                              <div className="flex flex-wrap items-end gap-3">
-                                <div>
-                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
-                                  <select
-                                    defaultValue={u.role}
-                                    onChange={e => setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: e.target.value } : x))}
-                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
-                                  >
-                                    <option>Team Member</option>
-                                    <option>Department Manager</option>
-                                    <option>Leadership</option>
-                                    <option>Contractor</option>
-                                    <option>Client</option>
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Unit</label>
-                                  <select
-                                    defaultValue={u.unit}
-                                    onChange={e => setUsers(prev => prev.map(x => x.id === u.id ? { ...x, unit: e.target.value } : x))}
-                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
-                                  >
-                                    <option>Sales</option>
-                                    <option>Delivery/Operations</option>
-                                    <option>Billing/Finance</option>
-                                    <option>Leadership/Admin</option>
-                                    <option>Contractors</option>
-                                  </select>
-                                </div>
-                                <button onClick={() => setEditingUser(null)} className="px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>
-                                  Save Changes
-                                </button>
-                                <button onClick={() => setEditingUser(null)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
-                                  Cancel
-                                </button>
-                              </div>
+                              {(() => {
+                                // Use a closure to hold local edit state
+                                const [editRole, setEditRole] = [u.role, (v: string) => setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: v, isAdmin: v === 'Super Admin' } : x))]
+                                const [editUnit, setEditUnit] = [u.unit, (v: string) => setUsers(prev => prev.map(x => x.id === u.id ? { ...x, unit: v } : x))]
+                                return (
+                                  <div className="flex flex-wrap items-end gap-3">
+                                    <div>
+                                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
+                                      <select
+                                        defaultValue={editRole}
+                                        onChange={e => setEditRole(e.target.value)}
+                                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                      >
+                                        <option>Super Admin</option>
+                                        <option>Leadership</option>
+                                        <option>Department Manager</option>
+                                        <option>Team Member</option>
+                                        <option>Contractor</option>
+                                        <option>Client</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Unit</label>
+                                      <select
+                                        defaultValue={editUnit}
+                                        onChange={e => setEditUnit(e.target.value)}
+                                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                      >
+                                        <option>Sales</option>
+                                        <option>Delivery/Operations</option>
+                                        <option>Billing/Finance</option>
+                                        <option>Leadership/Admin</option>
+                                        <option>Contractors</option>
+                                      </select>
+                                    </div>
+                                    <button
+                                      onClick={() => saveUserEdit(u.id, { role: u.role, unit: u.unit, isAdmin: u.role === 'Super Admin' })}
+                                      className="px-3 py-1.5 text-xs font-medium text-white rounded-lg"
+                                      style={{ background: '#015035' }}
+                                    >
+                                      Save Changes
+                                    </button>
+                                    <button onClick={() => setEditingUser(null)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+                                      Cancel
+                                    </button>
+                                  </div>
+                                )
+                              })()}
                             </td>
                           </tr>
                         )}
@@ -803,6 +893,25 @@ export default function AdminPage() {
                               <span className="flex items-center gap-2 text-xs text-red-600 font-medium">
                                 <AlertTriangle size={12} /> Failed to send email — check RESEND_API_KEY in .env.local
                               </span>
+                            </td>
+                          </tr>
+                        )}
+                        {removeConfirm === u.id && (
+                          <tr key={`remove-${u.id}`} className="bg-red-50/40 border-b border-red-100">
+                            <td colSpan={6} className="px-5 py-3">
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <AlertTriangle size={14} className="text-red-500 flex-shrink-0" />
+                                <span className="text-xs text-gray-700">
+                                  Remove <strong>{u.name}</strong>? They will be archived for 30 days before permanent deletion.
+                                </span>
+                                <button
+                                  onClick={() => removeUser(u.id)}
+                                  className="px-3 py-1.5 text-xs font-medium text-white rounded-lg bg-red-600 hover:bg-red-700"
+                                >
+                                  Remove &amp; Archive
+                                </button>
+                                <button onClick={() => setRemoveConfirm(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                              </div>
                             </td>
                           </tr>
                         )}

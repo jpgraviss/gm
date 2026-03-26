@@ -7,6 +7,7 @@ import {
   TrendingUp, DollarSign, CheckCircle, RefreshCw,
   FolderKanban, Calendar, ArrowUpRight, ArrowRight,
   FileText, ScrollText, AlertCircle, Zap,
+  Wrench, MessageSquare, CheckSquare, Clock,
 } from 'lucide-react'
 import { formatCurrency, contractStatusColors, invoiceStatusColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
@@ -403,19 +404,194 @@ function LiveClock() {
   )
 }
 
+// ─── Contractor Dashboard ────────────────────────────────────────────────────
+
+interface ContractorProject { id: string; company: string; serviceType: string; status: string; progress: number; launchDate: string }
+interface ContractorTicket { id: string; subject: string; company: string; status: string; priority: string; created_at: string }
+interface ContractorTask { id: string; title: string; status: string; assignee: string; due_date: string; project_id?: string }
+
+function ContractorDashboard({ userName }: { userName: string }) {
+  const { toast } = useToast()
+  const [projects, setProjects] = useState<ContractorProject[]>([])
+  const [tickets, setTickets] = useState<ContractorTicket[]>([])
+  const [tasks, setTasks] = useState<ContractorTask[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/projects').then(r => r.json()).catch(() => []),
+      fetch('/api/tickets').then(r => r.json()).catch(() => []),
+      fetch('/api/tasks').then(r => r.json()).catch(() => []),
+    ]).then(([p, t, tk]) => {
+      if (Array.isArray(p)) setProjects(p)
+      if (Array.isArray(t)) setTickets(t)
+      if (Array.isArray(tk)) setTasks(tk)
+    }).catch(() => toast('Failed to load dashboard data', 'error'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+
+  const activeProjects = projects.filter(p => !['Completed', 'Cancelled'].includes(p.status))
+  const openTickets = tickets.filter(t => !['Closed', 'Resolved'].includes(t.status))
+  const pendingTasks = tasks.filter(t => t.status !== 'Done' && t.status !== 'Completed')
+
+  return (
+    <>
+      <Header title="Dashboard" subtitle="Your workspace" />
+      <div className="page-content">
+        <GreetingBanner name={userName} />
+        <MagicMomentToast name={userName} />
+        <LiveClock />
+
+        {/* KPI Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KpiCard label="Active Projects"  value={String(activeProjects.length)} icon={<FolderKanban size={17} />}  accent="#8b5cf6" sub="In progress"   href="/projects" />
+          <KpiCard label="Open Tickets"     value={String(openTickets.length)}    icon={<MessageSquare size={17} />} accent="#f59e0b" sub="Need attention" href="/tickets" />
+          <KpiCard label="Pending Tasks"    value={String(pendingTasks.length)}   icon={<CheckSquare size={17} />}   accent="#3b82f6" sub="To complete"    href="/tasks" />
+          <KpiCard label="Total Projects"   value={String(projects.length)}       icon={<CheckCircle size={17} />}   accent="#015035" sub="All time"       href="/projects" />
+        </div>
+
+        {/* Content Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+          {/* Active Projects */}
+          <div className="metric-card">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FolderKanban size={14} style={{ color: '#8b5cf6' }} />
+                <h3 className="font-bold text-gray-800 text-sm">Active Projects</h3>
+              </div>
+              <Link href="/projects" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
+                View All <ArrowRight size={11} />
+              </Link>
+            </div>
+            {activeProjects.length === 0 ? (
+              <p className="text-xs text-gray-400 py-4 text-center">No active projects</p>
+            ) : (
+              <div className="flex flex-col divide-y divide-gray-50">
+                {activeProjects.slice(0, 6).map(p => (
+                  <Link key={p.id} href="/projects" className="flex items-center justify-between py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold text-gray-800 truncate">{p.company}</p>
+                      <p className="text-[11px] text-gray-400">{p.serviceType}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${p.progress}%`, background: '#015035' }} />
+                      </div>
+                      <span className="text-[11px] font-bold text-gray-500 w-8 text-right">{p.progress}%</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Open Tickets */}
+          <div className="metric-card">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <MessageSquare size={14} style={{ color: '#f59e0b' }} />
+                <h3 className="font-bold text-gray-800 text-sm">Open Tickets</h3>
+              </div>
+              <Link href="/tickets" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
+                View All <ArrowRight size={11} />
+              </Link>
+            </div>
+            {openTickets.length === 0 ? (
+              <p className="text-xs text-gray-400 py-4 text-center">No open tickets</p>
+            ) : (
+              <div className="flex flex-col divide-y divide-gray-50">
+                {openTickets.slice(0, 6).map(t => {
+                  const priorityColor = t.priority === 'High' || t.priority === 'Urgent' ? 'text-red-600 bg-red-50' : t.priority === 'Medium' ? 'text-orange-600 bg-orange-50' : 'text-gray-600 bg-gray-50'
+                  return (
+                    <Link key={t.id} href="/tickets" className="flex items-center justify-between py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-semibold text-gray-800 truncate">{t.subject}</p>
+                        <p className="text-[11px] text-gray-400">{t.company}</p>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ml-2 ${priorityColor}`}>
+                        {t.priority}
+                      </span>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Tasks Row */}
+        <div className="metric-card">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <CheckSquare size={14} style={{ color: '#3b82f6' }} />
+              <h3 className="font-bold text-gray-800 text-sm">Pending Tasks</h3>
+            </div>
+            <Link href="/tasks" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
+              View All <ArrowRight size={11} />
+            </Link>
+          </div>
+          {pendingTasks.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">All tasks completed</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              {pendingTasks.slice(0, 9).map(t => (
+                <Link key={t.id} href="/tasks" className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                  <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: t.status === 'In Progress' ? '#3b82f6' : '#d1d5db' }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-medium text-gray-800 truncate">{t.title}</p>
+                    {t.due_date && <p className="text-[10px] text-gray-400">Due {t.due_date}</p>}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Quick Links */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'Projects',      href: '/projects',      icon: <FolderKanban size={16} />, color: '#8b5cf6' },
+            { label: 'Maintenance',   href: '/maintenance',   icon: <Wrench size={16} />,       color: '#015035' },
+            { label: 'Time Tracking', href: '/time-tracking', icon: <Clock size={16} />,        color: '#3b82f6' },
+            { label: 'Tickets',       href: '/tickets',       icon: <MessageSquare size={16} />,color: '#f59e0b' },
+          ].map(link => (
+            <Link key={link.href} href={link.href} className="metric-card flex items-center gap-3 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${link.color}15` }}>
+                <span style={{ color: link.color }}>{link.icon}</span>
+              </div>
+              <span className="text-sm font-semibold text-gray-800">{link.label}</span>
+              <ArrowRight size={13} className="text-gray-300 ml-auto" />
+            </Link>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── Main Dashboard ──────────────────────────────────────────────────────────
+
 export default function DashboardPage() {
   const { user } = useAuth()
   const { toast } = useToast()
   const [data, setData] = useState<DashboardData>(emptyData)
   const [loading, setLoading] = useState(true)
 
+  const isContractor = user?.role === 'Contractor' || user?.unit === 'Contractors'
+
   useEffect(() => {
+    if (isContractor) return // Contractor dashboard fetches its own data
     fetch('/api/dashboard')
       .then(r => r.json())
       .then(d => { if (d.metrics) setData(d) })
       .catch(() => toast('Failed to load dashboard data', 'error'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [isContractor])
+
+  if (isContractor && user) return <ContractorDashboard userName={user.name} />
 
   const m = data.metrics
   const pendingContracts = data.recentContracts.filter(c =>
@@ -486,40 +662,42 @@ export default function DashboardPage() {
         </div>
 
         {/* Bottom Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className={`grid grid-cols-1 ${user?.isAdmin ? 'lg:grid-cols-3' : ''} gap-4`}>
 
-          {/* Activity feed */}
-          <div className="metric-card lg:col-span-2">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-gray-800 text-sm">Recent Activity</h3>
-              <span className="text-[11px] text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">Live feed</span>
-            </div>
-            <div className="flex flex-col divide-y divide-gray-50">
-              {data.activityFeed.length === 0 ? (
-                <p className="text-xs text-gray-400 py-4 text-center">No activity yet. Start by adding deals or contacts.</p>
-              ) : data.activityFeed.map((item) => {
-                const meta = activityMeta[item.type] ?? activityMeta.action
-                return (
-                  <div key={item.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-                    <div
-                      className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{ background: `${meta.color}14`, color: meta.color }}
-                    >
-                      {meta.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-gray-800 leading-snug">{item.action}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[11px] text-gray-500 font-semibold">{item.user}</span>
-                        <span className="text-gray-300 text-xs">·</span>
-                        <span className="text-[11px] text-gray-400">{item.module}</span>
+          {/* Activity feed — Admin / Super Admin only */}
+          {user?.isAdmin && (
+            <div className="metric-card lg:col-span-2">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-800 text-sm">Recent Activity</h3>
+                <span className="text-[11px] text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">Live feed</span>
+              </div>
+              <div className="flex flex-col divide-y divide-gray-50">
+                {data.activityFeed.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-4 text-center">No activity yet. Start by adding deals or contacts.</p>
+                ) : data.activityFeed.map((item) => {
+                  const meta = activityMeta[item.type] ?? activityMeta.action
+                  return (
+                    <div key={item.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                      <div
+                        className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
+                        style={{ background: `${meta.color}14`, color: meta.color }}
+                      >
+                        {meta.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] text-gray-800 leading-snug">{item.action}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[11px] text-gray-500 font-semibold">{item.user}</span>
+                          <span className="text-gray-300 text-xs">·</span>
+                          <span className="text-[11px] text-gray-400">{item.module}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Right column */}
           <div className="flex flex-col gap-4">

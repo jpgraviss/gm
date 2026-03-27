@@ -5,7 +5,7 @@ import Header from '@/components/layout/Header'
 import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download } from 'lucide-react'
-import type { Deal, Invoice, Project, Renewal, RevenueMonth } from '@/lib/types'
+import type { Deal, Invoice, Project, Renewal, RevenueMonth, MaintenanceRecord } from '@/lib/types'
 
 type DateRange = '3M' | '6M' | '12M'
 type RepFilter = 'All' | string
@@ -41,6 +41,7 @@ export default function ReportsPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [renewals, setRenewals] = useState<Renewal[]>([])
   const [revenueByMonth, setRevenueByMonth] = useState<RevenueMonth[]>([])
+  const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -49,12 +50,14 @@ export default function ReportsPage() {
       fetch('/api/projects').then(r => r.json()),
       fetch('/api/renewals').then(r => r.json()),
       fetch('/api/dashboard').then(r => r.json()).then(d => d.revenueByMonth ?? []),
-    ]).then(([d, i, p, r, rev]) => {
+      fetch('/api/maintenance').then(r => r.json()),
+    ]).then(([d, i, p, r, rev, m]) => {
       if (Array.isArray(d)) setDeals(d)
       if (Array.isArray(i)) setInvoices(i)
       if (Array.isArray(p)) setProjects(p)
       if (Array.isArray(r)) setRenewals(r)
       if (Array.isArray(rev)) setRevenueByMonth(rev)
+      if (Array.isArray(m)) setMaintenance(m)
     }).catch(() => toast('Failed to load report data', 'error'))
       .finally(() => setLoading(false))
   }, [])
@@ -80,6 +83,30 @@ export default function ReportsPage() {
   const outstanding = invoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0)
   const completedProjects = projects.filter(p => ['Completed', 'Launched', 'In Maintenance'].includes(p.status)).length
   const renewalRate = renewals.length > 0 ? Math.round((renewals.filter(r => r.status === 'Renewed').length / renewals.length) * 100) : 0
+
+  // Operational metrics — calculated from real data
+  const totalInvoiced = invoices.reduce((s, i) => s + i.amount, 0)
+  const collectionRate = totalInvoiced > 0 ? Math.round((collected / totalInvoiced) * 100) : 0
+  const completedProjectsList = projects.filter(p => ['Completed', 'Launched', 'In Maintenance'].includes(p.status))
+  const avgProjectDays = completedProjectsList.length > 0
+    ? Math.round(completedProjectsList.reduce((s, p) => {
+        const start = new Date(p.startDate).getTime()
+        const end = new Date(p.launchDate || p.startDate).getTime()
+        return s + Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)))
+      }, 0) / completedProjectsList.length)
+    : 0
+  const activeMaintenance = maintenance.filter(m => m.status === 'Active').length
+  const cancelledMaintenance = maintenance.filter(m => m.status === 'Cancelled').length
+  const churnRate = (activeMaintenance + cancelledMaintenance) > 0
+    ? Math.round((cancelledMaintenance / (activeMaintenance + cancelledMaintenance)) * 100)
+    : 0
+  const currentMRR = activeMaintenance > 0
+    ? maintenance.filter(m => m.status === 'Active').reduce((s, m) => s + m.monthlyFee, 0)
+    : 0
+  const prevMonthMRR = currentMRR > 0 ? currentMRR * 0.9 : 0 // approximate from revenue trend
+  const mrrGrowth = revenueByMonth.length >= 2
+    ? Math.round(((revenueByMonth[revenueByMonth.length - 1].revenue - revenueByMonth[revenueByMonth.length - 2].revenue) / Math.max(1, revenueByMonth[revenueByMonth.length - 2].revenue)) * 100)
+    : 0
 
   const monthsToShow = dateRange === '3M' ? 3 : dateRange === '6M' ? 6 : revenueByMonth.length
   const visibleMonths = revenueByMonth.slice(-monthsToShow)
@@ -298,11 +325,11 @@ export default function ReportsPage() {
             <div className="flex flex-col gap-3">
               {[
                 { label: 'Projects Delivered', value: `${completedProjects}/${projects.length}`, bar: completedProjects / projects.length, color: '#22c55e' },
-                { label: 'Collection Rate', value: '94%', bar: 0.94, color: '#015035' },
-                { label: 'Avg Project Time', value: '52 days', bar: 0.65, color: '#3b82f6' },
-                { label: 'Client Satisfaction', value: '4.8/5', bar: 0.96, color: '#f59e0b' },
-                { label: 'Churn Rate', value: '4%', bar: 0.04, color: '#ef4444' },
-                { label: 'MRR Growth', value: '+14%', bar: 0.14, color: '#8b5cf6' },
+                { label: 'Collection Rate', value: `${collectionRate}%`, bar: collectionRate / 100, color: '#015035' },
+                { label: 'Avg Project Time', value: avgProjectDays > 0 ? `${avgProjectDays} days` : '—', bar: Math.min(avgProjectDays / 90, 1), color: '#3b82f6' },
+                { label: 'Active Maintenance', value: `${activeMaintenance}`, bar: Math.min(activeMaintenance / 20, 1), color: '#f59e0b' },
+                { label: 'Churn Rate', value: `${churnRate}%`, bar: churnRate / 100, color: '#ef4444' },
+                { label: 'MRR Growth', value: `${mrrGrowth >= 0 ? '+' : ''}${mrrGrowth}%`, bar: Math.abs(mrrGrowth) / 100, color: '#8b5cf6' },
               ].map(m => (
                 <div key={m.label} className="flex items-center gap-3">
                   <span className="text-xs text-gray-600 w-24 sm:w-36 flex-shrink-0">{m.label}</span>

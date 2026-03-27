@@ -28,7 +28,7 @@ const priorityConfig: Record<TaskPriority, { badge: string; dot: string; label: 
   Low:    { badge: 'bg-gray-100 text-gray-500',   dot: '#9ca3af', label: 'Low' },
 }
 
-const TODAY = '2026-03-02'
+const TODAY = new Date().toISOString().split('T')[0]
 
 function isOverdue(dueDate: string, status: AppTaskStatus) {
   return status !== 'Completed' && dueDate < TODAY

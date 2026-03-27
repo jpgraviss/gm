@@ -203,6 +203,117 @@ export async function uploadFile(
   return res.json()
 }
 
+export async function getFileDownloadUrl(fileId: string, token: string): Promise<string> {
+  // For Google Docs/Sheets/Slides, export as PDF
+  // For other files, get direct download URL
+  const metaRes = await fetch(`${DRIVE_API}/files/${fileId}?fields=mimeType,name`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!metaRes.ok) throw new Error(`Failed to get file metadata: ${metaRes.status}`)
+  const meta = await metaRes.json()
+
+  const googleDocTypes: Record<string, string> = {
+    'application/vnd.google-apps.document': 'application/pdf',
+    'application/vnd.google-apps.spreadsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.google-apps.presentation': 'application/pdf',
+  }
+
+  if (googleDocTypes[meta.mimeType]) {
+    return `${DRIVE_API}/files/${fileId}/export?mimeType=${encodeURIComponent(googleDocTypes[meta.mimeType])}`
+  }
+
+  return `${DRIVE_API}/files/${fileId}?alt=media`
+}
+
+export async function downloadFile(fileId: string, token: string): Promise<{ buffer: Buffer; name: string; mimeType: string }> {
+  const metaRes = await fetch(`${DRIVE_API}/files/${fileId}?fields=mimeType,name`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!metaRes.ok) throw new Error(`Failed to get file metadata: ${metaRes.status}`)
+  const meta = await metaRes.json()
+
+  const googleDocTypes: Record<string, { exportMime: string; ext: string }> = {
+    'application/vnd.google-apps.document': { exportMime: 'application/pdf', ext: '.pdf' },
+    'application/vnd.google-apps.spreadsheet': { exportMime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ext: '.xlsx' },
+    'application/vnd.google-apps.presentation': { exportMime: 'application/pdf', ext: '.pdf' },
+  }
+
+  let downloadUrl: string
+  let finalMime: string
+  let finalName: string = meta.name
+
+  if (googleDocTypes[meta.mimeType]) {
+    const exp = googleDocTypes[meta.mimeType]
+    downloadUrl = `${DRIVE_API}/files/${fileId}/export?mimeType=${encodeURIComponent(exp.exportMime)}`
+    finalMime = exp.exportMime
+    if (!finalName.endsWith(exp.ext)) finalName += exp.ext
+  } else {
+    downloadUrl = `${DRIVE_API}/files/${fileId}?alt=media`
+    finalMime = meta.mimeType
+  }
+
+  const res = await fetch(downloadUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error(`File download failed: ${res.status}`)
+  const arrayBuffer = await res.arrayBuffer()
+  return { buffer: Buffer.from(arrayBuffer), name: finalName, mimeType: finalMime }
+}
+
+export async function shareFile(
+  fileId: string,
+  email: string,
+  role: 'reader' | 'writer' | 'commenter',
+  token: string,
+): Promise<void> {
+  const res = await fetch(`${DRIVE_API}/files/${fileId}/permissions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      type: 'user',
+      role,
+      emailAddress: email,
+    }),
+  })
+  if (!res.ok) throw new Error(`Share failed: ${res.status}`)
+}
+
+export async function shareFilePublic(
+  fileId: string,
+  token: string,
+): Promise<string> {
+  const res = await fetch(`${DRIVE_API}/files/${fileId}/permissions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      type: 'anyone',
+      role: 'reader',
+    }),
+  })
+  if (!res.ok) throw new Error(`Public share failed: ${res.status}`)
+
+  // Get the web view link
+  const metaRes = await fetch(`${DRIVE_API}/files/${fileId}?fields=webViewLink`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const meta = await metaRes.json()
+  return meta.webViewLink
+}
+
+export async function deleteFile(fileId: string, token: string): Promise<void> {
+  const res = await fetch(`${DRIVE_API}/files/${fileId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`)
+}
+
 export async function ensureClientFolder(
   clientName: string,
   token: string,

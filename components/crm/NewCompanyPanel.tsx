@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Check, Plus, Minus, ChevronDown, ChevronUp, ChevronLeft, Calculator } from 'lucide-react'
+import { X, Check, Plus, Minus, ChevronDown, ChevronUp, ChevronLeft, Calculator, Sparkles, Loader2 } from 'lucide-react'
 import type { CompanySize, CompanyStatus } from '@/lib/types'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 
@@ -126,6 +126,38 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
     setForm(prev => ({ ...prev, [field]: value }))
   }
 
+  // ─── AI Auto-fill ─────────────────────────────────────────────────────────
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState('')
+
+  async function analyzeWebsite() {
+    if (!form.website.trim() || aiLoading) return
+    setAiLoading(true)
+    setAiError('')
+    try {
+      const res = await fetch('/api/ai/analyze-website', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: form.website }),
+      })
+      if (!res.ok) throw new Error('AI analysis failed')
+      const data = await res.json()
+      setForm(prev => ({
+        ...prev,
+        industry: data.industry || prev.industry,
+        description: data.description || prev.description,
+        size: data.size || prev.size,
+        hq: data.hq || prev.hq,
+        annualRevenue: data.annualRevenue || prev.annualRevenue,
+        phone: data.phone || prev.phone,
+      }))
+    } catch {
+      setAiError('Could not analyze website. Please fill in details manually.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
   // ─── Proposal calculator state ────────────────────────────────────────────
   const [proposalOpen, setProposalOpen] = useState(false)
   const [websiteEnabled, setWebsiteEnabled] = useState(true)
@@ -244,12 +276,25 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
           <div>
             <FieldLabel>Contact Info</FieldLabel>
             <div className="flex flex-col gap-2">
-              <Input
-                type="url"
-                placeholder="Website URL"
-                value={form.website}
-                onChange={e => set('website', e.target.value)}
-              />
+              <div className="flex gap-2">
+                <Input
+                  type="url"
+                  placeholder="Website URL"
+                  value={form.website}
+                  onChange={e => set('website', e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={analyzeWebsite}
+                  disabled={!form.website.trim() || aiLoading}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                  title="Auto-fill company details with AI"
+                >
+                  {aiLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  {aiLoading ? 'Analyzing...' : 'Auto-fill'}
+                </button>
+              </div>
+              {aiError && <p className="text-xs text-red-500 mt-1">{aiError}</p>}
               <Input
                 type="tel"
                 placeholder="Main phone number"

@@ -25,7 +25,20 @@ const SUGGESTIONS = [
 ]
 
 export default function AssistantPanel({ open, onClose }: AssistantPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const saved = localStorage.getItem('gravhub-ai-chat')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        return parsed.map((m: { id: string; role: string; content: string; timestamp: string }) => ({
+          ...m,
+          timestamp: new Date(m.timestamp),
+        }))
+      }
+    } catch {}
+    return []
+  })
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -44,6 +57,14 @@ export default function AssistantPanel({ open, onClose }: AssistantPanelProps) {
       setTimeout(() => inputRef.current?.focus(), 200)
     }
   }, [open])
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      try {
+        localStorage.setItem('gravhub-ai-chat', JSON.stringify(messages))
+      } catch {}
+    }
+  }, [messages])
 
   async function sendMessage(text?: string) {
     const content = (text ?? input).trim()
@@ -104,6 +125,7 @@ export default function AssistantPanel({ open, onClose }: AssistantPanelProps) {
 
   function clearChat() {
     setMessages([])
+    try { localStorage.removeItem('gravhub-ai-chat') } catch {}
   }
 
   // Format markdown-ish content (basic)

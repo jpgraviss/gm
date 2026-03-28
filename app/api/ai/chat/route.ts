@@ -140,6 +140,21 @@ const TOOLS = [
     },
   },
   {
+    name: 'write_proposal',
+    description: 'Write a custom AI-generated proposal for a client. Provide the company name, services needed, pricing, and any additional context. The AI will craft professional proposal content tailored to the client.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        company_name: { type: 'string', description: 'Client company name' },
+        services: { type: 'string', description: 'Comma-separated list of services (e.g. "Website Design, SEO, Social Media")' },
+        budget: { type: 'string', description: 'Budget or pricing details' },
+        timeline: { type: 'string', description: 'Project timeline' },
+        context: { type: 'string', description: 'Additional context about the client, their industry, goals, or specific requirements' },
+      },
+      required: ['company_name', 'services'],
+    },
+  },
+  {
     name: 'list_templates',
     description: 'List all available document templates (proposals, contracts, addendums).',
     input_schema: {
@@ -327,6 +342,72 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
       return JSON.stringify(data)
     }
 
+    case 'write_proposal': {
+      const company = input.company_name as string
+      const services = input.services as string
+      const budget = (input.budget as string) || 'to be discussed'
+      const timeline = (input.timeline as string) || 'to be determined'
+      const context = (input.context as string) || ''
+
+      // Look up company data from CRM for additional context
+      const { data: companyData } = await db
+        .from('crm_companies')
+        .select('name, industry, website, hq, size, description')
+        .ilike('name', `%${company}%`)
+        .limit(1)
+
+      const companyInfo = companyData?.[0]
+      const companyContext = companyInfo
+        ? `\nCompany Details from CRM:\n- Industry: ${companyInfo.industry || 'Unknown'}\n- Website: ${companyInfo.website || 'N/A'}\n- Location: ${companyInfo.hq || 'Unknown'}\n- Size: ${companyInfo.size || 'Unknown'}\n- Description: ${companyInfo.description || 'N/A'}`
+        : ''
+
+      const proposalPrompt = `Write a professional marketing services proposal for ${company}.
+
+Services requested: ${services}
+Budget: ${budget}
+Timeline: ${timeline}
+${context ? `Additional context: ${context}` : ''}
+${companyContext}
+
+Write the proposal in this format:
+1. **Executive Summary** - Brief overview of what Graviss Marketing will deliver
+2. **Understanding Your Needs** - Show understanding of the client's business and goals
+3. **Proposed Services** - Detail each service with scope and deliverables
+4. **Timeline & Milestones** - Phase-by-phase breakdown
+5. **Investment** - Pricing breakdown (use the budget info provided)
+6. **Why Graviss Marketing** - Brief value proposition
+7. **Next Steps** - Clear call to action
+
+Keep the tone professional but approachable. Be specific about deliverables. Use the company details from CRM if available to personalize the content.`
+
+      // Make a separate Claude call to generate the proposal
+      const apiKey = process.env.ANTHROPIC_API_KEY
+      if (!apiKey) return 'API key not configured for proposal generation.'
+
+      const proposalRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 4096,
+          messages: [{ role: 'user', content: proposalPrompt }],
+        }),
+      })
+
+      if (!proposalRes.ok) {
+        return 'Failed to generate proposal content. Please try again.'
+      }
+
+      const proposalData = await proposalRes.json() as { content: Array<{ type: string; text?: string }> }
+      const proposalText = proposalData.content.filter(c => c.type === 'text').map(c => c.text).join('')
+
+      return `--- AI-GENERATED PROPOSAL FOR ${company.toUpperCase()} ---\n\n${proposalText}`
+    }
+
     default:
       return `Unknown tool: ${name}`
   }
@@ -356,7 +437,7 @@ You have access to the full CRM, pipeline, billing, project, and document system
 
 1. **Search & Lookup** — Find companies, contacts, deals, contracts, proposals, invoices, projects, and tickets instantly.
 2. **Dashboard Intelligence** — Provide real-time business summaries (pipeline value, overdue invoices, upcoming renewals, etc.).
-3. **Document Generation** — Generate proposals, service agreements (contracts), and contract addendums from Graviss Marketing's official templates. When generating documents, fill in as many placeholders as possible from the data available.
+3. **Document Generation** — Generate proposals, service agreements (contracts), and contract addendums from templates, OR write fully custom AI-generated proposals using the write_proposal tool. When the user asks to "write" or "create" a proposal with custom content, use write_proposal. When they want a template-based document, use generate_document.
 4. **Analysis & Advice** — Provide strategic recommendations based on the data you find.
 
 Guidelines:

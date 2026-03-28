@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       const fileId = searchParams.get('fileId')
       if (!fileId) return NextResponse.json({ error: 'fileId required' }, { status: 400 })
       const { buffer, name, mimeType } = await downloadFile(fileId, token)
-      return new NextResponse(buffer, {
+      return new NextResponse(new Uint8Array(buffer), {
         headers: {
           'Content-Type': mimeType,
           'Content-Disposition': `attachment; filename="${encodeURIComponent(name)}"`,

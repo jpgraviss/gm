@@ -38,6 +38,8 @@ const PUBLIC_PREFIXES = [
   '/api/auth/auto-provision',  // Auto-create team_members profile on first login
   '/api/auth/profile',         // Server-side profile lookup during login
   '/api/auth/verify-email',    // Check if email exists (magic link pre-check)
+  '/api/signatures/',           // Public signature fetch/submit by token
+  '/api/email/sign-request',    // Signing email (called from signatures POST)
 ]
 
 const ADMIN_SETUP_PREFIXES = [

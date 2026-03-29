@@ -3,6 +3,37 @@ import crypto from 'crypto'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 
+async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
+  const db = createServiceClient()
+
+  // Try to get token from cookie or header
+  const authHeader = req.headers.get('authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+
+  // Get user from Supabase
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { data: { user }, error } = await db.auth.getUser(token)
+  if (error || !user?.email) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Check if admin
+  const { data: member } = await db
+    .from('team_members')
+    .select('is_admin')
+    .eq('email', user.email)
+    .single()
+
+  if (!member?.is_admin) {
+    return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
+  }
+
+  return null // Authorized
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapUser(row: any) {
   return {
@@ -18,7 +49,10 @@ function mapUser(row: any) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('team_members')
@@ -32,6 +66,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const body = await req.json()
   const db = createServiceClient()
   const initials = body.initials ?? body.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)

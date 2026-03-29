@@ -6,7 +6,7 @@ import { fetchTeamMembers } from '@/lib/supabase'
 import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority, TeamMember } from '@/lib/types'
 import {
   CheckSquare, Clock, AlertCircle, CheckCircle2, Plus, X, ChevronRight, ChevronLeft,
-  Building2, User, Calendar, Flag, Tag, Trash2, Circle,
+  Building2, User, Calendar, Flag, Tag, Trash2, Circle, Repeat,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
@@ -55,6 +55,10 @@ function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
   const [assignedTo, setAssignedTo] = useState('')
   const [dueDate, setDueDate] = useState(TODAY)
   const [company, setCompany] = useState('')
+  const [recurring, setRecurring] = useState(false)
+  const [recFrequency, setRecFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
+  const [recInterval, setRecInterval] = useState(1)
+  const [recEndDate, setRecEndDate] = useState('')
 
   const canSave = title.trim() && dueDate
 
@@ -71,6 +75,7 @@ function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
       assignedTo,
       dueDate,
       createdDate: TODAY,
+      recurrence: recurring ? { frequency: recFrequency, interval: recInterval, ...(recEndDate ? { endDate: recEndDate } : {}) } : null,
     })
   }
 
@@ -171,6 +176,56 @@ function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
               placeholder="e.g. Coastal Realty"
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
             />
+          </div>
+
+          {/* Recurrence toggle */}
+          <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={recurring}
+                onChange={e => setRecurring(e.target.checked)}
+                className="accent-emerald-600 w-4 h-4"
+              />
+              <Repeat size={14} className="text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">Repeat this task</span>
+            </label>
+            {recurring && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Frequency</label>
+                  <select
+                    value={recFrequency}
+                    onChange={e => setRecFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Every</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={recInterval}
+                    onChange={e => setRecInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">End Date (optional)</label>
+                  <input
+                    type="date"
+                    value={recEndDate}
+                    onChange={e => setRecEndDate(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -384,6 +439,11 @@ export default function TasksPage() {
   function addTask(task: AppTask) {
     setTasks(prev => [task, ...prev])
     setCreatingTask(false)
+    fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(task),
+    }).catch(() => toast('Failed to save task', 'error'))
   }
 
   // Computed stats
@@ -526,6 +586,11 @@ export default function TasksPage() {
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${catColor}`}>{task.category}</span>
+                    {task.recurrence && (
+                      <span className="text-gray-400 flex items-center gap-0.5" title={`Repeats ${task.recurrence.frequency} every ${task.recurrence.interval}`}>
+                        <Repeat size={10} />
+                      </span>
+                    )}
                     {task.company && (
                       <span className="text-xs text-gray-400 flex items-center gap-1">
                         <Building2 size={10} /> {task.company}

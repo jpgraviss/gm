@@ -17,6 +17,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.projectName !== undefined) update.project_name = body.projectName
   if (body.invoiced !== undefined)    update.invoiced = body.invoiced
   if (body.invoiceId !== undefined)   update.invoice_id = body.invoiceId
+  if (body.approvalStatus !== undefined)  update.approval_status = body.approvalStatus
+  if (body.approvedBy !== undefined)      update.approved_by = body.approvedBy
+  if (body.approvedAt !== undefined)      update.approved_at = body.approvedAt
+  if (body.rejectionNote !== undefined)   update.rejection_note = body.rejectionNote
 
   const { data, error } = await db.from('time_entries').update(update).eq('id', id).select().single()
   if (error) {

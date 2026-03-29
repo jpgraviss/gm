@@ -17,6 +17,8 @@ function mapTask(row: any) {
     completedDate:   row.completed_date ?? undefined,
     linkedId:        row.linked_id ?? undefined,
     teamServiceLine: row.team_service_line ?? undefined,
+    recurrence:      row.recurrence ?? null,
+    parentTaskId:    row.parent_task_id ?? undefined,
   }
 }
 
@@ -54,6 +56,8 @@ export async function POST(req: NextRequest) {
       created_date:     new Date().toISOString().split('T')[0],
       linked_id:        body.linkedId ?? null,
       team_service_line: body.teamServiceLine ?? null,
+      recurrence:        body.recurrence ?? null,
+      parent_task_id:    body.parentTaskId ?? null,
     })
     .select()
     .single()

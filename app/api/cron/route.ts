@@ -36,7 +36,106 @@ export async function GET(req: NextRequest) {
     results.timeTriggers = { error: 'Failed' }
   }
 
+  // 3. Calendar sync
+  try {
+    const baseUrl2 = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const syncRes = await fetch(`${baseUrl2}/api/calendar/sync`, { method: 'POST' })
+    results.calendarSync = await syncRes.json()
+  } catch (err) {
+    console.error('[cron] Calendar sync failed:', err)
+    results.calendarSync = { error: 'Failed' }
+  }
+
+  // 4. Spawn next occurrence for completed recurring tasks
+  try {
+    await spawnRecurringTasks()
+    results.recurringTasks = { checked: true }
+  } catch (err) {
+    console.error('[cron] Recurring task spawn failed:', err)
+    results.recurringTasks = { error: 'Failed' }
+  }
+
+  // 4. Email-to-ticket conversion
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const emailRes = await fetch(`${baseUrl}/api/tickets/from-email`, { method: 'POST' })
+    results.emailToTicket = await emailRes.json()
+  } catch (err) {
+    console.error('[cron] Email-to-ticket failed:', err)
+    results.emailToTicket = { error: 'Failed' }
+  }
+
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })
+}
+
+async function spawnRecurringTasks() {
+  const db = createServiceClient()
+
+  // Find completed tasks that still have a recurrence rule (haven't spawned yet)
+  const { data: completedRecurring, error } = await db
+    .from('app_tasks')
+    .select('*')
+    .eq('status', 'Completed')
+    .not('recurrence', 'is', null)
+
+  if (error) {
+    console.error('[cron] Failed to query recurring tasks:', error)
+    return
+  }
+
+  for (const task of completedRecurring ?? []) {
+    const rec = task.recurrence as { frequency: string; interval: number; endDate?: string }
+    if (!rec?.frequency || !rec?.interval) continue
+
+    // Calculate next due date from the original due date
+    const baseDue = new Date(task.due_date)
+    if (isNaN(baseDue.getTime())) continue
+
+    const nextDue = new Date(baseDue)
+    switch (rec.frequency) {
+      case 'daily':
+        nextDue.setDate(nextDue.getDate() + rec.interval)
+        break
+      case 'weekly':
+        nextDue.setDate(nextDue.getDate() + rec.interval * 7)
+        break
+      case 'monthly':
+        nextDue.setMonth(nextDue.getMonth() + rec.interval)
+        break
+      default:
+        continue
+    }
+
+    const nextDueStr = nextDue.toISOString().split('T')[0]
+
+    // Respect endDate — don't spawn if next date is past endDate
+    if (rec.endDate && nextDueStr > rec.endDate) {
+      // Clear recurrence on the completed task so we don't check it again
+      await db.from('app_tasks').update({ recurrence: null }).eq('id', task.id)
+      continue
+    }
+
+    // Create the new task with same fields but new ID, Pending status, updated due date
+    await db.from('app_tasks').insert({
+      id:                `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title:             task.title,
+      description:       task.description ?? null,
+      category:          task.category,
+      priority:          task.priority,
+      status:            'Pending',
+      company:           task.company ?? null,
+      assigned_to:       task.assigned_to,
+      due_date:          nextDueStr,
+      created_date:      new Date().toISOString().split('T')[0],
+      linked_id:         task.linked_id ?? null,
+      team_service_line: task.team_service_line ?? null,
+      recurrence:        task.recurrence,
+      parent_task_id:    task.id,
+    })
+
+    // Null out recurrence on the completed task so it doesn't spawn again
+    await db.from('app_tasks').update({ recurrence: null }).eq('id', task.id)
+  }
 }
 
 async function checkTimeBasedTriggers() {

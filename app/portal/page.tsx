@@ -8,12 +8,14 @@ import {
   Globe, Lock, Eye, CheckCircle, Calendar, RefreshCw, FolderKanban,
   ChevronDown, X, AlertTriangle, FileText, MessageSquare, Bell,
   ArrowLeft, Settings, LogOut, ChevronRight, Upload, Download, Trash2,
+  Check,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
-// ─── Client data ──────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type PortalClient = { id: string; company: string; service: string; access: string; lastLogin: string; contact: string; email: string }
+type PortalNotification = { id: string; portal_client_id: string; type: string; title: string; message: string | null; link: string | null; read: boolean; emailed: boolean; created_at: string }
 
 // ─── Add Client Panel ─────────────────────────────────────────────────────────
 
@@ -199,12 +201,57 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
   const [contract, setContract]       = useState<any>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [clientInvoices, setClientInvoices] = useState<any[]>([])
+  const [notifications, setNotifications] = useState<PortalNotification[]>([])
+  const [showNotifications, setShowNotifications] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [clientTickets, setClientTickets] = useState<any[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [clientFiles, setClientFiles] = useState<any[]>([])
+
+  const unreadCount = notifications.filter(n => !n.read).length
+
+  function fetchNotifications() {
+    if (!accountInfo?.id) return
+    fetch(`/api/portal-clients/notifications?clientId=${encodeURIComponent(accountInfo.id)}`)
+      .then(r => r.json())
+      .then((data: PortalNotification[]) => setNotifications(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }
+
+  async function markAllRead() {
+    const unreadIds = notifications.filter(n => !n.read).map(n => n.id)
+    if (unreadIds.length === 0) return
+    try {
+      await fetch('/api/portal-clients/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: unreadIds }),
+      })
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    } catch {
+      toast('Failed to mark notifications as read', 'error')
+    }
+  }
+
+  async function markAsRead(id: string) {
+    try {
+      await fetch('/api/portal-clients/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [id] }),
+      })
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+    } catch {}
+  }
 
   useEffect(() => {
     const q = encodeURIComponent(company)
     fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => toast('Failed to load project data', 'error'))
     fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => toast('Failed to load contract data', 'error'))
     fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => toast('Failed to load invoices', 'error'))
+    fetch(`/api/tickets?company=${q}`).then(r => r.json()).then((d: unknown[]) => setClientTickets(Array.isArray(d) ? d : [])).catch(() => setClientTickets([]))
+    fetch(`/api/drive/files?company=${q}`).then(r => r.json()).then((d: unknown[]) => setClientFiles(Array.isArray(d) ? d : [])).catch(() => setClientFiles([]))
+    fetchNotifications()
   }, [company])
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
@@ -238,12 +285,89 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-lg hover:bg-white/10 transition-colors">
-            <Bell size={16} className="text-white/60" />
-            {openInvoices.length > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-400 rounded-full" />
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(prev => !prev)}
+              className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
+            >
+              <Bell size={16} className="text-white/60" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 flex items-center justify-center bg-red-500 rounded-full text-[10px] font-bold text-white px-1">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Notification dropdown */}
+            {showNotifications && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
+                <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100" style={{ background: '#012b1e' }}>
+                    <p className="text-sm font-bold text-white">Notifications</p>
+                    <div className="flex items-center gap-2">
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={markAllRead}
+                          className="text-[11px] font-semibold text-white/70 hover:text-white transition-colors"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                      <button onClick={() => setShowNotifications(false)} className="p-1 rounded hover:bg-white/10">
+                        <X size={14} className="text-white/60" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+                    {notifications.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+                        <Bell size={24} className="text-gray-300 mb-2" />
+                        <p className="text-sm text-gray-500 font-medium">No notifications yet</p>
+                        <p className="text-xs text-gray-400 mt-1">We&apos;ll notify you of important updates here.</p>
+                      </div>
+                    ) : (
+                      notifications.map(n => (
+                        <button
+                          key={n.id}
+                          onClick={() => {
+                            if (!n.read) markAsRead(n.id)
+                            if (n.link) {
+                              setShowNotifications(false)
+                              window.open(n.link, '_blank')
+                            }
+                          }}
+                          className={`w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${!n.read ? 'bg-emerald-50/50' : ''}`}
+                        >
+                          <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${!n.read ? 'bg-emerald-500' : 'bg-transparent'}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm ${!n.read ? 'font-semibold text-gray-900' : 'font-medium text-gray-600'}`}>{n.title}</p>
+                            {n.message && (
+                              <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
+                            )}
+                            <p className="text-[11px] text-gray-400 mt-1">
+                              {(() => {
+                                const diff = Date.now() - new Date(n.created_at).getTime()
+                                const mins = Math.floor(diff / 60000)
+                                if (mins < 1) return 'Just now'
+                                if (mins < 60) return `${mins}m ago`
+                                const hrs = Math.floor(mins / 60)
+                                if (hrs < 24) return `${hrs}h ago`
+                                const days = Math.floor(hrs / 24)
+                                if (days < 7) return `${days}d ago`
+                                return new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                              })()}
+                            </p>
+                          </div>
+                          {n.link && <ChevronRight size={12} className="text-gray-300 flex-shrink-0 mt-1" />}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </>
             )}
-          </button>
+          </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10">
             <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-[10px] font-bold text-white">
               {accountInfo?.contact.split(' ').map(n => n[0]).join('')}
@@ -388,23 +512,38 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-800 mb-3">Recent Updates</h3>
               <div className="flex flex-col gap-3">
-                {[
-                  { msg: 'Your project is 75% complete — on track for launch', time: '2 days ago', type: 'project' },
-                  { msg: 'Invoice #INV-2024-007 was generated for March', time: '5 days ago', type: 'billing' },
-                  { msg: 'Milestone "Content Revisions" marked complete', time: '1 week ago', type: 'project' },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
+                {notifications.length > 0 ? notifications.slice(0, 5).map(n => (
+                  <div key={n.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
                     <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: '#e6f0ec' }}>
-                      {item.type === 'project'
+                      {n.type === 'project'
                         ? <FolderKanban size={11} style={{ color: '#015035' }} />
-                        : <FileText size={11} style={{ color: '#015035' }} />}
+                        : n.type === 'billing'
+                        ? <FileText size={11} style={{ color: '#015035' }} />
+                        : <Bell size={11} style={{ color: '#015035' }} />}
                     </div>
                     <div className="flex-1">
-                      <p className="text-xs text-gray-700">{item.msg}</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">{item.time}</p>
+                      <p className="text-xs text-gray-700">{n.title}{n.message ? ` — ${n.message}` : ''}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {(() => {
+                          const diff = Date.now() - new Date(n.created_at).getTime()
+                          const mins = Math.floor(diff / 60000)
+                          if (mins < 1) return 'Just now'
+                          if (mins < 60) return `${mins}m ago`
+                          const hrs = Math.floor(mins / 60)
+                          if (hrs < 24) return `${hrs}h ago`
+                          const days = Math.floor(hrs / 24)
+                          if (days < 7) return `${days}d ago`
+                          return new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        })()}
+                      </p>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <Bell size={20} className="text-gray-300 mb-2" />
+                    <p className="text-xs text-gray-400">No recent updates yet. We&apos;ll keep you posted!</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -582,24 +721,29 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
               <div className="px-5 py-3 border-b border-gray-100">
                 <h3 className="text-sm font-semibold text-gray-800">Recent Requests</h3>
               </div>
-              <div className="flex flex-col divide-y divide-gray-100">
-                {[
-                  { subject: 'Homepage hero image needs to be updated', status: 'Open', date: 'Feb 25' },
-                  { subject: 'Email campaign — wrong link in footer CTA', status: 'Resolved', date: 'Feb 20' },
-                ].filter(t => t.status !== 'Closed').map((t, i) => (
-                  <div key={i} className="flex items-center gap-4 px-5 py-3.5">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-800">{t.subject}</p>
-                      <p className="text-xs text-gray-400">{t.date}</p>
+              {clientTickets.length > 0 ? (
+                <div className="flex flex-col divide-y divide-gray-100">
+                  {clientTickets.filter(t => t.status !== 'Closed').map((t, i) => (
+                    <div key={t.id ?? i} className="flex items-center gap-4 px-5 py-3.5">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-800">{t.subject}</p>
+                        <p className="text-xs text-gray-400">{t.created_at ? new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</p>
+                      </div>
+                      <StatusBadge
+                        label={t.status}
+                        colorClass={t.status === 'Open' ? 'bg-blue-100 text-blue-700' : t.status === 'Resolved' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}
+                      />
+                      <ChevronRight size={14} className="text-gray-300" />
                     </div>
-                    <StatusBadge
-                      label={t.status}
-                      colorClass={t.status === 'Open' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}
-                    />
-                    <ChevronRight size={14} className="text-gray-300" />
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+                  <MessageSquare size={24} className="text-gray-300 mb-2" />
+                  <p className="text-sm text-gray-500 font-medium">No support requests yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Submit a request above and we&apos;ll get back to you shortly.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -614,34 +758,328 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
                   <Upload size={12} /> Upload
                 </button>
               </div>
-              <div className="flex flex-col divide-y divide-gray-100">
-                {[
-                  { name: 'Website_Design_Mockups_v3.pdf', size: '4.2 MB', date: 'Feb 20', type: 'Design' },
-                  { name: 'Project_Scope_Agreement.pdf', size: '1.1 MB', date: 'Jan 15', type: 'Contract' },
-                  { name: 'Brand_Assets_Package.zip', size: '18.4 MB', date: 'Jan 10', type: 'Assets' },
-                  { name: 'Q1_Analytics_Report.pdf', size: '2.8 MB', date: 'Mar 1', type: 'Report' },
-                ].map((file, i) => (
-                  <div key={i} className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 transition-colors">
-                    <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                      <FileText size={16} className="text-gray-400" />
+              {clientFiles.length > 0 ? (
+                <div className="flex flex-col divide-y divide-gray-100">
+                  {clientFiles.map((file, i) => (
+                    <div key={file.id ?? i} className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 transition-colors">
+                      <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                        <FileText size={16} className="text-gray-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
+                        <p className="text-xs text-gray-400">{file.size ? `${file.size} · ` : ''}{file.created_at ? new Date(file.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</p>
+                      </div>
+                      {file.type && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{file.type}</span>}
+                      <button
+                        className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1.5 rounded-lg hover:bg-gray-100"
+                        onClick={() => toast(`Download for "${file.name}" is not yet available`, 'info')}
+                      >
+                        <Download size={13} />
+                      </button>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
-                      <p className="text-xs text-gray-400">{file.size} · {file.date}</p>
-                    </div>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{file.type}</span>
-                    <button
-                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1.5 rounded-lg hover:bg-gray-100"
-                      onClick={() => toast(`Download for "${file.name}" is not yet available`, 'info')}
-                    >
-                      <Download size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                  <Upload size={24} className="text-gray-300 mb-2" />
+                  <p className="text-sm text-gray-500 font-medium">No files shared yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Your team will share project files and documents here.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Manage Client Panel ──────────────────────────────────────────────────────
+
+function ManageClientPanel({ client, onClose }: { client: PortalClient; onClose: () => void }) {
+  const { toast } = useToast()
+  const [activeTab, setActiveTab] = useState<'files' | 'tickets' | 'notifications'>('files')
+
+  // Files tab state
+  const [fileName, setFileName] = useState('')
+  const [fileType, setFileType] = useState('Document')
+  const [fileNotes, setFileNotes] = useState('')
+  const [fileSaving, setFileSaving] = useState(false)
+
+  // Tickets tab state
+  const [ticketSubject, setTicketSubject] = useState('')
+  const [ticketDescription, setTicketDescription] = useState('')
+  const [ticketPriority, setTicketPriority] = useState('Normal')
+  const [ticketSaving, setTicketSaving] = useState(false)
+
+  // Notifications tab state
+  const [notifTitle, setNotifTitle] = useState('')
+  const [notifMessage, setNotifMessage] = useState('')
+  const [notifLink, setNotifLink] = useState('')
+  const [notifSending, setNotifSending] = useState(false)
+
+  async function handleFileSubmit() {
+    if (!fileName.trim()) return
+    setFileSaving(true)
+    try {
+      const res = await fetch('/api/drive/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: fileName.trim(), type: fileType, notes: fileNotes.trim(), company: client.company }),
+      })
+      if (!res.ok) throw new Error()
+      toast('File metadata added successfully', 'success')
+      setFileName('')
+      setFileNotes('')
+      setFileType('Document')
+    } catch {
+      toast('Failed to add file', 'error')
+    } finally {
+      setFileSaving(false)
+    }
+  }
+
+  async function handleTicketSubmit() {
+    if (!ticketSubject.trim()) return
+    setTicketSaving(true)
+    try {
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: ticketSubject.trim(), description: ticketDescription.trim(), priority: ticketPriority, company: client.company, status: 'Open' }),
+      })
+      if (!res.ok) throw new Error()
+      toast('Support ticket created', 'success')
+      setTicketSubject('')
+      setTicketDescription('')
+      setTicketPriority('Normal')
+    } catch {
+      toast('Failed to create ticket', 'error')
+    } finally {
+      setTicketSaving(false)
+    }
+  }
+
+  async function handleNotifSend() {
+    if (!notifTitle.trim()) return
+    setNotifSending(true)
+    try {
+      const res = await fetch('/api/portal-clients/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ portal_client_id: client.id, type: 'general', title: notifTitle.trim(), message: notifMessage.trim() || null, link: notifLink.trim() || null }),
+      })
+      if (!res.ok) throw new Error()
+      toast('Notification sent to client', 'success')
+      setNotifTitle('')
+      setNotifMessage('')
+      setNotifLink('')
+    } catch {
+      toast('Failed to send notification', 'error')
+    } finally {
+      setNotifSending(false)
+    }
+  }
+
+  const tabs = [
+    { id: 'files' as const, label: 'Files', icon: <FileText size={13} /> },
+    { id: 'tickets' as const, label: 'Tickets', icon: <MessageSquare size={13} /> },
+    { id: 'notifications' as const, label: 'Notifications', icon: <Bell size={13} /> },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex pointer-events-none">
+      <div className="flex-1 pointer-events-auto" onClick={onClose} />
+      <div className="w-full max-w-md flex flex-col shadow-2xl pointer-events-auto" style={{ background: '#f8fafc' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0" style={{ background: '#012b1e' }}>
+          <div>
+            <h2 className="text-sm font-bold text-white">Manage: {client.company}</h2>
+            <p className="text-[11px] text-white/50 mt-0.5">{client.contact} · {client.service}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+            <X size={16} className="text-white/70" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 bg-white flex-shrink-0">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 px-3 pb-2.5 text-xs font-semibold border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-green-800 text-gray-900'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+
+          {/* Files tab */}
+          {activeTab === 'files' && (
+            <>
+              <div>
+                <p className="text-xs font-semibold text-gray-700 mb-1">Add Document / File</p>
+                <p className="text-[11px] text-gray-400 mb-3">Add file metadata for this client. The file will appear in their portal.</p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-gray-600">File Name <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    value={fileName}
+                    onChange={e => setFileName(e.target.value)}
+                    placeholder="Website_Design_Mockups_v3.pdf"
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-gray-600">File Type</label>
+                  <select
+                    value={fileType}
+                    onChange={e => setFileType(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  >
+                    <option>Document</option>
+                    <option>Design</option>
+                    <option>Report</option>
+                    <option>Contract</option>
+                    <option>Invoice</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-gray-600">Notes</label>
+                  <textarea
+                    value={fileNotes}
+                    onChange={e => setFileNotes(e.target.value)}
+                    placeholder="Optional notes about this file..."
+                    rows={3}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400 bg-white"
+                  />
+                </div>
+                <button
+                  onClick={handleFileSubmit}
+                  disabled={!fileName.trim() || fileSaving}
+                  className="w-full py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity disabled:opacity-40"
+                  style={{ background: '#015035' }}
+                >
+                  {fileSaving ? 'Adding…' : 'Add File'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Tickets tab */}
+          {activeTab === 'tickets' && (
+            <>
+              <div>
+                <p className="text-xs font-semibold text-gray-700 mb-1">Create Support Ticket</p>
+                <p className="text-[11px] text-gray-400 mb-3">Create a support ticket on behalf of {client.company}.</p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-gray-600">Subject <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    value={ticketSubject}
+                    onChange={e => setTicketSubject(e.target.value)}
+                    placeholder="Brief description of the issue..."
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-gray-600">Description</label>
+                  <textarea
+                    value={ticketDescription}
+                    onChange={e => setTicketDescription(e.target.value)}
+                    placeholder="Detailed description of the issue..."
+                    rows={4}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400 bg-white"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-gray-600">Priority</label>
+                  <select
+                    value={ticketPriority}
+                    onChange={e => setTicketPriority(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  >
+                    <option>Low</option>
+                    <option>Normal</option>
+                    <option>High</option>
+                    <option>Urgent</option>
+                  </select>
+                </div>
+                <button
+                  onClick={handleTicketSubmit}
+                  disabled={!ticketSubject.trim() || ticketSaving}
+                  className="w-full py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity disabled:opacity-40"
+                  style={{ background: '#015035' }}
+                >
+                  {ticketSaving ? 'Creating…' : 'Create Ticket'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Notifications tab */}
+          {activeTab === 'notifications' && (
+            <>
+              <div>
+                <p className="text-xs font-semibold text-gray-700 mb-1">Send Notification</p>
+                <p className="text-[11px] text-gray-400 mb-3">Send a custom notification to {client.company}&apos;s portal.</p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-gray-600">Title <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    value={notifTitle}
+                    onChange={e => setNotifTitle(e.target.value)}
+                    placeholder="Notification title..."
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-gray-600">Message</label>
+                  <textarea
+                    value={notifMessage}
+                    onChange={e => setNotifMessage(e.target.value)}
+                    placeholder="Optional message body..."
+                    rows={3}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400 bg-white"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-gray-600">Link (optional)</label>
+                  <input
+                    type="url"
+                    value={notifLink}
+                    onChange={e => setNotifLink(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+                  />
+                </div>
+                <button
+                  onClick={handleNotifSend}
+                  disabled={!notifTitle.trim() || notifSending}
+                  className="w-full py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity disabled:opacity-40"
+                  style={{ background: '#015035' }}
+                >
+                  {notifSending ? 'Sending…' : 'Send Notification'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -659,6 +1097,7 @@ export default function PortalPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [showLoginList, setShowLoginList] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [managingClient, setManagingClient] = useState<PortalClient | null>(null)
 
   useEffect(() => {
     fetch('/api/portal-clients')
@@ -908,6 +1347,14 @@ export default function PortalPage() {
                               Resend Invite
                             </button>
                           )}
+                          {(client.access === 'Active' || client.access === 'Invited') && (
+                            <button
+                              onClick={() => { setManagingClient(client) }}
+                              className="text-xs text-[#015035] hover:text-green-800 font-medium flex items-center gap-1"
+                            >
+                              <Settings size={11} /> Manage
+                            </button>
+                          )}
                           {client.access === 'Not Setup' && (
                             <button
                               onClick={() => sendPortalInvite(client, false)}
@@ -955,6 +1402,13 @@ export default function PortalPage() {
           onClose={() => setAddingClient(false)}
           onSave={newClient => setClients(prev => [...prev, newClient])}
           onInvite={(client) => sendPortalInvite(client, false)}
+        />
+      )}
+
+      {managingClient && (
+        <ManageClientPanel
+          client={managingClient}
+          onClose={() => setManagingClient(null)}
         />
       )}
     </>

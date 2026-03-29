@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, Link2, Copy, Check, Clock, User, Building2, Video, X, ChevronRight, ExternalLink, Mail } from 'lucide-react'
+import { Calendar, Link2, Copy, Check, Clock, User, Building2, Video, X, ChevronLeft, ChevronRight, ExternalLink, Mail, RefreshCw } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchTeamMembers } from '@/lib/supabase'
@@ -58,6 +58,13 @@ export default function CalendarPage() {
   const [gcalLinks, setGcalLinks]   = useState<Record<string, string>>({})
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [copiedGcal, setCopiedGcal] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [lastSync, setLastSync] = useState<string | null>(null)
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
   // Derive booking link from user's name (slug format)
   const userSlug = user?.name
@@ -86,17 +93,49 @@ export default function CalendarPage() {
         }
         const stored = (d?.gcal_links && typeof d.gcal_links === 'object') ? d.gcal_links as Record<string, string> : {}
         setGcalLinks({ ...defaults, ...stored })
+        if (d?.last_calendar_sync) setLastSync(d.last_calendar_sync)
       })
       .catch(() => toast('Failed to load calendar settings', 'error'))
     fetchTeamMembers().then(d => { if (Array.isArray(d)) setTeamMembers(d) }).catch(() => {})
   }, [])
 
-  const filtered = bookings.filter(b => {
+  const filteredByTab = bookings.filter(b => {
     if (b.status === 'cancelled') return filter === 'past'
     if (filter === 'upcoming') return isUpcoming(b.date, b.start_time)
     if (filter === 'past')     return !isUpcoming(b.date, b.start_time) || b.status === 'cancelled'
     return true
   })
+
+  const filtered = selectedDate
+    ? filteredByTab.filter(b => b.date === selectedDate)
+    : filteredByTab
+
+  // Build a set of dates that have bookings (for calendar dots)
+  const bookingDatesSet = new Set(bookings.map(b => b.date))
+
+  // Calendar helper functions
+  function getCalendarDays(monthDate: Date) {
+    const year = monthDate.getFullYear()
+    const month = monthDate.getMonth()
+    const firstDay = new Date(year, month, 1).getDay() // 0=Sun
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const days: (number | null)[] = []
+    for (let i = 0; i < firstDay; i++) days.push(null)
+    for (let d = 1; d <= daysInMonth; d++) days.push(d)
+    return days
+  }
+
+  function formatCalendarDate(day: number) {
+    const y = calendarMonth.getFullYear()
+    const m = String(calendarMonth.getMonth() + 1).padStart(2, '0')
+    const d = String(day).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+
+  const todayStr = (() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  })()
 
   const upcoming = bookings.filter(b => b.status === 'confirmed' && isUpcoming(b.date, b.start_time))
 
@@ -126,6 +165,28 @@ export default function CalendarPage() {
     setTimeout(() => setCopiedGcal(null), 2000)
   }
 
+  async function handleSync() {
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/calendar/sync', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Sync failed')
+      setLastSync(data.timestamp)
+      toast(`Synced ${data.synced} event${data.synced !== 1 ? 's' : ''} from Google Calendar${data.errors ? ` (${data.errors} error${data.errors !== 1 ? 's' : ''})` : ''}`, data.errors ? 'error' : 'success')
+      // Refresh bookings
+      const params = userSlug ? `?slug=${userSlug}` : ''
+      const bookingsRes = await fetch(`/api/bookings${params}`)
+      if (bookingsRes.ok) {
+        const bookingsData = await bookingsRes.json()
+        setBookings(Array.isArray(bookingsData) ? bookingsData : [])
+      }
+    } catch (err) {
+      toast('Calendar sync failed', 'error')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const membersWithLinks = teamMembers.filter(m => gcalLinks[m.email])
 
   return (
@@ -150,27 +211,42 @@ export default function CalendarPage() {
             ))}
           </div>
 
-          {bookingLink && (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 max-w-xs">
-                <Link2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                <span className="text-xs text-gray-600 truncate font-mono">/book/{userSlug}</span>
-              </div>
-              <button
-                onClick={copyLink}
-                className="flex items-center gap-1.5 bg-[#012b1e] text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-[#015035] transition-colors"
-              >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? 'Copied!' : 'Copy Link'}
-              </button>
-              <a
-                href={`/settings/calendar`}
-                className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
-              >
-                Settings
-              </a>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {lastSync && (
+              <span className="text-xs text-gray-400">
+                Last sync: {new Date(lastSync).toLocaleString()}
+              </span>
+            )}
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Sync Now'}
+            </button>
+            {bookingLink && (
+              <>
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 max-w-xs">
+                  <Link2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                  <span className="text-xs text-gray-600 truncate font-mono">/book/{userSlug}</span>
+                </div>
+                <button
+                  onClick={copyLink}
+                  className="flex items-center gap-1.5 bg-[#012b1e] text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-[#015035] transition-colors"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? 'Copied!' : 'Copy Link'}
+                </button>
+                <a
+                  href={`/settings/calendar`}
+                  className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Settings
+                </a>
+              </>
+            )}
+          </div>
         </div>
 
         {/* ── Summary cards ── */}
@@ -279,6 +355,92 @@ export default function CalendarPage() {
             )}
           </div>
         )}
+
+        {/* ── Monthly Calendar Grid ── */}
+        <div className="bg-white rounded-xl border border-gray-100 p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4 text-gray-500" />
+            </button>
+            <h2 className="text-sm font-bold text-gray-900">
+              {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </h2>
+            <button
+              onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+
+          {/* Day-of-week headers */}
+          <div className="grid grid-cols-7 gap-px mb-1">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+              <div key={d} className="text-center text-xs font-semibold text-gray-400 uppercase tracking-wide py-2">
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* Day cells */}
+          <div className="grid grid-cols-7 gap-px">
+            {getCalendarDays(calendarMonth).map((day, i) => {
+              if (day === null) {
+                return <div key={`empty-${i}`} className="h-10" />
+              }
+              const dateStr = formatCalendarDate(day)
+              const hasBookings = bookingDatesSet.has(dateStr)
+              const isToday = dateStr === todayStr
+              const isSelected = dateStr === selectedDate
+              return (
+                <button
+                  key={dateStr}
+                  onClick={() => {
+                    if (hasBookings) {
+                      setSelectedDate(isSelected ? null : dateStr)
+                    }
+                  }}
+                  className={`h-10 rounded-lg flex flex-col items-center justify-center relative transition-colors ${
+                    isSelected
+                      ? 'bg-[#012b1e] text-white'
+                      : isToday
+                      ? 'bg-[#015035]/10 text-[#012b1e] font-bold'
+                      : hasBookings
+                      ? 'hover:bg-gray-100 text-gray-900 cursor-pointer'
+                      : 'text-gray-400 cursor-default'
+                  }`}
+                >
+                  <span className="text-xs">{day}</span>
+                  {hasBookings && (
+                    <span
+                      className={`absolute bottom-1 w-1 h-1 rounded-full ${
+                        isSelected ? 'bg-white' : 'bg-[#015035]'
+                      }`}
+                    />
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Selected date indicator + clear */}
+          {selectedDate && (
+            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-xs text-gray-500">
+                Showing bookings for <span className="font-semibold text-gray-900">{formatDate(selectedDate)}</span>
+              </span>
+              <button
+                onClick={() => setSelectedDate(null)}
+                className="text-xs font-medium text-[#015035] hover:underline"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* ── Bookings list + detail ── */}
         <div className="flex gap-4">

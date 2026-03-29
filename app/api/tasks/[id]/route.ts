@@ -8,10 +8,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const update: Record<string, unknown> = {}
   if (body.status !== undefined)        update.status = body.status
   if (body.title !== undefined)         update.title = body.title
+  if (body.description !== undefined)   update.description = body.description
+  if (body.category !== undefined)      update.category = body.category
   if (body.priority !== undefined)      update.priority = body.priority
   if (body.dueDate !== undefined)       update.due_date = body.dueDate
   if (body.assignedTo !== undefined)    update.assigned_to = body.assignedTo
+  if (body.company !== undefined)       update.company = body.company
   if (body.completedDate !== undefined) update.completed_date = body.completedDate
+  if (body.recurrence !== undefined)    update.recurrence = body.recurrence
   const { data, error } = await db.from('app_tasks').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[tasks/:id PATCH]', error)

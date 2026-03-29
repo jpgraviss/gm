@@ -111,11 +111,12 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         id: `task-auto-${Date.now()}`,
         title: `${action}: ${company}`,
         description: `Auto-created by automation for ${company}`,
-        status: 'To Do',
+        category: action === 'Create Billing Task' ? 'Billing' : 'Renewal',
+        status: 'Pending',
         priority: 'High',
         assigned_to: (context.assigned_rep as string) ?? '',
         due_date: today,
-        project_id: (context.project_id as string) ?? null,
+        created_date: today,
       })
       break
     }

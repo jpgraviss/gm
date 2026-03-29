@@ -38,8 +38,29 @@ export async function GET(req: NextRequest) {
   return NextResponse.json((data ?? []).map(mapTask))
 }
 
+const VALID_STATUSES = ['Pending', 'In Progress', 'Completed']
+const VALID_PRIORITIES = ['High', 'Medium', 'Low']
+const VALID_CATEGORIES = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'General']
+
 export async function POST(req: NextRequest) {
   const body = await req.json()
+
+  if (!body.title || typeof body.title !== 'string' || !body.title.trim()) {
+    return NextResponse.json({ error: 'Title is required' }, { status: 400 })
+  }
+  if (body.title.length > 500) {
+    return NextResponse.json({ error: 'Title too long (max 500 chars)' }, { status: 400 })
+  }
+  if (body.status && !VALID_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
+  }
+  if (body.priority && !VALID_PRIORITIES.includes(body.priority)) {
+    return NextResponse.json({ error: 'Invalid priority' }, { status: 400 })
+  }
+  if (body.category && !VALID_CATEGORIES.includes(body.category)) {
+    return NextResponse.json({ error: 'Invalid category' }, { status: 400 })
+  }
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('app_tasks')

@@ -6,7 +6,7 @@ import { fetchTeamMembers } from '@/lib/supabase'
 import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority, TeamMember } from '@/lib/types'
 import {
   CheckSquare, Clock, AlertCircle, CheckCircle2, Plus, X, ChevronRight, ChevronLeft,
-  Building2, User, Calendar, Flag, Tag, Trash2, Circle, Repeat,
+  Building2, User, Calendar, Flag, Tag, Trash2, Circle, Repeat, Search,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
@@ -28,14 +28,16 @@ const priorityConfig: Record<TaskPriority, { badge: string; dot: string; label: 
   Low:    { badge: 'bg-gray-100 text-gray-500',   dot: '#9ca3af', label: 'Low' },
 }
 
-const TODAY = new Date().toISOString().split('T')[0]
+function getToday() {
+  return new Date().toISOString().split('T')[0]
+}
 
 function isOverdue(dueDate: string, status: AppTaskStatus) {
-  return status !== 'Completed' && dueDate < TODAY
+  return status !== 'Completed' && dueDate < getToday()
 }
 
 function isDueToday(dueDate: string, status: AppTaskStatus) {
-  return status !== 'Completed' && dueDate === TODAY
+  return status !== 'Completed' && dueDate === getToday()
 }
 
 function dueDateLabel(dueDate: string, status: AppTaskStatus) {
@@ -53,7 +55,7 @@ function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
   const [category, setCategory] = useState<AppTaskCategory>('General')
   const [priority, setPriority] = useState<TaskPriority>('Medium')
   const [assignedTo, setAssignedTo] = useState('')
-  const [dueDate, setDueDate] = useState(TODAY)
+  const [dueDate, setDueDate] = useState(getToday())
   const [company, setCompany] = useState('')
   const [recurring, setRecurring] = useState(false)
   const [recFrequency, setRecFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
@@ -74,7 +76,7 @@ function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
       company: company.trim() || undefined,
       assignedTo,
       dueDate,
-      createdDate: TODAY,
+      createdDate: getToday(),
       recurrence: recurring ? { frequency: recFrequency, interval: recInterval, ...(recEndDate ? { endDate: recEndDate } : {}) } : null,
     })
   }
@@ -253,17 +255,27 @@ function TaskPanel({
   task,
   onClose,
   onUpdateStatus,
+  onUpdate,
   onDelete,
+  teamMembers,
 }: {
   task: AppTask
   onClose: () => void
   onUpdateStatus: (id: string, status: AppTaskStatus) => void
+  onUpdate: (id: string, updates: Partial<AppTask>) => void
   onDelete: (id: string) => void
+  teamMembers: TeamMember[]
 }) {
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [editTitle, setEditTitle] = useState(task.title)
+  const [editingDesc, setEditingDesc] = useState(false)
+  const [editDesc, setEditDesc] = useState(task.description ?? '')
   const due = dueDateLabel(task.dueDate, task.status)
   const pri = priorityConfig[task.priority]
   const catColor = categoryColors[task.category]
   const overdue = isOverdue(task.dueDate, task.status)
+
+  const fieldSelect = "text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
@@ -293,40 +305,109 @@ function TaskPanel({
               <X size={18} className="text-white/60" />
             </button>
           </div>
-          <h2 className="text-white text-sm font-bold leading-snug">{task.title}</h2>
-          {task.description && (
-            <p className="text-white/50 text-xs mt-2 leading-relaxed">{task.description}</p>
+          {editingTitle ? (
+            <input
+              value={editTitle}
+              onChange={e => setEditTitle(e.target.value)}
+              onBlur={() => { if (editTitle.trim() && editTitle !== task.title) onUpdate(task.id, { title: editTitle.trim() }); setEditingTitle(false) }}
+              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setEditTitle(task.title); setEditingTitle(false) } }}
+              autoFocus
+              className="w-full text-sm font-bold text-white bg-white/10 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          ) : (
+            <h2 className="text-white text-sm font-bold leading-snug cursor-pointer hover:bg-white/5 rounded px-1 -mx-1 py-0.5" onClick={() => { setEditTitle(task.title); setEditingTitle(true) }}>
+              {task.title}
+            </h2>
+          )}
+          {editingDesc ? (
+            <textarea
+              value={editDesc}
+              onChange={e => setEditDesc(e.target.value)}
+              onBlur={() => { onUpdate(task.id, { description: editDesc.trim() || undefined }); setEditingDesc(false) }}
+              onKeyDown={e => { if (e.key === 'Escape') { setEditDesc(task.description ?? ''); setEditingDesc(false) } }}
+              autoFocus
+              rows={3}
+              className="w-full text-xs text-white bg-white/10 rounded-lg px-2 py-1.5 mt-2 focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
+              placeholder="Add a description..."
+            />
+          ) : (
+            <p
+              className="text-white/50 text-xs mt-2 leading-relaxed cursor-pointer hover:bg-white/5 rounded px-1 -mx-1 py-0.5 min-h-[20px]"
+              onClick={() => { setEditDesc(task.description ?? ''); setEditingDesc(true) }}
+            >
+              {task.description || 'Click to add description...'}
+            </p>
           )}
         </div>
 
-        {/* Meta */}
+        {/* Editable Fields */}
         <div className="flex-1 overflow-y-auto p-5">
-          <div className="flex flex-col gap-3 mb-5">
-            {task.company && (
-              <div className="flex items-center gap-3">
-                <Building2 size={14} className="text-gray-400 flex-shrink-0" />
-                <span className="text-sm text-gray-700 font-medium">{task.company}</span>
+          <div className="flex flex-col gap-4 mb-5">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Assignee</label>
+                <select
+                  value={task.assignedTo}
+                  onChange={e => onUpdate(task.id, { assignedTo: e.target.value })}
+                  className={fieldSelect}
+                >
+                  {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Due Date</label>
+                <input
+                  type="date"
+                  value={task.dueDate}
+                  onChange={e => onUpdate(task.id, { dueDate: e.target.value })}
+                  className={fieldSelect}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Priority</label>
+                <select
+                  value={task.priority}
+                  onChange={e => onUpdate(task.id, { priority: e.target.value as TaskPriority })}
+                  className={fieldSelect}
+                >
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Category</label>
+                <select
+                  value={task.category}
+                  onChange={e => onUpdate(task.id, { category: e.target.value as AppTaskCategory })}
+                  className={fieldSelect}
+                >
+                  {(['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'General'] as AppTaskCategory[]).map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Company</label>
+              <input
+                value={task.company ?? ''}
+                onChange={e => onUpdate(task.id, { company: e.target.value || undefined })}
+                placeholder="No company"
+                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-300"
+              />
+            </div>
+
+            {task.recurrence && (
+              <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                <Repeat size={12} />
+                <span>Repeats {task.recurrence.frequency} every {task.recurrence.interval} {task.recurrence.frequency === 'daily' ? 'day(s)' : task.recurrence.frequency === 'weekly' ? 'week(s)' : 'month(s)'}</span>
               </div>
             )}
-            <div className="flex items-center gap-3">
-              <User size={14} className="text-gray-400 flex-shrink-0" />
-              <span className="text-sm text-gray-700">{task.assignedTo}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Calendar size={14} className="text-gray-400 flex-shrink-0" />
-              <span className={`text-sm ${due.cls}`}>{due.text}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Flag size={14} className="text-gray-400 flex-shrink-0" />
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ background: pri.dot }} />
-                <span className="text-sm text-gray-700">{task.priority} priority</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Tag size={14} className="text-gray-400 flex-shrink-0" />
-              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${catColor}`}>{task.category}</span>
-            </div>
           </div>
 
           {/* Status control */}
@@ -409,6 +490,7 @@ export default function TasksPage() {
   const [filterAssignee, setFilterAssignee] = useState<string>('All')
   const [selectedTask, setSelectedTask] = useState<AppTask | null>(null)
   const [creatingTask, setCreatingTask] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -421,19 +503,45 @@ export default function TasksPage() {
   }, [])
 
   function updateStatus(id: string, status: AppTaskStatus) {
-    const today = TODAY
+    const today = getToday()
+    const completedDate = status === 'Completed' ? today : undefined
     setTasks(prev => prev.map(t =>
-      t.id === id
-        ? { ...t, status, ...(status === 'Completed' ? { completedDate: today } : { completedDate: undefined }) }
-        : t
+      t.id === id ? { ...t, status, completedDate } : t
     ))
     if (selectedTask?.id === id) {
-      setSelectedTask(prev => prev ? { ...prev, status, ...(status === 'Completed' ? { completedDate: today } : { completedDate: undefined }) } : null)
+      setSelectedTask(prev => prev ? { ...prev, status, completedDate } : null)
     }
+    fetch(`/api/tasks/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, completedDate: completedDate ?? null }),
+    }).catch(() => toast('Failed to update task', 'error'))
+  }
+
+  function updateTask(id: string, updates: Partial<AppTask>) {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
+    if (selectedTask?.id === id) {
+      setSelectedTask(prev => prev ? { ...prev, ...updates } : null)
+    }
+    const apiBody: Record<string, unknown> = {}
+    if (updates.title !== undefined) apiBody.title = updates.title
+    if (updates.description !== undefined) apiBody.description = updates.description
+    if (updates.category !== undefined) apiBody.category = updates.category
+    if (updates.priority !== undefined) apiBody.priority = updates.priority
+    if (updates.assignedTo !== undefined) apiBody.assignedTo = updates.assignedTo
+    if (updates.dueDate !== undefined) apiBody.dueDate = updates.dueDate
+    if (updates.company !== undefined) apiBody.company = updates.company
+    fetch(`/api/tasks/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(apiBody),
+    }).catch(() => toast('Failed to update task', 'error'))
   }
 
   function deleteTask(id: string) {
     setTasks(prev => prev.filter(t => t.id !== id))
+    fetch(`/api/tasks/${id}`, { method: 'DELETE' })
+      .catch(() => toast('Failed to delete task', 'error'))
   }
 
   function addTask(task: AppTask) {
@@ -461,6 +569,10 @@ export default function TasksPage() {
     if (filterTab === 'Completed' && t.status !== 'Completed') return false
     if (filterCategory !== 'All' && t.category !== filterCategory) return false
     if (filterAssignee !== 'All' && t.assignedTo !== filterAssignee) return false
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      if (!t.title.toLowerCase().includes(q) && !(t.company ?? '').toLowerCase().includes(q) && !(t.description ?? '').toLowerCase().includes(q)) return false
+    }
     return true
   })
 
@@ -511,7 +623,17 @@ export default function TasksPage() {
           ))}
         </div>
 
-        {/* Filters */}
+        {/* Search + Filters */}
+        <div className="relative mb-3">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search tasks by title, company, or description..."
+            className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+          />
+        </div>
+
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
           {/* Status tabs */}
           <div className="flex gap-1 overflow-x-auto pb-0.5 flex-1 min-w-0">
@@ -632,7 +754,9 @@ export default function TasksPage() {
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
           onUpdateStatus={updateStatus}
+          onUpdate={updateTask}
           onDelete={deleteTask}
+          teamMembers={teamMembers}
         />
       )}
       {creatingTask && (

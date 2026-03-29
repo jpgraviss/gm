@@ -148,6 +148,7 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
   const [notes, setNotes]       = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError]   = useState('')
+  const [honeypot, setHoneypot]     = useState('')
 
   // Load calendar settings
   useEffect(() => {
@@ -175,6 +176,7 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedSlot || !selectedDate) return
+    if (honeypot) return // spam bot detected
     if (!name.trim() || !email.trim()) { setFormError('Name and email are required.'); return }
     setFormError('')
     setSubmitting(true)
@@ -250,6 +252,7 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">When</div>
               <div className="text-sm text-gray-800">{selectedDate && formatDateFull(selectedDate)}</div>
               <div className="text-sm text-gray-600">{selectedSlot?.label} · {s.duration} min · {s.timezone}</div>
+              <div className="text-xs text-gray-400 mt-1">Times shown in {s.timezone}. Your calendar invite will adjust to your local time.</div>
             </div>
           </div>
 
@@ -453,6 +456,18 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
                       className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/30 focus:border-[#015035] resize-none"
                     />
                   </div>
+                </div>
+
+                {/* Honeypot - hidden from real users */}
+                <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }} aria-hidden="true">
+                  <input
+                    type="text"
+                    name="website"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={honeypot}
+                    onChange={e => setHoneypot(e.target.value)}
+                  />
                 </div>
 
                 {formError && (

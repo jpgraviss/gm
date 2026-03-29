@@ -17,6 +17,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'slug and date are required' }, { status: 400 })
   }
 
+  // Validate date format
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return NextResponse.json({ error: 'Invalid date format. Use YYYY-MM-DD.' }, { status: 400 })
+  }
+
+  // Don't allow slot queries for dates more than 90 days in the future
+  const queryDate = new Date(date)
+  const maxDate = new Date()
+  maxDate.setDate(maxDate.getDate() + 90)
+  if (queryDate > maxDate) {
+    return NextResponse.json({ error: 'Cannot check slots more than 90 days ahead' }, { status: 400 })
+  }
+
   const db = createServiceClient()
 
   // Fetch calendar settings (full row, server-side only)

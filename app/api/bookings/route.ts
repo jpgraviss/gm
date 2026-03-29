@@ -30,8 +30,31 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data)
 }
 
+// Simple rate limiter: max 5 booking attempts per IP per 15 minutes
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
+const RATE_LIMIT = 5
+const RATE_WINDOW = 15 * 60 * 1000
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now()
+  const entry = rateLimitMap.get(ip)
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW })
+    return true
+  }
+  if (entry.count >= RATE_LIMIT) return false
+  entry.count++
+  return true
+}
+
 // POST /api/bookings — create a new booking
 export async function POST(req: NextRequest) {
+  // Rate limiting
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json({ error: 'Too many booking attempts. Please try again later.' }, { status: 429 })
+  }
+
   const body = await req.json()
   const {
     calendarSlug,
@@ -41,6 +64,22 @@ export async function POST(req: NextRequest) {
 
   if (!calendarSlug || !clientName || !clientEmail || !date || !startTime || !endTime) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  }
+
+  // Input validation
+  if (clientName.length > 200) return NextResponse.json({ error: 'Name too long' }, { status: 400 })
+  if (clientEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+    return NextResponse.json({ error: 'Invalid email address' }, { status: 400 })
+  }
+  if (notes && notes.length > 2000) return NextResponse.json({ error: 'Notes too long (max 2000 chars)' }, { status: 400 })
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'Invalid date format' }, { status: 400 })
+  if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) {
+    return NextResponse.json({ error: 'Invalid time format' }, { status: 400 })
+  }
+  // Prevent bookings in the past
+  const bookingDate = new Date(`${date}T${startTime}:00`)
+  if (bookingDate < new Date()) {
+    return NextResponse.json({ error: 'Cannot book a time in the past' }, { status: 400 })
   }
 
   const db = createServiceClient()

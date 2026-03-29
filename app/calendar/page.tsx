@@ -65,6 +65,7 @@ export default function CalendarPage() {
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month')
 
   // Derive booking link from user's name (slug format)
   const userSlug = user?.name
@@ -87,12 +88,8 @@ export default function CalendarPage() {
     fetch('/api/settings')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        const defaults: Record<string, string> = {
-          'jonathan@gravissmarketing.com': 'https://calendar.app.google/DdHBsREU2rAyEVoz8',
-          'jgraviss@gravissmarketing.com': 'https://calendar.app.google/DdHBsREU2rAyEVoz8',
-        }
         const stored = (d?.gcal_links && typeof d.gcal_links === 'object') ? d.gcal_links as Record<string, string> : {}
-        setGcalLinks({ ...defaults, ...stored })
+        setGcalLinks(stored)
         if (d?.last_calendar_sync) setLastSync(d.last_calendar_sync)
       })
       .catch(() => toast('Failed to load calendar settings', 'error'))
@@ -188,6 +185,96 @@ export default function CalendarPage() {
   }
 
   const membersWithLinks = teamMembers.filter(m => gcalLinks[m.email])
+
+  // ── Week/Day view helpers ──
+  function getWeekStart(date: Date): Date {
+    const d = new Date(date)
+    d.setDate(d.getDate() - d.getDay()) // Start on Sunday
+    return d
+  }
+
+  function getWeekDates(start: Date): Date[] {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start)
+      d.setDate(d.getDate() + i)
+      return d
+    })
+  }
+
+  function timeToY(time: string, startHour: number, hourHeight: number): number {
+    const [h, m] = time.split(':').map(Number)
+    return (h - startHour) * hourHeight + (m / 60) * hourHeight
+  }
+
+  function bookingHeight(start: string, end: string, hourHeight: number): number {
+    const [sh, sm] = start.split(':').map(Number)
+    const [eh, em] = end.split(':').map(Number)
+    return ((eh * 60 + em) - (sh * 60 + sm)) / 60 * hourHeight
+  }
+
+  function dateToStr(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  function formatFullDate(d: Date): string {
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+  }
+
+  // Current time for red line indicator
+  const now = new Date()
+  const currentTimeMinutes = now.getHours() * 60 + now.getMinutes()
+
+  // Week view data
+  const weekStart = getWeekStart(calendarMonth)
+  const weekDates = getWeekDates(weekStart)
+
+  // Get bookings for a specific date string
+  function getBookingsForDate(dateStr: string): Booking[] {
+    return bookings.filter(b => b.date === dateStr && b.status !== 'cancelled')
+  }
+
+  // Navigation handlers for week/day
+  function navigatePrev() {
+    if (calendarView === 'month') {
+      setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))
+    } else if (calendarView === 'week') {
+      const d = new Date(calendarMonth)
+      d.setDate(d.getDate() - 7)
+      setCalendarMonth(d)
+    } else {
+      const d = new Date(calendarMonth)
+      d.setDate(d.getDate() - 1)
+      setCalendarMonth(d)
+    }
+  }
+
+  function navigateNext() {
+    if (calendarView === 'month') {
+      setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))
+    } else if (calendarView === 'week') {
+      const d = new Date(calendarMonth)
+      d.setDate(d.getDate() + 7)
+      setCalendarMonth(d)
+    } else {
+      const d = new Date(calendarMonth)
+      d.setDate(d.getDate() + 1)
+      setCalendarMonth(d)
+    }
+  }
+
+  function getHeaderLabel(): string {
+    if (calendarView === 'month') {
+      return calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    } else if (calendarView === 'week') {
+      const end = new Date(weekStart)
+      end.setDate(end.getDate() + 6)
+      const startStr = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      return `${startStr} – ${endStr}`
+    } else {
+      return formatFullDate(calendarMonth)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#f9fafb]">
@@ -356,90 +443,317 @@ export default function CalendarPage() {
           </div>
         )}
 
-        {/* ── Monthly Calendar Grid ── */}
+        {/* ── Calendar Section ── */}
         <div className="bg-white rounded-xl border border-gray-100 p-5 mb-6">
+          {/* Header with nav + view toggle */}
           <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4 text-gray-500" />
-            </button>
-            <h2 className="text-sm font-bold text-gray-900">
-              {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-            </h2>
-            <button
-              onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <ChevronRight className="w-4 h-4 text-gray-500" />
-            </button>
-          </div>
-
-          {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 gap-px mb-1">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-              <div key={d} className="text-center text-xs font-semibold text-gray-400 uppercase tracking-wide py-2">
-                {d}
-              </div>
-            ))}
-          </div>
-
-          {/* Day cells */}
-          <div className="grid grid-cols-7 gap-px">
-            {getCalendarDays(calendarMonth).map((day, i) => {
-              if (day === null) {
-                return <div key={`empty-${i}`} className="h-10" />
-              }
-              const dateStr = formatCalendarDate(day)
-              const hasBookings = bookingDatesSet.has(dateStr)
-              const isToday = dateStr === todayStr
-              const isSelected = dateStr === selectedDate
-              return (
-                <button
-                  key={dateStr}
-                  onClick={() => {
-                    if (hasBookings) {
-                      setSelectedDate(isSelected ? null : dateStr)
-                    }
-                  }}
-                  className={`h-10 rounded-lg flex flex-col items-center justify-center relative transition-colors ${
-                    isSelected
-                      ? 'bg-[#012b1e] text-white'
-                      : isToday
-                      ? 'bg-[#015035]/10 text-[#012b1e] font-bold'
-                      : hasBookings
-                      ? 'hover:bg-gray-100 text-gray-900 cursor-pointer'
-                      : 'text-gray-400 cursor-default'
-                  }`}
-                >
-                  <span className="text-xs">{day}</span>
-                  {hasBookings && (
-                    <span
-                      className={`absolute bottom-1 w-1 h-1 rounded-full ${
-                        isSelected ? 'bg-white' : 'bg-[#015035]'
-                      }`}
-                    />
-                  )}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Selected date indicator + clear */}
-          {selectedDate && (
-            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
-              <span className="text-xs text-gray-500">
-                Showing bookings for <span className="font-semibold text-gray-900">{formatDate(selectedDate)}</span>
-              </span>
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setSelectedDate(null)}
-                className="text-xs font-medium text-[#015035] hover:underline"
+                onClick={navigatePrev}
+                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                Clear
+                <ChevronLeft className="w-4 h-4 text-gray-500" />
+              </button>
+              <h2 className="text-sm font-bold text-gray-900 min-w-[200px] text-center">
+                {getHeaderLabel()}
+              </h2>
+              <button
+                onClick={navigateNext}
+                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4 text-gray-500" />
               </button>
             </div>
+            <div className="flex gap-1 bg-gray-50 border border-gray-100 rounded-lg p-1">
+              {(['month', 'week', 'day'] as const).map(v => (
+                <button
+                  key={v}
+                  onClick={() => setCalendarView(v)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors ${
+                    calendarView === v ? 'bg-[#012b1e] text-white' : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Month View ── */}
+          {calendarView === 'month' && (
+            <>
+              {/* Day-of-week headers */}
+              <div className="grid grid-cols-7 gap-px mb-1">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                  <div key={d} className="text-center text-xs font-semibold text-gray-400 uppercase tracking-wide py-2">
+                    {d}
+                  </div>
+                ))}
+              </div>
+
+              {/* Day cells */}
+              <div className="grid grid-cols-7 gap-px">
+                {getCalendarDays(calendarMonth).map((day, i) => {
+                  if (day === null) {
+                    return <div key={`empty-${i}`} className="h-10" />
+                  }
+                  const dateStr = formatCalendarDate(day)
+                  const hasBookings = bookingDatesSet.has(dateStr)
+                  const isToday = dateStr === todayStr
+                  const isSelected = dateStr === selectedDate
+                  return (
+                    <button
+                      key={dateStr}
+                      onClick={() => {
+                        if (hasBookings) {
+                          // Switch to day view for the clicked date
+                          const [y, m, d] = dateStr.split('-').map(Number)
+                          setCalendarMonth(new Date(y, m - 1, d))
+                          setCalendarView('day')
+                          setSelectedDate(dateStr)
+                        }
+                      }}
+                      className={`h-10 rounded-lg flex flex-col items-center justify-center relative transition-colors ${
+                        isSelected
+                          ? 'bg-[#012b1e] text-white'
+                          : isToday
+                          ? 'bg-[#015035]/10 text-[#012b1e] font-bold'
+                          : hasBookings
+                          ? 'hover:bg-gray-100 text-gray-900 cursor-pointer'
+                          : 'text-gray-400 cursor-default'
+                      }`}
+                    >
+                      <span className="text-xs">{day}</span>
+                      {hasBookings && (
+                        <span
+                          className={`absolute bottom-1 w-1 h-1 rounded-full ${
+                            isSelected ? 'bg-white' : 'bg-[#015035]'
+                          }`}
+                        />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Selected date indicator + clear */}
+              {selectedDate && (
+                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                  <span className="text-xs text-gray-500">
+                    Showing bookings for <span className="font-semibold text-gray-900">{formatDate(selectedDate)}</span>
+                  </span>
+                  <button
+                    onClick={() => setSelectedDate(null)}
+                    className="text-xs font-medium text-[#015035] hover:underline"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </>
           )}
+
+          {/* ── Week View ── */}
+          {calendarView === 'week' && (() => {
+            const WEEK_START_HOUR = 8
+            const WEEK_END_HOUR = 18
+            const HOUR_HEIGHT = 56
+            const hours = Array.from({ length: WEEK_END_HOUR - WEEK_START_HOUR }, (_, i) => WEEK_START_HOUR + i)
+
+            return (
+              <div>
+                {/* Day-of-week headers with dates */}
+                <div className="grid grid-cols-[56px_repeat(7,1fr)] gap-px mb-1">
+                  <div />
+                  {weekDates.map(d => {
+                    const ds = dateToStr(d)
+                    const isToday = ds === todayStr
+                    return (
+                      <div key={ds} className={`text-center py-2 rounded-lg ${isToday ? 'bg-[#015035]/10' : ''}`}>
+                        <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                          {d.toLocaleDateString('en-US', { weekday: 'short' })}
+                        </div>
+                        <div className={`text-sm font-bold ${isToday ? 'text-[#015035]' : 'text-gray-700'}`}>
+                          {d.getDate()}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Time grid */}
+                <div className="relative grid grid-cols-[56px_repeat(7,1fr)] gap-px border-t border-gray-100" style={{ height: hours.length * HOUR_HEIGHT }}>
+                  {/* Time labels */}
+                  {hours.map(h => (
+                    <div
+                      key={`label-${h}`}
+                      className="absolute left-0 w-[56px] text-right pr-3"
+                      style={{ top: (h - WEEK_START_HOUR) * HOUR_HEIGHT - 6 }}
+                    >
+                      <span className="text-[11px] text-gray-400">{formatTime(`${h}:00`)}</span>
+                    </div>
+                  ))}
+
+                  {/* Hour grid lines */}
+                  {hours.map(h => (
+                    <div
+                      key={`line-${h}`}
+                      className="absolute left-[56px] right-0 border-t border-gray-100"
+                      style={{ top: (h - WEEK_START_HOUR) * HOUR_HEIGHT }}
+                    />
+                  ))}
+
+                  {/* Current time indicator */}
+                  {currentTimeMinutes >= WEEK_START_HOUR * 60 && currentTimeMinutes <= WEEK_END_HOUR * 60 && (
+                    <div
+                      className="absolute left-[56px] right-0 z-20 flex items-center"
+                      style={{ top: ((currentTimeMinutes / 60) - WEEK_START_HOUR) * HOUR_HEIGHT }}
+                    >
+                      <div className="w-2 h-2 rounded-full bg-red-500 -ml-1" />
+                      <div className="flex-1 h-[2px] bg-red-500" />
+                    </div>
+                  )}
+
+                  {/* Day columns with bookings */}
+                  {weekDates.map((d, colIdx) => {
+                    const ds = dateToStr(d)
+                    const dayBookings = getBookingsForDate(ds)
+                    return (
+                      <div
+                        key={ds}
+                        className="absolute"
+                        style={{
+                          left: `calc(56px + ${colIdx} * ((100% - 56px) / 7))`,
+                          width: `calc((100% - 56px) / 7)`,
+                          top: 0,
+                          height: '100%',
+                        }}
+                      >
+                        {/* Background for column */}
+                        <div className="absolute inset-0 bg-gray-50/30 border-l border-gray-100" />
+
+                        {/* Booking blocks */}
+                        {dayBookings.map(b => {
+                          const [bh] = b.start_time.split(':').map(Number)
+                          if (bh < WEEK_START_HOUR || bh >= WEEK_END_HOUR) return null
+                          const top = timeToY(b.start_time, WEEK_START_HOUR, HOUR_HEIGHT)
+                          const height = Math.max(bookingHeight(b.start_time, b.end_time, HOUR_HEIGHT), 24)
+                          return (
+                            <button
+                              key={b.id}
+                              onClick={() => setSelected(selected?.id === b.id ? null : b)}
+                              className={`absolute left-1 right-1 bg-[#015035] text-white rounded-lg px-2 py-1 text-left overflow-hidden hover:bg-[#012b1e] transition-colors cursor-pointer z-10 ${
+                                selected?.id === b.id ? 'ring-2 ring-[#012b1e] ring-offset-1' : 'shadow-sm'
+                              }`}
+                              style={{ top, height }}
+                            >
+                              <div className="text-[11px] font-semibold truncate">{b.client_name}</div>
+                              {height > 30 && (
+                                <div className="text-[10px] opacity-80 truncate">{formatTime(b.start_time)}</div>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* ── Day View ── */}
+          {calendarView === 'day' && (() => {
+            const DAY_START_HOUR = 7
+            const DAY_END_HOUR = 19
+            const HOUR_HEIGHT = 64
+            const hours = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR }, (_, i) => DAY_START_HOUR + i)
+            const dayStr = dateToStr(calendarMonth)
+            const dayBookings = getBookingsForDate(dayStr)
+            const isDayToday = dayStr === todayStr
+
+            return (
+              <div>
+                {isDayToday && (
+                  <div className="mb-3 text-xs text-[#015035] font-semibold bg-[#015035]/10 px-3 py-1.5 rounded-lg inline-block">
+                    Today
+                  </div>
+                )}
+
+                {/* Time grid */}
+                <div className="relative grid grid-cols-[56px_1fr] gap-px border-t border-gray-100" style={{ height: hours.length * HOUR_HEIGHT }}>
+                  {/* Time labels */}
+                  {hours.map(h => (
+                    <div
+                      key={`label-${h}`}
+                      className="absolute left-0 w-[56px] text-right pr-3"
+                      style={{ top: (h - DAY_START_HOUR) * HOUR_HEIGHT - 6 }}
+                    >
+                      <span className="text-[11px] text-gray-400">{formatTime(`${h}:00`)}</span>
+                    </div>
+                  ))}
+
+                  {/* Hour grid lines */}
+                  {hours.map(h => (
+                    <div
+                      key={`line-${h}`}
+                      className="absolute left-[56px] right-0 border-t border-gray-100"
+                      style={{ top: (h - DAY_START_HOUR) * HOUR_HEIGHT }}
+                    />
+                  ))}
+
+                  {/* Current time indicator */}
+                  {isDayToday && currentTimeMinutes >= DAY_START_HOUR * 60 && currentTimeMinutes <= DAY_END_HOUR * 60 && (
+                    <div
+                      className="absolute left-[56px] right-0 z-20 flex items-center"
+                      style={{ top: ((currentTimeMinutes / 60) - DAY_START_HOUR) * HOUR_HEIGHT }}
+                    >
+                      <div className="w-2 h-2 rounded-full bg-red-500 -ml-1" />
+                      <div className="flex-1 h-[2px] bg-red-500" />
+                    </div>
+                  )}
+
+                  {/* Background column */}
+                  <div className="absolute left-[56px] right-0 top-0 bottom-0 bg-gray-50/30 border-l border-gray-100" />
+
+                  {/* Booking blocks (full width) */}
+                  {dayBookings.map(b => {
+                    const [bh] = b.start_time.split(':').map(Number)
+                    if (bh < DAY_START_HOUR || bh >= DAY_END_HOUR) return null
+                    const top = timeToY(b.start_time, DAY_START_HOUR, HOUR_HEIGHT)
+                    const height = Math.max(bookingHeight(b.start_time, b.end_time, HOUR_HEIGHT), 40)
+                    return (
+                      <button
+                        key={b.id}
+                        onClick={() => setSelected(selected?.id === b.id ? null : b)}
+                        className={`absolute left-[64px] right-2 bg-[#015035] text-white rounded-lg px-4 py-2 text-left overflow-hidden hover:bg-[#012b1e] transition-colors cursor-pointer z-10 ${
+                          selected?.id === b.id ? 'ring-2 ring-[#012b1e] ring-offset-1' : 'shadow-sm'
+                        }`}
+                        style={{ top, height }}
+                      >
+                        <div className="text-sm font-semibold truncate">{b.client_name}</div>
+                        <div className="text-[11px] opacity-80 truncate">
+                          {formatTime(b.start_time)} – {formatTime(b.end_time)}
+                        </div>
+                        {height > 60 && (
+                          <div className="text-[11px] opacity-70 truncate mt-0.5">
+                            {b.client_email}
+                            {b.client_company ? ` · ${b.client_company}` : ''}
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {dayBookings.length === 0 && (
+                  <div className="text-center py-8 text-sm text-gray-400">
+                    No bookings for this day
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
 
         {/* ── Bookings list + detail ── */}

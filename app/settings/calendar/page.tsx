@@ -90,12 +90,8 @@ export default function CalendarSettingsPage() {
         setStart(calData.available_start ?? '09:00')
         setEnd(calData.available_end     ?? '17:00')
       }
-      const defaults: Record<string, string> = {
-        'jonathan@gravissmarketing.com': 'https://calendar.app.google/DdHBsREU2rAyEVoz8',
-        'jgraviss@gravissmarketing.com': 'https://calendar.app.google/DdHBsREU2rAyEVoz8',
-      }
       const stored = (globalData?.gcal_links && typeof globalData.gcal_links === 'object') ? globalData.gcal_links as Record<string, string> : {}
-      const links = { ...defaults, ...stored }
+      const links = stored
       setAllGcalLinks(links)
       if (user?.email && links[user.email]) setGcalLink(links[user.email])
       setFetching(false)

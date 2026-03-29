@@ -14,8 +14,6 @@ function mapEntry(row: any) {
     hours:       row.hours,
     minutes:     row.minutes,
     billable:    row.billable,
-    invoiced:    row.invoiced ?? false,
-    invoiceId:   row.invoice_id ?? undefined,
     approvalStatus: row.approval_status ?? 'pending',
     approvedBy:     row.approved_by ?? undefined,
     approvedAt:     row.approved_at ?? undefined,
@@ -55,6 +53,9 @@ export async function PATCH(req: NextRequest) {
   if (!ids?.length || !approvalStatus) {
     return NextResponse.json({ error: 'ids and approvalStatus are required' }, { status: 400 })
   }
+  if (!['pending', 'approved', 'rejected'].includes(approvalStatus)) {
+    return NextResponse.json({ error: 'Invalid approval status' }, { status: 400 })
+  }
 
   const db = createServiceClient()
   const update: Record<string, unknown> = {
@@ -81,6 +82,20 @@ export async function PATCH(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
+  if (!body.description || typeof body.description !== 'string' || !body.description.trim()) {
+    return NextResponse.json({ error: 'Description is required' }, { status: 400 })
+  }
+  if (!body.date || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
+    return NextResponse.json({ error: 'Valid date is required' }, { status: 400 })
+  }
+  if (!body.teamMember) {
+    return NextResponse.json({ error: 'Team member is required' }, { status: 400 })
+  }
+  const hours = body.hours ?? 0
+  const minutes = body.minutes ?? 0
+  if (hours === 0 && minutes === 0) {
+    return NextResponse.json({ error: 'Duration must be greater than zero' }, { status: 400 })
+  }
   const db = createServiceClient()
   const { data, error } = await db
     .from('time_entries')

@@ -108,9 +108,9 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projec
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="bg-white flex flex-col shadow-2xl" style={{ width: 'min(440px, 100vw)' }}>
+      <div className="bg-white flex flex-col shadow-2xl w-full sm:w-[440px] max-w-full">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-[#015035]" />
             <span className="font-semibold text-gray-900">{entry ? 'Edit Entry' : 'Log Time'}</span>
@@ -120,7 +120,7 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projec
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4">
           {/* Date */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Date</label>
@@ -247,7 +247,7 @@ function LogTimePanel({ entry, onSave, onClose, defaultDate, teamMembers, projec
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+        <div className="px-4 sm:px-6 py-4 border-t border-gray-100 flex gap-3">
           <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
             Cancel
           </button>
@@ -555,13 +555,13 @@ export default function TimeTrackingPage() {
       {activeTab === 'approvals' && canApprove && (
         <div className="px-3 py-4 sm:px-8 sm:py-6 space-y-6">
           {/* Actions bar */}
-          <div className="bg-white rounded-xl border border-gray-100 px-6 py-4 flex items-center justify-between">
+          <div className="bg-white rounded-xl border border-gray-100 px-4 py-3 sm:px-6 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between">
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
                 checked={pendingEntries.length > 0 && selectedIds.size === pendingEntries.length}
                 onChange={toggleAllPending}
-                className="w-4 h-4 rounded border-gray-300 text-[#015035] focus:ring-[#015035]"
+                className="w-5 h-5 sm:w-4 sm:h-4 rounded border-gray-300 text-[#015035] focus:ring-[#015035]"
               />
               <span className="text-sm text-gray-600">
                 {selectedIds.size > 0
@@ -570,11 +570,11 @@ export default function TimeTrackingPage() {
               </span>
             </div>
             {selectedIds.size > 0 && (
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full sm:w-auto">
                 <button
                   onClick={() => handleBulkApproval('approved')}
                   disabled={approvalLoading}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
                 >
                   <CheckCircle className="w-4 h-4" />
                   Approve ({selectedIds.size})
@@ -582,7 +582,7 @@ export default function TimeTrackingPage() {
                 <button
                   onClick={() => setShowRejectModal(true)}
                   disabled={approvalLoading}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
                 >
                   <XCircle className="w-4 h-4" />
                   Reject ({selectedIds.size})
@@ -606,26 +606,26 @@ export default function TimeTrackingPage() {
                 return (
                   <div
                     key={entry.id}
-                    className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/60 transition-colors"
+                    className="flex items-center gap-2 sm:gap-4 px-3 sm:px-6 py-3 sm:py-3.5 hover:bg-gray-50/60 transition-colors"
                   >
                     <input
                       type="checkbox"
                       checked={selectedIds.has(entry.id)}
                       onChange={() => toggleSelected(entry.id)}
-                      className="w-4 h-4 rounded border-gray-300 text-[#015035] focus:ring-[#015035] flex-shrink-0"
+                      className="w-5 h-5 sm:w-4 sm:h-4 rounded border-gray-300 text-[#015035] focus:ring-[#015035] flex-shrink-0"
                     />
                     <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${entry.billable ? 'bg-green-400' : 'bg-gray-200'}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-sm font-medium text-gray-900 truncate">{entry.description}</span>
                         {entry.projectName && (
-                          <span className="text-xs text-gray-400 truncate">· {entry.projectName}</span>
+                          <span className="text-xs text-gray-400 truncate hidden sm:inline">· {entry.projectName}</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                         <span className="text-xs text-gray-500">{entry.teamMember}</span>
-                        <span className="text-xs text-gray-400">{entry.date}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${SERVICE_COLORS[entry.serviceType] ?? 'bg-gray-100 text-gray-600'}`}>
+                        <span className="text-xs text-gray-400 hidden sm:inline">{entry.date}</span>
+                        <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-medium ${SERVICE_COLORS[entry.serviceType] ?? 'bg-gray-100 text-gray-600'}`}>
                           {entry.serviceType}
                         </span>
                       </div>
@@ -634,7 +634,7 @@ export default function TimeTrackingPage() {
                       <div className="text-sm font-semibold text-gray-900">
                         {fmtDuration(entry.hours, entry.minutes)}
                       </div>
-                      <div className="text-xs text-gray-400">{(mins / 60).toFixed(2)}h</div>
+                      <div className="text-xs text-gray-400 hidden sm:block">{(mins / 60).toFixed(2)}h</div>
                     </div>
                   </div>
                 )
@@ -647,41 +647,41 @@ export default function TimeTrackingPage() {
       {/* ── Timesheet Tab ── */}
       {activeTab === 'timesheet' && <div className="px-3 py-4 sm:px-8 sm:py-6 space-y-6">
         {/* ── Week Navigator ── */}
-        <div className="bg-white rounded-xl border border-gray-100 px-6 py-4 flex items-center justify-between">
-          <button onClick={prevWeek} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <ChevronLeft className="w-5 h-5 text-gray-500" />
-          </button>
-          <div className="text-center">
-            <div className="text-sm font-semibold text-gray-900">
+        <div className="bg-white rounded-xl border border-gray-100 px-3 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-center justify-between mb-2">
+            <button onClick={prevWeek} className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0">
+              <ChevronLeft className="w-5 h-5 text-gray-500" />
+            </button>
+            <div className="text-xs sm:text-sm font-semibold text-gray-900 text-center min-w-0 truncate px-1">
               {fmtHeader(weekDates[0])} — {fmtHeader(weekDates[6])}
             </div>
-            <div className="flex gap-1 mt-2 justify-center overflow-x-auto pb-1">
-              {weekDates.map((d, i) => {
-                const iso = toIso(d)
-                const hasEntries = entries.some(e => e.date === iso)
-                const isToday = iso === toIso(new Date())
-                return (
-                  <button
-                    key={i}
-                    onClick={() => openLog(iso)}
-                    className={`flex flex-col items-center px-3 py-1.5 rounded-lg text-xs transition-colors ${
-                      isToday ? 'bg-[#012b1e] text-white' : 'hover:bg-gray-50 text-gray-600'
-                    }`}
-                    title={`Log time for ${fmtDayLabel(d)}`}
-                  >
-                    <span className="font-medium">{d.toLocaleDateString('en-US', { weekday: 'short' })}</span>
-                    <span className={isToday ? 'text-green-300' : 'text-gray-400'}>{d.getDate()}</span>
-                    {hasEntries && (
-                      <div className={`w-1 h-1 rounded-full mt-0.5 ${isToday ? 'bg-green-300' : 'bg-[#015035]'}`} />
-                    )}
-                  </button>
-                )
-              })}
-            </div>
+            <button onClick={nextWeek} className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0">
+              <ChevronRight className="w-5 h-5 text-gray-500" />
+            </button>
           </div>
-          <button onClick={nextWeek} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <ChevronRight className="w-5 h-5 text-gray-500" />
-          </button>
+          <div className="flex gap-1 justify-center overflow-x-auto pb-1">
+            {weekDates.map((d, i) => {
+              const iso = toIso(d)
+              const hasEntries = entries.some(e => e.date === iso)
+              const isToday = iso === toIso(new Date())
+              return (
+                <button
+                  key={i}
+                  onClick={() => openLog(iso)}
+                  className={`flex flex-col items-center px-2.5 sm:px-3 py-1.5 rounded-lg text-xs transition-colors min-w-[40px] ${
+                    isToday ? 'bg-[#012b1e] text-white' : 'hover:bg-gray-50 text-gray-600'
+                  }`}
+                  title={`Log time for ${fmtDayLabel(d)}`}
+                >
+                  <span className="font-medium">{d.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                  <span className={isToday ? 'text-green-300' : 'text-gray-400'}>{d.getDate()}</span>
+                  {hasEntries && (
+                    <div className={`w-1 h-1 rounded-full mt-0.5 ${isToday ? 'bg-green-300' : 'bg-[#015035]'}`} />
+                  )}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* ── Summary Cards ── */}
@@ -734,7 +734,7 @@ export default function TimeTrackingPage() {
         </div>
 
         {/* ── Filters ── */}
-        <div className="flex flex-wrap items-center gap-3 overflow-x-auto">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3 overflow-x-auto">
           {/* Member filter */}
           <div className="flex items-center gap-1 bg-white border border-gray-100 rounded-lg p-1">
             {allMembers.map(m => (
@@ -808,7 +808,7 @@ export default function TimeTrackingPage() {
               return (
                 <div key={date} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                   {/* Day header */}
-                  <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-b border-gray-100">
+                  <div className="flex items-center justify-between px-3 sm:px-6 py-3 bg-gray-50 border-b border-gray-100">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-semibold text-gray-900">{fmtDayLabel(dayDate)}</span>
                       <span className="text-xs text-gray-400">{dayEntries.length} {dayEntries.length === 1 ? 'entry' : 'entries'}</span>
@@ -834,7 +834,7 @@ export default function TimeTrackingPage() {
                       return (
                         <div
                           key={entry.id}
-                          className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/60 group transition-colors"
+                          className="flex items-center gap-2 sm:gap-4 px-3 sm:px-6 py-3 sm:py-3.5 hover:bg-gray-50/60 group transition-colors"
                         >
                           {/* Billable indicator */}
                           <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${entry.billable ? 'bg-green-400' : 'bg-gray-200'}`} />
@@ -844,16 +844,16 @@ export default function TimeTrackingPage() {
                             <div className="flex items-center gap-2 mb-0.5">
                               <span className="text-sm font-medium text-gray-900 truncate">{entry.description}</span>
                               {entry.projectName && (
-                                <span className="text-xs text-gray-400 truncate">· {entry.projectName}</span>
+                                <span className="text-xs text-gray-400 truncate hidden sm:inline">· {entry.projectName}</span>
                               )}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                               <span className="text-xs text-gray-500">{entry.teamMember}</span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${SERVICE_COLORS[entry.serviceType] ?? 'bg-gray-100 text-gray-600'}`}>
+                              <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-medium ${SERVICE_COLORS[entry.serviceType] ?? 'bg-gray-100 text-gray-600'}`}>
                                 {entry.serviceType}
                               </span>
                               {!entry.billable && (
-                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-50 text-orange-500">Non-Billable</span>
+                                <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-medium bg-orange-50 text-orange-500 hidden sm:inline">Non-Billable</span>
                               )}
                               <ApprovalBadge status={entry.approvalStatus} />
                             </div>
@@ -864,24 +864,24 @@ export default function TimeTrackingPage() {
                             <div className="text-sm font-semibold text-gray-900">
                               {fmtDuration(entry.hours, entry.minutes)}
                             </div>
-                            <div className="text-xs text-gray-400">{(mins / 60).toFixed(2)}h</div>
+                            <div className="text-xs text-gray-400 hidden sm:block">{(mins / 60).toFixed(2)}h</div>
                           </div>
 
-                          {/* Actions */}
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                          {/* Actions — always visible on mobile, hover on desktop */}
+                          <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
                             <button
-                              onClick={() => openEdit(entry)}
-                              className="p-1.5 hover:bg-gray-100 rounded-lg"
+                              onClick={(e) => { e.stopPropagation(); openEdit(entry) }}
+                              className="p-2 sm:p-1.5 hover:bg-gray-100 rounded-lg"
                               title="Edit"
                             >
-                              <Pencil className="w-3.5 h-3.5 text-gray-400" />
+                              <Pencil className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-gray-400" />
                             </button>
                             <button
-                              onClick={() => handleDelete(entry.id)}
-                              className="p-1.5 hover:bg-red-50 rounded-lg"
+                              onClick={(e) => { e.stopPropagation(); handleDelete(entry.id) }}
+                              className="p-2 sm:p-1.5 hover:bg-red-50 rounded-lg"
                               title="Delete"
                             >
-                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-red-400" />
                             </button>
                           </div>
                         </div>

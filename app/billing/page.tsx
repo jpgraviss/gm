@@ -68,7 +68,7 @@ function downloadReceipt(invoice: Invoice) {
   w.document.close()
 }
 
-function InvoicePanel({ invoice, onClose, onUpdateStatus, contracts, allInvoices }: { invoice: Invoice; onClose: () => void; onUpdateStatus: (id: string, status: InvoiceStatus) => void; contracts: Contract[]; allInvoices: Invoice[] }) {
+function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: Invoice; onClose: () => void; contracts: Contract[]; allInvoices: Invoice[] }) {
   const linkedContract = contracts.find(c => c.id === invoice.contractId)
   const relatedInvoices = allInvoices.filter(i => i.contractId === invoice.contractId && i.id !== invoice.id)
   const isOverdue = invoice.status === 'Overdue'
@@ -270,12 +270,16 @@ export default function BillingPage() {
       .reduce((sum, c) => sum + c.value / c.duration, 0),
   }
 
-  // Revenue by service breakdown (computed from invoices)
-  const serviceBreakdown = [
-    { service: 'Website', amount: localInvoices.filter(i => i.serviceType === 'Website' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
-    { service: 'SEO', amount: localInvoices.filter(i => i.serviceType === 'SEO' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
-    { service: 'Email Marketing', amount: localInvoices.filter(i => i.serviceType === 'Email Marketing' && i.status === 'Paid').reduce((s, i) => s + i.amount, 0) },
-  ].filter(s => s.amount > 0)
+  // Revenue by service breakdown (computed from invoices — all service types)
+  const paidInvoices = localInvoices.filter(i => i.status === 'Paid')
+  const serviceMap = new Map<string, number>()
+  for (const inv of paidInvoices) {
+    serviceMap.set(inv.serviceType, (serviceMap.get(inv.serviceType) ?? 0) + inv.amount)
+  }
+  const serviceBreakdown = Array.from(serviceMap.entries())
+    .map(([service, amount]) => ({ service, amount }))
+    .filter(s => s.amount > 0)
+    .sort((a, b) => b.amount - a.amount)
   const maxService = Math.max(1, ...serviceBreakdown.map(s => s.amount || 0))
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
@@ -340,12 +344,19 @@ export default function BillingPage() {
                 </div>
               ))}
             </div>
-            {revenueByMonth.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-500">
-                <span>{revenueByMonth[revenueByMonth.length - 1].month} total: <strong className="text-gray-800">{formatCurrency(revenueByMonth[revenueByMonth.length - 1].revenue)}</strong></span>
-                <span>MoM growth: <strong className="text-emerald-600">+47%</strong></span>
-              </div>
-            )}
+            {revenueByMonth.length > 0 && (() => {
+              const latest = revenueByMonth[revenueByMonth.length - 1]
+              const prev = revenueByMonth.length >= 2 ? revenueByMonth[revenueByMonth.length - 2] : null
+              const momGrowth = prev && prev.revenue > 0 ? ((latest.revenue - prev.revenue) / prev.revenue) * 100 : null
+              return (
+                <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-500">
+                  <span>{latest.month} total: <strong className="text-gray-800">{formatCurrency(latest.revenue)}</strong></span>
+                  {momGrowth !== null && (
+                    <span>MoM growth: <strong className={momGrowth >= 0 ? 'text-emerald-600' : 'text-red-500'}>{momGrowth >= 0 ? '+' : ''}{Math.round(momGrowth)}%</strong></span>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Revenue by service */}
@@ -590,7 +601,6 @@ export default function BillingPage() {
         <InvoicePanel
           invoice={selectedInvoice}
           onClose={() => setSelectedInvoice(null)}
-          onUpdateStatus={() => {}}
           contracts={contracts}
           allInvoices={localInvoices}
         />

@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await db
     .from('renewals')
     .insert({
-      id:               `ren-${Date.now()}`,
+      id:               `ren-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       company:          body.company,
       contract_id:      body.contractId ?? null,
       expiration_date:  body.expirationDate ?? null,

@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await db
     .from('maintenance_records')
     .insert({
-      id:                  `maint-${Date.now()}`,
+      id:                  `maint-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       company:             body.company,
       service_type:        body.serviceType ?? 'Website',
       start_date:          body.startDate ?? null,

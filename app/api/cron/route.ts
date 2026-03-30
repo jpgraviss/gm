@@ -9,9 +9,10 @@ import { fireAutomations } from '@/lib/automations-engine'
  * 2. Check for time-based automation triggers (overdue invoices, upcoming renewals)
  */
 export async function GET(req: NextRequest) {
-  // Verify cron secret in production
+  // Verify cron secret — always required in production
   const authHeader = req.headers.get('authorization')
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

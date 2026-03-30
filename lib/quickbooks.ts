@@ -139,20 +139,19 @@ export async function syncInvoicesFromQBO(): Promise<{ invoicesSynced: number; p
       const isPartial  = (qbInv.Balance ?? 0) > 0 && (qbInv.Balance ?? 0) < (qbInv.TotalAmt ?? 0)
       const hasPayment = qbInv.LinkedTxn?.some(t => t.TxnType === 'Payment')
 
-      const status = isPaid ? 'paid' : isPartial ? 'partial' : 'unpaid'
+      const status = isPaid ? 'Paid' : isPartial ? 'Sent' : 'Pending'
       if (hasPayment) paymentsSynced++
 
       const row = {
         qb_invoice_id: qbInv.Id,
-        invoice_number: qbInv.DocNumber || `QB-${qbInv.Id}`,
+        company: qbInv.CustomerRef?.name || 'Unknown',
         client: qbInv.CustomerRef?.name || 'Unknown',
         amount: qbInv.TotalAmt || 0,
         amount_paid: (qbInv.TotalAmt || 0) - (qbInv.Balance || 0),
         status,
-        issue_date: qbInv.TxnDate || new Date().toISOString().split('T')[0],
+        issued_date: qbInv.TxnDate || new Date().toISOString().split('T')[0],
         due_date: qbInv.DueDate || null,
         source: 'quickbooks',
-        updated_at: new Date().toISOString(),
       }
 
       await db.from('invoices').upsert(row, { onConflict: 'qb_invoice_id', ignoreDuplicates: false })

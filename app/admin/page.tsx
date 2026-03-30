@@ -180,6 +180,17 @@ export default function AdminPage() {
   const [bulkResetTarget, setBulkResetTarget] = useState('')
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([])
 
+  // KPI metrics
+  const [metrics, setMetrics] = useState({ activeContracts: 0, pipelineValue: 0, mrr: 0, openProjects: 0 })
+
+  // Integration health (for system health + integration cards)
+  const [integrationHealth, setIntegrationHealth] = useState<{
+    quickbooks: boolean
+    email: boolean
+    googleCalendar: boolean
+    googleDrive: boolean
+  }>({ quickbooks: false, email: false, googleCalendar: false, googleDrive: false })
+
   // QuickBooks
   const [qbConnected, setQbConnected]   = useState(false)
   const [qbStatus, setQbStatus]         = useState<{ lastSync: string | null; invoicesSynced: number; paymentsSynced: number; syncErrors: number } | null>(null)
@@ -216,6 +227,67 @@ export default function AdminPage() {
       .then(data => { if (Array.isArray(data)) setAuditLog(data) })
       .catch(() => toast('Failed to load audit logs', 'error'))
     fetchQBStatus()
+  }, [])
+
+  // Fetch KPI metrics from real API endpoints
+  useEffect(() => {
+    // Active contracts + MRR
+    fetch('/api/contracts')
+      .then(r => r.ok ? r.json() : [])
+      .then((contracts: { status?: string; billing_structure?: string; value?: number }[]) => {
+        if (!Array.isArray(contracts)) return
+        const active = contracts.filter(c => c.status === 'Fully Executed' || c.status === 'Active').length
+        const mrr = contracts
+          .filter(c => c.billing_structure === 'Monthly Retainer' && (c.status === 'Fully Executed' || c.status === 'Active'))
+          .reduce((sum, c) => sum + (c.value || 0), 0)
+        setMetrics(prev => ({ ...prev, activeContracts: active, mrr }))
+      })
+      .catch(() => {})
+
+    // Pipeline value
+    fetch('/api/deals')
+      .then(r => r.ok ? r.json() : [])
+      .then((deals: { stage?: string; value?: number }[]) => {
+        if (!Array.isArray(deals)) return
+        const pipeline = deals
+          .filter(d => d.stage !== 'Closed Won' && d.stage !== 'Closed Lost')
+          .reduce((sum, d) => sum + (d.value || 0), 0)
+        setMetrics(prev => ({ ...prev, pipelineValue: pipeline }))
+      })
+      .catch(() => {})
+
+    // Open projects
+    fetch('/api/projects')
+      .then(r => r.ok ? r.json() : [])
+      .then((projects: { status?: string }[]) => {
+        if (!Array.isArray(projects)) return
+        const open = projects.filter(p => p.status === 'In Progress' || p.status === 'Awaiting Client').length
+        setMetrics(prev => ({ ...prev, openProjects: open }))
+      })
+      .catch(() => {})
+
+    // Integration health check
+    fetch('/api/quickbooks/status')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setIntegrationHealth(prev => ({ ...prev, quickbooks: !!d?.connected })))
+      .catch(() => {})
+
+    fetch('/api/admin/integration-health')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) {
+          setIntegrationHealth(prev => ({
+            ...prev,
+            email: !!d.email,
+            googleCalendar: !!d.googleCalendar,
+            googleDrive: !!d.googleDrive,
+          }))
+        }
+      })
+      .catch(() => {
+        // Fallback: assume email is configured if the app works
+        setIntegrationHealth(prev => ({ ...prev, email: true }))
+      })
   }, [])
 
   function parseCSVLine(line: string): string[] {
@@ -543,11 +615,11 @@ export default function AdminPage() {
             <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
               {[
                 { label: 'Total Users', value: users.length.toString(), color: '#015035', icon: <Users size={16} /> },
-                { label: 'Active Contracts', value: '—', color: '#3b82f6', icon: <ScrollText size={16} /> },
-                { label: 'Pipeline Value', value: '—', color: '#f59e0b', icon: <BarChart3 size={16} /> },
-                { label: 'MRR', value: '—', color: '#8b5cf6', icon: <CreditCard size={16} /> },
-                { label: 'Open Projects', value: '—', color: '#ec4899', icon: <Activity size={16} /> },
-                { label: 'Integrations', value: '2 Active', color: '#14b8a6', icon: <Zap size={16} /> },
+                { label: 'Active Contracts', value: metrics.activeContracts.toString(), color: '#3b82f6', icon: <ScrollText size={16} /> },
+                { label: 'Pipeline Value', value: formatCurrency(metrics.pipelineValue), color: '#f59e0b', icon: <BarChart3 size={16} /> },
+                { label: 'MRR', value: formatCurrency(metrics.mrr), color: '#8b5cf6', icon: <CreditCard size={16} /> },
+                { label: 'Open Projects', value: metrics.openProjects.toString(), color: '#ec4899', icon: <Activity size={16} /> },
+                { label: 'Integrations', value: `${[integrationHealth.quickbooks, integrationHealth.email, integrationHealth.googleCalendar, integrationHealth.googleDrive].filter(Boolean).length} Active`, color: '#14b8a6', icon: <Zap size={16} /> },
               ].map(m => (
                 <div key={m.label} className="metric-card">
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-2" style={{ background: `${m.color}18` }}>
@@ -564,16 +636,17 @@ export default function AdminPage() {
               <div className="flex items-center gap-2 mb-3">
                 <Server size={15} style={{ color: '#015035' }} />
                 <h3 className="text-sm font-bold text-gray-800">System Health</h3>
-                <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">ALL SYSTEMS GO</span>
+                <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
+                  {[true, true, integrationHealth.quickbooks, integrationHealth.email, integrationHealth.googleCalendar, integrationHealth.googleDrive].every(Boolean) ? 'ALL SYSTEMS GO' : 'DEGRADED'}
+                </span>
               </div>
               <SystemHealthRow label="Authentication" status="ok" detail="Operational" />
               <SystemHealthRow label="Database" status="ok" detail="Healthy" />
-              <SystemHealthRow label="QuickBooks Sync" status="ok" detail="Synced 1h ago" />
-              <SystemHealthRow label="DocuSign API" status="ok" detail="Connected" />
-              <SystemHealthRow label="Email Delivery" status="ok" detail="Active" />
-              <SystemHealthRow label="Automation Engine" status="ok" detail="7 flows active" />
-              <SystemHealthRow label="Overdue Invoices" status="warn" detail="1 overdue" />
-              <SystemHealthRow label="Expiring Contracts" status="warn" detail="2 in 30 days" />
+              <SystemHealthRow label="QuickBooks Sync" status={integrationHealth.quickbooks ? 'ok' : 'warn'} detail={integrationHealth.quickbooks ? 'Connected' : 'Not Connected'} />
+              <SystemHealthRow label="E-Signature" status="ok" detail="Built-in" />
+              <SystemHealthRow label="Email Delivery" status={integrationHealth.email ? 'ok' : 'warn'} detail={integrationHealth.email ? 'Active' : 'Not Configured'} />
+              <SystemHealthRow label="Google Calendar" status={integrationHealth.googleCalendar ? 'ok' : 'warn'} detail={integrationHealth.googleCalendar ? 'Connected' : 'Not Connected'} />
+              <SystemHealthRow label="Google Drive" status={integrationHealth.googleDrive ? 'ok' : 'warn'} detail={integrationHealth.googleDrive ? 'Connected' : 'Not Connected'} />
             </div>
 
             {/* Quick Actions */}
@@ -935,7 +1008,7 @@ export default function AdminPage() {
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1.5 text-xs text-gray-500">
                   <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-                  2 Connected
+                  {[integrationHealth.quickbooks, integrationHealth.email, integrationHealth.googleCalendar, integrationHealth.googleDrive].filter(Boolean).length} Connected
                 </div>
               </div>
             </div>
@@ -944,46 +1017,31 @@ export default function AdminPage() {
               <IntegrationCard
                 name="QuickBooks Online"
                 description="Sync invoices, payments, and revenue data with QuickBooks. Automatic two-way sync for billing records, client accounts, and revenue reporting."
-                status="connected"
+                status={integrationHealth.quickbooks ? 'connected' : 'disconnected'}
                 logo="QB"
-                lastSync="1 hour ago"
+                lastSync={qbStatus?.lastSync ? new Date(qbStatus.lastSync).toLocaleString() : undefined}
                 actions={['Invoice Sync', 'Payment Sync', 'Client Sync', 'Revenue Reports']}
               />
               <IntegrationCard
-                name="DocuSign"
-                description="Send contracts for legally binding e-signatures directly from GravHub. Track signature status, get completion notifications, and auto-archive signed documents."
-                status="connected"
-                logo="DS"
-                lastSync="3 hours ago"
-                actions={['E-Signatures', 'Contract Sending', 'Status Tracking', 'Auto-Archive']}
+                name="Google Calendar"
+                description="Two-way calendar sync for project deadlines, client meetings, and team scheduling. Events created in GravHub automatically appear in Google Calendar."
+                status={integrationHealth.googleCalendar ? 'connected' : 'disconnected'}
+                logo="GC"
+                actions={['Event Sync', 'Meeting Scheduling', 'Deadline Tracking', 'Team Calendars']}
               />
               <IntegrationCard
-                name="Stripe"
-                description="Accept online payments and automate billing collections. Sync payment status back to GravHub invoice records in real time."
-                status="disconnected"
-                logo="ST"
-                actions={['Online Payments', 'Auto-Billing', 'Payment Links', 'Refunds']}
+                name="Google Drive"
+                description="Store and attach files from Google Drive to deals, projects, and contracts. Centralized document management with automatic folder organization."
+                status={integrationHealth.googleDrive ? 'connected' : 'disconnected'}
+                logo="GD"
+                actions={['File Storage', 'Document Attachments', 'Auto-Folders', 'Sharing']}
               />
               <IntegrationCard
-                name="HubSpot"
-                description="Bi-directional CRM sync between GravHub and HubSpot. Import contacts, export deals, and keep both systems in sync."
-                status="disconnected"
-                logo="HS"
-                actions={['Contact Sync', 'Deal Sync', 'Email Tracking', 'Lead Import']}
-              />
-              <IntegrationCard
-                name="Slack"
-                description="Get real-time notifications in Slack for key events — new deals, signed contracts, paid invoices, and project milestones."
-                status="disconnected"
-                logo="SL"
-                actions={['Deal Alerts', 'Contract Alerts', 'Invoice Alerts', 'Project Updates']}
-              />
-              <IntegrationCard
-                name="Google Workspace"
-                description="SSO login via Google, Gmail integration for logged communications, and Google Drive for file attachments on deals and projects."
-                status="disconnected"
-                logo="GW"
-                actions={['SSO Login', 'Gmail Sync', 'Drive Storage', 'Calendar Sync']}
+                name="Resend Email"
+                description="Transactional email delivery for sign-in links, contract notifications, invoice reminders, and team invitations. Powered by Resend API."
+                status={integrationHealth.email ? 'connected' : 'disconnected'}
+                logo="RE"
+                actions={['Sign-In Links', 'Contract Emails', 'Invoice Reminders', 'Team Invites']}
               />
             </div>
 
@@ -1030,43 +1088,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* DocuSign Config Detail */}
-            <div className="mt-4 bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-xl bg-yellow-50 border border-yellow-100 flex items-center justify-center font-bold text-yellow-700 text-sm">DS</div>
-                <div>
-                  <h3 className="text-sm font-bold text-gray-800">DocuSign Configuration</h3>
-                  <p className="text-xs text-green-600 font-medium">● Connected • eSignature API active</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                {[
-                  { label: 'Envelopes Sent', value: '6', sub: 'This month', color: 'text-blue-500' },
-                  { label: 'Completed', value: '3', sub: 'Fully signed', color: 'text-green-500' },
-                  { label: 'Pending', value: '3', sub: 'Awaiting signature', color: 'text-amber-500' },
-                ].map(s => (
-                  <div key={s.label} className="p-3 bg-gray-50 rounded-xl">
-                    <p className={`text-base font-bold ${s.color}`}>{s.value}</p>
-                    <p className="text-xs font-medium text-gray-700">{s.label}</p>
-                    <p className="text-[11px] text-gray-400">{s.sub}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl mb-3">
-                <p className="text-xs font-semibold text-blue-800 mb-1">Signature Workflow</p>
-                <p className="text-xs text-blue-700">
-                  When a contract is sent from GravHub, DocuSign automatically creates an envelope, sends to the client, and updates the contract status when signed. Internal countersign notification is sent automatically.
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>
-                  <ScrollText size={12} /> Send Test Envelope
-                </button>
-                <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-                  <Settings size={12} /> Configure Templates
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -1134,7 +1155,7 @@ export default function AdminPage() {
               <div className="flex flex-col gap-3">
                 {[
                   { label: 'Company Name', value: 'Graviss Marketing' },
-                  { label: 'Admin Email', value: 'jonathan@' },
+                  { label: 'Admin Email', value: 'jonathan@gravissmarketing.com' },
                   { label: 'Platform URL', value: 'app.gravissmarketing.com' },
                   { label: 'Fiscal Year Start', value: 'January' },
                   { label: 'Default Currency', value: 'USD ($)' },

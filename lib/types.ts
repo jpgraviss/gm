@@ -37,7 +37,7 @@ export type ContractStatus =
   | 'Fully Executed'
   | 'Expired'
 
-export type InvoiceStatus = 'Pending' | 'Sent' | 'Overdue' | 'Paid'
+export type InvoiceStatus = 'Pending' | 'Sent' | 'Overdue' | 'Paid' | 'Cancelled'
 
 export type ProjectStatus =
   | 'Not Started'
@@ -84,6 +84,10 @@ export interface TimeEntry {
   hours: number
   minutes: number
   billable: boolean
+  approvalStatus?: 'pending' | 'approved' | 'rejected'
+  approvedBy?: string
+  approvedAt?: string
+  rejectionNote?: string
 }
 
 export type RenewalStatus = 'Upcoming' | 'In Progress' | 'Renewed' | 'Churned'
@@ -278,9 +282,26 @@ export interface AppTask {
   completedDate?: string
   linkedId?: string
   teamServiceLine?: TeamServiceLine
+  recurrence?: { frequency: 'daily' | 'weekly' | 'monthly'; interval: number; endDate?: string } | null
+  parentTaskId?: string
 }
 
 // ─── Full CRM Types ──────────────────────────────────────────────────────────
+
+export interface SignatureRequest {
+  id: string
+  contractId: string
+  token: string
+  signerEmail: string
+  signerName?: string
+  type: 'client' | 'internal'
+  status: 'pending' | 'signed' | 'expired'
+  signedAt?: string
+  signerIp?: string
+  signatureData?: string
+  createdAt: string
+  expiresAt: string
+}
 
 export type CompanyStatus = 'Prospect' | 'Active Client' | 'Past Client' | 'Partner' | 'Churned'
 export type CompanySize = '1-10' | '11-50' | '51-200' | '201-500' | '500+'

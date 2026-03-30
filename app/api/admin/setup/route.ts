@@ -44,36 +44,6 @@ const BASE_USERS = [
     isAdmin:  false,
     tmId:     't3',
   },
-  {
-    email:    'seo@gravissmarketing.com',
-    password: process.env.SEO_PASSWORD ?? '',
-    name:     'Team SEO',
-    role:     'Team Member',
-    unit:     'Delivery/Operations',
-    initials: 'SE',
-    isAdmin:  false,
-    tmId:     't4',
-  },
-  {
-    email:    'billing@gravissmarketing.com',
-    password: process.env.BILLING_PASSWORD ?? '',
-    name:     'Graviss Billing',
-    role:     'Department Manager',
-    unit:     'Billing/Finance',
-    initials: 'GB',
-    isAdmin:  true,
-    tmId:     't5',
-  },
-  {
-    email:    'test@gravissmarketing.com',
-    password: process.env.TEST_PASSWORD ?? '',
-    name:     'Graviss Marketing',
-    role:     'Team Member',
-    unit:     'Leadership/Admin',
-    initials: 'GM',
-    isAdmin:  false,
-    tmId:     't2',
-  },
 ]
 
 export async function POST(req: NextRequest) {

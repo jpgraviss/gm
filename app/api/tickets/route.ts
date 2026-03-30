@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError, TICKET_STATUSES, TASK_PRIORITIES } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTicket(row: any) {
@@ -39,6 +40,13 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
+  const result = validate(body, {
+    subject: { required: true, type: 'string', maxLength: 500 },
+    company: { required: true, type: 'string', maxLength: 200 },
+    status: { type: 'string', enum: [...TICKET_STATUSES] },
+    priority: { type: 'string', enum: [...TASK_PRIORITIES] },
+  })
+  if (!result.valid) return validationError(result.error)
   const today = new Date().toISOString().split('T')[0]
   const db = createServiceClient()
   const { data, error } = await db

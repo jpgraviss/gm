@@ -103,7 +103,7 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
                 className="fixed inset-0 z-30"
                 onClick={() => setNotificationsOpen(false)}
               />
-              <div className="absolute right-0 top-full mt-1.5 w-80 bg-white rounded-xl border border-gray-200 shadow-xl z-40 overflow-hidden">
+              <div className="absolute right-0 top-full mt-1.5 w-[calc(100vw-2rem)] sm:w-80 max-w-[320px] bg-white rounded-xl border border-gray-200 shadow-xl z-40 overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-900">Notifications</p>

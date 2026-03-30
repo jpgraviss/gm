@@ -31,6 +31,7 @@ function ProposalPanel({
   onClose,
   onUpdateStatus,
   onEdit,
+  onDelete,
   deals,
   contracts,
 }: {
@@ -38,6 +39,7 @@ function ProposalPanel({
   onClose: () => void
   onUpdateStatus: (id: string, status: ProposalStatus) => void
   onEdit: (proposal: Proposal) => void
+  onDelete: (id: string) => void
   deals: Deal[]
   contracts: Contract[]
 }) {
@@ -88,6 +90,15 @@ function ProposalPanel({
                   <Edit2 size={14} className="text-white/60" />
                 </button>
               )}
+              {proposal.status === 'Draft' && (
+                <button
+                  onClick={() => onDelete(proposal.id)}
+                  className="p-1.5 rounded-lg hover:bg-red-500/20 transition-colors"
+                  title="Delete proposal"
+                >
+                  <X size={14} className="text-red-400/60" />
+                </button>
+              )}
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
                 <X size={16} className="text-white/60" />
               </button>
@@ -125,7 +136,7 @@ function ProposalPanel({
           {[
             { label: 'Total Value', value: formatCurrency(proposal.value) },
             { label: 'One-Time', value: formatCurrency(oneTimeTotal) },
-            { label: 'MRR', value: recurring.length > 0 ? formatCurrency(recurring[0].unitPrice) + '/mo' : '—' },
+            { label: 'MRR', value: recurring.length > 0 ? formatCurrency(recurring.reduce((s, i) => s + i.unitPrice, 0)) + '/mo' : '—' },
           ].map((stat, i) => (
             <div key={i} className="p-3 text-center">
               <p className="text-[11px] text-gray-400 mb-0.5">{stat.label}</p>
@@ -309,7 +320,7 @@ function ProposalPanel({
                         ))}
                         <tr className="border-t border-gray-200 bg-gray-50">
                           <td colSpan={3} className="p-2.5 text-[10px] font-semibold text-gray-500 text-right uppercase tracking-wide">MRR</td>
-                          <td className="p-2.5 text-sm font-bold text-gray-900 text-right">{formatCurrency(recurring[0]?.unitPrice || 0)}/mo</td>
+                          <td className="p-2.5 text-sm font-bold text-gray-900 text-right">{formatCurrency(recurring.reduce((s, i) => s + i.unitPrice, 0))}/mo</td>
                         </tr>
                       </tbody>
                     </table>
@@ -491,11 +502,11 @@ export default function ProposalsPage() {
         })
         if (!emailRes.ok) {
           const err = await emailRes.json()
-          alert(`Could not send proposal email: ${err.error ?? 'Unknown error'}`)
+          toast(`Could not send proposal email: ${err.error ?? 'Unknown error'}`, 'error')
           return
         }
       } catch {
-        alert('Failed to send proposal email. Please try again.')
+        toast('Failed to send proposal email. Please try again.', 'error')
         return
       }
     }
@@ -519,13 +530,27 @@ export default function ProposalsPage() {
     })
 
     try {
-      await fetch(`/api/proposals/${id}`, {
+      const patchRes = await fetch(`/api/proposals/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patchData),
       })
+      if (!patchRes.ok) {
+        const err = await patchRes.json().catch(() => ({}))
+        toast(err.error || 'Failed to update proposal status', 'error')
+        // Revert optimistic update
+        setLocalProposals(prev => prev.map(p => {
+          if (p.id !== id) return p
+          const original = localProposals.find(op => op.id === id)
+          return original ?? p
+        }))
+        return
+      }
+      toast(`Proposal ${status === 'Pending Approval' ? 'submitted for approval' : status.toLowerCase()}`, 'success')
     } catch (err) {
       console.error('Failed to PATCH proposal status:', err)
+      toast('Network error — could not update proposal', 'error')
+      return
     }
 
     if (status === 'Accepted') {
@@ -552,9 +577,13 @@ export default function ProposalsPage() {
           if (res.ok) {
             const savedContract = await res.json()
             setContracts(prev => [savedContract, ...prev])
+            toast('Draft contract created from accepted proposal', 'success')
+          } else {
+            toast('Proposal accepted, but contract auto-creation failed', 'error')
           }
         } catch (err) {
           console.error('Failed to create contract from accepted proposal:', err)
+          toast('Proposal accepted, but contract auto-creation failed', 'error')
         }
       }
     }
@@ -569,13 +598,20 @@ export default function ProposalsPage() {
       ))
       setEditingProposal(null)
       try {
-        await fetch(`/api/proposals/${editingProposal.id}`, {
+        const res = await fetch(`/api/proposals/${editingProposal.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
         })
+        if (res.ok) {
+          toast('Proposal updated', 'success')
+        } else {
+          const err = await res.json().catch(() => ({}))
+          toast(err.error || 'Failed to save proposal changes', 'error')
+        }
       } catch (err) {
         console.error('Failed to PATCH proposal:', err)
+        toast('Network error — could not save proposal changes', 'error')
       }
     } else {
       const localProposal: Proposal = {
@@ -601,10 +637,32 @@ export default function ProposalsPage() {
           setLocalProposals(prev => prev.map(p =>
             p.id === localProposal.id ? savedProposal : p
           ))
+          toast('Proposal created', 'success')
+        } else {
+          const err = await res.json().catch(() => ({}))
+          toast(err.error || 'Failed to create proposal', 'error')
         }
       } catch (err) {
         console.error('Failed to POST proposal:', err)
+        toast('Network error — could not create proposal', 'error')
       }
+    }
+  }
+
+  async function handleDeleteProposal(id: string) {
+    if (!confirm('Delete this proposal? This cannot be undone.')) return
+    setLocalProposals(prev => prev.filter(p => p.id !== id))
+    setSelected(prev => (prev?.id === id ? null : prev))
+    try {
+      const res = await fetch(`/api/proposals/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast('Proposal deleted', 'success')
+      } else {
+        const err = await res.json().catch(() => ({}))
+        toast(err.error || 'Failed to delete proposal', 'error')
+      }
+    } catch {
+      toast('Network error — could not delete proposal', 'error')
     }
   }
 
@@ -709,6 +767,12 @@ export default function ProposalsPage() {
                             >
                               Edit
                             </button>
+                            <button
+                              onClick={() => handleDeleteProposal(p.id)}
+                              className="text-xs font-medium text-red-500 hover:text-red-700 px-2 py-1 rounded-md hover:bg-red-50 transition-colors"
+                            >
+                              Delete
+                            </button>
                           </>
                         )}
                         {p.status === 'Pending Approval' && (
@@ -765,6 +829,7 @@ export default function ProposalsPage() {
           onClose={() => setSelected(null)}
           onUpdateStatus={updateProposalStatus}
           onEdit={p => { setSelected(null); setEditingProposal(p) }}
+          onDelete={handleDeleteProposal}
           deals={deals}
           contracts={contracts}
         />

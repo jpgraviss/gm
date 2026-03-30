@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError, DEAL_STAGES } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDeal(row: any) {
@@ -34,11 +35,22 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
+
+  const result = validate(body, {
+    company:     { required: true, type: 'string', maxLength: 200 },
+    stage:       { type: 'string', enum: [...DEAL_STAGES] },
+    value:       { type: 'number', min: 0, max: 100_000_000 },
+    serviceType: { type: 'string', maxLength: 100 },
+    assignedRep: { type: 'string', maxLength: 200 },
+    probability: { type: 'number', min: 0, max: 100 },
+  })
+  if (!result.valid) return validationError(result.error)
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('deals')
     .insert({
-      id:           `deal-${Date.now()}`,
+      id:           `deal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       company:      body.company,
       contact:      body.contact ?? null,
       stage:        body.stage ?? 'Lead',

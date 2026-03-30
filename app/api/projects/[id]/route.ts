@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError, PROJECT_STATUSES } from '@/lib/validation'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const body = await req.json()
+  const result = validate(body, {
+    status: { type: 'string', enum: [...PROJECT_STATUSES] },
+    overview: { type: 'string', maxLength: 5000 },
+  })
+  if (!result.valid) return validationError(result.error)
   const db = createServiceClient()
   const update: Record<string, unknown> = {}
   if (body.status !== undefined)               update.status = body.status

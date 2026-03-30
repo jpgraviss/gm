@@ -82,7 +82,7 @@ function proposalEmailHtml({
   company: string
   serviceType: string
   value: number
-  items: { name: string; type: string; amount: number }[]
+  items: { name?: string; description?: string; type: string; amount?: number; total?: number; unitPrice?: number }[]
   portalUrl: string
 }) {
   const formattedValue = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
@@ -93,12 +93,15 @@ function proposalEmailHtml({
     if (list.length === 0) return ''
     return `
       <tr><td colspan="2" style="padding:12px 0 4px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;">${label}</td></tr>
-      ${list.map(i => `
+      ${list.map(i => {
+        const itemName = i.name || i.description || 'Service'
+        const itemAmount = i.amount ?? i.total ?? i.unitPrice ?? 0
+        return `
         <tr>
-          <td style="padding:6px 0;font-size:14px;color:#374151;">${i.name}</td>
-          <td style="padding:6px 0;font-size:14px;color:#111827;font-weight:600;text-align:right;">${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(i.amount)}</td>
+          <td style="padding:6px 0;font-size:14px;color:#374151;">${itemName}</td>
+          <td style="padding:6px 0;font-size:14px;color:#111827;font-weight:600;text-align:right;">${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(itemAmount)}</td>
         </tr>
-      `).join('')}
+      `}).join('')}
     `
   }
 

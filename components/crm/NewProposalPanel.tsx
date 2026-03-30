@@ -49,7 +49,7 @@ export default function NewProposalPanel({ onSave, onClose }: Props) {
   const [form, setForm] = useState<NewProposalFormData>({
     company: '',
     serviceType: 'Website',
-    assignedRep: REPS[0] ?? '',
+    assignedRep: 'Graviss Marketing',
     value: '',
     notes: '',
   })
@@ -109,7 +109,8 @@ export default function NewProposalPanel({ onSave, onClose }: Props) {
             <div>
               <FieldLabel><span className="flex items-center gap-1"><User size={11} />Assigned Rep</span></FieldLabel>
               <Select value={form.assignedRep} onChange={e => set('assignedRep', e.target.value)}>
-                {REPS.map(r => <option key={r} value={r}>{r}</option>)}
+                <option value="Graviss Marketing">Graviss Marketing</option>
+                {REPS.filter(r => r !== 'Graviss Marketing').map(r => <option key={r} value={r}>{r}</option>)}
               </Select>
             </div>
           </div>

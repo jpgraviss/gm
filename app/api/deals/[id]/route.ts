@@ -2,6 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapDeal(row: any) {
+  return {
+    id:           row.id,
+    company:      row.company,
+    contact:      row.contact ?? { id: '', name: '', email: '', phone: '', title: '' },
+    stage:        row.stage,
+    value:        row.value,
+    serviceType:  row.service_type,
+    closeDate:    row.close_date ?? '',
+    assignedRep:  row.assigned_rep,
+    probability:  row.probability,
+    notes:        row.notes ?? [],
+    lastActivity: row.last_activity ?? '',
+  }
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const body = await req.json()
@@ -14,6 +31,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.closeDate !== undefined)   update.close_date = body.closeDate
   if (body.notes !== undefined)       update.notes = body.notes
   if (body.contact !== undefined)     update.contact = body.contact
+  if (body.serviceType !== undefined) update.service_type = body.serviceType
   update.last_activity = new Date().toISOString().split('T')[0]
   const { data, error } = await db.from('deals').update(update).eq('id', id).select().single()
   if (error) {
@@ -25,7 +43,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     fireAutomations('deal_stage_changed', { dealId: id, stage: body.stage, ...data })
   }
 
-  return NextResponse.json(data)
+  return NextResponse.json(mapDeal(data))
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

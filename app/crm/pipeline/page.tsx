@@ -202,11 +202,6 @@ function DealPanel({
       serviceType: editForm.serviceType as LocalDeal['serviceType'],
     }
     onUpdateDeal(deal.id, updates)
-    fetch(`/api/deals/${deal.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    }).catch(() => toast('Failed to save deal changes', 'error'))
     setEditing(false)
   }
 
@@ -922,9 +917,13 @@ export default function PipelinePage() {
     if (!destination || source.droppableId === destination.droppableId) return
     const newStageName = activeStages.find(s => s.id === destination.droppableId)?.name
     if (!newStageName) return
-    setLocalDeals(prev => prev.map(d => d.id === draggableId ? { ...d, stage: newStageName } : d))
-    setSelectedDeal(prev => prev?.id === draggableId ? { ...prev, stage: newStageName } : prev)
-    fetch(`/api/deals/${draggableId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: newStageName }) }).catch(() => toast('Failed to update deal stage', 'error'))
+    const stageProbMap: Record<string, number> = { Lead: 20, Qualified: 40, 'Proposal Sent': 60, 'Contract Sent': 80, 'Closed Won': 100, 'Closed Lost': 0 }
+    const newProb = stageProbMap[newStageName]
+    const updates: { stage: string; probability?: number } = { stage: newStageName }
+    if (newProb !== undefined) updates.probability = newProb
+    setLocalDeals(prev => prev.map(d => d.id === draggableId ? { ...d, ...updates } : d))
+    setSelectedDeal(prev => prev?.id === draggableId ? { ...prev, ...updates } : prev)
+    fetch(`/api/deals/${draggableId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) }).catch(() => toast('Failed to update deal stage', 'error'))
   }
 
   async function handleNewDeal(data: NewDealData) {
@@ -950,13 +949,23 @@ export default function PipelinePage() {
   }
 
   function handleAdvanceStage(dealId: string, newStage: string) {
-    setLocalDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage } : d))
-    fetch(`/api/deals/${dealId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: newStage }) }).catch(() => toast('Failed to advance deal stage', 'error'))
+    const stageProbMap: Record<string, number> = { Lead: 20, Qualified: 40, 'Proposal Sent': 60, 'Contract Sent': 80, 'Closed Won': 100, 'Closed Lost': 0 }
+    const newProb = stageProbMap[newStage]
+    const updates: { stage: string; probability?: number } = { stage: newStage }
+    if (newProb !== undefined) updates.probability = newProb
+    setLocalDeals(prev => prev.map(d => d.id === dealId ? { ...d, ...updates } : d))
+    setSelectedDeal(prev => prev?.id === dealId ? { ...prev, ...updates } as LocalDeal : prev)
+    fetch(`/api/deals/${dealId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) }).catch(() => toast('Failed to advance deal stage', 'error'))
   }
 
   function handleUpdateDeal(id: string, updates: Partial<LocalDeal>) {
     setLocalDeals(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d))
     setSelectedDeal(prev => prev?.id === id ? { ...prev, ...updates } as LocalDeal : prev)
+    fetch(`/api/deals/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    }).catch(() => toast('Failed to update deal', 'error'))
   }
 
   async function handleDeleteDeal(id: string) {
@@ -969,8 +978,6 @@ export default function PipelinePage() {
     setCrmCompanies(prev => prev.filter(c => c.id !== companyId))
     fetch(`/api/crm/companies/${companyId}`, { method: 'DELETE' }).catch(() => toast('Failed to delete company', 'error'))
   }
-
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
@@ -1143,7 +1150,14 @@ export default function PipelinePage() {
           pipelines={pipelines}
           activePipelineId={activePipeline.id}
           onClose={() => setManagingPipeline(false)}
-          onChange={updated => { setPipelines(updated) }}
+          onChange={updated => {
+            setPipelines(updated)
+            fetch('/api/settings', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pipelines: updated }),
+            }).catch(() => toast('Failed to save pipeline settings', 'error'))
+          }}
         />
       )}
     </>

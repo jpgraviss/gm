@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return validationError('Invalid JSON body')
+  }
+
+  const result = validate(body, {
+    name:  { type: 'string', maxLength: 200 },
+    email: { type: 'string', pattern: EMAIL_PATTERN },
+  })
+  if (!result.valid) return validationError(result.error)
+
   const db = createServiceClient()
   const update: Record<string, unknown> = {}
   if (body.name !== undefined)     update.name = body.name

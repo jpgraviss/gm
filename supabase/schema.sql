@@ -460,6 +460,7 @@ create table if not exists public.app_settings (
   branding         jsonb not null default '{}',
   qb_sync          jsonb not null default '[]',
   google_drive     jsonb not null default '{}',
+  pipelines        jsonb not null default '[]',
   updated_at       timestamptz not null default now()
 );
 

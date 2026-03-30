@@ -1,6 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
+import { validationError } from '@/lib/validation'
+
+async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
+  const db = createServiceClient()
+
+  // Try to get token from cookie or header
+  const authHeader = req.headers.get('authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+
+  // Get user from Supabase
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { data: { user }, error } = await db.auth.getUser(token)
+  if (error || !user?.email) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Check if admin
+  const { data: member } = await db
+    .from('team_members')
+    .select('is_admin')
+    .eq('email', user.email)
+    .single()
+
+  if (!member?.is_admin) {
+    return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
+  }
+
+  return null // Authorized
+}
 
 const SETTINGS_ID = 'global'
 
@@ -19,7 +51,16 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const body = await req.json()
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return validationError('Invalid JSON body')
+  }
+
   const db = createServiceClient()
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (body.company          !== undefined) updates.company          = body.company

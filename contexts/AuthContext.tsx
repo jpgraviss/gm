@@ -203,12 +203,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false
     }
 
+    // Restore Gmail token from database for a given user email
+    const restoreGmailToken = async (email: string) => {
+      try {
+        const res = await fetch(`/api/gmail/token?email=${encodeURIComponent(email)}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.gmailToken) {
+          setGmailToken(data.gmailToken)
+          if (data.gmailEmail) {
+            setGmailEmail(data.gmailEmail)
+            try { localStorage.setItem('gravhub_gmail_email', data.gmailEmail) } catch {/* ignore */}
+          }
+        } else if (data.gmailEmail) {
+          // Token expired but we know which Gmail was connected
+          setGmailEmail(data.gmailEmail)
+        }
+      } catch {/* non-blocking */}
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user?.email) {
-        await restoreProfile(session.user.email)
+        const profile = await restoreProfile(session.user.email)
+        if (profile) await restoreGmailToken(profile.email)
       } else {
         // No Supabase session — try restoring a Google SSO user from localStorage
-        tryRestoreGoogleUser()
+        const restored = tryRestoreGoogleUser()
+        if (restored) {
+          try {
+            const stored = localStorage.getItem('gravhub_user')
+            if (stored) {
+              const parsed = JSON.parse(stored) as AuthUser
+              if (parsed?.email) await restoreGmailToken(parsed.email)
+            }
+          } catch {/* ignore */}
+        }
       }
       setLoading(false)
     })
@@ -315,17 +344,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         'https://www.googleapis.com/auth/gmail.send',
         'https://www.googleapis.com/auth/userinfo.email',
       ].join(' '),
-      callback: (resp: { access_token?: string; error?: string }) => {
+      callback: (resp: { access_token?: string; error?: string; expires_in?: number }) => {
         if (resp.error || !resp.access_token) return
         setGmailToken(resp.access_token)
+        const expiresIn = resp.expires_in ?? 3600
+
+        // Fetch the Gmail email address
         fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${resp.access_token}` },
         })
           .then(r => r.json())
           .then((info: { email?: string }) => {
-            if (info.email) {
-              setGmailEmail(info.email)
-              try { localStorage.setItem('gravhub_gmail_email', info.email) } catch {/* ignore */}
+            const email = info.email ?? null
+            if (email) {
+              setGmailEmail(email)
+              try { localStorage.setItem('gravhub_gmail_email', email) } catch {/* ignore */}
+            }
+
+            // Persist token to database so user stays signed in
+            if (user?.email) {
+              fetch('/api/gmail/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userEmail: user.email,
+                  gmailToken: resp.access_token,
+                  gmailEmail: email,
+                  expiresIn,
+                }),
+              }).catch(() => {/* non-blocking */})
             }
           })
           .catch(() => {/* non-blocking */})
@@ -333,7 +380,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     tokenClient.requestAccessToken()
-  }, [])
+  }, [user?.email])
 
   const disconnectGmail = useCallback(() => {
     const g = (window as unknown as { google?: { accounts?: { oauth2?: { revoke: (token: string, cb: () => void) => void } } } }).google
@@ -343,7 +390,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setGmailToken(null)
     setGmailEmail(null)
     try { localStorage.removeItem('gravhub_gmail_email') } catch {/* ignore */}
-  }, [gmailToken])
+    // Clear from database
+    if (user?.email) {
+      fetch('/api/gmail/token', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userEmail: user.email }),
+      }).catch(() => {/* non-blocking */})
+    }
+  }, [gmailToken, user?.email])
 
   return (
     <AuthContext.Provider value={{

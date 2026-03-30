@@ -14,9 +14,6 @@ const USERS_TO_FIX = [
   { email: 'jonathan@gravissmarketing.com', password: process.env.JONATHAN_PASSWORD ?? '' },
   { email: 'jgraviss@gravissmarketing.com',  password: process.env.JG_PASSWORD ?? '' },
   { email: 'ssarkar@gravissmarketing.com',   password: process.env.SHIHAB_PASSWORD ?? '' },
-  { email: 'seo@gravissmarketing.com',       password: process.env.SEO_PASSWORD ?? '' },
-  { email: 'billing@gravissmarketing.com',   password: process.env.BILLING_PASSWORD ?? '' },
-  { email: 'test@gravissmarketing.com',      password: process.env.TEST_PASSWORD ?? '' },
 ]
 
 export async function POST(req: NextRequest) {

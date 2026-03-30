@@ -65,6 +65,7 @@ export const invoiceStatusColors: Record<string, string> = {
   Sent: 'bg-blue-100 text-blue-700',
   Overdue: 'bg-red-100 text-red-600',
   Paid: 'bg-green-100 text-green-700',
+  Cancelled: 'bg-orange-100 text-orange-600',
 }
 
 export const projectStatusColors: Record<string, string> = {
@@ -83,6 +84,7 @@ export const serviceTypeColors: Record<string, string> = {
   Branding: 'bg-amber-100 text-amber-700',
   'Email Marketing': 'bg-cyan-100 text-cyan-700',
   Custom: 'bg-violet-100 text-violet-700',
+  General: 'bg-gray-100 text-gray-600',
 }
 
 export const renewalStatusColors: Record<string, string> = {

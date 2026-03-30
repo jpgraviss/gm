@@ -2,6 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 
 const BUCKET = 'client-files'
+const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+const ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/csv',
+  'application/zip',
+  'video/mp4',
+  'video/quicktime',
+])
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -50,6 +70,14 @@ export async function POST(req: NextRequest) {
 
   if (!file || !company) {
     return NextResponse.json({ error: 'file and company are required' }, { status: 400 })
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    return NextResponse.json({ error: 'File too large. Maximum size is 100MB.' }, { status: 413 })
+  }
+
+  if (!ALLOWED_MIME_TYPES.has(file.type)) {
+    return NextResponse.json({ error: `File type "${file.type}" is not allowed.` }, { status: 415 })
   }
 
   const db = createServiceClient()

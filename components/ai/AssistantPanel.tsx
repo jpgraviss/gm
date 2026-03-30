@@ -154,15 +154,22 @@ export default function AssistantPanel({ open, onClose }: AssistantPanelProps) {
         // Horizontal rule (--- GENERATED ...)
         if (line.startsWith('---')) return <hr key={`${i}-${j}`} className="my-2 border-gray-200" />
 
-        // Bold
-        const boldProcessed = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        // Bold — render safely by splitting on **bold** markers instead of using innerHTML
+        const renderBoldLine = (text: string, keyPrefix: string) => {
+          const segments = text.split(/(\*\*.*?\*\*)/g)
+          return segments.map((seg, s) =>
+            seg.startsWith('**') && seg.endsWith('**')
+              ? <strong key={`${keyPrefix}-${s}`}>{seg.slice(2, -2)}</strong>
+              : <span key={`${keyPrefix}-${s}`}>{seg}</span>
+          )
+        }
 
         // List items
         if (line.match(/^[\-\*]\s/)) {
-          return <li key={`${i}-${j}`} className="ml-4 text-xs list-disc" dangerouslySetInnerHTML={{ __html: boldProcessed.slice(2) }} />
+          return <li key={`${i}-${j}`} className="ml-4 text-xs list-disc">{renderBoldLine(line.slice(2), `${i}-${j}`)}</li>
         }
         if (line.match(/^\d+\.\s/)) {
-          return <li key={`${i}-${j}`} className="ml-4 text-xs list-decimal" dangerouslySetInnerHTML={{ __html: boldProcessed.replace(/^\d+\.\s/, '') }} />
+          return <li key={`${i}-${j}`} className="ml-4 text-xs list-decimal">{renderBoldLine(line.replace(/^\d+\.\s/, ''), `${i}-${j}`)}</li>
         }
 
         // Table rows
@@ -182,7 +189,7 @@ export default function AssistantPanel({ open, onClose }: AssistantPanelProps) {
         if (!line.trim()) return <div key={`${i}-${j}`} className="h-2" />
 
         // Regular paragraph
-        return <p key={`${i}-${j}`} className="text-xs leading-relaxed" dangerouslySetInnerHTML={{ __html: boldProcessed }} />
+        return <p key={`${i}-${j}`} className="text-xs leading-relaxed">{renderBoldLine(line, `${i}-${j}`)}</p>
       })
     })
   }

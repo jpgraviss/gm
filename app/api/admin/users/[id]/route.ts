@@ -1,10 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
+import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
+
+async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
+  const db = createServiceClient()
+
+  // Try to get token from cookie or header
+  const authHeader = req.headers.get('authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+
+  // Get user from Supabase
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { data: { user }, error } = await db.auth.getUser(token)
+  if (error || !user?.email) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Check if admin
+  const { data: member } = await db
+    .from('team_members')
+    .select('is_admin')
+    .eq('email', user.email)
+    .single()
+
+  if (!member?.is_admin) {
+    return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
+  }
+
+  return null // Authorized
+}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const { id } = await params
-  const body = await req.json()
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return validationError('Invalid JSON body')
+  }
+
+  const result = validate(body, {
+    name:  { type: 'string', maxLength: 200 },
+    email: { type: 'string', pattern: EMAIL_PATTERN },
+    role:  { type: 'string' },
+  })
+  if (!result.valid) return validationError(result.error)
+
   const db = createServiceClient()
   const update: Record<string, unknown> = {}
   if (body.name !== undefined)    update.name = body.name
@@ -21,7 +69,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json(data)
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
   // Deactivate rather than hard delete

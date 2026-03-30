@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
+import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapClient(row: any) {
@@ -30,14 +31,27 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json()
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return validationError('Invalid JSON body')
+  }
+
+  const result = validate(body, {
+    company: { required: true, type: 'string', maxLength: 200 },
+    email:   { required: true, type: 'string', pattern: EMAIL_PATTERN },
+    contact: { required: true, type: 'string', maxLength: 200 },
+  })
+  if (!result.valid) return validationError(result.error)
+
   const db = createServiceClient()
 
   // Generate a cryptographically secure temp password for client login
   const tempPassword = crypto.randomBytes(16).toString('base64url')
   if (body.email) {
     const { error: authError } = await db.auth.admin.createUser({
-      email: body.email,
+      email: body.email as string,
       password: tempPassword,
       email_confirm: true,
     })

@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError, TICKET_STATUSES, TASK_PRIORITIES } from '@/lib/validation'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const body = await req.json()
+  const result = validate(body, {
+    status: { type: 'string', enum: [...TICKET_STATUSES] },
+    priority: { type: 'string', enum: [...TASK_PRIORITIES] },
+  })
+  if (!result.valid) return validationError(result.error)
   const db = createServiceClient()
   const update: Record<string, unknown> = {
     updated_date: new Date().toISOString().split('T')[0],

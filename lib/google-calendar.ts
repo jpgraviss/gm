@@ -219,6 +219,55 @@ export async function createGoogleEvent(
   return { eventId: data.id, meetLink }
 }
 
+export async function listGoogleEvents(
+  token: string,
+  timeMin: string, // ISO date
+  timeMax: string, // ISO date
+): Promise<Array<{
+  id: string
+  summary: string
+  description?: string
+  start: { dateTime?: string; date?: string }
+  end: { dateTime?: string; date?: string }
+  attendees?: Array<{ email: string; displayName?: string }>
+  hangoutLink?: string
+  status: string
+}>> {
+  const params = new URLSearchParams({
+    timeMin: new Date(timeMin).toISOString(),
+    timeMax: new Date(timeMax).toISOString(),
+    singleEvents: 'true',
+    orderBy: 'startTime',
+    maxResults: '250',
+  })
+  const res = await fetch(
+    `${GOOGLE_CALENDAR}/calendars/primary/events?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) throw new Error(`Google Calendar list failed: ${res.status}`)
+  const data = await res.json()
+  return data.items ?? []
+}
+
+export async function updateGoogleEvent(
+  eventId: string,
+  data: { summary?: string; description?: string; start?: { dateTime: string; timeZone?: string }; end?: { dateTime: string; timeZone?: string } },
+  token: string,
+): Promise<void> {
+  const res = await fetch(
+    `${GOOGLE_CALENDAR}/calendars/primary/events/${eventId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    },
+  )
+  if (!res.ok) throw new Error(`Google Calendar update failed: ${res.status}`)
+}
+
 export async function deleteGoogleEvent(accessToken: string, eventId: string): Promise<void> {
   await fetch(`${GOOGLE_CALENDAR}/calendars/primary/events/${eventId}?sendUpdates=all`, {
     method:  'DELETE',

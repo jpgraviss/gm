@@ -7,10 +7,11 @@ import { fetchInvoices, fetchProjects, fetchProposals } from '@/lib/supabase'
 import { formatCurrency, contractStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
-import type { Contract, ContractStatus, Invoice, Project, Proposal } from '@/lib/types'
+import type { Contract, ContractStatus, Invoice, Project, Proposal, SignatureRequest } from '@/lib/types'
 import {
   X, CheckCircle, Clock, AlertCircle, ScrollText, Calendar, DollarSign, User,
   ExternalLink, FileText, FolderKanban, Send, RefreshCw, Shield, Plus, FilePlus2,
+  PenTool, Mail,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
@@ -30,7 +31,7 @@ interface Addendum {
 
 function ContractPanel({
   contract, onClose, onUpdateStatus, addendums, onAddAddendum, onUpdateAddendumStatus,
-  invoices, projects, proposals,
+  invoices, projects, proposals, signatures, onRequestSignature, onSignInternally,
 }: {
   contract: Contract
   onClose: () => void
@@ -41,13 +42,22 @@ function ContractPanel({
   invoices: Invoice[]
   projects: Project[]
   proposals: Proposal[]
+  signatures: SignatureRequest[]
+  onRequestSignature: (contractId: string, email: string, name: string, type: 'client' | 'internal') => void
+  onSignInternally: (contractId: string) => void
 }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'project' | 'addendums'>('overview')
   const [showAddForm, setShowAddForm] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newDesc, setNewDesc] = useState('')
+  const [showSigModal, setShowSigModal] = useState(false)
+  const [sigEmail, setSigEmail] = useState('')
+  const [sigName, setSigName] = useState('')
 
   const contractAddendums = addendums.filter(a => a.contractId === contract.id)
+  const contractSigs = signatures.filter(s => s.contractId === contract.id)
+  const clientSig = contractSigs.find(s => s.type === 'client' && s.status === 'signed') || contractSigs.find(s => s.type === 'client')
+  const internalSig = contractSigs.find(s => s.type === 'internal' && s.status === 'signed') || contractSigs.find(s => s.type === 'internal')
 
   const linkedInvoices = invoices.filter(i => i.contractId === contract.id)
   const linkedProject = projects.find(p => p.contractId === contract.id)
@@ -171,31 +181,46 @@ function ContractPanel({
                 <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">E-Signature Status</p>
                 <div className="flex items-stretch gap-2">
                   {/* Client sig */}
-                  <div className={`flex-1 p-3 rounded-xl border-2 ${contract.clientSigned ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-white'}`}>
+                  <div className={`flex-1 p-3 rounded-xl border-2 ${clientSig?.status === 'signed' || contract.clientSigned ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-white'}`}>
                     <div className="flex items-center gap-1.5 mb-1">
-                      {contract.clientSigned
+                      {clientSig?.status === 'signed' || contract.clientSigned
                         ? <CheckCircle size={13} className="text-emerald-500" />
                         : <Clock size={13} className="text-gray-300" />}
                       <span className="text-xs font-semibold text-gray-600">Client</span>
                     </div>
-                    {contract.clientSigned
-                      ? <p className="text-[11px] text-emerald-600">{formatDate(contract.clientSigned)}</p>
-                      : <p className="text-[11px] text-gray-400">Pending</p>}
+                    {clientSig?.status === 'signed'
+                      ? <p className="text-[11px] text-emerald-600">{formatDate(clientSig.signedAt!)}</p>
+                      : contract.clientSigned
+                        ? <p className="text-[11px] text-emerald-600">{formatDate(contract.clientSigned)}</p>
+                        : clientSig?.status === 'pending'
+                          ? <p className="text-[11px] text-amber-500">Awaiting</p>
+                          : <p className="text-[11px] text-gray-400">Not requested</p>}
                   </div>
 
-                  <div className="flex items-center text-gray-300 text-sm">→</div>
+                  <div className="flex items-center text-gray-300 text-sm">&rarr;</div>
 
                   {/* Internal sig */}
-                  <div className={`flex-1 p-3 rounded-xl border-2 ${contract.internalSigned ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-white'}`}>
+                  <div className={`flex-1 p-3 rounded-xl border-2 ${internalSig?.status === 'signed' || contract.internalSigned ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-white'}`}>
                     <div className="flex items-center gap-1.5 mb-1">
-                      {contract.internalSigned
+                      {internalSig?.status === 'signed' || contract.internalSigned
                         ? <CheckCircle size={13} className="text-emerald-500" />
                         : <Clock size={13} className="text-gray-300" />}
                       <span className="text-xs font-semibold text-gray-600">Internal</span>
                     </div>
-                    {contract.internalSigned
-                      ? <p className="text-[11px] text-emerald-600">{formatDate(contract.internalSigned)}</p>
-                      : <p className="text-[11px] text-gray-400">Pending</p>}
+                    {internalSig?.status === 'signed'
+                      ? <p className="text-[11px] text-emerald-600">{formatDate(internalSig.signedAt!)}</p>
+                      : contract.internalSigned
+                        ? <p className="text-[11px] text-emerald-600">{formatDate(contract.internalSigned)}</p>
+                        : <p className="text-[11px] text-gray-400">Pending</p>}
+                    {!internalSig && !contract.internalSigned && contract.status !== 'Fully Executed' && contract.status !== 'Draft' && (
+                      <button
+                        onClick={() => onSignInternally(contract.id)}
+                        className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md text-white transition-opacity hover:opacity-90"
+                        style={{ background: '#015035' }}
+                      >
+                        <PenTool size={9} /> Sign
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center text-gray-300 text-sm">→</div>
@@ -501,6 +526,15 @@ function ContractPanel({
               Send for Signature
             </button>
           )}
+          {(contract.status === 'Sent' || contract.status === 'Viewed') && !clientSig && (
+            <button
+              onClick={() => setShowSigModal(true)}
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90 flex items-center justify-center gap-1.5"
+              style={{ background: '#015035' }}
+            >
+              <PenTool size={12} /> Request Signature
+            </button>
+          )}
           {contract.status === 'Sent' && (
             <button
               onClick={() => onUpdateStatus(contract.id, 'Signed by Client')}
@@ -533,6 +567,65 @@ function ContractPanel({
           </button>
         </div>
       </div>
+
+      {/* Signature request modal */}
+      {showSigModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowSigModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-900">Request Client Signature</h3>
+              <button onClick={() => setShowSigModal(false)} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
+                <X size={14} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Signer Email</label>
+                <input
+                  type="email"
+                  value={sigEmail}
+                  onChange={e => setSigEmail(e.target.value)}
+                  placeholder="client@example.com"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Signer Name (optional)</label>
+                <input
+                  type="text"
+                  value={sigName}
+                  onChange={e => setSigName(e.target.value)}
+                  placeholder="John Doe"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                />
+              </div>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => {
+                    if (sigEmail.trim()) {
+                      onRequestSignature(contract.id, sigEmail.trim(), sigName.trim(), 'client')
+                      setShowSigModal(false)
+                      setSigEmail('')
+                      setSigName('')
+                    }
+                  }}
+                  disabled={!sigEmail.trim()}
+                  className="flex-1 py-2 rounded-lg text-white text-xs font-semibold disabled:opacity-40 transition-opacity hover:opacity-90 flex items-center justify-center gap-1.5"
+                  style={{ background: '#015035' }}
+                >
+                  <Mail size={12} /> Send Request
+                </button>
+                <button
+                  onClick={() => { setShowSigModal(false); setSigEmail(''); setSigName('') }}
+                  className="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -547,6 +640,7 @@ export default function ContractsPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [proposals, setProposals] = useState<Proposal[]>([])
+  const [signatures, setSignatures] = useState<SignatureRequest[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -560,23 +654,95 @@ export default function ContractsPage() {
     fetchProposals().then(setProposals)
   }, [])
 
-  function addAddendum(contractId: string, title: string, description: string) {
-    const today = new Date().toISOString().split('T')[0]
-    setLocalAddendums(prev => [...prev, {
-      id: `add-${Date.now()}`,
-      contractId,
-      title,
-      description,
-      status: 'Draft',
-      createdDate: today,
-    }])
+  // Fetch signatures and addendums when a contract is selected
+  useEffect(() => {
+    if (!selected) return
+    fetch(`/api/signatures?contractId=${selected.id}`)
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setSignatures(data) })
+      .catch(() => {})
+    fetch(`/api/contracts/${selected.id}/addendums`)
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalAddendums(data) })
+      .catch(() => {})
+  }, [selected?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function requestSignature(contractId: string, email: string, name: string, type: 'client' | 'internal') {
+    try {
+      const res = await fetch('/api/signatures', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contractId, signerEmail: email, signerName: name || undefined, type }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to create signature request', 'error')
+        return
+      }
+      setSignatures(prev => [data, ...prev])
+      toast('Signature request sent', 'success')
+    } catch {
+      toast('Failed to send signature request', 'error')
+    }
   }
 
-  function updateAddendumStatus(id: string, status: Addendum['status']) {
-    const today = new Date().toISOString().split('T')[0]
-    setLocalAddendums(prev => prev.map(a =>
-      a.id === id ? { ...a, status, ...(status === 'Sent' ? { sentDate: today } : {}) } : a
-    ))
+  async function signInternally(contractId: string) {
+    // Create an internal signature request and open it in a new tab
+    try {
+      const res = await fetch('/api/signatures', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contractId, signerEmail: 'internal@gravissmarketing.com', signerName: 'Graviss Marketing', type: 'internal' }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to create internal signature', 'error')
+        return
+      }
+      setSignatures(prev => [data, ...prev])
+      window.open(`/sign/${data.token}`, '_blank')
+    } catch {
+      toast('Failed to create internal signature', 'error')
+    }
+  }
+
+  async function addAddendum(contractId: string, title: string, description: string) {
+    try {
+      const res = await fetch(`/api/contracts/${contractId}/addendums`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to create addendum', 'error')
+        return
+      }
+      setLocalAddendums(prev => [data, ...prev])
+      toast('Addendum created', 'success')
+    } catch {
+      toast('Failed to create addendum', 'error')
+    }
+  }
+
+  async function updateAddendumStatus(id: string, status: Addendum['status']) {
+    const contractId = localAddendums.find(a => a.id === id)?.contractId
+    if (!contractId) return
+    try {
+      const res = await fetch(`/api/contracts/${contractId}/addendums`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addendumId: id, status }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to update addendum', 'error')
+        return
+      }
+      setLocalAddendums(prev => prev.map(a => a.id === id ? data : a))
+    } catch {
+      toast('Failed to update addendum', 'error')
+    }
   }
 
   async function updateContractStatus(id: string, status: ContractStatus) {
@@ -627,27 +793,41 @@ export default function ContractsPage() {
     }
   }
 
-  function handleNewContract(data: NewContractFormData) {
+  async function handleNewContract(data: NewContractFormData) {
     const startDate = data.startDate
     const renewalDate = (() => {
       const d = new Date(startDate)
       d.setMonth(d.getMonth() + Number(data.duration))
       return d.toISOString().split('T')[0]
     })()
-    const newContract: Contract = {
-      id: `ct-${Date.now()}`,
-      company: data.company,
-      status: 'Draft',
-      value: Number(data.value),
-      serviceType: data.serviceType,
-      assignedRep: data.assignedRep,
-      billingStructure: data.billingStructure,
-      duration: Number(data.duration),
-      startDate,
-      renewalDate,
+
+    try {
+      const res = await fetch('/api/contracts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: data.company,
+          status: 'Draft',
+          value: Number(data.value),
+          serviceType: data.serviceType,
+          assignedRep: data.assignedRep,
+          billingStructure: data.billingStructure,
+          duration: Number(data.duration),
+          startDate,
+          renewalDate,
+        }),
+      })
+      const created = await res.json()
+      if (!res.ok) {
+        toast(created.error || 'Failed to create contract', 'error')
+        return
+      }
+      setLocalContracts(prev => [created, ...prev])
+      setCreatingContract(false)
+      toast('Contract created', 'success')
+    } catch {
+      toast('Failed to create contract', 'error')
     }
-    setLocalContracts(prev => [newContract, ...prev])
-    setCreatingContract(false)
   }
 
   const filtered = statusFilter === 'All' ? localContracts : localContracts.filter(c => c.status === statusFilter)
@@ -781,6 +961,9 @@ export default function ContractsPage() {
           invoices={invoices}
           projects={projects}
           proposals={proposals}
+          signatures={signatures}
+          onRequestSignature={requestSignature}
+          onSignInternally={signInternally}
         />
       )}
       {creatingContract && (

@@ -110,11 +110,12 @@ export default function InboxPage() {
       if (!res.ok) {
         const e = await res.json()
         if (res.status === 401) {
-          setError('Gmail session expired. Please reconnect.')
-          disconnectGmail()
-        } else {
-          setError(e.error ?? 'Failed to load inbox')
+          setError('Gmail session expired. Click "Reconnect" above to sign back in.')
+          // Clear just the token, not the email — so the UI shows "Session Expired" with context
+          setMessages([])
+          return
         }
+        setError(e.error ?? 'Failed to load inbox')
         return
       }
       const data = await res.json()
@@ -226,6 +227,7 @@ export default function InboxPage() {
 
   // — Not connected —
   if (!gmailToken) {
+    const hasExpired = !!gmailEmail // We know which email was connected but token is gone
     return (
       <>
         <Header title="Inbox" subtitle="Gmail connected inbox" />
@@ -234,9 +236,14 @@ export default function InboxPage() {
             <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
               <InboxIcon size={28} className="text-gray-400" />
             </div>
-            <h2 className="text-base font-bold text-gray-800 mb-2">Connect your Gmail</h2>
+            <h2 className="text-base font-bold text-gray-800 mb-2">
+              {hasExpired ? 'Gmail Session Expired' : 'Connect your Gmail'}
+            </h2>
             <p className="text-sm text-gray-500 mb-6">
-              Sign in with Google to browse your inbox and log emails as CRM activities.
+              {hasExpired
+                ? `Your session for ${gmailEmail} has expired. Reconnect to continue browsing your inbox.`
+                : 'Sign in with Google to browse your inbox and log emails as CRM activities.'
+              }
             </p>
             <button
               onClick={connectGmail}
@@ -244,7 +251,7 @@ export default function InboxPage() {
               style={{ background: '#015035' }}
             >
               <Mail size={15} />
-              Connect Gmail
+              {hasExpired ? 'Reconnect Gmail' : 'Connect Gmail'}
             </button>
           </div>
         </div>

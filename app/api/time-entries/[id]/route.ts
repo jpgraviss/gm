@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError } from '@/lib/validation'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const body = await req.json()
+  const result = validate(body, {
+    date: { type: 'string', maxLength: 20 },
+    description: { type: 'string', maxLength: 1000 },
+    teamMember: { type: 'string', maxLength: 200 },
+    hours: { type: 'number', min: 0, max: 24 },
+    minutes: { type: 'number', min: 0, max: 59 },
+  })
+  if (!result.valid) return validationError(result.error)
   const db = createServiceClient()
   const update: Record<string, unknown> = {}
   if (body.date !== undefined)        update.date = body.date
@@ -15,8 +24,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.billable !== undefined)    update.billable = body.billable
   if (body.projectId !== undefined)   update.project_id = body.projectId
   if (body.projectName !== undefined) update.project_name = body.projectName
-  if (body.invoiced !== undefined)    update.invoiced = body.invoiced
-  if (body.invoiceId !== undefined)   update.invoice_id = body.invoiceId
+  if (body.approvalStatus !== undefined)  update.approval_status = body.approvalStatus
+  if (body.approvedBy !== undefined)      update.approved_by = body.approvedBy
+  if (body.approvedAt !== undefined)      update.approved_at = body.approvedAt
+  if (body.rejectionNote !== undefined)   update.rejection_note = body.rejectionNote
 
   const { data, error } = await db.from('time_entries').update(update).eq('id', id).select().single()
   if (error) {

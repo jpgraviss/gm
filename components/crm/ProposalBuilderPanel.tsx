@@ -312,7 +312,7 @@ function PdfTemplate(p: PdfProps) {
 
 // ─── Main Builder Component ───────────────────────────────────────────────────
 
-export default function ProposalBuilderPanel({ onSave, onClose, initialCompany = '', initialRep = 'Jaycee Graviss', initialData }: Props) {
+export default function ProposalBuilderPanel({ onSave, onClose, initialCompany = '', initialRep = 'Graviss Marketing', initialData }: Props) {
   const ALL_REPS = useTeamMembers()
   // Client info
   const [company, setCompany]           = useState(initialData?.company ?? initialCompany)
@@ -338,6 +338,11 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
   // Content
   const [execSummary, setExecSummary] = useState('')
   const [clientGoals, setClientGoals] = useState('')
+
+  // Renewal / internal
+  const [isRenewal, setIsRenewal]       = useState(initialData?.isRenewal ?? false)
+  const [renewalNotes, setRenewalNotes] = useState(initialData?.renewalNotes ?? '')
+  const [internalOnly, setInternalOnly] = useState(initialData?.internalOnly ?? false)
 
   // UI state
   const [generating, setGenerating] = useState(false)
@@ -444,11 +449,14 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
   function handleSave() {
     onSave({
       company:      company || 'Unknown Company',
-      status:       'Draft',
+      status:       initialData?.status ?? 'Draft',
       value:        grandTotal,
       serviceType:  getServiceType(),
       assignedRep:  rep,
       items:        buildLineItems(),
+      isRenewal,
+      internalOnly,
+      renewalNotes: renewalNotes || undefined,
     })
   }
 
@@ -933,10 +941,11 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-gray-500 mb-1 block">Sales Rep</label>
+                  <label className="text-[11px] font-semibold text-gray-500 mb-1 block">Prepared By</label>
                   <select value={rep} onChange={e => setRep(e.target.value)}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
-                    {ALL_REPS.map(r => <option key={r} value={r}>{r}</option>)}
+                    <option value="Graviss Marketing">Graviss Marketing</option>
+                    {ALL_REPS.filter(r => r !== 'Graviss Marketing').map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
                 <div>
@@ -946,6 +955,47 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                 </div>
               </div>
+            </section>
+
+            {/* Renewal / Internal */}
+            <section>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Proposal Type</p>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <button
+                    type="button"
+                    onClick={() => setIsRenewal(v => !v)}
+                    className="w-9 h-5 rounded-full relative transition-colors flex-shrink-0"
+                    style={{ background: isRenewal ? '#015035' : '#e5e7eb' }}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isRenewal ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                  <span className="text-xs font-medium text-gray-600">Renewal</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <button
+                    type="button"
+                    onClick={() => setInternalOnly(v => !v)}
+                    className="w-9 h-5 rounded-full relative transition-colors flex-shrink-0"
+                    style={{ background: internalOnly ? '#015035' : '#e5e7eb' }}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${internalOnly ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                  <span className="text-xs font-medium text-gray-600">Internal Only</span>
+                </label>
+              </div>
+              {isRenewal && (
+                <div className="mt-3">
+                  <label className="text-[11px] font-semibold text-gray-500 mb-1 block">Renewal Notes</label>
+                  <textarea
+                    value={renewalNotes}
+                    onChange={e => setRenewalNotes(e.target.value)}
+                    placeholder="Notes about this renewal (e.g. changed terms, price adjustment...)"
+                    rows={2}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                  />
+                </div>
+              )}
             </section>
 
             {/* Website build */}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -7,6 +8,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!contacts?.length) {
     return NextResponse.json({ error: 'contacts array required' }, { status: 400 })
+  }
+
+  for (const contact of contacts) {
+    const result = validate(
+      { contactEmail: contact.email, contactName: contact.name } as Record<string, unknown>,
+      {
+        contactEmail: { required: true, type: 'string', pattern: EMAIL_PATTERN },
+        contactName:  { required: true, type: 'string' },
+      }
+    )
+    if (!result.valid) return validationError(result.error)
   }
 
   const db = createServiceClient()

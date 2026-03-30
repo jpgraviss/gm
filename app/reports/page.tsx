@@ -103,7 +103,7 @@ export default function ReportsPage() {
   const currentMRR = activeMaintenance > 0
     ? maintenance.filter(m => m.status === 'Active').reduce((s, m) => s + m.monthlyFee, 0)
     : 0
-  const prevMonthMRR = currentMRR > 0 ? currentMRR * 0.9 : 0 // approximate from revenue trend
+  const prevMonthMRR = revenueByMonth.length >= 2 ? revenueByMonth[revenueByMonth.length - 2].recurring : 0
   const mrrGrowth = revenueByMonth.length >= 2
     ? Math.round(((revenueByMonth[revenueByMonth.length - 1].revenue - revenueByMonth[revenueByMonth.length - 2].revenue) / Math.max(1, revenueByMonth[revenueByMonth.length - 2].revenue)) * 100)
     : 0
@@ -197,7 +197,7 @@ export default function ReportsPage() {
             { label: 'Revenue Collected', value: formatCurrency(collected),     icon: <CheckCircle size={16} />,color: '#22c55e', sub: 'All invoices' },
             { label: 'Outstanding',       value: formatCurrency(outstanding),   icon: <DollarSign size={16} />, color: '#f59e0b', sub: 'Pending + overdue' },
             { label: 'ARR',              value: formatCurrency(collected * 12),  icon: <RefreshCw size={16} />,  color: '#8b5cf6', sub: 'Annual recurring' },
-            { label: 'Renewal Rate',     value: `${renewalRate || 78}%`,        icon: <Users size={16} />,      color: '#ec4899', sub: 'Client retention' },
+            { label: 'Renewal Rate',     value: `${renewalRate}%`,              icon: <Users size={16} />,      color: '#ec4899', sub: renewals.length > 0 ? `${renewals.filter(r => r.status === 'Renewed').length}/${renewals.length} renewals` : 'No renewals yet' },
           ].map(m => (
             <div key={m.label} className="kpi-card" style={{ '--kpi-accent': m.color } as React.CSSProperties}>
               <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: `${m.color}15` }}>

@@ -57,6 +57,30 @@ export function middleware(req: NextRequest) {
   // Only apply to API routes
   if (!pathname.startsWith('/api/')) return NextResponse.next()
 
+  // ── CSRF protection for state-changing requests ─────────────────────────
+  // Verify that the Origin/Referer header matches the host to prevent
+  // cross-site request forgery on non-GET/HEAD/OPTIONS requests.
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    const origin = req.headers.get('origin')
+    const host = req.headers.get('host')
+    if (origin && host) {
+      try {
+        const originHost = new URL(origin).host
+        if (originHost !== host) {
+          return NextResponse.json(
+            { error: 'Cross-origin request blocked' },
+            { status: 403 }
+          )
+        }
+      } catch {
+        return NextResponse.json(
+          { error: 'Invalid origin header' },
+          { status: 403 }
+        )
+      }
+    }
+  }
+
   // ── Rate-limit admin setup endpoints (5 requests per hour per IP) ────────
   if (ADMIN_SETUP_PREFIXES.some(p => pathname.startsWith(p))) {
     const ip = getClientIp(req)

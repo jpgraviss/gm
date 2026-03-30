@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError, PROPOSAL_STATUSES } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProposal(row: any) {
@@ -42,6 +43,17 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
+
+  const result = validate(body, {
+    company:     { required: true, type: 'string', maxLength: 200 },
+    status:      { type: 'string', enum: [...PROPOSAL_STATUSES] },
+    value:       { type: 'number', min: 0, max: 100_000_000 },
+    serviceType: { type: 'string', maxLength: 100 },
+    assignedRep: { type: 'string', maxLength: 200 },
+    items:       { type: 'array' },
+  })
+  if (!result.valid) return validationError(result.error)
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('proposals')

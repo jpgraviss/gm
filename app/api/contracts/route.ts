@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContract(row: any) {
@@ -36,6 +37,18 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
+
+  const result = validate(body, {
+    company:          { required: true, type: 'string', maxLength: 200 },
+    status:           { type: 'string', enum: [...CONTRACT_STATUSES] },
+    value:            { type: 'number', min: 0, max: 100_000_000 },
+    duration:         { type: 'number', min: 1, max: 120 },
+    serviceType:      { type: 'string', maxLength: 100 },
+    assignedRep:      { type: 'string', maxLength: 200 },
+    billingStructure: { type: 'string', enum: ['Monthly', 'Quarterly', 'Annual', 'One-time', 'Custom'] },
+  })
+  if (!result.valid) return validationError(result.error)
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('contracts')

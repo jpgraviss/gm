@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await db
     .from('deals')
     .insert({
-      id:           `deal-${Date.now()}`,
+      id:           `deal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       company:      body.company,
       contact:      body.contact ?? null,
       stage:        body.stage ?? 'Lead',

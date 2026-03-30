@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
         service_type:  normalizeServiceType(get(row, 'Deal Type', 'Service Type', 'servicetype', 'Deal type', 'Pipeline', 'Type'), dealName),
         close_date:    get(row, 'Close Date', 'closedate', 'Close date', 'Expected close date') || null,
         assigned_rep:  get(row, 'Deal owner', 'Assigned Rep', 'owner', 'Owner', 'HubSpot Owner Name', 'Record owner') || 'Jonathan Graviss',
-        probability:   parseNum(get(row, 'Deal Probability', 'Probability', 'probability', 'Deal probability', 'Win probability')) ?? 0,
+        probability:   parseNum(get(row, 'Deal Probability', 'Probability', 'probability', 'Deal probability', 'Win probability')) ?? stageProbability(stage),
         notes:         [],
         last_activity: get(row, 'Last Activity Date', 'Last activity date', 'Last Modified Date') || new Date().toISOString().split('T')[0],
       })
@@ -199,6 +199,14 @@ function normalizeServiceType(val?: string, dealName?: string): string {
   if (check.includes('brand'))       return 'Branding'
   if (check.includes('email'))       return 'Email Marketing'
   return 'Custom'
+}
+
+function stageProbability(stage: string): number {
+  const map: Record<string, number> = {
+    Lead: 20, Qualified: 40, 'Proposal Sent': 60,
+    'Contract Sent': 80, 'Closed Won': 100, 'Closed Lost': 0,
+  }
+  return map[stage] ?? 20
 }
 
 function parseNum(val?: string | number): number | null {

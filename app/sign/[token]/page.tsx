@@ -38,7 +38,7 @@ export default function SignPage() {
   useEffect(() => {
     if (!token) return
     fetch(`/api/signatures/${token}`)
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data.error) {
           setError(data.error)

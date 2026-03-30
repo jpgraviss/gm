@@ -23,9 +23,13 @@ const UNIT_RESTRICTED: { prefix: string; allowedUnits: string[] }[] = [
   { prefix: '/admin',       allowedUnits: [] }, // handled separately by adminOnly
 ]
 
+// Settings sub-routes that are open to all authenticated users
+const SETTINGS_OPEN_ROUTES = ['/settings/calendar']
+
 function isRouteAllowed(pathname: string, user: { isAdmin: boolean; unit: string } | null): boolean {
   if (!user) return false
   if (user.isAdmin) return true
+  if (SETTINGS_OPEN_ROUTES.some(r => pathname === r || pathname.startsWith(r + '/'))) return true
   const match = UNIT_RESTRICTED.find(r => pathname === r.prefix || pathname.startsWith(r.prefix + '/'))
   if (!match) return true
   return match.allowedUnits.includes(user.unit)

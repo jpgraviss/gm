@@ -881,7 +881,7 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
 
   useEffect(() => {
     fetch('/api/crm/companies')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setCompanies(data.map((c: { name: string }) => c.name)) })
       .catch(() => toast('Failed to load companies', 'error'))
   }, [])

@@ -278,7 +278,7 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (pa
   // Fetch companies for autocomplete
   useEffect(() => {
     fetch('/api/crm/companies')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setAllCompanies(data.map((c: { name: string }) => c.name)) })
       .catch(() => {})
   }, [])
@@ -688,7 +688,7 @@ export default function RenewalsPage() {
 
   useEffect(() => {
     fetch('/api/renewals')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setLocalRenewals(data) })
       .catch(() => toast('Failed to load renewals', 'error'))
       .finally(() => setLoading(false))

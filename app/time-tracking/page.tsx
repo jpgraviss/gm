@@ -340,7 +340,7 @@ export default function TimeTrackingPage() {
 
   useEffect(() => {
     fetch('/api/time-entries')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setEntries(data) })
       .catch(() => toast('Failed to load time entries', 'error'))
       .finally(() => setLoading(false))
@@ -507,21 +507,9 @@ export default function TimeTrackingPage() {
       <Header title="Time Tracking" subtitle="Log and review team hours by week" action={{ label: 'Log Time', onClick: () => openLog() }} />
 
       {/* ── Sub-header with tabs ── */}
-      <div className="bg-white border-b border-gray-100 px-4 sm:px-8">
-        <div className="flex items-center justify-between py-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => openLog()}
-              className="flex items-center gap-2 bg-[#012b1e] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#015035] transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Log Time
-            </button>
-          </div>
-        </div>
-        {/* Tabs */}
-        {canApprove && (
-          <div className="flex gap-1 border-t border-gray-100 -mb-px">
+      {canApprove && (
+        <div className="bg-white border-b border-gray-100 px-4 sm:px-8">
+          <div className="flex gap-1 -mb-px">
             <button
               onClick={() => setActiveTab('timesheet')}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -549,8 +537,8 @@ export default function TimeTrackingPage() {
               )}
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Approvals Tab ── */}
       {activeTab === 'approvals' && canApprove && (

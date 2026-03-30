@@ -265,7 +265,7 @@ export default function TicketsPage() {
 
   useEffect(() => {
     fetch('/api/tickets')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setLocalTickets(data) })
       .catch(() => toast('Failed to load tickets', 'error'))
       .finally(() => setLoading(false))

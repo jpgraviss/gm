@@ -153,7 +153,7 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
   // Load calendar settings
   useEffect(() => {
     fetch(`/api/calendar/settings/${slug}`)
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d?.error) setNotFound(true)
         else setSettings(d)
@@ -168,7 +168,7 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
     setSlots([])
     setSelectedSlot(null)
     fetch(`/api/calendar/slots?slug=${slug}&date=${selectedDate}`)
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : { slots: [] })
       .then(d => { setSlots(d.slots ?? []); setSlotsLoading(false) })
       .catch(() => setSlotsLoading(false))
   }, [slug, selectedDate])

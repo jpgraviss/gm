@@ -246,11 +246,11 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
 
   useEffect(() => {
     const q = encodeURIComponent(company)
-    fetch(`/api/projects?company=${q}`).then(r => r.json()).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => toast('Failed to load project data', 'error'))
-    fetch(`/api/contracts?company=${q}`).then(r => r.json()).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => toast('Failed to load contract data', 'error'))
-    fetch(`/api/invoices?company=${q}`).then(r => r.json()).then(setClientInvoices).catch(() => toast('Failed to load invoices', 'error'))
-    fetch(`/api/tickets?company=${q}`).then(r => r.json()).then((d: unknown[]) => setClientTickets(Array.isArray(d) ? d : [])).catch(() => setClientTickets([]))
-    fetch(`/api/drive/files?company=${q}`).then(r => r.json()).then((d: unknown[]) => setClientFiles(Array.isArray(d) ? d : [])).catch(() => setClientFiles([]))
+    fetch(`/api/projects?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => setProject(d[0] ?? null)).catch(() => toast('Failed to load project data', 'error'))
+    fetch(`/api/contracts?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => toast('Failed to load contract data', 'error'))
+    fetch(`/api/invoices?company=${q}`).then(r => r.ok ? r.json() : []).then(setClientInvoices).catch(() => toast('Failed to load invoices', 'error'))
+    fetch(`/api/tickets?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => setClientTickets(Array.isArray(d) ? d : [])).catch(() => toast('Failed to load tickets', 'error'))
+    fetch(`/api/drive/files?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => setClientFiles(Array.isArray(d) ? d : [])).catch(() => toast('Failed to load files', 'error'))
     fetchNotifications()
   }, [company])
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')

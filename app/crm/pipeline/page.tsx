@@ -883,7 +883,7 @@ export default function PipelinePage() {
 
   useEffect(() => {
     fetch('/api/deals')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
       .catch(() => toast('Failed to load deals', 'error'))
       .finally(() => setLoading(false))
@@ -1140,7 +1140,7 @@ export default function PipelinePage() {
           defaultType="deals"
           onClose={() => setShowImport(false)}
           onComplete={() => {
-            fetch('/api/deals').then(r => r.json()).then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
+            fetch('/api/deals').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
           }}
         />
       )}

@@ -648,7 +648,7 @@ export default function ContractsPage() {
 
   useEffect(() => {
     fetch('/api/contracts')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setLocalContracts(data) })
       .catch(() => toast('Failed to load contracts', 'error'))
       .finally(() => setLoading(false))
@@ -661,11 +661,11 @@ export default function ContractsPage() {
   useEffect(() => {
     if (!selected) return
     fetch(`/api/signatures?contractId=${selected.id}`)
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setSignatures(data) })
       .catch(() => {})
     fetch(`/api/contracts/${selected.id}/addendums`)
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setLocalAddendums(data) })
       .catch(() => {})
   }, [selected?.id]) // eslint-disable-line react-hooks/exhaustive-deps

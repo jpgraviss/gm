@@ -484,7 +484,7 @@ export default function ProposalsPage() {
 
   useEffect(() => {
     fetch('/api/proposals')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setLocalProposals(data) })
       .catch(() => toast('Failed to load proposals', 'error'))
       .finally(() => setLoading(false))

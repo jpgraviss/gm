@@ -11,7 +11,7 @@ import CRMSubNav from '@/components/crm/CRMSubNav'
 import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronRight, Edit2, Copy, TrendingUp,
-  Eye, MousePointerClick,
+  Eye, MousePointerClick, ChevronDown, ChevronUp, Settings,
 } from 'lucide-react'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -19,14 +19,24 @@ import {
 type SequenceStatus = 'Active' | 'Paused' | 'Draft' | 'Completed'
 type StepType = 'email' | 'wait' | 'task' | 'condition'
 
+type HtmlTemplate = 'branded' | 'minimal' | 'plain'
+
 interface SequenceStep {
   id: string
   type: StepType
   day: number
+  // Email fields
   subject?: string
   body?: string
-  taskTitle?: string
+  htmlTemplate?: HtmlTemplate
+  cc?: string
+  bcc?: string
+  replyTo?: string
+  // Wait fields
   waitDays?: number
+  // Task fields
+  taskTitle?: string
+  // Condition fields
   condition?: string
 }
 
@@ -45,6 +55,8 @@ interface EmailSequence {
   steps: SequenceStep[]
   createdDate: string
   lastModified: string
+  sendVia: 'gmail' | 'resend'
+  fromName?: string
 }
 
 
@@ -60,6 +72,93 @@ const stepTypeConfig: Record<StepType, { color: string; label: string; icon: Rea
   wait:      { color: '#9ca3af', label: 'Wait', icon: <Clock size={13} /> },
   task:      { color: '#10b981', label: 'Task', icon: <CheckCircle size={13} /> },
   condition: { color: '#f59e0b', label: 'Branch', icon: <Zap size={13} /> },
+}
+
+const MERGE_FIELDS = [
+  { token: '{{first_name}}', label: 'First Name', sample: 'John' },
+  { token: '{{last_name}}', label: 'Last Name', sample: 'Smith' },
+  { token: '{{full_name}}', label: 'Full Name', sample: 'John Smith' },
+  { token: '{{email}}', label: 'Email', sample: 'john@acme.com' },
+  { token: '{{company}}', label: 'Company', sample: 'Acme Inc' },
+  { token: '{{sender_name}}', label: 'Sender Name', sample: 'Jane Doe' },
+  { token: '{{sender_email}}', label: 'Sender Email', sample: 'jane@gravhub.com' },
+]
+
+function replaceMergeFields(text: string): string {
+  let result = text
+  for (const f of MERGE_FIELDS) {
+    result = result.replaceAll(f.token, f.sample)
+  }
+  return result
+}
+
+// ─── Merge Field Reference ───────────────────────────────────────────────────
+
+function MergeFieldReference() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-3 border border-gray-200 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:bg-gray-50"
+      >
+        <span>Merge Field Reference</span>
+        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+      </button>
+      {open && (
+        <div className="px-3 pb-3 grid grid-cols-2 gap-1.5">
+          {MERGE_FIELDS.map(f => (
+            <div key={f.token} className="flex items-center gap-2 text-xs">
+              <code className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-mono text-[11px]">{f.token}</code>
+              <span className="text-gray-400">{f.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Email Preview ───────────────────────────────────────────────────────────
+
+function EmailStepPreview({ subject, body, template }: { subject: string; body: string; template?: HtmlTemplate }) {
+  const [open, setOpen] = useState(false)
+  const previewSubject = replaceMergeFields(subject || '(No subject)')
+  const previewBody = replaceMergeFields(body || '(No body)')
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700"
+      >
+        <Eye size={11} />
+        {open ? 'Hide Preview' : 'Show Preview'}
+      </button>
+      {open && (
+        <div className={`mt-2 rounded-xl border overflow-hidden ${
+          template === 'branded' ? 'border-emerald-200' :
+          template === 'minimal' ? 'border-gray-200' :
+          'border-gray-100'
+        }`}>
+          {template === 'branded' && (
+            <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white" style={{ background: '#015035' }}>
+              GravHub
+            </div>
+          )}
+          <div className={`p-4 ${template === 'plain' ? 'bg-white' : 'bg-gray-50'}`}>
+            <p className="text-xs font-semibold text-gray-400 mb-1">Subject</p>
+            <p className="text-sm font-semibold text-gray-900 mb-3">{previewSubject}</p>
+            <p className="text-xs font-semibold text-gray-400 mb-1">Body</p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{previewBody}</p>
+          </div>
+          <div className="px-4 py-2 bg-gray-100 text-[10px] text-gray-400 text-center">
+            Preview with sample merge field values
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Sequence Detail Panel ────────────────────────────────────────────────────
@@ -84,6 +183,10 @@ function SequencePanel({
   const [editBody, setEditBody] = useState('')
   const [editTask, setEditTask] = useState('')
   const [editWaitDays, setEditWaitDays] = useState('')
+  const [editTemplate, setEditTemplate] = useState<HtmlTemplate>('plain')
+  const [editCc, setEditCc] = useState('')
+  const [editBcc, setEditBcc] = useState('')
+  const [editReplyTo, setEditReplyTo] = useState('')
 
   // Add Step form
   const [addingStep, setAddingStep] = useState(false)
@@ -93,6 +196,15 @@ function SequencePanel({
   const [newStepBody, setNewStepBody] = useState('')
   const [newStepWait, setNewStepWait] = useState('1')
   const [newStepTask, setNewStepTask] = useState('')
+  const [newStepTemplate, setNewStepTemplate] = useState<HtmlTemplate>('plain')
+  const [newStepCc, setNewStepCc] = useState('')
+  const [newStepBcc, setNewStepBcc] = useState('')
+  const [newStepReplyTo, setNewStepReplyTo] = useState('')
+
+  // Sequence-level settings
+  const [seqSendVia, setSeqSendVia] = useState<'gmail' | 'resend'>(seq.sendVia || 'gmail')
+  const [seqFromName, setSeqFromName] = useState(seq.fromName || '')
+  const [showSettings, setShowSettings] = useState(false)
 
   // Enroll contacts
   const [enrolling, setEnrolling] = useState(false)
@@ -108,6 +220,10 @@ function SequencePanel({
     setEditBody(step.body ?? '')
     setEditTask(step.taskTitle ?? '')
     setEditWaitDays(String(step.waitDays ?? 1))
+    setEditTemplate(step.htmlTemplate ?? 'plain')
+    setEditCc(step.cc ?? '')
+    setEditBcc(step.bcc ?? '')
+    setEditReplyTo(step.replyTo ?? '')
   }
 
   function saveEdit(stepId: string) {
@@ -117,6 +233,10 @@ function SequencePanel({
         ...s,
         subject: s.type === 'email' ? editSubject : s.subject,
         body: s.type === 'email' ? editBody : s.body,
+        htmlTemplate: s.type === 'email' ? editTemplate : s.htmlTemplate,
+        cc: s.type === 'email' ? editCc : s.cc,
+        bcc: s.type === 'email' ? editBcc : s.bcc,
+        replyTo: s.type === 'email' ? editReplyTo : s.replyTo,
         taskTitle: s.type === 'task' ? editTask : s.taskTitle,
         waitDays: s.type === 'wait' ? Number(editWaitDays) : s.waitDays,
       }
@@ -126,13 +246,32 @@ function SequencePanel({
     setEditingStepId(null)
   }
 
+  function saveSettings() {
+    onUpdate({ ...seq, sendVia: seqSendVia, fromName: seqFromName || undefined })
+    setShowSettings(false)
+  }
+
+  function insertMergeField(token: string, target: 'editBody' | 'newBody') {
+    if (target === 'editBody') {
+      setEditBody(prev => prev + token)
+    } else {
+      setNewStepBody(prev => prev + token)
+    }
+  }
+
   function addStep() {
     if (!newStepDay) return
     const day = Number(newStepDay)
     const id = `step-${Date.now()}`
     let newStep: SequenceStep
     if (newStepType === 'email') {
-      newStep = { id, type: 'email', day, subject: newStepSubject, body: newStepBody }
+      newStep = {
+        id, type: 'email', day, subject: newStepSubject, body: newStepBody,
+        htmlTemplate: newStepTemplate,
+        cc: newStepCc || undefined,
+        bcc: newStepBcc || undefined,
+        replyTo: newStepReplyTo || undefined,
+      }
     } else if (newStepType === 'wait') {
       newStep = { id, type: 'wait', day, waitDays: Number(newStepWait) }
     } else if (newStepType === 'task') {
@@ -150,6 +289,10 @@ function SequencePanel({
     setNewStepBody('')
     setNewStepWait('1')
     setNewStepTask('')
+    setNewStepTemplate('plain')
+    setNewStepCc('')
+    setNewStepBcc('')
+    setNewStepReplyTo('')
   }
 
   async function commitEnroll() {
@@ -259,10 +402,72 @@ function SequencePanel({
           {(['steps', 'stats', 'enrolled'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}>{t}</button>
           ))}
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className={`tab-btn flex-shrink-0 ml-auto flex items-center gap-1 ${showSettings ? 'active' : ''}`}
+          >
+            <Settings size={12} /> Settings
+          </button>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5">
+
+          {/* ── Settings Panel ── */}
+          {showSettings && (
+            <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-xl flex flex-col gap-4">
+              <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Sequence Settings</p>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Send Via</label>
+                <div className="flex gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="sendVia"
+                      value="gmail"
+                      checked={seqSendVia === 'gmail'}
+                      onChange={() => setSeqSendVia('gmail')}
+                      className="accent-emerald-600"
+                    />
+                    <span className="text-sm text-gray-700">Gmail (from your inbox)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="sendVia"
+                      value="resend"
+                      checked={seqSendVia === 'resend'}
+                      onChange={() => setSeqSendVia('resend')}
+                      className="accent-emerald-600"
+                    />
+                    <span className="text-sm text-gray-700">System email (Resend)</span>
+                  </label>
+                </div>
+                {seqSendVia === 'gmail' && (
+                  <p className="text-[11px] text-amber-600 mt-1.5">Gmail requires your inbox to be connected. Go to Inbox to connect.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">From Name</label>
+                <input
+                  value={seqFromName}
+                  onChange={e => setSeqFromName(e.target.value)}
+                  placeholder="Defaults to your name"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none"
+                />
+              </div>
+
+              <button
+                onClick={saveSettings}
+                className="self-start px-4 py-1.5 rounded-lg text-white text-xs font-semibold"
+                style={{ background: '#015035' }}
+              >
+                Save Settings
+              </button>
+            </div>
+          )}
 
           {/* ── Steps ── */}
           {tab === 'steps' && (
@@ -304,8 +509,66 @@ function SequencePanel({
                                 onChange={e => setEditBody(e.target.value)}
                                 placeholder="Email body"
                                 rows={5}
-                                className="w-full text-sm border border-blue-200 rounded-lg px-2.5 py-1.5 bg-white outline-none resize-none leading-relaxed"
+                                className="w-full text-sm border border-blue-200 rounded-lg px-2.5 py-1.5 bg-white outline-none resize-none leading-relaxed mb-2"
                               />
+                              {/* Merge field chips */}
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                <span className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mr-1 self-center">Insert:</span>
+                                {MERGE_FIELDS.map(f => (
+                                  <button
+                                    key={f.token}
+                                    type="button"
+                                    onClick={() => insertMergeField(f.token, 'editBody')}
+                                    className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md hover:bg-blue-200 font-mono"
+                                  >
+                                    {f.token}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 mb-2">
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Template</label>
+                                  <select
+                                    value={editTemplate}
+                                    onChange={e => setEditTemplate(e.target.value as HtmlTemplate)}
+                                    className="w-full text-sm border border-blue-200 rounded-lg px-2.5 py-1.5 bg-white outline-none"
+                                  >
+                                    <option value="branded">Branded</option>
+                                    <option value="minimal">Minimal</option>
+                                    <option value="plain">Plain Text</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Reply-To</label>
+                                  <input
+                                    value={editReplyTo}
+                                    onChange={e => setEditReplyTo(e.target.value)}
+                                    placeholder="reply@example.com"
+                                    className="w-full text-sm border border-blue-200 rounded-lg px-2.5 py-1.5 bg-white outline-none"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 mb-2">
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">CC</label>
+                                  <input
+                                    value={editCc}
+                                    onChange={e => setEditCc(e.target.value)}
+                                    placeholder="cc@example.com"
+                                    className="w-full text-sm border border-blue-200 rounded-lg px-2.5 py-1.5 bg-white outline-none"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">BCC</label>
+                                  <input
+                                    value={editBcc}
+                                    onChange={e => setEditBcc(e.target.value)}
+                                    placeholder="bcc@example.com"
+                                    className="w-full text-sm border border-blue-200 rounded-lg px-2.5 py-1.5 bg-white outline-none"
+                                  />
+                                </div>
+                              </div>
+                              <EmailStepPreview subject={editSubject} body={editBody} template={editTemplate} />
                             </>
                           )}
                           {step.type === 'task' && (
@@ -375,6 +638,14 @@ function SequencePanel({
                             <div>
                               <p className="text-sm font-semibold text-gray-900 mb-1">{step.subject}</p>
                               <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">{step.body}</p>
+                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                {step.htmlTemplate && step.htmlTemplate !== 'plain' && (
+                                  <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium capitalize">{step.htmlTemplate}</span>
+                                )}
+                                {step.cc && <span className="text-[10px] text-gray-400">CC: {step.cc}</span>}
+                                {step.bcc && <span className="text-[10px] text-gray-400">BCC: {step.bcc}</span>}
+                                {step.replyTo && <span className="text-[10px] text-gray-400">Reply-To: {step.replyTo}</span>}
+                              </div>
                             </div>
                           )}
                           {step.type === 'wait' && (
@@ -445,6 +716,64 @@ function SequencePanel({
                         rows={4}
                         className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none resize-none leading-relaxed"
                       />
+                      {/* Merge field chips */}
+                      <div className="flex flex-wrap gap-1">
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mr-1 self-center">Insert:</span>
+                        {MERGE_FIELDS.map(f => (
+                          <button
+                            key={f.token}
+                            type="button"
+                            onClick={() => insertMergeField(f.token, 'newBody')}
+                            className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-md hover:bg-gray-200 font-mono"
+                          >
+                            {f.token}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Template</label>
+                          <select
+                            value={newStepTemplate}
+                            onChange={e => setNewStepTemplate(e.target.value as HtmlTemplate)}
+                            className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none"
+                          >
+                            <option value="branded">Branded</option>
+                            <option value="minimal">Minimal</option>
+                            <option value="plain">Plain Text</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Reply-To</label>
+                          <input
+                            value={newStepReplyTo}
+                            onChange={e => setNewStepReplyTo(e.target.value)}
+                            placeholder="reply@example.com"
+                            className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">CC</label>
+                          <input
+                            value={newStepCc}
+                            onChange={e => setNewStepCc(e.target.value)}
+                            placeholder="cc@example.com"
+                            className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">BCC</label>
+                          <input
+                            value={newStepBcc}
+                            onChange={e => setNewStepBcc(e.target.value)}
+                            placeholder="bcc@example.com"
+                            className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none"
+                          />
+                        </div>
+                      </div>
+                      <EmailStepPreview subject={newStepSubject} body={newStepBody} template={newStepTemplate} />
                     </>
                   )}
                   {newStepType === 'task' && (
@@ -481,6 +810,8 @@ function SequencePanel({
                   <Plus size={14} /> Add Step
                 </button>
               )}
+
+              <MergeFieldReference />
             </div>
           )}
 
@@ -678,6 +1009,8 @@ function SequencePanel({
               replyRate: 0,
               createdDate: new Date().toISOString().split('T')[0],
               lastModified: new Date().toISOString().split('T')[0],
+              sendVia: seq.sendVia,
+              fromName: seq.fromName,
             })}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
           >
@@ -699,6 +1032,8 @@ function NewSequenceModal({ onSave, onClose }: { onSave: (s: EmailSequence) => v
   const [name, setName] = useState('')
   const [trigger, setTrigger] = useState('')
   const [segment, setSegment] = useState('')
+  const [sendVia, setSendVia] = useState<'gmail' | 'resend'>('gmail')
+  const [fromName, setFromName] = useState('')
 
   function save() {
     if (!name.trim()) return
@@ -717,13 +1052,15 @@ function NewSequenceModal({ onSave, onClose }: { onSave: (s: EmailSequence) => v
       steps: [],
       createdDate: new Date().toISOString().split('T')[0],
       lastModified: new Date().toISOString().split('T')[0],
+      sendVia,
+      fromName: fromName.trim() || undefined,
     }
     onSave(newSeq)
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h3 className="text-sm font-bold text-gray-900">New Email Sequence</h3>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
@@ -759,6 +1096,51 @@ function NewSequenceModal({ onSave, onClose }: { onSave: (s: EmailSequence) => v
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
+
+          {/* Send Settings */}
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Send Settings</p>
+            <div className="mb-3">
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Send Via</label>
+              <div className="flex gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="newSeqSendVia"
+                    value="gmail"
+                    checked={sendVia === 'gmail'}
+                    onChange={() => setSendVia('gmail')}
+                    className="accent-emerald-600"
+                  />
+                  <span className="text-sm text-gray-700">Gmail (from your inbox)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="newSeqSendVia"
+                    value="resend"
+                    checked={sendVia === 'resend'}
+                    onChange={() => setSendVia('resend')}
+                    className="accent-emerald-600"
+                  />
+                  <span className="text-sm text-gray-700">System email (Resend)</span>
+                </label>
+              </div>
+              {sendVia === 'gmail' && (
+                <p className="text-[11px] text-amber-600 mt-1.5">Gmail requires your inbox to be connected. Go to Inbox to connect.</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">From Name</label>
+              <input
+                value={fromName}
+                onChange={e => setFromName(e.target.value)}
+                placeholder="Defaults to your name"
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
           <div className="flex gap-2 pt-1">
             <button
               onClick={save}

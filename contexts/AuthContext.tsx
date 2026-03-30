@@ -240,10 +240,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
       setLoading(false)
+    }).catch(() => {
+      // If Supabase fails, still try localStorage restoration so users aren't locked out
+      tryRestoreGoogleUser()
+      setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
+      // Only react to explicit sign-out — NOT to INITIAL_SESSION with null session,
+      // because Google SSO users never have a Supabase session and we restore them
+      // from localStorage instead.
+      if (event === 'SIGNED_OUT') {
         setUser(null)
         clearAuthCookie()
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {

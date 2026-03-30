@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/Toast'
 import {
   Mail, RefreshCw, X, ChevronDown, Search, Link2,
   Inbox as InboxIcon, AlertCircle, CheckCircle, ExternalLink,
+  Send, Reply, PenSquare,
 } from 'lucide-react'
 
 interface GmailMessage {
@@ -80,6 +81,13 @@ export default function InboxPage() {
   const [logSuccess, setLogSuccess] = useState(false)
   const [loggedIds, setLoggedIds] = useState<Set<string>>(new Set())
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
+  const [showCompose, setShowCompose] = useState(false)
+  const [composeTo, setComposeTo] = useState('')
+  const [composeSubject, setComposeSubject] = useState('')
+  const [composeBody, setComposeBody] = useState('')
+  const [composeCc, setComposeCc] = useState('')
+  const [sending, setSending] = useState(false)
+  const [isReply, setIsReply] = useState(false)
 
   useEffect(() => { fetchCrmContacts().then(d => { if (Array.isArray(d)) setCrmContacts(d) }).catch(() => {}) }, [])
 
@@ -218,6 +226,62 @@ export default function InboxPage() {
       })
   }
 
+  async function handleSendEmail() {
+    if (!composeTo.trim() || !composeSubject.trim() || !composeBody.trim()) return
+    setSending(true)
+    try {
+      const res = await fetch('/api/gmail/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userEmail: user?.email ?? gmailEmail,
+          to: composeTo.trim(),
+          subject: composeSubject.trim(),
+          htmlBody: composeBody.replace(/\n/g, '<br/>'),
+          cc: composeCc.trim() || undefined,
+        }),
+      })
+      if (!res.ok) {
+        const e = await res.json()
+        toast(e.error || 'Failed to send email', 'error')
+        return
+      }
+      toast('Email sent successfully', 'success')
+      setShowCompose(false)
+      setComposeTo('')
+      setComposeSubject('')
+      setComposeBody('')
+      setComposeCc('')
+      setIsReply(false)
+      // Refresh inbox to show sent message
+      fetchMessages(search)
+    } catch {
+      toast('Failed to send email', 'error')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  function openCompose() {
+    setComposeTo('')
+    setComposeSubject('')
+    setComposeBody('')
+    setComposeCc('')
+    setIsReply(false)
+    setShowCompose(true)
+  }
+
+  function openReply() {
+    if (!selected) return
+    const { email: senderEmail } = parseSender(selected.from)
+    setComposeTo(senderEmail)
+    setComposeSubject(selected.subject.startsWith('Re:') ? selected.subject : `Re: ${selected.subject}`)
+    setComposeBody('')
+    setComposeCc('')
+    setIsReply(true)
+    setShowCompose(true)
+  }
+
   const filteredMessages = messages.filter(m =>
     !search ||
     m.subject.toLowerCase().includes(search.toLowerCase()) ||
@@ -286,6 +350,14 @@ export default function InboxPage() {
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             Refresh
+          </button>
+          <button
+            onClick={openCompose}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-white font-medium hover:opacity-90 transition-opacity"
+            style={{ background: '#015035' }}
+          >
+            <PenSquare size={13} />
+            Compose
           </button>
         </div>
 
@@ -379,6 +451,12 @@ export default function InboxPage() {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
+                    onClick={openReply}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    <Reply size={12} /> Reply
+                  </button>
+                  <button
                     onClick={openLogModal}
                     disabled={loggedIds.has(selected.id)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
@@ -441,6 +519,78 @@ export default function InboxPage() {
       </div>
 
       {/* Log as Activity modal */}
+      {/* Compose / Reply modal */}
+      {showCompose && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                {isReply ? <><Reply size={14} /> Reply</> : <><PenSquare size={14} /> New Email</>}
+              </h3>
+              <button onClick={() => setShowCompose(false)} className="p-1 rounded-lg hover:bg-gray-100">
+                <X size={14} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="p-5 flex flex-col gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">To</label>
+                <input
+                  value={composeTo}
+                  onChange={e => setComposeTo(e.target.value)}
+                  placeholder="recipient@example.com"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">CC <span className="normal-case font-normal text-gray-400">(optional)</span></label>
+                <input
+                  value={composeCc}
+                  onChange={e => setComposeCc(e.target.value)}
+                  placeholder="cc@example.com"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Subject</label>
+                <input
+                  value={composeSubject}
+                  onChange={e => setComposeSubject(e.target.value)}
+                  placeholder="Subject"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Message</label>
+                <textarea
+                  value={composeBody}
+                  onChange={e => setComposeBody(e.target.value)}
+                  rows={8}
+                  placeholder="Write your message..."
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 resize-none"
+                />
+              </div>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={handleSendEmail}
+                  disabled={sending || !composeTo.trim() || !composeSubject.trim() || !composeBody.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-opacity"
+                  style={{ background: '#015035' }}
+                >
+                  <Send size={13} />
+                  {sending ? 'Sending...' : 'Send Email'}
+                </button>
+                <button
+                  onClick={() => setShowCompose(false)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {logModal && selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">

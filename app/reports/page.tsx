@@ -5,7 +5,8 @@ import Header from '@/components/layout/Header'
 import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download } from 'lucide-react'
-import type { Deal, Invoice, Project, Renewal, RevenueMonth, MaintenanceRecord } from '@/lib/types'
+import type { Deal, Invoice, Project, Renewal, RevenueMonth, MaintenanceRecord, TeamMember } from '@/lib/types'
+import { fetchTeamMembers } from '@/lib/supabase'
 
 type DateRange = '3M' | '6M' | '12M'
 type RepFilter = 'All' | string
@@ -42,6 +43,7 @@ export default function ReportsPage() {
   const [renewals, setRenewals] = useState<Renewal[]>([])
   const [revenueByMonth, setRevenueByMonth] = useState<RevenueMonth[]>([])
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -51,13 +53,15 @@ export default function ReportsPage() {
       fetch('/api/renewals').then(r => r.json()),
       fetch('/api/dashboard').then(r => r.json()).then(d => d.revenueByMonth ?? []),
       fetch('/api/maintenance').then(r => r.json()),
-    ]).then(([d, i, p, r, rev, m]) => {
+      fetchTeamMembers(),
+    ]).then(([d, i, p, r, rev, m, tm]) => {
       if (Array.isArray(d)) setDeals(d)
       if (Array.isArray(i)) setInvoices(i)
       if (Array.isArray(p)) setProjects(p)
       if (Array.isArray(r)) setRenewals(r)
       if (Array.isArray(rev)) setRevenueByMonth(rev)
       if (Array.isArray(m)) setMaintenance(m)
+      if (Array.isArray(tm)) setTeamMembers(tm)
     }).catch(() => toast('Failed to load report data', 'error'))
       .finally(() => setLoading(false))
   }, [])
@@ -120,6 +124,10 @@ export default function ReportsPage() {
 
   const allRepStats = useMemo(() => {
     const reps: Record<string, { name: string; deals: number; revenue: number; won: number }> = {}
+    // Initialize with all team members so they always appear in reports
+    teamMembers.forEach(m => {
+      if (!reps[m.name]) reps[m.name] = { name: m.name, deals: 0, revenue: 0, won: 0 }
+    })
     normalizedDeals.forEach(d => {
       if (!reps[d.assignedRep]) reps[d.assignedRep] = { name: d.assignedRep, deals: 0, revenue: 0, won: 0 }
       reps[d.assignedRep].deals++
@@ -127,7 +135,7 @@ export default function ReportsPage() {
       if (d.stage === 'Closed Won') reps[d.assignedRep].won++
     })
     return Object.values(reps).map(r => ({ ...r, winRate: r.deals > 0 ? Math.round((r.won / r.deals) * 100) : 0 }))
-  }, [normalizedDeals])
+  }, [normalizedDeals, teamMembers])
 
   const repStats = repFilter === 'All' ? allRepStats : allRepStats.filter(r => r.name === repFilter)
 

@@ -6,6 +6,7 @@ import type { TimeEntry, TeamServiceLine, TeamMember, Project } from '@/lib/type
 import { fetchTeamMembers, fetchProjects } from '@/lib/supabase'
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
+import Header from '@/components/layout/Header'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -503,24 +504,24 @@ export default function TimeTrackingPage() {
 
   return (
     <div className="min-h-screen bg-[#f9fafb]">
-      {/* ── Page Header ── */}
-      <div className="bg-white border-b border-gray-100 px-4 py-4 sm:px-8 sm:py-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Time Tracking</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Log and review team hours by week</p>
+      <Header title="Time Tracking" subtitle="Log and review team hours by week" action={{ label: 'Log Time', onClick: () => openLog() }} />
+
+      {/* ── Sub-header with tabs ── */}
+      <div className="bg-white border-b border-gray-100 px-4 sm:px-8">
+        <div className="flex items-center justify-between py-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => openLog()}
+              className="flex items-center gap-2 bg-[#012b1e] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#015035] transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Log Time
+            </button>
           </div>
-          <button
-            onClick={() => openLog()}
-            className="flex items-center gap-2 bg-[#012b1e] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#015035] transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Log Time
-          </button>
         </div>
         {/* Tabs */}
         {canApprove && (
-          <div className="flex gap-1 mt-4 border-b border-gray-100 -mb-4 sm:-mb-5">
+          <div className="flex gap-1 border-t border-gray-100 -mb-px">
             <button
               onClick={() => setActiveTab('timesheet')}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${

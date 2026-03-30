@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchContracts, fetchRevenueByMonth } from '@/lib/supabase'
@@ -214,6 +215,21 @@ export default function BillingPage() {
   const [qbStatus, setQbStatus]           = useState<{ lastSync: string | null; invoicesSynced: number; paymentsSynced: number } | null>(null)
   const [qbSyncing, setQbSyncing]         = useState(false)
   const [loading, setLoading] = useState(true)
+
+  // Handle QB callback params
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('qb_connected') === 'true') {
+      toast('QuickBooks connected successfully!', 'success')
+      fetchQBStatus()
+      window.history.replaceState({}, '', '/billing')
+    }
+    if (searchParams.get('qb_error')) {
+      const err = searchParams.get('qb_error')
+      toast(`QuickBooks connection failed: ${err}`, 'error')
+      window.history.replaceState({}, '', '/billing')
+    }
+  }, [searchParams])
 
   function fetchQBStatus() {
     fetch('/api/quickbooks/status')
@@ -440,7 +456,7 @@ export default function BillingPage() {
                   </a>
                 </>
               ) : (
-                <a href="/settings?tab=Billing" className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-white transition-colors" style={{ background: '#015035' }}>
+                <a href="/api/quickbooks/connect" className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-white transition-colors hover:opacity-90" style={{ background: '#015035' }}>
                   Connect QuickBooks
                 </a>
               )}
@@ -466,7 +482,7 @@ export default function BillingPage() {
             </div>
           ) : (
             <div className="px-5 py-4 text-xs text-gray-400">
-              Connect QuickBooks in <a href="/settings?tab=Billing" className="text-emerald-700 font-semibold hover:underline">Settings → Billing</a> to enable automatic invoice and payment sync.
+              <a href="/api/quickbooks/connect" className="text-emerald-700 font-semibold hover:underline">Connect QuickBooks</a> to enable automatic invoice and payment sync.
             </div>
           )}
           <div className="px-5 py-3 bg-blue-50 border-t border-blue-100 flex items-center justify-between">

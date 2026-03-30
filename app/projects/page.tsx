@@ -873,8 +873,9 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
   const [company, setCompany] = useState('')
   const [companies, setCompanies] = useState<string[]>([])
   const [serviceType, setServiceType] = useState<Project['serviceType']>('Website')
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
+  const [startDate, setStartDate] = useState('')
   const [launchDate, setLaunchDate] = useState('')
+  const [projectStatus, setProjectStatus] = useState<ProjectStatus>('Not Started')
   const [selectedTeam, setSelectedTeam] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
@@ -885,7 +886,7 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
       .catch(() => toast('Failed to load companies', 'error'))
   }, [])
 
-  const canSave = company.trim() && launchDate
+  const canSave = company.trim()
 
   async function handleSave() {
     if (!canSave) return
@@ -894,7 +895,7 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
       contractId: '',
       company: company.trim(),
       serviceType,
-      status: 'Not Started' as ProjectStatus,
+      status: projectStatus,
       startDate,
       launchDate,
       assignedTeam: selectedTeam,
@@ -950,6 +951,13 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
               ))}
             </select>
           </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Status</label>
+            <select value={projectStatus} onChange={e => setProjectStatus(e.target.value as ProjectStatus)}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+              {statusOrder.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Start Date</label>
@@ -957,7 +965,7 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Launch Date *</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Launch Date</label>
               <input type="date" value={launchDate} onChange={e => setLaunchDate(e.target.value)}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
             </div>

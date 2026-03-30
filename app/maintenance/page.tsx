@@ -220,6 +220,7 @@ function MaintenancePanel({
   onConfirmCancellation,
   onUpdateBilling,
   onEdit,
+  onDelete,
   crmContacts,
   contracts,
   invoices,
@@ -229,6 +230,7 @@ function MaintenancePanel({
   onConfirmCancellation: (id: string) => void
   onUpdateBilling: (id: string, fee: number, nextDate: string) => void
   onEdit: (record: MaintenanceRecord) => void
+  onDelete: (id: string) => void
   crmContacts: CRMContact[]
   contracts: Contract[]
   invoices: Invoice[]
@@ -303,6 +305,9 @@ function MaintenancePanel({
             <div className="flex items-center gap-1">
               <button onClick={() => onEdit(record)} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0" title="Edit record">
                 <Edit2 size={14} className="text-white/60" />
+              </button>
+              <button onClick={() => onDelete(record.id)} className="p-1.5 rounded-lg hover:bg-red-500/20 flex-shrink-0" title="Delete record">
+                <Trash2 size={14} className="text-white/60" />
               </button>
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0">
                 <X size={18} className="text-white/60" />
@@ -676,6 +681,18 @@ export default function MaintenancePage() {
     }).catch(() => toast('Failed to update billing details', 'error'))
   }
 
+  async function handleDeleteRecord(id: string) {
+    if (!confirm('Are you sure you want to permanently delete this maintenance record?')) return
+    setRecords(prev => prev.filter(r => r.id !== id))
+    setSelected(null)
+    try {
+      await fetch(`/api/maintenance/${id}`, { method: 'DELETE' })
+      toast('Maintenance record deleted', 'success')
+    } catch {
+      toast('Failed to delete maintenance record', 'error')
+    }
+  }
+
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
@@ -800,6 +817,7 @@ export default function MaintenancePage() {
           onConfirmCancellation={confirmCancellation}
           onUpdateBilling={updateBilling}
           onEdit={r => { setSelected(null); setEditingRecord(r) }}
+          onDelete={handleDeleteRecord}
           crmContacts={crmContacts}
           contracts={contracts}
           invoices={invoices}

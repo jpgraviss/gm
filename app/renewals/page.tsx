@@ -263,38 +263,113 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (pa
   const teamMembers = useTeamMembers()
 
   const [company, setCompany] = useState('')
+  const [companySuggestions, setCompanySuggestions] = useState<string[]>([])
+  const [allCompanies, setAllCompanies] = useState<string[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
   const [serviceType, setServiceType] = useState('Website')
+  const [customServices, setCustomServices] = useState<string[]>([])
   const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0])
   const [expirationDate, setExpirationDate] = useState(() => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-  const [value, setValue] = useState('')
+  const [costPerMonth, setCostPerMonth] = useState('')
+  const [contractMonths, setContractMonths] = useState('12')
   const [assignedRep, setAssignedRep] = useState('')
   const [notes, setNotes] = useState('')
 
+  // Fetch companies for autocomplete
+  useEffect(() => {
+    fetch('/api/crm/companies')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setAllCompanies(data.map((c: { name: string }) => c.name)) })
+      .catch(() => {})
+  }, [])
+
+  function handleCompanyInput(val: string) {
+    setCompany(val)
+    if (val.trim().length > 0) {
+      const filtered = allCompanies.filter(c => c.toLowerCase().includes(val.toLowerCase()))
+      setCompanySuggestions(filtered)
+      setShowSuggestions(filtered.length > 0)
+    } else {
+      setShowSuggestions(false)
+    }
+  }
+
+  function selectCompany(name: string) {
+    setCompany(name)
+    setShowSuggestions(false)
+  }
+
+  const monthlyRate = parseFloat(costPerMonth) || 0
+  const months = parseInt(contractMonths) || 12
+  const renewalValue = monthlyRate * months
+
   const canSave = company.trim() && expirationDate
+
+  const CUSTOM_SERVICE_OPTIONS = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Content Marketing', 'PPC', 'Design', 'Development', 'Consulting']
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
       <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 pointer-events-auto overflow-hidden">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between" style={{ background: '#012b1e' }}>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 pointer-events-auto overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between flex-shrink-0" style={{ background: '#012b1e' }}>
           <h2 className="text-white text-sm font-bold">Log Renewal</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10"><X size={16} className="text-white/60" /></button>
         </div>
-        <div className="p-5 flex flex-col gap-4">
-          <div>
+        <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1">
+          <div className="relative">
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company Name *</label>
-            <input value={company} onChange={e => setCompany(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="Acme Corp" />
+            <input
+              value={company}
+              onChange={e => handleCompanyInput(e.target.value)}
+              onFocus={() => { if (company.trim() && companySuggestions.length > 0) setShowSuggestions(true) }}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+              placeholder="Start typing to search companies..."
+            />
+            {showSuggestions && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                {companySuggestions.map(c => (
+                  <button
+                    key={c}
+                    onMouseDown={() => selectCompany(c)}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-green-50 transition-colors"
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
-            <select value={serviceType} onChange={e => setServiceType(e.target.value)}
+            <select value={serviceType} onChange={e => { setServiceType(e.target.value); if (e.target.value !== 'Custom') setCustomServices([]) }}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
               {['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom'].map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </div>
+          {serviceType === 'Custom' && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Select Services</label>
+              <div className="flex flex-wrap gap-1.5">
+                {CUSTOM_SERVICE_OPTIONS.map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setCustomServices(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])}
+                    className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                      customServices.includes(s)
+                        ? 'bg-green-50 border-green-600 text-green-800 font-semibold'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Start Date</label>
@@ -307,11 +382,31 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (pa
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Renewal Value ($)</label>
-            <input type="number" value={value} onChange={e => setValue(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="12000" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cost Per Month ($)</label>
+              <input type="number" value={costPerMonth} onChange={e => setCostPerMonth(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="1000" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Contract Months</label>
+              <select value={contractMonths} onChange={e => setContractMonths(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+                {[3, 6, 12, 18, 24, 36].map(m => <option key={m} value={m}>{m} months</option>)}
+              </select>
+            </div>
           </div>
+          {monthlyRate > 0 && (
+            <div className="bg-green-50 border border-green-100 rounded-xl p-3">
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-600">Renewal Value</span>
+                <span className="font-bold text-gray-900">{formatCurrency(renewalValue)}</span>
+              </div>
+              <div className="flex justify-between text-xs mt-1">
+                <span className="text-gray-500">{formatCurrency(monthlyRate)}/mo &times; {months} months</span>
+              </div>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Assigned Rep</label>
             <select value={assignedRep} onChange={e => setAssignedRep(e.target.value)}
@@ -326,12 +421,13 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (pa
               className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 resize-none" placeholder="Renewal details..." />
           </div>
         </div>
-        <div className="px-5 pb-5 flex gap-2">
+        <div className="px-5 pb-5 pt-3 flex gap-2 flex-shrink-0 border-t border-gray-100">
           <button
             onClick={() => {
               if (canSave) {
                 const daysUntilExpiry = Math.ceil((new Date(expirationDate).getTime() - Date.now()) / 86400000)
-                onSave({ company: company.trim(), serviceType, startDate, expirationDate, daysUntilExpiry, renewalValue: parseFloat(value) || 0, assignedRep, notes, contractId: '', status: 'Upcoming' })
+                const svcType = serviceType === 'Custom' && customServices.length > 0 ? customServices.join(', ') : serviceType
+                onSave({ company: company.trim(), serviceType: svcType, startDate, expirationDate, daysUntilExpiry, renewalValue: renewalValue || 0, assignedRep, notes, contractId: '', status: 'Upcoming' })
                 onClose()
               }
             }}

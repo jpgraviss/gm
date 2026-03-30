@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRenewal(row: any) {
@@ -32,6 +33,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
+  const result = validate(body, {
+    company: { required: true, type: 'string', maxLength: 200 },
+    renewalValue: { type: 'number', min: 0 },
+  })
+  if (!result.valid) return validationError(result.error)
   const db = createServiceClient()
   const { data, error } = await db
     .from('renewals')

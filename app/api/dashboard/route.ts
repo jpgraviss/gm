@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 
 export async function GET() {
+  try {
   const db = createServiceClient()
 
   const [dealsRes, invoicesRes, contractsRes, renewalsRes, revenueRes, activityRes] = await Promise.all([
@@ -46,4 +47,8 @@ export async function GET() {
     activityFeed,
     revenueByMonth,
   })
+  } catch (err) {
+    console.error('[dashboard GET]', err)
+    return NextResponse.json({ error: 'Failed to load dashboard data' }, { status: 500 })
+  }
 }

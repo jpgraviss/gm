@@ -19,6 +19,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/settings?tab=integrations&qb_error=missing_params`)
   }
 
+  // Basic parameter length validation to prevent abuse
+  if (code.length > 512 || realmId.length > 64) {
+    return NextResponse.redirect(`${origin}/settings?tab=integrations&qb_error=invalid_params`)
+  }
+
   try {
     const client       = createOAuthClient()
     const authResponse = await client.createToken(req.url)

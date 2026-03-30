@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapEntry(row: any) {
@@ -82,19 +83,18 @@ export async function PATCH(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  if (!body.description || typeof body.description !== 'string' || !body.description.trim()) {
-    return NextResponse.json({ error: 'Description is required' }, { status: 400 })
-  }
-  if (!body.date || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
-    return NextResponse.json({ error: 'Valid date is required' }, { status: 400 })
-  }
-  if (!body.teamMember) {
-    return NextResponse.json({ error: 'Team member is required' }, { status: 400 })
-  }
+  const result = validate(body, {
+    date: { required: true, type: 'string', maxLength: 20 },
+    description: { required: true, type: 'string', maxLength: 1000 },
+    teamMember: { required: true, type: 'string', maxLength: 200 },
+    hours: { type: 'number', min: 0, max: 24 },
+    minutes: { type: 'number', min: 0, max: 59 },
+  })
+  if (!result.valid) return validationError(result.error)
   const hours = body.hours ?? 0
   const minutes = body.minutes ?? 0
   if (hours === 0 && minutes === 0) {
-    return NextResponse.json({ error: 'Duration must be greater than zero' }, { status: 400 })
+    return validationError('Duration must be greater than zero')
   }
   const db = createServiceClient()
   const { data, error } = await db

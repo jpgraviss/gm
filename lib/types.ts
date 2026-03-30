@@ -37,7 +37,7 @@ export type ContractStatus =
   | 'Fully Executed'
   | 'Expired'
 
-export type InvoiceStatus = 'Pending' | 'Sent' | 'Overdue' | 'Paid'
+export type InvoiceStatus = 'Pending' | 'Sent' | 'Overdue' | 'Paid' | 'Cancelled'
 
 export type ProjectStatus =
   | 'Not Started'

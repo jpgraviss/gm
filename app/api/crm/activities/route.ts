@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapActivity(row: any) {
@@ -40,6 +41,15 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
+
+  const result = validate(body, {
+    type:     { required: true, type: 'string' },
+    title:    { required: true, type: 'string', maxLength: 300 },
+    body:     { type: 'string', maxLength: 5000 },
+    user:     { required: true, type: 'string' },
+  })
+  if (!result.valid) return validationError(result.error)
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('crm_activities')

@@ -320,7 +320,7 @@ function ProposalPanel({
                         ))}
                         <tr className="border-t border-gray-200 bg-gray-50">
                           <td colSpan={3} className="p-2.5 text-[10px] font-semibold text-gray-500 text-right uppercase tracking-wide">MRR</td>
-                          <td className="p-2.5 text-sm font-bold text-gray-900 text-right">{formatCurrency(recurring[0]?.unitPrice || 0)}/mo</td>
+                          <td className="p-2.5 text-sm font-bold text-gray-900 text-right">{formatCurrency(recurring.reduce((s, i) => s + i.unitPrice, 0))}/mo</td>
                         </tr>
                       </tbody>
                     </table>

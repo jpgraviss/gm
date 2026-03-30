@@ -14,13 +14,14 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
-const statuses: InvoiceStatus[] = ['Pending', 'Sent', 'Overdue', 'Paid']
+const statuses: InvoiceStatus[] = ['Pending', 'Sent', 'Overdue', 'Paid', 'Cancelled']
 
 const statusIcons: Record<InvoiceStatus, React.ReactNode> = {
   Pending: <Clock size={14} className="text-gray-400" />,
   Sent: <Send size={14} className="text-blue-500" />,
   Overdue: <AlertCircle size={14} className="text-red-500" />,
   Paid: <CheckCircle size={14} className="text-emerald-500" />,
+  Cancelled: <X size={14} className="text-orange-500" />,
 }
 
 function downloadReceipt(invoice: Invoice) {

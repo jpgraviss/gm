@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
+import { validationError } from '@/lib/validation'
 
 async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
   const db = createServiceClient()
@@ -53,7 +54,13 @@ export async function PATCH(req: NextRequest) {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
-  const body = await req.json()
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return validationError('Invalid JSON body')
+  }
+
   const db = createServiceClient()
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (body.company          !== undefined) updates.company          = body.company

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
+import { validate, validationError } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {
@@ -46,6 +47,17 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
+
+  const result = validate(body, {
+    firstName:   { required: true, type: 'string', maxLength: 100 },
+    lastName:    { required: true, type: 'string', maxLength: 100 },
+    companyName: { type: 'string', maxLength: 200 },
+    title:       { type: 'string', maxLength: 200 },
+    emails:      { type: 'array' },
+    owner:       { type: 'string', maxLength: 200 },
+  })
+  if (!result.valid) return validationError(result.error)
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('crm_contacts')

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { validate, validationError } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapAutomation(row: any) {
@@ -29,6 +30,14 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
+
+  const result = validate(body, {
+    name:    { required: true, type: 'string', maxLength: 200 },
+    trigger: { required: true, type: 'string', maxLength: 100 },
+    actions: { required: true, type: 'array' },
+  })
+  if (!result.valid) return validationError(result.error)
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('automations')

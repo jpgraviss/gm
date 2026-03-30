@@ -65,10 +65,10 @@ export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 export const SLUG_PATTERN = /^[a-z0-9-]+$/
 
-export const DEAL_STAGES = ['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost'] as const
+export const DEAL_STAGES = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost'] as const
 export const PROPOSAL_STATUSES = ['Draft', 'Pending Approval', 'Approved', 'Sent', 'Viewed', 'Accepted', 'Declined'] as const
 export const CONTRACT_STATUSES = ['Draft', 'Sent', 'Viewed', 'Signed by Client', 'Countersign Needed', 'Fully Executed', 'Expired'] as const
 export const INVOICE_STATUSES = ['Pending', 'Sent', 'Paid', 'Overdue', 'Cancelled'] as const
-export const PROJECT_STATUSES = ['Not Started', 'In Progress', 'In Review', 'Completed', 'Launched', 'In Maintenance', 'On Hold'] as const
+export const PROJECT_STATUSES = ['Not Started', 'In Progress', 'Awaiting Client', 'Completed', 'Launched', 'In Maintenance'] as const
 export const TASK_PRIORITIES = ['High', 'Medium', 'Low'] as const
 export const TICKET_STATUSES = ['Open', 'In Progress', 'Waiting', 'Resolved', 'Closed'] as const

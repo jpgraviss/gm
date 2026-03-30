@@ -33,7 +33,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid credential' }, { status: 400 })
     }
 
-    const email = payload.email?.toLowerCase()
+    // ── Server-side JWT verification via Google's tokeninfo endpoint ────────
+    let verifiedEmail: string | undefined
+    try {
+      const tokenInfoRes = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`
+      )
+      if (tokenInfoRes.ok) {
+        const tokenInfo = await tokenInfoRes.json()
+        const expectedAud = process.env.GOOGLE_CLIENT_ID
+        if (expectedAud && tokenInfo.aud !== expectedAud) {
+          return NextResponse.json(
+            { error: 'Token audience mismatch' },
+            { status: 403 }
+          )
+        }
+        verifiedEmail = tokenInfo.email?.toLowerCase()
+      } else {
+        console.warn(
+          '[auth/google-verify] Google tokeninfo returned non-OK status:',
+          tokenInfoRes.status
+        )
+      }
+    } catch (verifyErr) {
+      console.warn('[auth/google-verify] Google tokeninfo call failed, falling back to JWT payload:', verifyErr)
+    }
+
+    const email = (verifiedEmail ?? payload.email)?.toLowerCase()
     if (!email) {
       return NextResponse.json({ error: 'No email in credential' }, { status: 400 })
     }

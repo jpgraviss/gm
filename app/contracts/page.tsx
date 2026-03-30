@@ -654,12 +654,16 @@ export default function ContractsPage() {
     fetchProposals().then(setProposals)
   }, [])
 
-  // Fetch signatures when a contract is selected
+  // Fetch signatures and addendums when a contract is selected
   useEffect(() => {
     if (!selected) return
     fetch(`/api/signatures?contractId=${selected.id}`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setSignatures(data) })
+      .catch(() => {})
+    fetch(`/api/contracts/${selected.id}/addendums`)
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLocalAddendums(data) })
       .catch(() => {})
   }, [selected?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -702,23 +706,43 @@ export default function ContractsPage() {
     }
   }
 
-  function addAddendum(contractId: string, title: string, description: string) {
-    const today = new Date().toISOString().split('T')[0]
-    setLocalAddendums(prev => [...prev, {
-      id: `add-${Date.now()}`,
-      contractId,
-      title,
-      description,
-      status: 'Draft',
-      createdDate: today,
-    }])
+  async function addAddendum(contractId: string, title: string, description: string) {
+    try {
+      const res = await fetch(`/api/contracts/${contractId}/addendums`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to create addendum', 'error')
+        return
+      }
+      setLocalAddendums(prev => [data, ...prev])
+      toast('Addendum created', 'success')
+    } catch {
+      toast('Failed to create addendum', 'error')
+    }
   }
 
-  function updateAddendumStatus(id: string, status: Addendum['status']) {
-    const today = new Date().toISOString().split('T')[0]
-    setLocalAddendums(prev => prev.map(a =>
-      a.id === id ? { ...a, status, ...(status === 'Sent' ? { sentDate: today } : {}) } : a
-    ))
+  async function updateAddendumStatus(id: string, status: Addendum['status']) {
+    const contractId = localAddendums.find(a => a.id === id)?.contractId
+    if (!contractId) return
+    try {
+      const res = await fetch(`/api/contracts/${contractId}/addendums`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addendumId: id, status }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to update addendum', 'error')
+        return
+      }
+      setLocalAddendums(prev => prev.map(a => a.id === id ? data : a))
+    } catch {
+      toast('Failed to update addendum', 'error')
+    }
   }
 
   async function updateContractStatus(id: string, status: ContractStatus) {
@@ -769,27 +793,41 @@ export default function ContractsPage() {
     }
   }
 
-  function handleNewContract(data: NewContractFormData) {
+  async function handleNewContract(data: NewContractFormData) {
     const startDate = data.startDate
     const renewalDate = (() => {
       const d = new Date(startDate)
       d.setMonth(d.getMonth() + Number(data.duration))
       return d.toISOString().split('T')[0]
     })()
-    const newContract: Contract = {
-      id: `ct-${Date.now()}`,
-      company: data.company,
-      status: 'Draft',
-      value: Number(data.value),
-      serviceType: data.serviceType,
-      assignedRep: data.assignedRep,
-      billingStructure: data.billingStructure,
-      duration: Number(data.duration),
-      startDate,
-      renewalDate,
+
+    try {
+      const res = await fetch('/api/contracts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: data.company,
+          status: 'Draft',
+          value: Number(data.value),
+          serviceType: data.serviceType,
+          assignedRep: data.assignedRep,
+          billingStructure: data.billingStructure,
+          duration: Number(data.duration),
+          startDate,
+          renewalDate,
+        }),
+      })
+      const created = await res.json()
+      if (!res.ok) {
+        toast(created.error || 'Failed to create contract', 'error')
+        return
+      }
+      setLocalContracts(prev => [created, ...prev])
+      setCreatingContract(false)
+      toast('Contract created', 'success')
+    } catch {
+      toast('Failed to create contract', 'error')
     }
-    setLocalContracts(prev => [newContract, ...prev])
-    setCreatingContract(false)
   }
 
   const filtered = statusFilter === 'All' ? localContracts : localContracts.filter(c => c.status === statusFilter)

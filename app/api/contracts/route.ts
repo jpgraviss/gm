@@ -46,6 +46,9 @@ export async function POST(req: NextRequest) {
     serviceType:      { type: 'string', maxLength: 100 },
     assignedRep:      { type: 'string', maxLength: 200 },
     billingStructure: { type: 'string', enum: ['Monthly', 'Quarterly', 'Annual', 'One-time', 'Custom'] },
+    startDate:        { type: 'string', maxLength: 30 },
+    renewalDate:      { type: 'string', maxLength: 30 },
+    proposalId:       { type: 'string', maxLength: 100 },
   })
   if (!result.valid) return validationError(result.error)
 

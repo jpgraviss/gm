@@ -89,6 +89,9 @@ function ContractPanel({
       >
         {/* Dark green header */}
         <div className="flex-shrink-0 p-5 border-b border-white/10" style={{ background: '#012b1e' }}>
+          <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mb-3">
+            <X size={14} /> Back
+          </button>
           <div className="flex items-start justify-between mb-3">
             <div>
               <p className="text-white/50 text-[11px] mb-0.5">{contract.id.toUpperCase()} · Contract</p>

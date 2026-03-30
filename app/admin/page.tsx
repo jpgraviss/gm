@@ -65,7 +65,7 @@ function SystemHealthRow({ label, status, detail }: { label: string; status: 'ok
 }
 
 function IntegrationCard({
-  name, description, status, logo, lastSync, actions,
+  name, description, status, logo, lastSync, actions, onConnect, onConfigure, onRefresh,
 }: {
   name: string
   description: string
@@ -73,8 +73,18 @@ function IntegrationCard({
   logo: string
   lastSync?: string
   actions: string[]
+  onConnect?: () => void
+  onConfigure?: () => void
+  onRefresh?: () => void
 }) {
   const [enabled, setEnabled] = useState(status === 'connected')
+
+  function handleToggle() {
+    if (!enabled && onConnect) {
+      onConnect()
+    }
+    setEnabled(!enabled)
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -95,7 +105,7 @@ function IntegrationCard({
           </div>
         </div>
         <button
-          onClick={() => setEnabled(!enabled)}
+          onClick={handleToggle}
           className={`w-11 h-6 rounded-full relative transition-colors flex items-center px-0.5 flex-shrink-0`}
           style={{ background: enabled ? '#015035' : '#d1d5db', width: '42px', height: '24px' }}
         >
@@ -126,15 +136,26 @@ function IntegrationCard({
       <div className="flex gap-2">
         {status === 'connected' ? (
           <>
-            <button className="flex-1 py-1.5 text-xs font-medium text-white rounded-lg transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
+            <button
+              onClick={onConfigure}
+              className="flex-1 py-1.5 text-xs font-medium text-white rounded-lg transition-opacity hover:opacity-90"
+              style={{ background: '#015035' }}
+            >
               Configure
             </button>
-            <button className="px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+            <button
+              onClick={onRefresh}
+              className="px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+            >
               <RefreshCw size={12} />
             </button>
           </>
         ) : (
-          <button className="flex-1 py-1.5 text-xs font-semibold text-white rounded-lg" style={{ background: '#015035' }}>
+          <button
+            onClick={onConnect}
+            className="flex-1 py-1.5 text-xs font-semibold text-white rounded-lg hover:opacity-90 transition-opacity"
+            style={{ background: '#015035' }}
+          >
             Connect
           </button>
         )}
@@ -1021,6 +1042,9 @@ export default function AdminPage() {
                 logo="QB"
                 lastSync={qbStatus?.lastSync ? new Date(qbStatus.lastSync).toLocaleString() : undefined}
                 actions={['Invoice Sync', 'Payment Sync', 'Client Sync', 'Revenue Reports']}
+                onConnect={() => { window.location.href = '/api/quickbooks/connect' }}
+                onConfigure={() => { router.push('/settings?tab=Billing') }}
+                onRefresh={handleQBSync}
               />
               <IntegrationCard
                 name="Google Calendar"
@@ -1028,6 +1052,9 @@ export default function AdminPage() {
                 status={integrationHealth.googleCalendar ? 'connected' : 'disconnected'}
                 logo="GC"
                 actions={['Event Sync', 'Meeting Scheduling', 'Deadline Tracking', 'Team Calendars']}
+                onConnect={() => { window.location.href = '/api/calendar/auth' }}
+                onConfigure={() => { router.push('/settings/calendar') }}
+                onRefresh={() => { fetch('/api/calendar/sync', { method: 'POST' }).then(() => toast('Calendar synced', 'success')).catch(() => toast('Calendar sync failed', 'error')) }}
               />
               <IntegrationCard
                 name="Google Drive"
@@ -1035,6 +1062,9 @@ export default function AdminPage() {
                 status={integrationHealth.googleDrive ? 'connected' : 'disconnected'}
                 logo="GD"
                 actions={['File Storage', 'Document Attachments', 'Auto-Folders', 'Sharing']}
+                onConnect={() => { window.location.href = '/api/drive?action=auth' }}
+                onConfigure={() => { router.push('/settings?tab=Integrations') }}
+                onRefresh={() => { toast('Google Drive files refreshed', 'success') }}
               />
               <IntegrationCard
                 name="Resend Email"
@@ -1042,6 +1072,9 @@ export default function AdminPage() {
                 status={integrationHealth.email ? 'connected' : 'disconnected'}
                 logo="RE"
                 actions={['Sign-In Links', 'Contract Emails', 'Invoice Reminders', 'Team Invites']}
+                onConnect={() => { router.push('/settings?tab=Integrations') }}
+                onConfigure={() => { router.push('/settings?tab=Integrations') }}
+                onRefresh={() => { fetch('/api/admin/integration-health').then(r => r.json()).then(() => toast('Email status refreshed', 'success')).catch(() => toast('Failed to check email status', 'error')) }}
               />
             </div>
 
@@ -1082,7 +1115,10 @@ export default function AdminPage() {
                 <a href="/settings?tab=Billing" className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                   <Settings size={12} /> Settings
                 </a>
-                <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                <button
+                  onClick={() => setTab('audit')}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
                   <Activity size={12} /> Sync Log
                 </button>
               </div>

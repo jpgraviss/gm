@@ -12,11 +12,11 @@ export async function GET(req: NextRequest) {
   const origin  = req.nextUrl.origin
 
   if (error) {
-    return NextResponse.redirect(`${origin}/settings?tab=integrations&qb_error=${encodeURIComponent(error)}`)
+    return NextResponse.redirect(`${origin}/billing?qb_error=${encodeURIComponent(error)}`)
   }
 
   if (!code || !realmId) {
-    return NextResponse.redirect(`${origin}/settings?tab=integrations&qb_error=missing_params`)
+    return NextResponse.redirect(`${origin}/billing?qb_error=missing_params`)
   }
 
   // Basic parameter length validation to prevent abuse
@@ -40,11 +40,11 @@ export async function GET(req: NextRequest) {
       token_expires_at: new Date(Date.now() + (token.expires_in as number) * 1000).toISOString(),
     })
 
-    return NextResponse.redirect(`${origin}/settings?tab=integrations&qb_connected=true`)
+    return NextResponse.redirect(`${origin}/billing?qb_connected=true`)
   } catch (err) {
     console.error('[quickbooks/callback GET]', err)
     return NextResponse.redirect(
-      `${origin}/settings?tab=integrations&qb_error=connection_failed`,
+      `${origin}/billing?qb_error=connection_failed`,
     )
   }
 }

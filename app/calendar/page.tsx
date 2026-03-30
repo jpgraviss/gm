@@ -280,10 +280,10 @@ export default function CalendarPage() {
     <div className="min-h-screen bg-[#f9fafb]">
       <Header title="Calendar & Bookings" />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-4 md:px-8 md:py-6">
 
         {/* ── Top bar ── */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
           <div className="flex gap-1 bg-white border border-gray-100 rounded-lg p-1">
             {(['upcoming', 'past', 'all'] as const).map(f => (
               <button
@@ -298,9 +298,9 @@ export default function CalendarPage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {lastSync && (
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-gray-400 hidden sm:inline">
                 Last sync: {new Date(lastSync).toLocaleString()}
               </span>
             )}
@@ -314,7 +314,7 @@ export default function CalendarPage() {
             </button>
             {bookingLink && (
               <>
-                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 max-w-xs">
+                <div className="hidden sm:flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 max-w-xs">
                   <Link2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                   <span className="text-xs text-gray-600 truncate font-mono">/book/{userSlug}</span>
                 </div>
@@ -337,7 +337,7 @@ export default function CalendarPage() {
         </div>
 
         {/* ── Summary cards ── */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           {[
             {
               label: 'Upcoming Bookings',
@@ -454,7 +454,7 @@ export default function CalendarPage() {
               >
                 <ChevronLeft className="w-4 h-4 text-gray-500" />
               </button>
-              <h2 className="text-sm font-bold text-gray-900 min-w-[200px] text-center">
+              <h2 className="text-sm font-bold text-gray-900 min-w-[120px] sm:min-w-[200px] text-center">
                 {getHeaderLabel()}
               </h2>
               <button
@@ -555,13 +555,15 @@ export default function CalendarPage() {
 
           {/* ── Week View ── */}
           {calendarView === 'week' && (() => {
+            // Week view scrolls horizontally on mobile
             const WEEK_START_HOUR = 8
             const WEEK_END_HOUR = 18
             const HOUR_HEIGHT = 56
             const hours = Array.from({ length: WEEK_END_HOUR - WEEK_START_HOUR }, (_, i) => WEEK_START_HOUR + i)
 
             return (
-              <div>
+              <div className="overflow-x-auto -mx-5 px-5">
+                <div className="min-w-[600px]">
                 {/* Day-of-week headers with dates */}
                 <div className="grid grid-cols-[56px_repeat(7,1fr)] gap-px mb-1">
                   <div />
@@ -657,6 +659,7 @@ export default function CalendarPage() {
                       </div>
                     )
                   })}
+                </div>
                 </div>
               </div>
             )
@@ -757,7 +760,7 @@ export default function CalendarPage() {
         </div>
 
         {/* ── Bookings list + detail ── */}
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-4">
           {/* List */}
           <div className="flex-1 bg-white rounded-xl border border-gray-100 overflow-hidden">
             {loading ? (
@@ -785,8 +788,8 @@ export default function CalendarPage() {
               </div>
             ) : (
               <div className="divide-y divide-gray-50">
-                {/* Table header */}
-                <div className="grid grid-cols-[1fr_1fr_1fr_80px] gap-4 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                {/* Table header - hidden on mobile */}
+                <div className="hidden sm:grid grid-cols-[1fr_1fr_1fr_80px] gap-4 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-400 uppercase tracking-wide">
                   <span>Client</span>
                   <span>Date & Time</span>
                   <span>Company</span>
@@ -796,20 +799,33 @@ export default function CalendarPage() {
                   <button
                     key={booking.id}
                     onClick={() => setSelected(selected?.id === booking.id ? null : booking)}
-                    className={`w-full grid grid-cols-[1fr_1fr_1fr_80px] gap-4 px-5 py-3.5 text-left hover:bg-gray-50/80 transition-colors items-center group ${
+                    className={`w-full sm:grid sm:grid-cols-[1fr_1fr_1fr_80px] gap-2 sm:gap-4 px-4 sm:px-5 py-3.5 text-left hover:bg-gray-50/80 transition-colors sm:items-center group ${
                       selected?.id === booking.id ? 'bg-green-50/50' : ''
                     }`}
                   >
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{booking.client_name}</div>
-                      <div className="text-xs text-gray-400">{booking.client_email}</div>
+                    <div className="flex items-center justify-between sm:block">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{booking.client_name}</div>
+                        <div className="text-xs text-gray-400">{booking.client_email}</div>
+                      </div>
+                      <span className={`sm:hidden text-xs px-2 py-1 rounded-full font-medium ${
+                        booking.status === 'confirmed' && isUpcoming(booking.date, booking.start_time)
+                          ? 'bg-green-100 text-green-700'
+                          : booking.status === 'cancelled'
+                          ? 'bg-red-100 text-red-600'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {booking.status === 'confirmed' && !isUpcoming(booking.date, booking.start_time)
+                          ? 'Completed'
+                          : booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                      </span>
                     </div>
-                    <div>
-                      <div className="text-sm text-gray-800">{formatDate(booking.date)}</div>
+                    <div className="mt-1 sm:mt-0">
+                      <div className="text-xs sm:text-sm text-gray-800">{formatDate(booking.date)}</div>
                       <div className="text-xs text-gray-400">{formatTime(booking.start_time)} · {booking.timezone}</div>
                     </div>
-                    <div className="text-sm text-gray-600">{booking.client_company || '—'}</div>
-                    <div>
+                    <div className="hidden sm:block text-sm text-gray-600">{booking.client_company || '—'}</div>
+                    <div className="hidden sm:block">
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                         booking.status === 'confirmed' && isUpcoming(booking.date, booking.start_time)
                           ? 'bg-green-100 text-green-700'
@@ -830,7 +846,7 @@ export default function CalendarPage() {
 
           {/* Detail panel */}
           {selected && (
-            <div className="w-72 flex-shrink-0 bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+            <div className="w-full sm:w-72 flex-shrink-0 bg-white rounded-xl border border-gray-100 p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900">Booking Details</h3>
                 <button onClick={() => setSelected(null)} className="p-1 hover:bg-gray-100 rounded">

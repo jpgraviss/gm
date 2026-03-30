@@ -1104,7 +1104,7 @@ export default function PortalPage() {
       .then(r => r.json())
       .then((data: PortalClient[]) => {
         setClients(data)
-        if (data.length > 0) setPreviewCompany(data.find(c => c.access === 'Active')?.company ?? data[0].company)
+        if (data.length > 0) setPreviewCompany(data[0].company)
       })
       .catch(() => toast('Failed to load portal clients', 'error'))
       .finally(() => setLoading(false))
@@ -1183,8 +1183,8 @@ export default function PortalPage() {
               onChange={e => setPreviewCompany(e.target.value)}
               className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
             >
-              {clients.filter(c => c.access === 'Active').map(c => (
-                <option key={c.company} value={c.company}>{c.company}</option>
+              {clients.map(c => (
+                <option key={c.company} value={c.company}>{c.company}{c.access !== 'Active' ? ` (${c.access})` : ''}</option>
               ))}
             </select>
             <button

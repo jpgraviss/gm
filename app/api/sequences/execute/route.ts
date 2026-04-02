@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { createServiceClient } from '@/lib/supabase'
 import { sendViaGmail } from '@/lib/gmail-send'
+import { fireAutomations } from '@/lib/automations-engine'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.gravissmarketing.com'
@@ -189,8 +190,8 @@ async function lookupRep(
 // ─── Sending window check ────────────────────────────────────────────────────
 
 function isWithinSendingWindow(seq: {
-  send_window_start?: string | null
-  send_window_end?: string | null
+  send_window_start?: number | string | null
+  send_window_end?: number | string | null
   send_on_weekends?: boolean | null
   timezone?: string | null
 }): boolean {
@@ -207,7 +208,6 @@ function isWithinSendingWindow(seq: {
   })
   const parts = formatter.formatToParts(now)
   const hour = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0', 10)
-  const minute = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10)
   const weekday = parts.find(p => p.type === 'weekday')?.value ?? ''
 
   // Check weekends
@@ -215,16 +215,19 @@ function isWithinSendingWindow(seq: {
     return false
   }
 
-  // Check time window (e.g. "09:00" / "17:00")
-  if (seq.send_window_start && seq.send_window_end) {
-    const [startH, startM] = seq.send_window_start.split(':').map(Number)
-    const [endH, endM] = seq.send_window_end.split(':').map(Number)
-    const currentMinutes = hour * 60 + minute
-    const startMinutes = startH * 60 + startM
-    const endMinutes = endH * 60 + endM
+  // Check time window — DB stores as integer hours (e.g. 8, 18)
+  if (seq.send_window_start != null && seq.send_window_end != null) {
+    const startH = typeof seq.send_window_start === 'number'
+      ? seq.send_window_start
+      : parseInt(String(seq.send_window_start), 10)
+    const endH = typeof seq.send_window_end === 'number'
+      ? seq.send_window_end
+      : parseInt(String(seq.send_window_end), 10)
 
-    if (currentMinutes < startMinutes || currentMinutes >= endMinutes) {
-      return false
+    if (!isNaN(startH) && !isNaN(endH)) {
+      if (hour < startH || hour >= endH) {
+        return false
+      }
     }
   }
 
@@ -311,7 +314,14 @@ async function isActiveInOtherSequence(
 
 // ─── Main execution endpoint ─────────────────────────────────────────────────
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  // Verify cron secret
+  const authHeader = req.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const db = createServiceClient()
   const now = new Date()
 
@@ -541,7 +551,10 @@ export async function POST() {
           to: [enrollment.contact_email],
           subject,
           html,
-          headers: {},
+          headers: {
+            'X-Sequence-Id': seq.id,
+            'X-Enrollment-Id': enrollment.id,
+          },
         }
         if (cc) resendPayload.cc = cc
         if (bcc) resendPayload.bcc = bcc
@@ -627,6 +640,26 @@ export async function POST() {
           completed_count: (seq.completed_count ?? 0) + 1,
         })
         .eq('id', seq.id)
+
+      // Reset contact in_sequence flag
+      if (enrollment.contact_id) {
+        await db.from('crm_contacts').update({
+          in_sequence: false,
+          current_sequence_id: null,
+          last_sequence_id: seq.id,
+          last_sequence_date: now.toISOString(),
+        }).eq('id', enrollment.contact_id)
+      }
+
+      // Fire automation event
+      fireAutomations('sequence_completed', {
+        sequenceId: seq.id,
+        sequenceName: seq.name,
+        contactEmail: enrollment.contact_email,
+        contactName: enrollment.contact_name,
+        contactId: enrollment.contact_id,
+        company: enrollment.company,
+      })
     }
 
     await db

@@ -45,11 +45,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const alreadyEnrolled = new Set((existing ?? []).map((r: any) => r.contact_email as string))
 
-  // Check suppression list
+  // Check suppression list (emails stored lowercase)
+  const normalizedEmails = emails.map(e => e.toLowerCase())
   const { data: suppressed } = await db
     .from('sequence_suppression_list')
     .select('email')
-    .in('email', emails)
+    .in('email', normalizedEmails)
   const suppressedEmails = new Set((suppressed ?? []).map((r: any) => r.email as string))
 
   // Check one-at-a-time: skip contacts already active in another sequence
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .in('contact_email', emails)
   const activeElsewhereEmails = new Set((activeElsewhere ?? []).map((r: any) => r.contact_email as string))
 
-  const toEnroll = contacts.filter(c => c.email && !alreadyEnrolled.has(c.email) && !suppressedEmails.has(c.email) && !activeElsewhereEmails.has(c.email))
+  const toEnroll = contacts.filter(c => c.email && !alreadyEnrolled.has(c.email) && !suppressedEmails.has(c.email.toLowerCase()) && !activeElsewhereEmails.has(c.email))
   if (!toEnroll.length) return NextResponse.json({ enrolled: 0 })
 
   const now = new Date()
@@ -76,6 +77,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     current_step: 0,
     status: 'active',
     next_send_at: nextSendAt.toISOString(),
+    enrolled_at: now.toISOString(),
+    delivery_status: 'pending',
+    message_ids: [],
   }))
 
   const { error: insertErr } = await db.from('sequence_enrollments').insert(rows)

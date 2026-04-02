@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { fireAutomations } from '@/lib/automations-engine'
 
 interface GmailThread {
   id: string
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
   // Fetch all active enrollments that have message_ids (sent emails with thread references)
   const { data: enrollments, error: fetchErr } = await db
     .from('sequence_enrollments')
-    .select('id, sequence_id, contact_email, message_ids, assigned_rep_id')
+    .select('id, sequence_id, contact_email, contact_name, contact_id, company, message_ids, assigned_rep_id, current_step')
     .eq('status', 'active')
     .not('message_ids', 'is', null)
 
@@ -110,6 +111,7 @@ export async function POST(req: NextRequest) {
             sequence_id: enrollment.sequence_id,
             enrollment_id: enrollment.id,
             contact_email: enrollment.contact_email,
+            step_index: enrollment.current_step ?? 0,
             event_type: 'replied',
             metadata: { thread_id: threadId, thread_message_count: thread.messages.length },
             created_at: new Date().toISOString(),
@@ -118,23 +120,51 @@ export async function POST(req: NextRequest) {
           // Update sequence reply_rate and active_count
           const { data: seq } = await db
             .from('sequences')
-            .select('reply_rate, enrolled_count, active_count')
+            .select('reply_rate, enrolled_count, active_count, name')
             .eq('id', enrollment.sequence_id)
             .single()
 
           if (seq) {
-            const newReplyRate =
-              seq.enrolled_count > 0
-                ? Math.min(100, (seq.reply_rate ?? 0) + (1 / seq.enrolled_count) * 100)
-                : seq.reply_rate ?? 0
+            // Recalculate reply rate from actual activity data
+            const { data: replyActivities } = await db
+              .from('sequence_activities')
+              .select('contact_email')
+              .eq('sequence_id', enrollment.sequence_id)
+              .eq('event_type', 'replied')
+
+            const uniqueRepliers = new Set((replyActivities ?? []).map(a => a.contact_email)).size
+            const replyRate = seq.enrolled_count > 0
+              ? Math.min(100, Math.round((uniqueRepliers / seq.enrolled_count) * 10000) / 100)
+              : 0
+
             await db
               .from('sequences')
               .update({
-                reply_rate: newReplyRate,
+                reply_rate: replyRate,
                 active_count: Math.max(0, (seq.active_count ?? 1) - 1),
               })
               .eq('id', enrollment.sequence_id)
           }
+
+          // Reset contact in_sequence flag
+          if (enrollment.contact_id) {
+            await db.from('crm_contacts').update({
+              in_sequence: false,
+              current_sequence_id: null,
+              last_sequence_id: enrollment.sequence_id,
+              last_sequence_date: new Date().toISOString(),
+            }).eq('id', enrollment.contact_id)
+          }
+
+          // Fire automation event
+          fireAutomations('sequence_reply', {
+            sequenceId: enrollment.sequence_id,
+            sequenceName: seq?.name ?? '',
+            contactEmail: enrollment.contact_email,
+            contactName: enrollment.contact_name,
+            contactId: enrollment.contact_id,
+            company: enrollment.company,
+          })
         }
       } catch (err) {
         console.warn(`[reply-check] Failed to check thread ${threadId}:`, err)

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { fireAutomations } from '@/lib/automations-engine'
 import * as crypto from 'crypto'
 
 // Resend webhook event types we handle
@@ -25,10 +26,49 @@ function extractHeader(headers: { name: string; value: string }[] | undefined, n
   return h?.value ?? null
 }
 
-function verifySignature(body: string, signature: string | null, secret: string): boolean {
-  if (!signature) return false
-  const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+function verifySignature(body: string, req: NextRequest, secret: string): boolean {
+  // Resend uses Svix for webhooks — check svix headers first
+  const svixId = req.headers.get('svix-id')
+  const svixTimestamp = req.headers.get('svix-timestamp')
+  const svixSignature = req.headers.get('svix-signature')
+
+  if (svixId && svixTimestamp && svixSignature) {
+    // Svix signature format: v1,<base64-signature>
+    // Signed content: "{svix-id}.{svix-timestamp}.{body}"
+    const signedContent = `${svixId}.${svixTimestamp}.${body}`
+    const secretBytes = Buffer.from(secret.startsWith('whsec_') ? secret.slice(6) : secret, 'base64')
+    const expectedSignature = crypto
+      .createHmac('sha256', secretBytes)
+      .update(signedContent)
+      .digest('base64')
+
+    // svix-signature can contain multiple signatures separated by spaces
+    const signatures = svixSignature.split(' ')
+    for (const sig of signatures) {
+      const sigValue = sig.startsWith('v1,') ? sig.slice(3) : sig
+      try {
+        if (crypto.timingSafeEqual(Buffer.from(sigValue), Buffer.from(expectedSignature))) {
+          return true
+        }
+      } catch {
+        // Length mismatch — continue
+      }
+    }
+    return false
+  }
+
+  // Fallback: simple HMAC for resend-signature header
+  const resendSig = req.headers.get('resend-signature')
+  if (resendSig) {
+    const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')
+    try {
+      return crypto.timingSafeEqual(Buffer.from(resendSig), Buffer.from(expected))
+    } catch {
+      return false
+    }
+  }
+
+  return false
 }
 
 export async function POST(req: NextRequest) {
@@ -37,8 +77,7 @@ export async function POST(req: NextRequest) {
   // Optional signature verification
   const webhookSecret = process.env.RESEND_WEBHOOK_SECRET
   if (webhookSecret) {
-    const signature = req.headers.get('svix-signature') ?? req.headers.get('resend-signature')
-    if (!verifySignature(rawBody, signature, webhookSecret)) {
+    if (!verifySignature(rawBody, req, webhookSecret)) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
   }
@@ -63,7 +102,8 @@ export async function POST(req: NextRequest) {
   const contactEmail = data.to?.[0]
 
   // Look up enrollment by headers or by email match
-  let enrollment: Record<string, unknown> | null = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let enrollment: Record<string, any> | null = null
 
   if (enrollmentId) {
     const { data: row } = await db
@@ -114,29 +154,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true, reason: 'Unhandled event type' })
   }
 
-  // Insert activity record
+  const seqId = enrollment.sequence_id as string
+
+  // Insert activity record with step_index from enrollment
   await db.from('sequence_activities').insert({
     id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    sequence_id: enrollment.sequence_id,
+    sequence_id: seqId,
     enrollment_id: enrollment.id,
     contact_email: contactEmail,
+    step_index: enrollment.current_step ?? 0,
     event_type: eventType,
     metadata: { email_id: data.email_id, resend_event: type },
     created_at: new Date().toISOString(),
   })
 
-  const seqId = enrollment.sequence_id as string
-
   // Handle bounces
   if (type === 'email.bounced') {
+    // Add to global suppression list (email unique)
     await db.from('sequence_suppression_list').upsert(
       {
-        email: contactEmail,
+        id: `sup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        email: contactEmail?.toLowerCase(),
         reason: 'bounced',
-        sequence_id: seqId,
+        source: seqId,
         created_at: new Date().toISOString(),
       },
-      { onConflict: 'email,sequence_id' },
+      { onConflict: 'email' },
     )
 
     await db
@@ -147,7 +190,7 @@ export async function POST(req: NextRequest) {
     // Decrement active count
     const { data: seq } = await db
       .from('sequences')
-      .select('active_count')
+      .select('active_count, name')
       .eq('id', seqId)
       .single()
     if (seq) {
@@ -156,18 +199,39 @@ export async function POST(req: NextRequest) {
         .update({ active_count: Math.max(0, (seq.active_count ?? 1) - 1) })
         .eq('id', seqId)
     }
+
+    // Reset contact in_sequence flag
+    if (enrollment.contact_id) {
+      await db.from('crm_contacts').update({
+        in_sequence: false,
+        current_sequence_id: null,
+        last_sequence_id: seqId,
+        last_sequence_date: new Date().toISOString(),
+      }).eq('id', enrollment.contact_id)
+    }
+
+    // Fire automation event
+    fireAutomations('sequence_bounce', {
+      sequenceId: seqId,
+      sequenceName: seq?.name ?? '',
+      contactEmail,
+      contactName: enrollment.contact_name,
+      contactId: enrollment.contact_id,
+      company: enrollment.company,
+    })
   }
 
   // Handle complaints
   if (type === 'email.complained') {
     await db.from('sequence_suppression_list').upsert(
       {
-        email: contactEmail,
+        id: `sup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        email: contactEmail?.toLowerCase(),
         reason: 'complained',
-        sequence_id: seqId,
+        source: seqId,
         created_at: new Date().toISOString(),
       },
-      { onConflict: 'email,sequence_id' },
+      { onConflict: 'email' },
     )
 
     await db
@@ -186,40 +250,59 @@ export async function POST(req: NextRequest) {
         .update({ active_count: Math.max(0, (seq.active_count ?? 1) - 1) })
         .eq('id', seqId)
     }
+
+    // Reset contact in_sequence flag
+    if (enrollment.contact_id) {
+      await db.from('crm_contacts').update({
+        in_sequence: false,
+        current_sequence_id: null,
+        last_sequence_id: seqId,
+        last_sequence_date: new Date().toISOString(),
+      }).eq('id', enrollment.contact_id)
+    }
   }
 
-  // Handle opens — increment open_rate
+  // Handle opens — calculate from activities count (accurate)
   if (type === 'email.opened') {
-    const { data: seq } = await db
-      .from('sequences')
-      .select('open_rate, enrolled_count')
-      .eq('id', seqId)
-      .single()
-    if (seq && seq.enrolled_count > 0) {
-      // Simple increment: each open adds 1/enrolled_count to the rate
-      const increment = 1 / seq.enrolled_count
-      await db
-        .from('sequences')
-        .update({ open_rate: Math.min(100, (seq.open_rate ?? 0) + increment * 100) })
-        .eq('id', seqId)
-    }
+    await recalculateRate(db, seqId, 'open_rate', 'opened')
   }
 
-  // Handle clicks — increment click_rate
+  // Handle clicks — calculate from activities count (accurate)
   if (type === 'email.clicked') {
-    const { data: seq } = await db
-      .from('sequences')
-      .select('click_rate, enrolled_count')
-      .eq('id', seqId)
-      .single()
-    if (seq && seq.enrolled_count > 0) {
-      const increment = 1 / seq.enrolled_count
-      await db
-        .from('sequences')
-        .update({ click_rate: Math.min(100, (seq.click_rate ?? 0) + increment * 100) })
-        .eq('id', seqId)
-    }
+    await recalculateRate(db, seqId, 'click_rate', 'clicked')
   }
 
   return NextResponse.json({ ok: true, event: eventType, enrollment_id: enrollment.id })
+}
+
+// Recalculate rates from actual activity counts instead of naive incrementing
+async function recalculateRate(
+  db: ReturnType<typeof createServiceClient>,
+  seqId: string,
+  rateField: 'open_rate' | 'click_rate',
+  eventType: string,
+) {
+  // Count unique contacts who had this event
+  const { data: uniqueEvents } = await db
+    .from('sequence_activities')
+    .select('contact_email')
+    .eq('sequence_id', seqId)
+    .eq('event_type', eventType)
+
+  const uniqueContacts = new Set((uniqueEvents ?? []).map(e => e.contact_email)).size
+
+  // Get total sent
+  const { count: totalSent } = await db
+    .from('sequence_activities')
+    .select('*', { count: 'exact', head: true })
+    .eq('sequence_id', seqId)
+    .eq('event_type', 'sent')
+
+  const sent = totalSent ?? 0
+  const rate = sent > 0 ? Math.round((uniqueContacts / sent) * 10000) / 100 : 0
+
+  await db
+    .from('sequences')
+    .update({ [rateField]: Math.min(100, rate) })
+    .eq('id', seqId)
 }

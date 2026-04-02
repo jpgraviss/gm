@@ -82,15 +82,16 @@ export async function POST(req: NextRequest) {
 
   const db = createServiceClient()
 
-  // Add to suppression list
+  // Add to global suppression list (unique on email)
   await db.from('sequence_suppression_list').upsert(
     {
+      id: `sup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       email,
       reason: 'unsubscribed',
-      sequence_id: body.seq || null,
+      source: body.seq || null,
       created_at: new Date().toISOString(),
     },
-    { onConflict: 'email,sequence_id' },
+    { onConflict: 'email' },
   )
 
   // Find all active enrollments for this email and unenroll them
@@ -131,10 +132,17 @@ export async function POST(req: NextRequest) {
       sequence_id: e.sequence_id,
       enrollment_id: e.id,
       contact_email: email,
+      step_index: 0,
       event_type: 'unsubscribed',
       created_at: new Date().toISOString(),
     }))
     await db.from('sequence_activities').insert(activities)
+
+    // Reset in_sequence flag for contacts matching this email
+    await db.from('crm_contacts').update({
+      in_sequence: false,
+      current_sequence_id: null,
+    }).contains('emails', [email])
   }
 
   return NextResponse.json({ ok: true, unsubscribed: email })

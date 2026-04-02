@@ -25,6 +25,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       status: r.status,
       nextSendAt: r.next_send_at,
       lastSentAt: r.last_sent_at,
+      assignedRepId: r.assigned_rep_id,
+      company: r.company,
+      dealId: r.deal_id,
+      unenrollReason: r.unenroll_reason,
+      deliveryStatus: r.delivery_status,
+      lastMessageId: r.last_message_id,
+      abVariant: r.ab_variant,
     }))
   )
 }

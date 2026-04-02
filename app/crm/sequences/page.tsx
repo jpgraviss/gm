@@ -265,6 +265,7 @@ export default function SequencesPage() {
   const [sortBy, setSortBy] = useState<'name' | 'enrolled' | 'reply' | 'modified'>('modified')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [topTab, setTopTab] = useState<'manage' | 'analyze' | 'automate' | 'scheduled'>('manage')
+  const [folderFilter, setFolderFilter] = useState<string>('all')
 
   useEffect(() => {
     fetch('/api/sequences')
@@ -321,8 +322,13 @@ export default function SequencesPage() {
     toast('Sequence deleted', 'success')
   }
 
+  const folders = [...new Set(sequences.map(s => (s as any).folder).filter(Boolean))]
+
   // Filter + sort
   let filtered = statusFilter === 'All' ? sequences : sequences.filter(s => s.status === statusFilter)
+  if (folderFilter !== 'all') {
+    filtered = filtered.filter(s => (s as any).folder === folderFilter)
+  }
   if (search.trim()) {
     const q = search.toLowerCase()
     filtered = filtered.filter(s => s.name.toLowerCase().includes(q) || s.trigger.toLowerCase().includes(q))
@@ -428,6 +434,18 @@ export default function SequencesPage() {
                   </button>
                 ))}
               </div>
+              {folders.length > 0 && (
+                <select
+                  value={folderFilter}
+                  onChange={e => setFolderFilter(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
+                >
+                  <option value="all">All Folders</option>
+                  {folders.map(f => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Table */}
@@ -558,11 +576,13 @@ export default function SequencesPage() {
               <BarChart3 size={20} className="text-gray-400" />
               <h3 className="text-base font-bold text-gray-900">Sequence Analytics</h3>
             </div>
-            <div className="grid grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
               {[
                 { label: 'Average Open Rate', value: sequences.length ? `${(sequences.reduce((s, q) => s + q.openRate, 0) / sequences.length).toFixed(1)}%` : '0%', benchmark: '21%', good: sequences.length > 0 && sequences.reduce((s, q) => s + q.openRate, 0) / sequences.length > 21 },
                 { label: 'Average Reply Rate', value: sequences.length ? `${(sequences.reduce((s, q) => s + q.replyRate, 0) / sequences.length).toFixed(1)}%` : '0%', benchmark: '8%', good: sequences.length > 0 && sequences.reduce((s, q) => s + q.replyRate, 0) / sequences.length > 8 },
                 { label: 'Total Contacts Reached', value: totalEnrolled.toString(), benchmark: '', good: true },
+                { label: 'Average Bounce Rate', value: sequences.length ? `${(sequences.reduce((s, q) => s + (q.bounceRate ?? 0), 0) / sequences.length).toFixed(1)}%` : '0%', benchmark: '2%', good: sequences.length > 0 && sequences.reduce((s, q) => s + (q.bounceRate ?? 0), 0) / sequences.length < 2 },
+                { label: 'Total Unsubscribed', value: sequences.reduce((s, q) => s + Math.round((q.unsubscribeRate ?? 0) * q.enrolledCount / 100), 0).toString(), benchmark: '', good: true },
               ].map(m => (
                 <div key={m.label} className="p-5 bg-gray-50 rounded-xl text-center">
                   <p className="text-3xl font-bold mb-1" style={{ fontFamily: 'var(--font-syncopate), sans-serif', color: m.good ? '#015035' : '#6b7280' }}>{m.value}</p>
@@ -596,39 +616,95 @@ export default function SequencesPage() {
 
         {topTab === 'automate' && (
           <div className="bg-white rounded-xl border border-gray-200 p-8">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-6">
               <Zap size={20} className="text-amber-500" />
-              <h3 className="text-base font-bold text-gray-900">Automate Enrollment</h3>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Automation Rules</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Auto-enrollment and unenrollment rules across all sequences</p>
+              </div>
             </div>
-            <p className="text-sm text-gray-500 mb-6">Automatically enroll or unenroll contacts from sequences based on triggers</p>
-            <div className="p-6 bg-gray-50 rounded-xl text-center">
-              <p className="text-sm text-gray-500">Configure automation rules within each sequence&apos;s Automate tab</p>
-              <p className="text-xs text-gray-400 mt-1">Open a sequence and go to the Automate tab to set up rules</p>
+
+            <div className="mb-6">
+              <h4 className="text-sm font-bold text-gray-700 mb-3">Default Unenrollment Triggers</h4>
+              <div className="flex flex-col gap-2">
+                {[
+                  { label: 'Contact replies to sequence email', desc: 'Automatically unenroll when a reply is detected', default: true },
+                  { label: 'Meeting is booked', desc: 'Unenroll when contact books a meeting via calendar link', default: true },
+                  { label: 'Email bounces', desc: 'Unenroll and add to suppression list on hard bounce', default: true },
+                  { label: 'Company-level smart unenroll', desc: 'When one contact at a company replies, unenroll all contacts from that company', default: false },
+                ].map(rule => (
+                  <div key={rule.label} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{rule.label}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{rule.desc}</p>
+                    </div>
+                    <div className={`w-10 h-6 rounded-full flex items-center px-1 cursor-pointer transition-colors ${rule.default ? 'bg-emerald-500 justify-end' : 'bg-gray-300 justify-start'}`}>
+                      <div className="w-4 h-4 rounded-full bg-white shadow" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-bold text-gray-700 mb-3">Auto-Enrollment Rules</h4>
+              <p className="text-xs text-gray-500 mb-3">Configure automatic enrollment in each sequence&apos;s Automate tab</p>
+              {sequences.filter(s => s.status === 'Active').map(seq => (
+                <div key={seq.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg mb-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{seq.name}</p>
+                    <p className="text-xs text-gray-500">{seq.trigger || 'Manual enrollment only'}</p>
+                  </div>
+                  <button
+                    onClick={() => router.push(`/crm/sequences/${seq.id}`)}
+                    className="text-xs text-emerald-600 font-medium hover:underline"
+                  >
+                    Configure
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
         {topTab === 'scheduled' && (
           <div className="bg-white rounded-xl border border-gray-200 p-8">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-6">
               <Clock size={20} className="text-gray-400" />
-              <h3 className="text-base font-bold text-gray-900">Scheduled Sends</h3>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Scheduled Sends</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Upcoming sequence steps across all active sequences</p>
+              </div>
             </div>
-            <p className="text-sm text-gray-500 mb-6">View upcoming scheduled sequence steps across all active sequences</p>
             {sequences.filter(s => s.status === 'Active').length === 0 ? (
               <div className="p-6 bg-gray-50 rounded-xl text-center">
                 <p className="text-sm text-gray-400">No active sequences with scheduled sends</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-3">
                 {sequences.filter(s => s.status === 'Active').map(seq => (
-                  <div key={seq.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                    <div className="w-2 h-2 rounded-full bg-green-500" />
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-900">{seq.name}</p>
-                      <p className="text-xs text-gray-500">{seq.activeCount} contacts pending next step</p>
+                  <div
+                    key={seq.id}
+                    onClick={() => router.push(`/crm/sequences/${seq.id}`)}
+                    className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center">
+                      <Play size={16} className="text-green-600" />
                     </div>
-                    <span className="text-xs text-gray-400">{seq.steps.filter(s => s.type === 'email' || s.type === 'manual_email').length} email steps</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900">{seq.name}</p>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="text-xs text-gray-500">{seq.activeCount} contacts in queue</span>
+                        <span className="text-xs text-gray-400">·</span>
+                        <span className="text-xs text-gray-500">{seq.steps.filter((s: any) => s.type === 'email' || s.type === 'manual_email').length} email steps</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-gray-900">{seq.enrolledCount} enrolled</p>
+                      <p className="text-xs text-gray-500">{seq.completedCount} completed</p>
+                    </div>
+                    <ChevronRight size={16} className="text-gray-300" />
                   </div>
                 ))}
               </div>

@@ -11,6 +11,8 @@ export interface GmailSendOptions {
   replyTo?: string
   cc?: string
   bcc?: string
+  inReplyTo?: string  // Message-ID for threading
+  references?: string // Space-separated Message-IDs for threading
 }
 
 /**
@@ -20,16 +22,18 @@ export interface GmailSendOptions {
 export async function sendViaGmail(
   options: GmailSendOptions,
 ): Promise<{ messageId: string }> {
-  const { accessToken, from, to, subject, htmlBody, replyTo, cc, bcc } = options
+  const { accessToken, from, to, subject, htmlBody, replyTo, cc, bcc, inReplyTo, references } = options
 
   // ── Build RFC 2822 message ──────────────────────────────────────────────
   const lines: string[] = [
     `From: ${from}`,
     `To: ${to}`,
   ]
-  if (cc)      lines.push(`Cc: ${cc}`)
-  if (bcc)     lines.push(`Bcc: ${bcc}`)
-  if (replyTo) lines.push(`Reply-To: ${replyTo}`)
+  if (cc)         lines.push(`Cc: ${cc}`)
+  if (bcc)        lines.push(`Bcc: ${bcc}`)
+  if (replyTo)    lines.push(`Reply-To: ${replyTo}`)
+  if (inReplyTo)  lines.push(`In-Reply-To: ${inReplyTo}`)
+  if (references) lines.push(`References: ${references}`)
   lines.push(
     `Subject: ${subject}`,
     'MIME-Version: 1.0',

@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { sendViaGmail } from '@/lib/gmail-send'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.gravissmarketing.com'
 
 // ─── Merge-field replacement ─────────────────────────────────────────────────
 
@@ -28,6 +29,25 @@ function replaceMergeFields(text: string, ctx: MergeContext): string {
     .replace(/\{\{company\}\}/gi, ctx.company || '')
     .replace(/\{\{sender_name\}\}/gi, ctx.senderName || '')
     .replace(/\{\{sender_email\}\}/gi, ctx.senderEmail || '')
+}
+
+// ─── Unsubscribe link builder ────────────────────────────────────────────────
+
+function buildUnsubscribeLink(email: string, sequenceId: string): string {
+  return `${APP_URL}/api/sequences/unsubscribe?email=${encodeURIComponent(email)}&seq=${sequenceId}`
+}
+
+function appendUnsubscribeFooter(html: string, email: string, sequenceId: string): string {
+  const link = buildUnsubscribeLink(email, sequenceId)
+  const footer = `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#9ca3af;">
+    <a href="${link}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>
+  </div>`
+
+  // Insert before closing </body> if present, otherwise append
+  if (html.includes('</body>')) {
+    return html.replace('</body>', `${footer}</body>`)
+  }
+  return html + footer
 }
 
 // ─── HTML template renderers ─────────────────────────────────────────────────
@@ -105,7 +125,6 @@ function brandedEmailHtml({
             <p style="margin:0;font-size:11px;color:#9ca3af;">
               &copy; ${new Date().getFullYear()} Graviss Marketing &nbsp;&middot;&nbsp;
               <a href="mailto:info@gravissmarketing.com" style="color:#015035;">info@gravissmarketing.com</a>
-              &nbsp;&middot;&nbsp; To unsubscribe, reply with &ldquo;unsubscribe&rdquo;.
             </p>
           </td>
         </tr>
@@ -167,6 +186,129 @@ async function lookupRep(
   return data ?? null
 }
 
+// ─── Sending window check ────────────────────────────────────────────────────
+
+function isWithinSendingWindow(seq: {
+  send_window_start?: string | null
+  send_window_end?: string | null
+  send_on_weekends?: boolean | null
+  timezone?: string | null
+}): boolean {
+  const tz = seq.timezone || 'America/New_York'
+  const now = new Date()
+
+  // Get current time in the sequence's timezone
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+    weekday: 'short',
+  })
+  const parts = formatter.formatToParts(now)
+  const hour = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0', 10)
+  const minute = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10)
+  const weekday = parts.find(p => p.type === 'weekday')?.value ?? ''
+
+  // Check weekends
+  if (!seq.send_on_weekends && (weekday === 'Sat' || weekday === 'Sun')) {
+    return false
+  }
+
+  // Check time window (e.g. "09:00" / "17:00")
+  if (seq.send_window_start && seq.send_window_end) {
+    const [startH, startM] = seq.send_window_start.split(':').map(Number)
+    const [endH, endM] = seq.send_window_end.split(':').map(Number)
+    const currentMinutes = hour * 60 + minute
+    const startMinutes = startH * 60 + startM
+    const endMinutes = endH * 60 + endM
+
+    if (currentMinutes < startMinutes || currentMinutes >= endMinutes) {
+      return false
+    }
+  }
+
+  return true
+}
+
+// ─── Throttling helpers ──────────────────────────────────────────────────────
+
+async function getDailySendCount(
+  db: ReturnType<typeof createServiceClient>,
+  sequenceId: string,
+): Promise<number> {
+  const todayStart = new Date()
+  todayStart.setUTCHours(0, 0, 0, 0)
+
+  const { count } = await db
+    .from('sequence_activities')
+    .select('*', { count: 'exact', head: true })
+    .eq('sequence_id', sequenceId)
+    .eq('event_type', 'sent')
+    .gte('created_at', todayStart.toISOString())
+
+  return count ?? 0
+}
+
+// Per-sequence in-memory per-minute counters (reset each invocation is fine for cron)
+const perMinuteCounts = new Map<string, number>()
+
+// ─── Activity logging ────────────────────────────────────────────────────────
+
+async function logActivity(
+  db: ReturnType<typeof createServiceClient>,
+  params: {
+    sequenceId: string
+    enrollmentId: string
+    contactEmail: string
+    stepIndex: number
+    eventType: 'sent' | 'failed' | 'skipped'
+    messageId?: string | null
+    metadata?: Record<string, unknown>
+  },
+) {
+  await db.from('sequence_activities').insert({
+    sequence_id: params.sequenceId,
+    enrollment_id: params.enrollmentId,
+    contact_email: params.contactEmail,
+    step_index: params.stepIndex,
+    event_type: params.eventType,
+    message_id: params.messageId ?? null,
+    metadata: params.metadata ?? {},
+  })
+}
+
+// ─── Suppression check ──────────────────────────────────────────────────────
+
+async function isSuppressed(
+  db: ReturnType<typeof createServiceClient>,
+  email: string,
+): Promise<boolean> {
+  const { count } = await db
+    .from('sequence_suppression_list')
+    .select('*', { count: 'exact', head: true })
+    .eq('email', email.toLowerCase())
+
+  return (count ?? 0) > 0
+}
+
+// ─── One-at-a-time enforcement ───────────────────────────────────────────────
+
+async function isActiveInOtherSequence(
+  db: ReturnType<typeof createServiceClient>,
+  contactEmail: string,
+  currentSequenceId: string,
+): Promise<boolean> {
+  const { count } = await db
+    .from('sequence_enrollments')
+    .select('*', { count: 'exact', head: true })
+    .eq('contact_email', contactEmail)
+    .eq('status', 'active')
+    .neq('sequence_id', currentSequenceId)
+
+  return (count ?? 0) > 0
+}
+
 // ─── Main execution endpoint ─────────────────────────────────────────────────
 
 export async function POST() {
@@ -182,26 +324,41 @@ export async function POST() {
 
   if (fetchErr) {
     console.error('[sequences/execute POST]', fetchErr)
-    return NextResponse.json({ error: fetchErr?.message || 'Failed to execute sequences' }, { status: 500 })
+    return NextResponse.json(
+      { error: fetchErr?.message || 'Failed to execute sequences' },
+      { status: 500 },
+    )
   }
-  if (!enrollments?.length) return NextResponse.json({ processed: 0, sent: 0, completed: 0 })
+  if (!enrollments?.length) {
+    return NextResponse.json({ processed: 0, sent: 0, completed: 0, skipped: 0 })
+  }
 
-  // Fetch all relevant sequences in one query
+  // Fetch all relevant sequences in one query (include throttling/window columns)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const seqIds = [...new Set(enrollments.map((e: any) => e.sequence_id as string))]
   const { data: sequences } = await db
     .from('sequences')
-    .select('id, name, status, steps, active_count, completed_count, send_via, from_name, from_email, assigned_rep_id')
+    .select(
+      'id, name, status, steps, active_count, completed_count, send_via, from_name, from_email, assigned_rep_id, ' +
+      'daily_send_limit, per_minute_limit, send_window_start, send_window_end, send_on_weekends, timezone, thread_mode',
+    )
     .in('id', seqIds)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const seqMap = new Map((sequences ?? []).map((s: any) => [s.id as string, s]))
 
-  // Pre-fetch rep info for all sequences that have an assigned rep
+  // Pre-fetch daily send counts per sequence for throttling
+  const dailySendCounts = new Map<string, number>()
+  for (const seqId of seqIds) {
+    dailySendCounts.set(seqId, await getDailySendCount(db, seqId))
+  }
+
+  // Pre-fetch rep info cache
   const repCache = new Map<string, RepInfo | null>()
 
   let sent = 0
   let completed = 0
+  let skipped = 0
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const enrollment of enrollments as any[]) {
@@ -209,6 +366,68 @@ export async function POST() {
     // Only process active sequences
     if (!seq || seq.status !== 'Active') continue
 
+    // ── 1. Suppression check ───────────────────────────────────────────────
+    if (await isSuppressed(db, enrollment.contact_email)) {
+      console.log(`[sequences/execute] Skipping suppressed contact: ${enrollment.contact_email}`)
+      await db
+        .from('sequence_enrollments')
+        .update({ status: 'unenrolled', unenroll_reason: 'suppressed' })
+        .eq('id', enrollment.id)
+      await logActivity(db, {
+        sequenceId: seq.id,
+        enrollmentId: enrollment.id,
+        contactEmail: enrollment.contact_email,
+        stepIndex: enrollment.current_step,
+        eventType: 'skipped',
+        metadata: { reason: 'suppressed' },
+      })
+      skipped++
+      continue
+    }
+
+    // ── 2. One-at-a-time enforcement ───────────────────────────────────────
+    if (await isActiveInOtherSequence(db, enrollment.contact_email, enrollment.sequence_id)) {
+      console.log(`[sequences/execute] Skipping ${enrollment.contact_email}: active in another sequence`)
+      await db
+        .from('sequence_enrollments')
+        .update({ status: 'paused', unenroll_reason: 'active_in_other_sequence' })
+        .eq('id', enrollment.id)
+      await logActivity(db, {
+        sequenceId: seq.id,
+        enrollmentId: enrollment.id,
+        contactEmail: enrollment.contact_email,
+        stepIndex: enrollment.current_step,
+        eventType: 'skipped',
+        metadata: { reason: 'active_in_other_sequence' },
+      })
+      skipped++
+      continue
+    }
+
+    // ── 3. Sending window check ────────────────────────────────────────────
+    if (!isWithinSendingWindow(seq)) {
+      // Don't advance, don't update — leave for next cron run
+      continue
+    }
+
+    // ── 4. Send throttling ─────────────────────────────────────────────────
+    const dailyCount = dailySendCounts.get(seq.id) ?? 0
+    const dailyLimit = seq.daily_send_limit ?? Infinity
+    if (dailyCount >= dailyLimit) {
+      console.log(`[sequences/execute] Daily limit reached for sequence ${seq.id} (${dailyCount}/${dailyLimit})`)
+      skipped++
+      continue
+    }
+
+    const minuteCount = perMinuteCounts.get(seq.id) ?? 0
+    const minuteLimit = seq.per_minute_limit ?? Infinity
+    if (minuteCount >= minuteLimit) {
+      console.log(`[sequences/execute] Per-minute limit reached for sequence ${seq.id}`)
+      skipped++
+      continue
+    }
+
+    // ── Process current step ───────────────────────────────────────────────
     const steps: {
       id: string
       type: string
@@ -258,21 +477,32 @@ export async function POST() {
 
       // Resolve HTML template
       const template: HtmlTemplate = step.htmlTemplate ?? 'branded'
-      const html = renderEmailHtml(template, {
+      let html = renderEmailHtml(template, {
         body: bodyText,
         contactName: enrollment.contact_name ?? '',
         sequenceName: seq.name,
         fromName,
       })
 
+      // ── 8. Append unsubscribe link ─────────────────────────────────────
+      html = appendUnsubscribeFooter(html, enrollment.contact_email, seq.id)
+
       // CC/BCC
       const cc = step.cc?.length ? step.cc : undefined
       const bcc = step.bcc?.length ? step.bcc : undefined
+
+      // ── 5. Email threading ─────────────────────────────────────────────
+      // Retrieve existing message IDs from enrollment for threading
+      const existingMessageIds: string[] = enrollment.message_ids ?? []
+      const firstMessageId = existingMessageIds.length > 0 ? existingMessageIds[0] : undefined
+      const inReplyTo = firstMessageId ? `<${firstMessageId}>` : undefined
+      const references = firstMessageId ? `<${firstMessageId}>` : undefined
 
       // Determine send channel: Gmail preferred, Resend fallback
       const useGmail = seq.send_via === 'gmail'
       let emailErr: string | null = null
       let gmailSent = false
+      let messageId: string | null = null
 
       if (useGmail && rep?.email) {
         const { accessToken, gmailEmail } = await lookupGmailToken(db, rep.email)
@@ -280,7 +510,7 @@ export async function POST() {
         if (accessToken) {
           const gmailFrom = `${fromName} <${gmailEmail || rep.email}>`
           try {
-            await sendViaGmail({
+            const result = await sendViaGmail({
               accessToken,
               to: enrollment.contact_email,
               subject,
@@ -289,8 +519,11 @@ export async function POST() {
               replyTo,
               cc: cc?.join(', '),
               bcc: bcc?.join(', '),
+              inReplyTo,
+              references,
             })
             gmailSent = true
+            messageId = result.messageId
           } catch (gmailErr) {
             const msg = gmailErr instanceof Error ? gmailErr.message : String(gmailErr)
             console.warn(`[sequences/execute] Gmail send failed, falling back to Resend: ${msg}`)
@@ -308,17 +541,69 @@ export async function POST() {
           to: [enrollment.contact_email],
           subject,
           html,
+          headers: {},
         }
         if (cc) resendPayload.cc = cc
         if (bcc) resendPayload.bcc = bcc
+        // Add threading headers for Resend
+        if (inReplyTo && resendPayload.headers) {
+          resendPayload.headers['In-Reply-To'] = inReplyTo
+          resendPayload.headers['References'] = references!
+        }
 
-        const { error: resendErr } = await resend.emails.send(resendPayload)
+        const { data: resendData, error: resendErr } = await resend.emails.send(resendPayload)
         emailErr = resendErr ? (resendErr as Error).message ?? 'Resend error' : null
+        if (!emailErr && resendData) {
+          messageId = resendData.id ?? null
+        }
       }
 
+      // ── 6. Activity logging ────────────────────────────────────────────
       if (!emailErr) {
         sent++
         update.last_sent_at = now.toISOString()
+
+        // Store message ID for threading
+        if (messageId) {
+          const updatedMessageIds = [...existingMessageIds, messageId]
+          update.message_ids = updatedMessageIds
+        }
+
+        // Update send counters for throttling
+        dailySendCounts.set(seq.id, (dailySendCounts.get(seq.id) ?? 0) + 1)
+        perMinuteCounts.set(seq.id, (perMinuteCounts.get(seq.id) ?? 0) + 1)
+
+        // ── 9. Delivery status tracking ──────────────────────────────────
+        update.delivery_status = 'sent'
+        update.last_message_id = messageId
+
+        await logActivity(db, {
+          sequenceId: seq.id,
+          enrollmentId: enrollment.id,
+          contactEmail: enrollment.contact_email,
+          stepIndex: enrollment.current_step,
+          eventType: 'sent',
+          messageId,
+          metadata: {
+            channel: gmailSent ? 'gmail' : 'resend',
+            subject,
+            from: `${fromName} <${gmailSent ? rep?.email : fromEmail}>`,
+          },
+        })
+      } else {
+        await logActivity(db, {
+          sequenceId: seq.id,
+          enrollmentId: enrollment.id,
+          contactEmail: enrollment.contact_email,
+          stepIndex: enrollment.current_step,
+          eventType: 'failed',
+          metadata: {
+            error: emailErr,
+            channel: useGmail ? 'gmail+resend_fallback' : 'resend',
+          },
+        })
+        // Don't advance step on failure — retry next cron run
+        continue
       }
     }
     // wait/task/condition steps: no email — just advance
@@ -350,5 +635,29 @@ export async function POST() {
       .eq('id', enrollment.id)
   }
 
-  return NextResponse.json({ processed: enrollments.length, sent, completed })
+  return NextResponse.json({ processed: enrollments.length, sent, completed, skipped })
 }
+
+/*
+ * ─── 7. Bounce / Reply Detection Placeholder ──────────────────────────────────
+ *
+ * Bounce and reply detection will be handled by separate webhook endpoints:
+ *
+ * - POST /api/sequences/webhooks/gmail
+ *     Receives Gmail push notifications for bounces and replies.
+ *     On bounce: update enrollment status to 'bounced', log activity with event_type 'bounced'.
+ *     On reply: update enrollment status per sequence config (pause or unenroll),
+ *               log activity with event_type 'replied', update sequence reply_rate.
+ *
+ * - POST /api/sequences/webhooks/resend
+ *     Receives Resend webhook events (email.bounced, email.complained, email.delivered).
+ *     On bounce: same as Gmail bounce handling.
+ *     On complaint: add to suppression list, unenroll contact.
+ *     On delivery: update delivery_status to 'delivered' in enrollment.
+ *
+ * Both endpoints should:
+ *   1. Verify webhook signatures
+ *   2. Look up the enrollment by message_id
+ *   3. Update sequence_enrollments and sequence_activities
+ *   4. Update aggregate stats on the sequences table (open_rate, click_rate, reply_rate)
+ */

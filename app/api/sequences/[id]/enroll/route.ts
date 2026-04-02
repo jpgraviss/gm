@@ -45,7 +45,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const alreadyEnrolled = new Set((existing ?? []).map((r: any) => r.contact_email as string))
 
-  const toEnroll = contacts.filter(c => c.email && !alreadyEnrolled.has(c.email))
+  // Check suppression list
+  const { data: suppressed } = await db
+    .from('sequence_suppression_list')
+    .select('email')
+    .in('email', emails)
+  const suppressedEmails = new Set((suppressed ?? []).map((r: any) => r.email as string))
+
+  // Check one-at-a-time: skip contacts already active in another sequence
+  const { data: activeElsewhere } = await db
+    .from('sequence_enrollments')
+    .select('contact_email')
+    .neq('sequence_id', id)
+    .eq('status', 'active')
+    .in('contact_email', emails)
+  const activeElsewhereEmails = new Set((activeElsewhere ?? []).map((r: any) => r.contact_email as string))
+
+  const toEnroll = contacts.filter(c => c.email && !alreadyEnrolled.has(c.email) && !suppressedEmails.has(c.email) && !activeElsewhereEmails.has(c.email))
   if (!toEnroll.length) return NextResponse.json({ enrolled: 0 })
 
   const now = new Date()
@@ -66,6 +82,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (insertErr) {
     console.error('[sequences/enroll POST]', insertErr)
     return NextResponse.json({ error: insertErr?.message || 'Failed to enroll contacts' }, { status: 500 })
+  }
+
+  // Update contact sequence tracking
+  for (const c of toEnroll) {
+    if (c.id) {
+      await db.from('crm_contacts').update({
+        in_sequence: true,
+        current_sequence_id: id,
+      }).eq('id', c.id)
+    }
   }
 
   // Update sequence aggregate counts

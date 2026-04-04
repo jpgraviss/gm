@@ -19,6 +19,10 @@ const TRIGGER_MAP: Record<string, string> = {
   'contact_created':      'Contact Created',
   'renewal_90':           'Renewal Date Within 90 Days',
   'renewal_30':           'Renewal Date Within 30 Days',
+  'sequence_reply':       'Sequence Contact Replied',
+  'sequence_bounce':      'Sequence Contact Bounced',
+  'sequence_completed':   'Sequence Completed',
+  'meeting_booked':       'Meeting Booked',
 }
 
 interface AutomationRow {
@@ -216,6 +220,90 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         timestamp: new Date().toISOString(),
         logged_by: 'System',
       })
+      break
+    }
+
+    case 'Enroll in Sequence': {
+      // Look up the sequence by name from context.sequenceName
+      // Create enrollment via the enroll API pattern
+      const seqName = (context.sequenceName as string) ?? ''
+      if (!seqName) break
+      const { data: targetSeq } = await db
+        .from('sequences')
+        .select('id, steps, enrolled_count, active_count')
+        .eq('name', seqName)
+        .eq('status', 'Active')
+        .single()
+      if (!targetSeq) break
+
+      const contactEmail = (context.contactEmail as string) ?? ''
+      const contactName = (context.contactName as string) ?? ''
+      if (!contactEmail) break
+
+      // Check suppression
+      const { data: suppressed } = await db
+        .from('sequence_suppression_list')
+        .select('id')
+        .eq('email', contactEmail)
+        .single()
+      if (suppressed) break
+
+      // Check not already enrolled
+      const { data: existing } = await db
+        .from('sequence_enrollments')
+        .select('id')
+        .eq('sequence_id', targetSeq.id)
+        .eq('contact_email', contactEmail)
+        .single()
+      if (existing) break
+
+      const steps = targetSeq.steps ?? []
+      const firstDay = steps[0]?.day ?? 0
+      const now = new Date()
+
+      await db.from('sequence_enrollments').insert({
+        id: `enr-auto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        sequence_id: targetSeq.id,
+        contact_id: (context.contactId as string) ?? null,
+        contact_name: contactName,
+        contact_email: contactEmail,
+        current_step: 0,
+        status: 'active',
+        next_send_at: new Date(now.getTime() + firstDay * 86400000).toISOString(),
+        company: company || null,
+      })
+
+      await db.from('sequences').update({
+        enrolled_count: (targetSeq.enrolled_count ?? 0) + 1,
+        active_count: (targetSeq.active_count ?? 0) + 1,
+      }).eq('id', targetSeq.id)
+      break
+    }
+
+    case 'Unenroll from Sequence': {
+      const contactEmail = (context.contactEmail as string) ?? ''
+      if (!contactEmail) break
+      // Unenroll from all active sequences
+      const { data: activeEnrollments } = await db
+        .from('sequence_enrollments')
+        .select('id, sequence_id')
+        .eq('contact_email', contactEmail)
+        .eq('status', 'active')
+
+      for (const enr of activeEnrollments ?? []) {
+        await db.from('sequence_enrollments')
+          .update({ status: 'unenrolled', unenroll_reason: 'automation' })
+          .eq('id', enr.id)
+
+        // Decrement active count
+        const { data: seq } = await db.from('sequences')
+          .select('active_count').eq('id', enr.sequence_id).single()
+        if (seq) {
+          await db.from('sequences')
+            .update({ active_count: Math.max(0, (seq.active_count ?? 1) - 1) })
+            .eq('id', enr.sequence_id)
+        }
+      }
       break
     }
 

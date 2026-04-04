@@ -47,12 +47,12 @@ export default function ReportsPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/deals').then(r => r.json()),
-      fetch('/api/invoices').then(r => r.json()),
-      fetch('/api/projects').then(r => r.json()),
-      fetch('/api/renewals').then(r => r.json()),
-      fetch('/api/dashboard').then(r => r.json()).then(d => d.revenueByMonth ?? []),
-      fetch('/api/maintenance').then(r => r.json()),
+      fetch('/api/deals').then(r => r.ok ? r.json() : []),
+      fetch('/api/invoices').then(r => r.ok ? r.json() : []),
+      fetch('/api/projects').then(r => r.ok ? r.json() : []),
+      fetch('/api/renewals').then(r => r.ok ? r.json() : []),
+      fetch('/api/dashboard').then(r => r.ok ? r.json() : null).then(d => d?.revenueByMonth ?? []),
+      fetch('/api/maintenance').then(r => r.ok ? r.json() : []),
       fetchTeamMembers(),
     ]).then(([d, i, p, r, rev, m, tm]) => {
       if (Array.isArray(d)) setDeals(d)

@@ -27,7 +27,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.openRate       !== undefined) update.open_rate       = body.openRate
   if (body.clickRate      !== undefined) update.click_rate      = body.clickRate
   if (body.replyRate      !== undefined) update.reply_rate      = body.replyRate
-  if (body.steps          !== undefined) update.steps           = body.steps
+  if (body.steps            !== undefined) update.steps             = body.steps
+  if (body.sendVia          !== undefined) update.send_via           = body.sendVia
+  if (body.fromName         !== undefined) update.from_name          = body.fromName
+  if (body.fromEmail        !== undefined) update.from_email         = body.fromEmail
+  if (body.assignedRepId    !== undefined) update.assigned_rep_id    = body.assignedRepId
+  if (body.meetingRate      !== undefined) update.meeting_rate       = body.meetingRate
+  if (body.bounceRate       !== undefined) update.bounce_rate        = body.bounceRate
+  if (body.unsubscribeRate  !== undefined) update.unsubscribe_rate   = body.unsubscribeRate
+  if (body.owner            !== undefined) update.owner              = body.owner
+  if (body.dailySendLimit   !== undefined) update.daily_send_limit   = body.dailySendLimit
+  if (body.perMinuteLimit   !== undefined) update.per_minute_limit   = body.perMinuteLimit
+  if (body.sendWindowStart  !== undefined) update.send_window_start  = body.sendWindowStart
+  if (body.sendWindowEnd    !== undefined) update.send_window_end    = body.sendWindowEnd
+  if (body.sendOnWeekends   !== undefined) update.send_on_weekends   = body.sendOnWeekends
+  if (body.timezone         !== undefined) update.timezone            = body.timezone
+  if (body.threadMode       !== undefined) update.thread_mode        = body.threadMode
+  if (body.sharing          !== undefined) update.sharing             = body.sharing
+  if (body.folder           !== undefined) update.folder              = body.folder
   const { data, error } = await db.from('sequences').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[sequences/:id PATCH]', error)

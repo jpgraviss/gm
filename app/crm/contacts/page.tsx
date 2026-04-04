@@ -982,7 +982,7 @@ export default function ContactsPage() {
 
   useEffect(() => {
     fetch('/api/crm/contacts')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setLocalContacts(data) })
       .catch(() => toast('Failed to load contacts', 'error'))
       .finally(() => setLoading(false))
@@ -1038,10 +1038,16 @@ export default function ContactsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      if (!res.ok) {
+        toast('Failed to create contact', 'error')
+        setCreatingContact(false)
+        return
+      }
       const saved = await res.json()
       setLocalContacts(prev => [saved, ...prev])
+      toast('Contact created', 'success')
     } catch {
-      setLocalContacts(prev => [{ ...payload, id: `contact-${Date.now()}` } as CRMContact, ...prev])
+      toast('Failed to create contact', 'error')
     }
     setCreatingContact(false)
   }
@@ -1052,8 +1058,6 @@ export default function ContactsPage() {
     c.title.toLowerCase().includes(search.toLowerCase()) ||
     c.emails.join(' ').toLowerCase().includes(search.toLowerCase())
   )
-
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
@@ -1225,7 +1229,7 @@ export default function ContactsPage() {
           defaultType="contacts"
           onClose={() => setShowImport(false)}
           onComplete={() => {
-            fetch('/api/crm/contacts').then(r => r.json()).then(data => { if (Array.isArray(data)) setLocalContacts(data) })
+            fetch('/api/crm/contacts').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalContacts(data) })
           }}
         />
       )}

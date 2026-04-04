@@ -419,9 +419,9 @@ function ContractorDashboard({ userName }: { userName: string }) {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/projects').then(r => r.json()).catch(() => []),
-      fetch('/api/tickets').then(r => r.json()).catch(() => []),
-      fetch('/api/tasks').then(r => r.json()).catch(() => []),
+      fetch('/api/projects').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('/api/tickets').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('/api/tasks').then(r => r.ok ? r.json() : []).catch(() => []),
     ]).then(([p, t, tk]) => {
       if (Array.isArray(p)) setProjects(p)
       if (Array.isArray(t)) setTickets(t)
@@ -585,8 +585,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (isContractor) return // Contractor dashboard fetches its own data
     fetch('/api/dashboard')
-      .then(r => r.json())
-      .then(d => { if (d.metrics) setData(d) })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.metrics) setData(d) })
       .catch(() => toast('Failed to load dashboard data', 'error'))
       .finally(() => setLoading(false))
   }, [isContractor])

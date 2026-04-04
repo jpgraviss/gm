@@ -57,7 +57,7 @@ function AddRecordPanel({
   })
 
   useEffect(() => {
-    fetch('/api/crm/companies').then(r => r.json()).then(d => {
+    fetch('/api/crm/companies').then(r => r.ok ? r.json() : []).then(d => {
       if (Array.isArray(d)) setCrmCompanies(d.map((c: { name: string }) => c.name))
     }).catch(() => toast('Failed to load companies', 'error'))
   }, [])

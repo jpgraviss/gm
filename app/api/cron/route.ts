@@ -21,11 +21,27 @@ export async function GET(req: NextRequest) {
   // 1. Execute pending sequence steps
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-    const seqRes = await fetch(`${baseUrl}/api/sequences/execute`, { method: 'POST' })
+    const seqRes = await fetch(`${baseUrl}/api/sequences/execute`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cronSecret}` },
+    })
     results.sequences = await seqRes.json()
   } catch (err) {
     console.error('[cron] Sequence execution failed:', err)
     results.sequences = { error: 'Failed' }
+  }
+
+  // 1b. Check for sequence replies
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const replyRes = await fetch(`${baseUrl}/api/sequences/reply-check`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cronSecret}` },
+    })
+    results.sequenceReplies = await replyRes.json()
+  } catch (err) {
+    console.error('[cron] Sequence reply check failed:', err)
+    results.sequenceReplies = { error: 'Failed' }
   }
 
   // 2. Check time-based automation triggers

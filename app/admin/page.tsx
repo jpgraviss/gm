@@ -174,7 +174,7 @@ export default function AdminPage() {
   // Load users from database on mount
   useEffect(() => {
     fetch('/api/admin/users')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setUsers(data as AdminUser[]) })
       .catch(() => toast('Failed to load users', 'error'))
       .finally(() => setLoading(false))
@@ -1074,7 +1074,7 @@ export default function AdminPage() {
                 actions={['Sign-In Links', 'Contract Emails', 'Invoice Reminders', 'Team Invites']}
                 onConnect={() => { router.push('/settings?tab=Integrations') }}
                 onConfigure={() => { router.push('/settings?tab=Integrations') }}
-                onRefresh={() => { fetch('/api/admin/integration-health').then(r => r.json()).then(() => toast('Email status refreshed', 'success')).catch(() => toast('Failed to check email status', 'error')) }}
+                onRefresh={() => { fetch('/api/admin/integration-health').then(r => r.ok ? r.json() : Promise.reject()).then(() => toast('Email status refreshed', 'success')).catch(() => toast('Failed to check email status', 'error')) }}
               />
             </div>
 

@@ -717,7 +717,7 @@ export default function CompaniesPage() {
 
   useEffect(() => {
     fetch('/api/crm/companies')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
       .catch(() => toast('Failed to load companies', 'error'))
       .finally(() => setLoading(false))
@@ -974,7 +974,7 @@ export default function CompaniesPage() {
           defaultType="companies"
           onClose={() => setShowImport(false)}
           onComplete={() => {
-            fetch('/api/crm/companies').then(r => r.json()).then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
+            fetch('/api/crm/companies').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
           }}
         />
       )}

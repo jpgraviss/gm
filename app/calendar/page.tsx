@@ -93,7 +93,7 @@ export default function CalendarPage() {
         if (d?.last_calendar_sync) setLastSync(d.last_calendar_sync)
       })
       .catch(() => toast('Failed to load calendar settings', 'error'))
-    fetchTeamMembers().then(d => { if (Array.isArray(d)) setTeamMembers(d) }).catch(() => {})
+    fetchTeamMembers().then(d => { if (Array.isArray(d)) setTeamMembers(d) }).catch(() => toast('Failed to load team members', 'error'))
   }, [])
 
   const filteredByTab = bookings.filter(b => {

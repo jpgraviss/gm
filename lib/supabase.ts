@@ -30,15 +30,37 @@ export function createServiceClient(): SupabaseClient {
 // ── Client-side data fetch helpers ───────────────────────────────────────────
 // These call the Next.js API routes and are safe to use in 'use client' components.
 
+const MAX_RETRIES = 3
+const RETRY_BASE_MS = 1000 // 1s, 2s, 4s exponential backoff
+
+function isRetryable(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500
+}
+
 async function apiFetch<T>(path: string): Promise<T[]> {
-  try {
-    const res = await fetch(path)
-    if (!res.ok) return []
-    const data = await res.json()
-    return Array.isArray(data) ? data : []
-  } catch {
-    return []
+  let lastError: unknown
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(path)
+      if (!res.ok) {
+        if (attempt < MAX_RETRIES && isRetryable(res.status)) {
+          await new Promise(r => setTimeout(r, RETRY_BASE_MS * Math.pow(2, attempt)))
+          continue
+        }
+        return []
+      }
+      const data = await res.json()
+      return Array.isArray(data) ? data : []
+    } catch (err) {
+      lastError = err
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, RETRY_BASE_MS * Math.pow(2, attempt)))
+        continue
+      }
+    }
   }
+  if (lastError) console.error(`apiFetch ${path} failed after ${MAX_RETRIES + 1} attempts:`, lastError)
+  return []
 }
 
 export async function fetchTeamMembers(): Promise<TeamMember[]> {
@@ -78,12 +100,27 @@ export async function fetchCrmActivities(): Promise<CRMActivity[]> {
 }
 
 export async function fetchRevenueByMonth(): Promise<RevenueMonth[]> {
-  try {
-    const res = await fetch('/api/dashboard')
-    if (!res.ok) return []
-    const data = await res.json()
-    return Array.isArray(data?.revenueByMonth) ? data.revenueByMonth : []
-  } catch {
-    return []
+  let lastError: unknown
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch('/api/dashboard')
+      if (!res.ok) {
+        if (attempt < MAX_RETRIES && isRetryable(res.status)) {
+          await new Promise(r => setTimeout(r, RETRY_BASE_MS * Math.pow(2, attempt)))
+          continue
+        }
+        return []
+      }
+      const data = await res.json()
+      return Array.isArray(data?.revenueByMonth) ? data.revenueByMonth : []
+    } catch (err) {
+      lastError = err
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, RETRY_BASE_MS * Math.pow(2, attempt)))
+        continue
+      }
+    }
   }
+  if (lastError) console.error(`fetchRevenueByMonth failed after ${MAX_RETRIES + 1} attempts:`, lastError)
+  return []
 }

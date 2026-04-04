@@ -220,9 +220,7 @@ export default function InboxPage() {
         setTimeout(() => setLogModal(false), 1200)
       })
       .catch(() => {
-        setLoggedIds(prev => new Set([...prev, selected.id]))
-        setLogSuccess(true)
-        setTimeout(() => setLogModal(false), 1200)
+        toast('Failed to log activity', 'error')
       })
   }
 

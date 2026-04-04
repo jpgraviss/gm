@@ -263,12 +263,12 @@ export default function BillingPage() {
 
   useEffect(() => {
     fetch('/api/invoices')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setLocalInvoices(data) })
       .catch(() => toast('Failed to load invoices', 'error'))
       .finally(() => setLoading(false))
-    fetchContracts().then(d => { if (Array.isArray(d)) setContracts(d) }).catch(() => {})
-    fetchRevenueByMonth().then(d => { if (Array.isArray(d)) setRevenueByMonth(d) }).catch(() => {})
+    fetchContracts().then(d => { if (Array.isArray(d)) setContracts(d) }).catch(() => toast('Failed to load contracts', 'error'))
+    fetchRevenueByMonth().then(d => { if (Array.isArray(d)) setRevenueByMonth(d) }).catch(() => toast('Failed to load revenue data', 'error'))
     fetchQBStatus()
     fetch('/api/time-entries/billable-summary').then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setBillableSummary(d) }).catch(() => toast('Failed to load billable time summary', 'error'))
   }, [])

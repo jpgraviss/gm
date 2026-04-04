@@ -75,8 +75,8 @@ export default function CalendarSettingsPage() {
     if (!user?.email) return
     // Load calendar settings and global settings in parallel
     Promise.all([
-      fetch(`/api/calendar/settings?email=${encodeURIComponent(user.email)}`).then(r => r.json()).catch(() => { console.warn('Failed to load calendar settings'); return null }),
-      fetch('/api/settings').then(r => r.json()).catch(() => { console.warn('Failed to load global settings'); return null }),
+      fetch(`/api/calendar/settings?email=${encodeURIComponent(user.email)}`).then(r => r.ok ? r.json() : null).catch(() => { console.warn('Failed to load calendar settings'); return null }),
+      fetch('/api/settings').then(r => r.ok ? r.json() : null).catch(() => { console.warn('Failed to load global settings'); return null }),
     ]).then(([calData, globalData]) => {
       if (calData && !calData.error) {
         setSettings(calData)

@@ -495,7 +495,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     fetch('/api/tasks')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setTasks(data) })
       .catch(() => toast('Failed to load tasks', 'error'))
       .finally(() => setLoading(false))

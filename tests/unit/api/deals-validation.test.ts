@@ -15,7 +15,7 @@ describe('deals route validation', () => {
   it('accepts valid deal data with all fields', () => {
     const body = {
       company: 'Acme Corp',
-      stage: 'Proposal',
+      stage: 'Proposal Sent',
       value: 75000,
       serviceType: 'Web Development',
       assignedRep: 'Jonathan Graviss',

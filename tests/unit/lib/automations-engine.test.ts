@@ -31,7 +31,7 @@ const mockDb = {
     }
     // For any other table, capture inserts
     const chain = createSupabaseChain()
-    const origInsert = chain.insert as ReturnType<typeof vi.fn>
+    const origInsert = chain.insert as (data: unknown) => unknown
     chain.insert = vi.fn().mockImplementation((data: unknown) => {
       if (!insertCalls[table]) insertCalls[table] = []
       insertCalls[table].push(data)

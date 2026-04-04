@@ -322,12 +322,12 @@ export default function SequencesPage() {
     toast('Sequence deleted', 'success')
   }
 
-  const folders = [...new Set(sequences.map(s => (s as any).folder).filter(Boolean))]
+  const folders = [...new Set(sequences.map(s => (s as EmailSequence & { folder?: string }).folder).filter(Boolean))]
 
   // Filter + sort
   let filtered = statusFilter === 'All' ? sequences : sequences.filter(s => s.status === statusFilter)
   if (folderFilter !== 'all') {
-    filtered = filtered.filter(s => (s as any).folder === folderFilter)
+    filtered = filtered.filter(s => (s as EmailSequence & { folder?: string }).folder === folderFilter)
   }
   if (search.trim()) {
     const q = search.toLowerCase()
@@ -697,7 +697,7 @@ export default function SequencesPage() {
                       <div className="flex items-center gap-3 mt-0.5">
                         <span className="text-xs text-gray-500">{seq.activeCount} contacts in queue</span>
                         <span className="text-xs text-gray-400">·</span>
-                        <span className="text-xs text-gray-500">{seq.steps.filter((s: any) => s.type === 'email' || s.type === 'manual_email').length} email steps</span>
+                        <span className="text-xs text-gray-500">{seq.steps.filter((s: SequenceStep) => s.type === 'email' || s.type === 'manual_email').length} email steps</span>
                       </div>
                     </div>
                     <div className="text-right">

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Resend } from 'resend'
+import { getResend } from '@/lib/resend'
 import { createServiceClient } from '@/lib/supabase'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,7 +41,7 @@ export async function POST(req: NextRequest) {
     const portalUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
     const items = proposal.items ?? []
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResend().emails.send({
       from: 'GravHub <noreply@app.gravissmarketing.com>',
       replyTo: 'info@gravissmarketing.com',
       to: [recipientEmail],

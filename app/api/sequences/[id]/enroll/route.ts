@@ -31,8 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .single()
   if (seqErr || !seq) return NextResponse.json({ error: 'Sequence not found' }, { status: 404 })
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const steps: any[] = seq.steps ?? []
+  const steps: Array<{ day?: number }> = seq.steps ?? []
   const firstDays: number = steps[0]?.day ?? 0
 
   // Check for already-enrolled contacts to avoid duplicates
@@ -42,8 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .select('contact_email')
     .eq('sequence_id', id)
     .in('contact_email', emails)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const alreadyEnrolled = new Set((existing ?? []).map((r: any) => r.contact_email as string))
+  const alreadyEnrolled = new Set((existing ?? []).map((r: { contact_email: string }) => r.contact_email))
 
   // Check suppression list (emails stored lowercase)
   const normalizedEmails = emails.map(e => e.toLowerCase())
@@ -51,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .from('sequence_suppression_list')
     .select('email')
     .in('email', normalizedEmails)
-  const suppressedEmails = new Set((suppressed ?? []).map((r: any) => r.email as string))
+  const suppressedEmails = new Set((suppressed ?? []).map((r: { email: string }) => r.email))
 
   // Check one-at-a-time: skip contacts already active in another sequence
   const { data: activeElsewhere } = await db
@@ -60,7 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .neq('sequence_id', id)
     .eq('status', 'active')
     .in('contact_email', emails)
-  const activeElsewhereEmails = new Set((activeElsewhere ?? []).map((r: any) => r.contact_email as string))
+  const activeElsewhereEmails = new Set((activeElsewhere ?? []).map((r: { contact_email: string }) => r.contact_email))
 
   const toEnroll = contacts.filter(c => c.email && !alreadyEnrolled.has(c.email) && !suppressedEmails.has(c.email.toLowerCase()) && !activeElsewhereEmails.has(c.email))
   if (!toEnroll.length) return NextResponse.json({ enrolled: 0 })

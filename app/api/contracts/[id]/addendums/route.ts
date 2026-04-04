@@ -3,17 +3,24 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 
 const ADDENDUM_STATUSES = ['Draft', 'Sent', 'Accepted', 'Declined'] as const
+const CHANGE_TYPES = ['Scope Change', 'Value Change', 'Term Extension', 'Termination', 'Other'] as const
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapAddendum(row: any) {
   return {
-    id:          row.id,
-    contractId:  row.contract_id,
-    title:       row.title,
-    description: row.description,
-    status:      row.status,
-    createdDate: row.created_at?.split('T')[0] ?? '',
-    sentDate:    row.sent_at?.split('T')[0] ?? undefined,
+    id:              row.id,
+    contractId:      row.contract_id,
+    title:           row.title,
+    description:     row.description,
+    status:          row.status,
+    createdDate:     row.created_at?.split('T')[0] ?? '',
+    sentDate:        row.sent_at?.split('T')[0] ?? undefined,
+    changeType:      row.change_type ?? undefined,
+    valueDelta:      row.value_delta != null ? Number(row.value_delta) : undefined,
+    termDeltaMonths: row.term_delta_months ?? undefined,
+    scopeAdded:      row.scope_added ?? undefined,
+    scopeRemoved:    row.scope_removed ?? undefined,
+    effectiveDate:   row.effective_date ?? undefined,
   }
 }
 
@@ -46,8 +53,14 @@ export async function POST(
   const body = await req.json()
 
   const result = validate(body, {
-    title:       { required: true, type: 'string', maxLength: 300 },
-    description: { required: true, type: 'string', maxLength: 5000 },
+    title:           { required: true, type: 'string', maxLength: 300 },
+    description:     { required: true, type: 'string', maxLength: 5000 },
+    changeType:      { type: 'string', enum: [...CHANGE_TYPES] },
+    valueDelta:      { type: 'number', min: -100_000_000, max: 100_000_000 },
+    termDeltaMonths: { type: 'number', min: -120, max: 120 },
+    scopeAdded:      { type: 'string', maxLength: 5000 },
+    scopeRemoved:    { type: 'string', maxLength: 5000 },
+    effectiveDate:   { type: 'string', maxLength: 30 },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -71,6 +84,12 @@ export async function POST(
       title: body.title,
       description: body.description,
       status: 'Draft',
+      change_type:       body.changeType ?? null,
+      value_delta:       body.valueDelta ?? null,
+      term_delta_months: body.termDeltaMonths ?? null,
+      scope_added:       body.scopeAdded ?? null,
+      scope_removed:     body.scopeRemoved ?? null,
+      effective_date:    body.effectiveDate ?? null,
     })
     .select()
     .single()

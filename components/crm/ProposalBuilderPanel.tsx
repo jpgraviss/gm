@@ -877,37 +877,40 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
 
   return (
     <div className="fixed inset-0 z-50 flex bg-black/60 overflow-hidden">
-      {/* Click-away */}
-      <div className="flex-1" onClick={onClose} />
+      {/* Click-away (hidden on mobile — panel takes full width) */}
+      <div className="hidden lg:block flex-1" onClick={onClose} />
 
       {/* Panel */}
-      <div className="pointer-events-auto flex flex-col bg-white shadow-2xl overflow-hidden" style={{ width: 'min(980px, 100vw)', height: '100vh' }}>
+      <div className="pointer-events-auto flex flex-col bg-white shadow-2xl overflow-hidden w-full lg:w-[min(980px,100vw)]" style={{ height: '100vh' }}>
 
         {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-white/10" style={{ background: '#012b1e' }}>
-          <div className="flex items-center gap-3">
-            <FileText size={15} className="text-emerald-400" />
-            <div>
-              <p className="text-white font-bold text-sm" style={{ fontFamily: 'var(--font-heading)' }}>Proposal Builder</p>
-              <p className="text-white/50 text-[11px]">Configure · Preview · Export PDF</p>
+        <div className="flex-shrink-0 flex items-center justify-between gap-2 px-4 sm:px-6 py-3 sm:py-4 border-b border-white/10" style={{ background: '#012b1e' }}>
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <FileText size={15} className="text-emerald-400 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-white font-bold text-sm truncate" style={{ fontFamily: 'var(--font-heading)' }}>Proposal Builder</p>
+              <p className="text-white/50 text-[11px] truncate hidden sm:block">Configure · Preview · Export PDF</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
             <button
               onClick={handleSave}
               disabled={!company}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white border border-emerald-600/40 hover:bg-emerald-600/20 transition-colors disabled:opacity-40"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold text-white border border-emerald-600/40 hover:bg-emerald-600/20 transition-colors disabled:opacity-40 whitespace-nowrap"
+              title="Save Draft"
             >
-              <Save size={12} /> Save Draft
+              <Save size={12} /> <span className="hidden sm:inline">Save Draft</span><span className="sm:hidden">Save</span>
             </button>
             <button
               onClick={handleDownloadPDF}
               disabled={generating || !company}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors disabled:opacity-40"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors disabled:opacity-40 whitespace-nowrap"
               style={{ background: '#015035' }}
+              title="Download PDF"
             >
               <Download size={12} className={generating ? 'animate-bounce' : ''} />
-              {generating ? 'Generating…' : 'Download PDF'}
+              <span className="hidden sm:inline">{generating ? 'Generating…' : 'Download PDF'}</span>
+              <span className="sm:hidden">{generating ? '…' : 'PDF'}</span>
             </button>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10">
               <X size={16} className="text-white/60" />
@@ -915,17 +918,17 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
           </div>
         </div>
 
-        {/* Body — 2 col */}
-        <div className="flex-1 flex overflow-hidden">
+        {/* Body — stacks on mobile, 2-col on lg+ */}
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
 
           {/* LEFT — Calculator */}
-          <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 border-r border-gray-100">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-6 lg:border-r border-gray-100">
 
             {/* Client info */}
             <section>
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Client Info</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
                   <label className="text-[11px] font-semibold text-gray-500 mb-1 block">Company Name *</label>
                   <input value={company} onChange={e => setCompany(e.target.value)} placeholder="Acme Corp"
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
@@ -1146,8 +1149,8 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
             </section>
           </div>
 
-          {/* RIGHT — Live summary */}
-          <div className="w-72 flex-shrink-0 overflow-y-auto p-5 bg-gray-50 flex flex-col gap-4">
+          {/* RIGHT — Live summary (below form on mobile, sidebar on lg+) */}
+          <div className="w-full lg:w-72 flex-shrink-0 overflow-y-auto p-4 sm:p-5 bg-gray-50 flex flex-col gap-4 border-t lg:border-t-0 border-gray-100">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Live Summary</p>
 
             {company && (

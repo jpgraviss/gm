@@ -1,9 +1,9 @@
 # GravHub — Completion Assessment & Final Plan
-**Last updated: March 30, 2026**
+**Last updated: April 4, 2026**
 
 ---
 
-## COMPLETION: 98% Functional
+## COMPLETION: 99% Functional
 
 ### Scoring Breakdown
 
@@ -18,8 +18,9 @@
 | **Admin** (users, audit logs, imports, invitations) | 100% | All functional, dynamic team members from DB |
 | **Automation Engine** | 100% | Engine built + trigger hooks + daily cron scheduler for time-based triggers (overdue invoices, renewals) |
 | **Error Handling / UX** | 95% | Toast wired to all user-facing errors. Loading spinners on all pages. 3 acceptable silent catches remain (CSS fallback, greeting, JSON parse). |
-| **Database Migrations** | 100% | All 15 migrations applied. Schema, seeds, and templates loaded. |
-| **Security** | 75% | Middleware auth + encrypted tokens + RLS write policies applied. Sentry not yet configured. |
+| **Database Migrations** | 100% | All 16 migrations applied. Schema, seeds, and templates loaded. |
+| **Security** | 80% | Proxy auth (renamed from middleware for Next 16) + CSRF + encrypted tokens + RLS write policies applied. Sentry DSN not yet configured. Rate limit still in-memory. |
+| **CI / Build** | 100% | `next build`, `tsc --noEmit`, `vitest run`, and `eslint` all green. GitHub Actions workflow runs on every PR. |
 
 ---
 
@@ -52,17 +53,34 @@
    - `add_timesheet_approvals` — Approval workflow on time_entries
    - `add_maintenance_fields` — end_date, cancellation_fee, payment_terms on maintenance_records
    - `add_projects_notes` — notes (JSONB) and overview on projects
+   - `add_addendum_change_fields` — change_type, value_delta, term_delta_months, scope_added, scope_removed, effective_date on contract_addendums
 8. **Schema & Seeds Loaded** — `schema.sql`, `schema_calendar.sql`, `setup.sql`, `seed.sql`, `seed-templates.sql` all applied.
+
+### TIER 4: Build Hygiene — ALL DONE (Apr 4)
+9. **Build unblocked** — Lazy `getResend()` helper in `lib/resend.ts` so module-load no longer throws without `RESEND_API_KEY`.
+10. **Mock data removed** — Deleted orphaned `lib/data.ts` (488 LOC); `isConfigured` escape hatch dropped so Supabase is strictly required.
+11. **Next 16 file-convention** — `middleware.ts` → `proxy.ts` (deprecation warning resolved).
+12. **Model IDs env-configurable** — `lib/anthropic.ts` reads `ANTHROPIC_MODEL_CHAT` / `ANTHROPIC_MODEL_INSIGHTS` with sensible defaults.
+13. **Root error boundary** — `app/global-error.tsx` wraps layout-level crashes.
+14. **CI pipeline** — `.github/workflows/ci.yml` runs typecheck + lint + test + build on every PR.
+
+### TIER 5: Product UX (Apr 4)
+15. **Proposal Builder mobile layout** — Panel now stacks form + Live Summary vertically on phones; client-info grid drops to single column; header buttons shrink labels.
+16. **Contract → Proposal lookup** — New Contract panel can search an existing proposal and auto-fill the contract (company, service, rep, value, `proposalId`).
+17. **Addendum workflow** — Standalone New Addendum panel: searches for a contract, then structured change fields (change type, value delta, term delta, scope ±, effective date).
 
 ---
 
 ## WHAT'S LEFT — Pre-Launch
 
-### Production Readiness
+### Production Readiness (needs infra decisions)
 1. **Sentry Error Monitoring** — Create Sentry project and set `NEXT_PUBLIC_SENTRY_DSN` + `SENTRY_AUTH_TOKEN` in Vercel env vars
 2. **Rate Limiting** — Current in-memory rate limiting is per-instance; replace with Redis/Upstash for multi-instance production
-3. **Vercel Deployment** — Deploy to `app.gravissmarketing.com` with all env vars configured
-4. **Merge to Main** — Merge feature branch to main after final review
+3. **RLS granularity** — Current write policies are blanket `authenticated = true`. Tighten with `owner_id` / `team_id` scoping once ownership model is decided.
+4. **CSP hardening** — Remove `'unsafe-eval'` from `next.config.ts` CSP; needs thorough smoke test against Next/Turbopack runtime.
+5. **Setup passwords** — Replace `JONATHAN_PASSWORD`/`JG_PASSWORD`/`SHIHAB_PASSWORD` env vars with magic-link invite flow.
+6. **Vercel Deployment** — Deploy to `app.gravissmarketing.com` with all env vars configured
+7. **Merge to Main** — Merge feature branch to main after final review
 
 ---
 
@@ -80,6 +98,7 @@
 | Calendar | Google Calendar API v3 |
 | AI | Anthropic Claude |
 | Testing | Vitest (93 tests passing) |
+| CI | GitHub Actions (`.github/workflows/ci.yml`) |
 | Error Tracking | Sentry (pending DSN) |
 | Integrations | QuickBooks Online, Gmail API, Google Drive |
 

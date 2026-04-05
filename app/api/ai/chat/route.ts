@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { anthropicChatModel } from '@/lib/anthropic'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -810,7 +811,7 @@ Keep the tone professional but approachable. Be specific about deliverables. Use
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
+          model: anthropicChatModel(),
           max_tokens: 4096,
           messages: [{ role: 'user', content: proposalPrompt }],
         }),
@@ -896,7 +897,7 @@ Guidelines:
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
+          model: anthropicChatModel(),
           max_tokens: 4096,
           system: systemPrompt,
           tools: TOOLS,

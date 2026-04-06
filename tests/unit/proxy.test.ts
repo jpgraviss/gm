@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-// The proxy uses setInterval at module level — mock it so it doesn't leak
-vi.stubGlobal('setInterval', vi.fn())
+// Mock Upstash so tests use in-memory fallback
+vi.mock('@upstash/ratelimit', () => ({ Ratelimit: vi.fn() }))
+vi.mock('@upstash/redis', () => ({ Redis: { fromEnv: vi.fn() } }))
 
 import { proxy } from '@/proxy'
 
@@ -31,7 +32,7 @@ describe('proxy — CSRF protection', () => {
       },
     })
 
-    const res = proxy(req)
+    const res = await proxy(req)
     expect(res.status).toBe(403)
     const body = await res.json()
     expect(body.error).toBe('Cross-origin request blocked')
@@ -46,7 +47,7 @@ describe('proxy — CSRF protection', () => {
       },
     })
 
-    const res = proxy(req)
+    const res = await proxy(req)
     expect(res.status).toBe(200)
   })
 
@@ -60,30 +61,29 @@ describe('proxy — CSRF protection', () => {
       },
     })
 
-    const res = proxy(req)
+    const res = await proxy(req)
     // GET bypasses CSRF so it should reach the auth check and pass (has auth header)
     expect(res.status).toBe(200)
   })
 })
 
 describe('proxy — rate limiting', () => {
-  it('returns 429 when admin setup rate limit is exceeded', async () => {
-    // Fire 6 requests — limit is 5 per hour
+  it('returns 429 when general API rate limit is exceeded', async () => {
+    // Fire 201 authenticated requests — limit is 200/min
     let lastRes
-    for (let i = 0; i < 6; i++) {
-      const req = makeRequest('/api/admin/setup', {
-        method: 'POST',
+    for (let i = 0; i < 201; i++) {
+      const req = makeRequest('/api/deals', {
+        method: 'GET',
         headers: {
-          origin: 'http://localhost',
-          host: 'localhost',
-          'x-forwarded-for': '10.0.0.99',
+          authorization: 'Bearer token',
+          'x-forwarded-for': '10.0.0.201',
         },
       })
-      lastRes = proxy(req)
+      lastRes = await proxy(req)
     }
 
     expect(lastRes!.status).toBe(429)
     const body = await lastRes!.json()
-    expect(body.error).toContain('Too many requests')
+    expect(body.error).toContain('Rate limit exceeded')
   })
 })

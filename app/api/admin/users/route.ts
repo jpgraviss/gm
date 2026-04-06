@@ -1,39 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
-
-async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
-  const db = createServiceClient()
-
-  // Try to get token from cookie or header
-  const authHeader = req.headers.get('authorization')
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-
-  // Get user from Supabase
-  if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const { data: { user }, error } = await db.auth.getUser(token)
-  if (error || !user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  // Check if admin
-  const { data: member } = await db
-    .from('team_members')
-    .select('is_admin')
-    .eq('email', user.email)
-    .single()
-
-  if (!member?.is_admin) {
-    return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
-  }
-
-  return null // Authorized
-}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapUser(row: any) {

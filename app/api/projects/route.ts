@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     .from('projects')
     .insert({
       id:            `pr-${Date.now()}`,
-      contract_id:   body.contractId ?? null,
+      contract_id:   body.contractId || null,
       company:       body.company,
       service_type:  body.serviceType ?? 'General',
       status:        body.status ?? 'Not Started',

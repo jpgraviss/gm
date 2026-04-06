@@ -9,7 +9,7 @@ import {
   Users, Shield, Bell, Palette, Building, Plus, Pencil, Link2,
   CheckCircle, AlertCircle, RefreshCw, Plug, Globe, Tag,
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
-  Trash2, X, Eye, EyeOff,
+  Trash2, X, Eye, EyeOff, AlertTriangle,
 } from 'lucide-react'
 
 const membershipColors: Record<string, string> = {
@@ -367,8 +367,34 @@ export default function SettingsPage() {
     flash('Team')
   }
 
-  function removeMember(id: string) {
-    setMembers(prev => prev.filter(m => m.id !== id))
+  const [removeTarget, setRemoveTarget] = useState<string | null>(null)
+  const [reassignTo, setReassignTo] = useState('')
+
+  async function confirmRemoveMember() {
+    if (!removeTarget) return
+    const target = members.find(m => m.id === removeTarget)
+    if (!target) return
+
+    try {
+      const res = await fetch(`/api/team-members/${removeTarget}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+
+      // Reassign deals if a target rep was selected
+      if (reassignTo && target.name) {
+        await fetch('/api/deals/reassign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fromRep: target.name, toRep: reassignTo }),
+        }).catch(() => {/* best effort */})
+      }
+
+      setMembers(prev => prev.filter(m => m.id !== removeTarget))
+      setRemoveTarget(null)
+      setReassignTo('')
+      toast('Team member removed and deals reassigned', 'success')
+    } catch {
+      toast('Failed to remove team member', 'error')
+    }
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
@@ -543,7 +569,7 @@ export default function SettingsPage() {
                               <button onClick={() => setEditingMember(editingMember === member.id ? null : member.id)} className="text-xs text-blue-600 hover:text-blue-700 font-medium">
                                 {editingMember === member.id ? 'Done' : 'Edit'}
                               </button>
-                              <button onClick={() => removeMember(member.id)} className="text-xs text-gray-400 hover:text-red-500 font-medium">Remove</button>
+                              <button onClick={() => setRemoveTarget(member.id)} className="text-xs text-gray-400 hover:text-red-500 font-medium">Remove</button>
                             </div>
                           </td>
                         </tr>
@@ -1051,6 +1077,66 @@ export default function SettingsPage() {
         )}
 
       </div>
+
+      {/* Remove team member modal with deal reassignment */}
+      {removeTarget && (() => {
+        const target = members.find(m => m.id === removeTarget)
+        if (!target) return null
+        const otherReps = members.filter(m => m.id !== removeTarget).map(m => m.name)
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+              <div className="p-5 border-b border-gray-100">
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle size={18} className="text-red-500" />
+                  </div>
+                  <h3 className="text-base font-bold text-gray-900">Remove {target.name}</h3>
+                </div>
+                <p className="text-sm text-gray-500 mt-2 ml-12">
+                  This will remove their account and reassign all of their deals to the rep you choose below.
+                </p>
+              </div>
+
+              <div className="p-5 flex flex-col gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                    Reassign deals to
+                  </label>
+                  <select
+                    value={reassignTo}
+                    onChange={e => setReassignTo(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  >
+                    <option value="">Select a team member...</option>
+                    {otherReps.map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <p className="text-xs font-semibold text-red-600">This change cannot be undone.</p>
+              </div>
+
+              <div className="p-4 border-t border-gray-100 flex gap-2">
+                <button
+                  onClick={confirmRemoveMember}
+                  disabled={!reassignTo}
+                  className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold bg-red-600 hover:bg-red-700 disabled:opacity-40 transition-colors"
+                >
+                  Remove & Reassign Deals
+                </button>
+                <button
+                  onClick={() => { setRemoveTarget(null); setReassignTo('') }}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </>
   )
 }

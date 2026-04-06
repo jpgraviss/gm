@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/Toast'
 import {
   MessageSquare, CheckCircle, Clock, AlertTriangle, X, ExternalLink,
   Plus, ChevronRight, ArrowUpRight, Send, User, Tag, FolderKanban,
-  Zap, Circle,
+  Zap, Circle, Trash2,
 } from 'lucide-react'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -68,12 +68,13 @@ const allStatuses: TicketStatus[] = ['Open', 'In Progress', 'Waiting on Client',
 // ─── Ticket Panel ─────────────────────────────────────────────────────────────
 
 function TicketPanel({
-  ticket, onClose, onSendReply, onUpdateStatus,
+  ticket, onClose, onSendReply, onUpdateStatus, onDelete,
 }: {
   ticket: Ticket
   onClose: () => void
   onSendReply: (id: string, body: string, isInternal: boolean) => void
   onUpdateStatus: (id: string, status: TicketStatus) => void
+  onDelete: (id: string) => void
 }) {
   const [reply, setReply] = useState('')
   const [showInternal, setShowInternal] = useState(true)
@@ -246,6 +247,12 @@ function TicketPanel({
                 <CheckCircle size={12} /> Resolve
               </button>
             )}
+            <button
+              onClick={() => { if (confirm('Delete this ticket permanently?')) onDelete(ticket.id) }}
+              className={`${ticket.status === 'Resolved' || ticket.status === 'Closed' ? 'ml-auto' : ''} flex items-center gap-1 px-3 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-colors`}
+            >
+              <Trash2 size={12} /> Delete
+            </button>
           </div>
         </div>
       </div>
@@ -295,6 +302,21 @@ export default function TicketsPage() {
       }).catch(() => toast('Failed to send reply', 'error'))
     }
     setSelected(prev => prev?.id === id ? { ...prev, messages: [...prev.messages, newMsg] } : prev)
+  }
+
+  async function deleteTicket(id: string) {
+    try {
+      const res = await fetch(`/api/tickets/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        toast('Failed to delete ticket', 'error')
+        return
+      }
+      setLocalTickets(prev => prev.filter(t => t.id !== id))
+      setSelected(null)
+      toast('Ticket deleted', 'success')
+    } catch {
+      toast('Failed to delete ticket', 'error')
+    }
   }
 
   function updateTicketStatus(id: string, status: TicketStatus) {
@@ -520,6 +542,7 @@ export default function TicketsPage() {
           onClose={() => setSelected(null)}
           onSendReply={sendReply}
           onUpdateStatus={updateTicketStatus}
+          onDelete={deleteTicket}
         />
       )}
       {creatingTicket && (

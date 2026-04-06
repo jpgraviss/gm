@@ -364,7 +364,7 @@ export default function SequencesPage() {
         <div className="flex items-center justify-between mb-5">
           <div>
             <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Sequences</h2>
-            <p className="text-xs text-gray-500 mt-0.5">{sequences.length} of 5,000 created</p>
+            <p className="text-xs text-gray-500 mt-0.5">{sequences.length} sequence{sequences.length !== 1 ? 's' : ''}</p>
           </div>
         </div>
 
@@ -388,28 +388,28 @@ export default function SequencesPage() {
         {topTab === 'manage' && (
           <>
             {/* Summary cards */}
-            <div className="grid grid-cols-4 gap-4 mb-5">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
               {[
                 { label: 'Total Sequences', value: sequences.length.toString(), icon: <Mail size={16} />, color: '#015035' },
                 { label: 'Active', value: activeCount.toString(), icon: <Play size={14} />, color: '#10b981' },
                 { label: 'Total Enrolled', value: totalEnrolled.toString(), icon: <Users size={16} />, color: '#3b82f6' },
                 { label: 'Avg Reply Rate', value: `${avgReplyRate}%`, icon: <TrendingUp size={16} />, color: '#8b5cf6' },
               ].map(c => (
-                <div key={c.label} className="bg-white rounded-xl border border-gray-200 p-4">
-                  <div className="flex items-center gap-2 mb-2">
+                <div key={c.label} className="bg-white rounded-xl border border-gray-200 p-3 md:p-4">
+                  <div className="flex items-center gap-2 mb-1.5 md:mb-2">
                     <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${c.color}12`, color: c.color }}>
                       {c.icon}
                     </div>
-                    <span className="text-[11px] text-gray-500 uppercase tracking-wide font-semibold">{c.label}</span>
+                    <span className="text-[10px] md:text-[11px] text-gray-500 uppercase tracking-wide font-semibold leading-tight">{c.label}</span>
                   </div>
-                  <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{c.value}</p>
+                  <p className="text-xl md:text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{c.value}</p>
                 </div>
               ))}
             </div>
 
             {/* Search + Filters */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="relative flex-1 max-w-sm">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 mb-4">
+              <div className="relative flex-1 sm:max-w-sm">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   value={search}
@@ -418,7 +418,7 @@ export default function SequencesPage() {
                   className="w-full text-sm border border-gray-200 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
                 />
               </div>
-              <div className="flex gap-1 overflow-x-auto">
+              <div className="flex gap-1 overflow-x-auto pb-0.5">
                 {(['All', 'Active', 'Paused', 'Draft', 'Completed'] as const).map(s => (
                   <button
                     key={s}
@@ -449,8 +449,8 @@ export default function SequencesPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <table className="w-full">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+              <table className="w-full min-w-[640px]">
                 <thead>
                   <tr className="border-b border-gray-100">
                     <th className="text-left px-4 py-3">
@@ -468,13 +468,13 @@ export default function SequencesPage() {
                         Reply Rate <ArrowUpDown size={10} />
                       </button>
                     </th>
-                    <th className="text-center px-4 py-3">
+                    <th className="text-center px-4 py-3 hidden md:table-cell">
                       <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Meeting Rate</span>
                     </th>
-                    <th className="text-center px-4 py-3">
+                    <th className="text-center px-4 py-3 hidden md:table-cell">
                       <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Open Rate</span>
                     </th>
-                    <th className="text-left px-4 py-3">
+                    <th className="text-left px-4 py-3 hidden lg:table-cell">
                       <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Owner</span>
                     </th>
                     <th className="text-right px-4 py-3">
@@ -532,13 +532,13 @@ export default function SequencesPage() {
                           {seq.replyRate}%
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-center">
+                      <td className="px-4 py-3.5 text-center hidden md:table-cell">
                         <span className="text-sm font-semibold text-gray-600">{seq.meetingRate ?? 0}%</span>
                       </td>
-                      <td className="px-4 py-3.5 text-center">
+                      <td className="px-4 py-3.5 text-center hidden md:table-cell">
                         <span className="text-sm font-semibold text-gray-600">{seq.openRate}%</span>
                       </td>
-                      <td className="px-4 py-3.5">
+                      <td className="px-4 py-3.5 hidden lg:table-cell">
                         <span className="text-sm text-gray-600">{seq.owner || 'Unassigned'}</span>
                       </td>
                       <td className="px-4 py-3.5 text-right">
@@ -576,7 +576,7 @@ export default function SequencesPage() {
               <BarChart3 size={20} className="text-gray-400" />
               <h3 className="text-base font-bold text-gray-900">Sequence Analytics</h3>
             </div>
-            <div className="grid grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6 mb-8">
               {[
                 { label: 'Average Open Rate', value: sequences.length ? `${(sequences.reduce((s, q) => s + q.openRate, 0) / sequences.length).toFixed(1)}%` : '0%', benchmark: '21%', good: sequences.length > 0 && sequences.reduce((s, q) => s + q.openRate, 0) / sequences.length > 21 },
                 { label: 'Average Reply Rate', value: sequences.length ? `${(sequences.reduce((s, q) => s + q.replyRate, 0) / sequences.length).toFixed(1)}%` : '0%', benchmark: '8%', good: sequences.length > 0 && sequences.reduce((s, q) => s + q.replyRate, 0) / sequences.length > 8 },

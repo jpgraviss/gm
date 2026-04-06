@@ -99,16 +99,13 @@ create policy "unit_insert_projects" on public.projects for insert to authentica
 create policy "unit_update_projects" on public.projects for update to authenticated using (true) with check (true);
 create policy "unit_delete_projects" on public.projects for delete to authenticated using (public.auth_user_is_admin());
 
--- maintenance_records
+-- maintenance_records (NO assigned_rep column — open insert/update, admin-only delete)
 drop policy if exists "auth_insert_maintenance" on public.maintenance_records;
 drop policy if exists "auth_update_maintenance" on public.maintenance_records;
 drop policy if exists "auth_delete_maintenance" on public.maintenance_records;
-create policy "unit_insert_maintenance" on public.maintenance_records for insert to authenticated
-  with check (public.same_unit_or_admin(assigned_rep));
-create policy "unit_update_maintenance" on public.maintenance_records for update to authenticated
-  using (public.same_unit_or_admin(assigned_rep)) with check (public.same_unit_or_admin(assigned_rep));
-create policy "unit_delete_maintenance" on public.maintenance_records for delete to authenticated
-  using (public.same_unit_or_admin(assigned_rep));
+create policy "unit_insert_maintenance" on public.maintenance_records for insert to authenticated with check (true);
+create policy "unit_update_maintenance" on public.maintenance_records for update to authenticated using (true) with check (true);
+create policy "unit_delete_maintenance" on public.maintenance_records for delete to authenticated using (public.auth_user_is_admin());
 
 -- renewals
 drop policy if exists "auth_insert_renewals" on public.renewals;

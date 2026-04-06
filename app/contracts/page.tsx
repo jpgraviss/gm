@@ -7,6 +7,7 @@ import { fetchInvoices, fetchProjects, fetchProposals } from '@/lib/supabase'
 import { formatCurrency, contractStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
+import NewAddendumPanel, { type NewAddendumFormData } from '@/components/crm/NewAddendumPanel'
 import type { Contract, ContractStatus, Invoice, Project, Proposal, SignatureRequest } from '@/lib/types'
 import {
   X, CheckCircle, Clock, AlertCircle, ScrollText, Calendar, DollarSign, User,
@@ -27,6 +28,13 @@ interface Addendum {
   status: 'Draft' | 'Sent' | 'Accepted' | 'Declined'
   createdDate: string
   sentDate?: string
+  // Structured change fields
+  changeType?: 'Scope Change' | 'Value Change' | 'Term Extension' | 'Termination' | 'Other'
+  valueDelta?: number
+  termDeltaMonths?: number
+  scopeAdded?: string
+  scopeRemoved?: string
+  effectiveDate?: string
 }
 
 function ContractPanel({
@@ -474,6 +482,26 @@ function ContractPanel({
                           }
                         />
                       </div>
+                      {a.changeType && (
+                        <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
+                            {a.changeType}
+                          </span>
+                          {a.valueDelta != null && (
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${a.valueDelta >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-700 border-red-100'}`}>
+                              {a.valueDelta >= 0 ? '+' : ''}{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(a.valueDelta)}
+                            </span>
+                          )}
+                          {a.termDeltaMonths != null && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                              {a.termDeltaMonths >= 0 ? '+' : ''}{a.termDeltaMonths}mo
+                            </span>
+                          )}
+                          {a.effectiveDate && (
+                            <span className="text-[10px] text-gray-500">eff. {formatDate(a.effectiveDate)}</span>
+                          )}
+                        </div>
+                      )}
                       <p className="text-[11px] text-gray-500 leading-relaxed mb-2.5 line-clamp-2">{a.description}</p>
                       <div className="flex gap-2 items-center">
                         {a.status === 'Draft' && (
@@ -639,6 +667,7 @@ export default function ContractsPage() {
   const [selected, setSelected] = useState<Contract | null>(null)
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'All'>('All')
   const [creatingContract, setCreatingContract] = useState(false)
+  const [creatingAddendum, setCreatingAddendum] = useState(false)
   const [localAddendums, setLocalAddendums] = useState<Addendum[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -722,6 +751,35 @@ export default function ContractsPage() {
         return
       }
       setLocalAddendums(prev => [data, ...prev])
+      toast('Addendum created', 'success')
+    } catch {
+      toast('Failed to create addendum', 'error')
+    }
+  }
+
+  async function handleNewAddendum(data: NewAddendumFormData) {
+    try {
+      const res = await fetch(`/api/contracts/${data.contractId}/addendums`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: data.title,
+          description: data.description,
+          changeType: data.changeType,
+          valueDelta: data.valueDelta,
+          termDeltaMonths: data.termDeltaMonths,
+          scopeAdded: data.scopeAdded,
+          scopeRemoved: data.scopeRemoved,
+          effectiveDate: data.effectiveDate,
+        }),
+      })
+      const created = await res.json()
+      if (!res.ok) {
+        toast(created.error || 'Failed to create addendum', 'error')
+        return
+      }
+      setLocalAddendums(prev => [created, ...prev])
+      setCreatingAddendum(false)
       toast('Addendum created', 'success')
     } catch {
       toast('Failed to create addendum', 'error')
@@ -818,6 +876,7 @@ export default function ContractsPage() {
           duration: Number(data.duration),
           startDate,
           renewalDate,
+          proposalId: data.proposalId,
         }),
       })
       const created = await res.json()
@@ -880,9 +939,17 @@ export default function ContractsPage() {
                 <button key={s} onClick={() => setStatusFilter(s)} className={`filter-pill flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>{s}</button>
               ))}
             </div>
-            <span className="text-xs text-gray-400 font-semibold flex-shrink-0">
-              {filtered.length} · {formatCurrency(filtered.reduce((s, c) => s + c.value, 0))}
-            </span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => setCreatingAddendum(true)}
+                className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+              >
+                <FilePlus2 size={12} /> Addendum
+              </button>
+              <span className="text-xs text-gray-400 font-semibold whitespace-nowrap">
+                {filtered.length} · {formatCurrency(filtered.reduce((s, c) => s + c.value, 0))}
+              </span>
+            </div>
           </div>
           <div className="overflow-x-auto table-scroll">
             <table className="data-table min-w-[560px]">
@@ -971,6 +1038,13 @@ export default function ContractsPage() {
       )}
       {creatingContract && (
         <NewContractPanel onSave={handleNewContract} onClose={() => setCreatingContract(false)} />
+      )}
+      {creatingAddendum && (
+        <NewAddendumPanel
+          contracts={localContracts}
+          onSave={handleNewAddendum}
+          onClose={() => setCreatingAddendum(false)}
+        />
       )}
     </>
   )

@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
-import { getSupabaseClient, isConfigured } from '@/lib/supabase'
+import { getSupabaseClient } from '@/lib/supabase'
 import type { TeamMember } from '@/lib/types'
 
 export interface AuthUser {
@@ -153,11 +153,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (!isConfigured) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLoading(false)
-      return
-    }
     const supabase = getSupabaseClient()
 
     // Helper: load profile and set user + cookie
@@ -262,6 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const storedGmailEmail = localStorage.getItem('gravhub_gmail_email')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (storedGmailEmail) setGmailEmail(storedGmailEmail)
     } catch {/* ignore */}
 
@@ -387,7 +383,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     tokenClient.requestAccessToken()
-  }, [user?.email])
+  }, [user])
 
   const disconnectGmail = useCallback(() => {
     const g = (window as unknown as { google?: { accounts?: { oauth2?: { revoke: (token: string, cb: () => void) => void } } } }).google
@@ -405,7 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ userEmail: user.email }),
       }).catch(() => {/* non-blocking */})
     }
-  }, [gmailToken, user?.email])
+  }, [gmailToken, user])
 
   return (
     <AuthContext.Provider value={{

@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       .eq('id', 'global')
       .single()
 
-    const gmailToken = (settings as any)?.gmail_access_token
+    const gmailToken = (settings as { gmail_access_token?: string } | null)?.gmail_access_token
     if (!gmailToken) {
       return NextResponse.json({ error: 'Gmail not connected' }, { status: 400 })
     }
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch Gmail messages' }, { status: 502 })
     }
     const listData = await listRes.json()
-    const messageIds = (listData.messages ?? []).map((m: any) => m.id)
+    const messageIds = (listData.messages ?? []).map((m: { id: string }) => m.id)
 
     if (messageIds.length === 0) {
       return NextResponse.json({ created: 0, skipped: 0 })
@@ -59,9 +59,10 @@ export async function POST(req: NextRequest) {
 
       // Extract headers
       const headers = msg.payload?.headers ?? []
-      const fromHeader = headers.find((h: any) => h.name === 'From')?.value ?? ''
-      const subject = headers.find((h: any) => h.name === 'Subject')?.value ?? 'No Subject'
-      const dateHeader = headers.find((h: any) => h.name === 'Date')?.value ?? ''
+      type GmailHeader = { name: string; value: string }
+      const fromHeader = (headers as GmailHeader[]).find((h) => h.name === 'From')?.value ?? ''
+      const subject = (headers as GmailHeader[]).find((h) => h.name === 'Subject')?.value ?? 'No Subject'
+      const dateHeader = (headers as GmailHeader[]).find((h) => h.name === 'Date')?.value ?? ''
 
       // Extract sender email
       const emailMatch = fromHeader.match(/<([^>]+)>/) || fromHeader.match(/([^\s<]+@[^\s>]+)/)
@@ -100,7 +101,8 @@ export async function POST(req: NextRequest) {
 
       // Extract body text
       let body = ''
-      function extractText(part: any): string {
+      type GmailPart = { mimeType?: string; body?: { data?: string }; parts?: GmailPart[] }
+      function extractText(part: GmailPart): string {
         if (part.mimeType === 'text/plain' && part.body?.data) {
           return Buffer.from(part.body.data, 'base64url').toString('utf-8')
         }

@@ -176,9 +176,8 @@ components/
 └── layout/                    # AppShell, Sidebar, Header
 
 lib/
-├── data.ts                    # Seed/mock data (fallback when DB not configured)
 ├── google-calendar.ts         # Google Calendar OAuth + API helpers
-├── supabase.ts                # Supabase client (lazy-init, safe without env vars)
+├── supabase.ts                # Supabase client (lazy-init, throws if env vars missing)
 ├── types.ts                   # All TypeScript interfaces
 └── utils.ts                   # formatCurrency, formatDate, color maps
 
@@ -218,7 +217,7 @@ supabase/
 
 ## Notes
 
-- **Supabase not required to run** — all API routes fall back to seed data when env vars are missing. The app is fully functional without a database for development/demo purposes.
+- **Supabase is required to run** — API routes connect to Postgres via the service-role key and will throw if env vars are missing. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` before booting the app.
 - **Google Calendar not required** — booking system works without it; slots are calculated from existing bookings in Supabase only (no Google free/busy check).
 - **Public routes** — `/book/*` and `/login` are the only routes that don't require authentication.
 - **PDF generation** uses jsPDF's native vector API (not html2canvas), producing crisp PDFs at any zoom level.

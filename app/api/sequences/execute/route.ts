@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Resend } from 'resend'
+import type { Resend } from 'resend'
+import { getResend } from '@/lib/resend'
 import { createServiceClient } from '@/lib/supabase'
 import { sendViaGmail } from '@/lib/gmail-send'
 import { fireAutomations } from '@/lib/automations-engine'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.gravissmarketing.com'
 
 // ─── Merge-field replacement ─────────────────────────────────────────────────
@@ -545,7 +544,7 @@ export async function POST(req: NextRequest) {
 
       // Send via Resend if Gmail wasn't used or failed
       if (!gmailSent) {
-        const resendPayload: Parameters<typeof resend.emails.send>[0] = {
+        const resendPayload: Parameters<Resend['emails']['send']>[0] = {
           from: `${fromName} <${fromEmail}>`,
           replyTo,
           to: [enrollment.contact_email],
@@ -564,7 +563,7 @@ export async function POST(req: NextRequest) {
           resendPayload.headers['References'] = references!
         }
 
-        const { data: resendData, error: resendErr } = await resend.emails.send(resendPayload)
+        const { data: resendData, error: resendErr } = await getResend().emails.send(resendPayload)
         emailErr = resendErr ? (resendErr as Error).message ?? 'Resend error' : null
         if (!emailErr && resendData) {
           messageId = resendData.id ?? null

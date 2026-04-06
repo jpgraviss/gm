@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-// The middleware uses setInterval at module level — mock it so it doesn't leak
+// The proxy uses setInterval at module level — mock it so it doesn't leak
 vi.stubGlobal('setInterval', vi.fn())
 
-import { middleware } from '@/middleware'
+import { proxy } from '@/proxy'
 
 function makeRequest(
   path: string,
@@ -21,7 +21,7 @@ function makeRequest(
   })
 }
 
-describe('middleware — CSRF protection', () => {
+describe('proxy — CSRF protection', () => {
   it('blocks cross-origin POST requests', async () => {
     const req = makeRequest('/api/deals', {
       method: 'POST',
@@ -31,7 +31,7 @@ describe('middleware — CSRF protection', () => {
       },
     })
 
-    const res = middleware(req)
+    const res = proxy(req)
     expect(res.status).toBe(403)
     const body = await res.json()
     expect(body.error).toBe('Cross-origin request blocked')
@@ -46,7 +46,7 @@ describe('middleware — CSRF protection', () => {
       },
     })
 
-    const res = middleware(req)
+    const res = proxy(req)
     expect(res.status).toBe(200)
   })
 
@@ -60,13 +60,13 @@ describe('middleware — CSRF protection', () => {
       },
     })
 
-    const res = middleware(req)
+    const res = proxy(req)
     // GET bypasses CSRF so it should reach the auth check and pass (has auth header)
     expect(res.status).toBe(200)
   })
 })
 
-describe('middleware — rate limiting', () => {
+describe('proxy — rate limiting', () => {
   it('returns 429 when admin setup rate limit is exceeded', async () => {
     // Fire 6 requests — limit is 5 per hour
     let lastRes
@@ -79,7 +79,7 @@ describe('middleware — rate limiting', () => {
           'x-forwarded-for': '10.0.0.99',
         },
       })
-      lastRes = middleware(req)
+      lastRes = proxy(req)
     }
 
     expect(lastRes!.status).toBe(429)

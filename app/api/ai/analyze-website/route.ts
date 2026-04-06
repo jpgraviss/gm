@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { anthropicInsightsModel } from '@/lib/anthropic'
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,7 +35,7 @@ Based on the URL and your knowledge of this company/website, infer the following
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: anthropicInsightsModel(),
         max_tokens: 1024,
         messages: [{ role: 'user', content: prompt }],
       }),

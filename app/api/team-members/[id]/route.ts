@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
+import { logAudit } from '@/lib/audit'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -42,5 +43,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     console.error('[team-members/:id DELETE]', error)
     return NextResponse.json({ error: error?.message || 'Failed to delete team member' }, { status: 500 })
   }
+  logAudit({ userName: 'system', action: 'deleted_team_member', module: 'admin', type: 'warning', metadata: { memberId: id } })
   return NextResponse.json({ deleted: id })
 }

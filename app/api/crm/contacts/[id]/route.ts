@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {
@@ -109,5 +110,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     console.error('[crm/contacts/:id DELETE]', error)
     return NextResponse.json({ error: error?.message || 'Failed to delete contact' }, { status: 500 })
   }
+  logAudit({ userName: 'system', action: 'deleted_contact', module: 'crm', type: 'warning', metadata: { contactId: id } })
   return NextResponse.json({ success: true })
 }

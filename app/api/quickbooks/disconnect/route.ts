@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getQBConfig, createOAuthClient } from '@/lib/quickbooks'
+import { logAudit } from '@/lib/audit'
 
 // POST /api/quickbooks/disconnect
 // Revokes tokens and removes QB config
@@ -30,6 +31,7 @@ export async function POST() {
     const db = createServiceClient()
     await db.from('quickbooks_config').delete().eq('id', config.id)
 
+    logAudit({ userName: 'system', action: 'quickbooks_disconnected', module: 'integrations', type: 'warning', metadata: {} })
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error('[quickbooks/disconnect POST]', err)

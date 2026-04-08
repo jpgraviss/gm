@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROPOSAL_STATUSES } from '@/lib/validation'
 import { fireAutomations } from '@/lib/automations-engine'
+import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProposal(row: any) {
@@ -87,6 +88,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     fireAutomations('proposal_declined', { proposalId: id, ...data })
   }
 
+  if (body.status !== undefined) {
+    logAudit({ userName: 'system', action: 'proposal_status_changed', module: 'proposals', type: 'action', metadata: { proposalId: id, newStatus: body.status } })
+  }
+
   return NextResponse.json(mapProposal(data))
 }
 
@@ -98,5 +103,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     console.error('[proposals/:id DELETE]', error)
     return NextResponse.json({ error: error?.message || 'Failed to delete proposal' }, { status: 500 })
   }
+  logAudit({ userName: 'system', action: 'deleted_proposal', module: 'proposals', type: 'warning', metadata: { proposalId: id } })
   return NextResponse.json({ deleted: id })
 }

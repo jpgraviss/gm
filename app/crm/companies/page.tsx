@@ -193,7 +193,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, 
           </div>
 
           {/* Metrics */}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
               { label: 'Deal Value', value: formatCurrency(company.totalDealValue) },
               { label: 'Contacts', value: companyContacts.length.toString() },

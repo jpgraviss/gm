@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { logAudit } from '@/lib/audit'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -33,5 +34,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     console.error('[renewals/:id DELETE]', error)
     return NextResponse.json({ error: error?.message || 'Failed to delete renewal' }, { status: 500 })
   }
+  logAudit({ userName: 'system', action: 'deleted_renewal', module: 'renewals', type: 'warning', metadata: { renewalId: id } })
   return NextResponse.json({ deleted: id })
 }

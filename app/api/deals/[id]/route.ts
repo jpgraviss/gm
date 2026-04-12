@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
+import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDeal(row: any) {
@@ -54,5 +55,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     console.error('[deals/:id DELETE]', error)
     return NextResponse.json({ error: error?.message || 'Failed to delete deal' }, { status: 500 })
   }
+  logAudit({ userName: 'system', action: 'deleted_deal', module: 'crm', type: 'warning', metadata: { dealId: id } })
   return NextResponse.json({ deleted: id })
 }

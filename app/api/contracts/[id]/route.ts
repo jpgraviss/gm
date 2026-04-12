@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
+import { logAudit } from '@/lib/audit'
 
 // Valid status transitions — keys are current status, values are allowed next statuses
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -104,6 +105,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     fireAutomations('contract_sent', { contractId: id, ...data })
   }
 
+  if (body.status !== undefined) {
+    logAudit({ userName: 'system', action: 'contract_status_changed', module: 'contracts', type: 'action', metadata: { contractId: id, newStatus: body.status } })
+  }
+
   return NextResponse.json(mapContract(data))
 }
 
@@ -119,5 +124,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     console.error('[contracts/:id DELETE]', error)
     return NextResponse.json({ error: error?.message || 'Failed to delete contract' }, { status: 500 })
   }
+  logAudit({ userName: 'system', action: 'deleted_contract', module: 'contracts', type: 'warning', metadata: { contractId: id } })
   return NextResponse.json({ deleted: id })
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROJECT_STATUSES } from '@/lib/validation'
+import { logAudit } from '@/lib/audit'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -37,5 +38,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     console.error('[projects/:id DELETE]', error)
     return NextResponse.json({ error: error?.message || 'Failed to delete project' }, { status: 500 })
   }
+  logAudit({ userName: 'system', action: 'deleted_project', module: 'projects', type: 'warning', metadata: { projectId: id } })
   return NextResponse.json({ deleted: id })
 }

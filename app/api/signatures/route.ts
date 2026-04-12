@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import crypto from 'crypto'
+import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
   try {
@@ -116,6 +117,7 @@ export async function POST(req: NextRequest) {
       expiresAt: data.expires_at,
     }
 
+    logAudit({ userName: 'system', action: 'signature_requested', module: 'contracts', type: 'action', metadata: { contractId, signerEmail } })
     return NextResponse.json(mapped, { status: 201 })
   } catch (err) {
     console.error('Signatures POST error:', err)

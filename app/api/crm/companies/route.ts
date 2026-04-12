@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCompany(row: any) {
@@ -25,17 +26,22 @@ function mapCompany(row: any) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { limit, cursor } = parsePagination(req)
   const db = createServiceClient()
-  const { data, error } = await db
+  let query = db
     .from('crm_companies')
     .select('*')
-    .order('name')
+    .order('created_at', { ascending: false })
+    .limit(limit + 1)
+  if (cursor) query = query.lt('created_at', cursor)
+  const { data, error } = await query
   if (error) {
     console.error('[crm/companies GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch companies' }, { status: 500 })
   }
-  return NextResponse.json((data ?? []).map(mapCompany))
+  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  return paginatedJson(rows.map(mapCompany), nextCursor)
 }
 
 export async function POST(req: NextRequest) {

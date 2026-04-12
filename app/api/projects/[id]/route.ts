@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROJECT_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
+import { requireRole } from '@/lib/rbac'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -30,8 +31,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json(data)
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
   const db = createServiceClient()
   const { error } = await db.from('projects').delete().eq('id', id)
   if (error) {

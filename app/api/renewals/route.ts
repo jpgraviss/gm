@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRenewal(row: any) {
@@ -20,15 +21,22 @@ function mapRenewal(row: any) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
+  const { limit, cursor } = parsePagination(req)
   const db = createServiceClient()
-  let query = db.from('renewals').select('*').order('expiration_date', { ascending: true })
+  let query = db
+    .from('renewals')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit + 1)
   if (status) query = query.eq('status', status)
+  if (cursor) query = query.lt('created_at', cursor)
   const { data, error } = await query
   if (error) {
     console.error('[renewals GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch renewals' }, { status: 500 })
   }
-  return NextResponse.json((data ?? []).map(mapRenewal))
+  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  return paginatedJson(rows.map(mapRenewal), nextCursor)
 }
 
 export async function POST(req: NextRequest) {

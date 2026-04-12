@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
+import { requireRole } from '@/lib/rbac'
 
 export async function POST(req: NextRequest) {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
   const { fromRep, toRep } = await req.json()
 
   if (!fromRep || !toRep) {

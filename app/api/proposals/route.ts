@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROPOSAL_STATUSES } from '@/lib/validation'
+import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProposal(row: any) {
@@ -28,17 +29,22 @@ function mapProposal(row: any) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { limit, cursor } = parsePagination(req)
   const db = createServiceClient()
-  const { data, error } = await db
+  let query = db
     .from('proposals')
     .select('*')
     .order('created_at', { ascending: false })
+    .limit(limit + 1)
+  if (cursor) query = query.lt('created_at', cursor)
+  const { data, error } = await query
   if (error) {
     console.error('[proposals GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch proposals' }, { status: 500 })
   }
-  return NextResponse.json((data ?? []).map(mapProposal))
+  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  return paginatedJson(rows.map(mapProposal), nextCursor)
 }
 
 export async function POST(req: NextRequest) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TASK_PRIORITIES } from '@/lib/validation'
+import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTicket(row: any) {
@@ -27,15 +28,22 @@ function mapTicket(row: any) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
+  const { limit, cursor } = parsePagination(req)
   const db = createServiceClient()
-  let query = db.from('tickets').select('*').order('created_at', { ascending: false })
+  let query = db
+    .from('tickets')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit + 1)
   if (status) query = query.eq('status', status)
+  if (cursor) query = query.lt('created_at', cursor)
   const { data, error } = await query
   if (error) {
     console.error('[tickets GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch tickets' }, { status: 500 })
   }
-  return NextResponse.json((data ?? []).map(mapTicket))
+  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  return paginatedJson(rows.map(mapTicket), nextCursor)
 }
 
 export async function POST(req: NextRequest) {

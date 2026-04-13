@@ -63,9 +63,10 @@ const PUBLIC_PREFIXES = [
   '/api/auth/verify-email',
   '/api/signatures/',
   '/api/email/sign-request',
-  '/api/forms/public/',      // Public form embed endpoints
-  '/api/sequences/webhooks', // Resend webhook
+  '/api/forms/public/',          // Public form embed endpoints
+  '/api/sequences/webhooks',     // Resend webhook
   '/api/sequences/unsubscribe',
+  '/api/portal/insights',        // Portal client read-only insights
 ]
 
 function getClientIp(req: NextRequest): string {

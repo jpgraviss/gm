@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
+import { checkSite, recordCheck, computeUptime30d, type MonitoredSiteRow } from '@/lib/uptime'
+import { checkAllRanks } from '@/lib/rank-tracker'
 
 /**
  * Cron endpoint — called on a schedule (e.g. every 6 hours via Vercel Cron).
@@ -82,7 +84,111 @@ export async function GET(req: NextRequest) {
     results.emailToTicket = { error: 'Failed' }
   }
 
+  // 5. Website uptime checks — run every cron invocation, but only hit each
+  //    site if its last_check_at is older than its check_interval_minutes.
+  try {
+    results.uptime = await runUptimeChecks()
+  } catch (err) {
+    console.error('[cron] Uptime checks failed:', err)
+    results.uptime = { error: 'Failed' }
+  }
+
+  // 6. Keyword rank tracker — once per UTC day. GSC data has a 2-3 day lag,
+  //    so running more than once/day is wasted quota. We detect "already ran
+  //    today" by checking whether the most-recently-checked tracked keyword
+  //    was updated during the current UTC date.
+  try {
+    if (await rankCheckDue()) {
+      results.rankTracker = await checkAllRanks()
+    } else {
+      results.rankTracker = { skipped: true }
+    }
+  } catch (err) {
+    console.error('[cron] Rank tracker failed:', err)
+    results.rankTracker = { error: 'Failed' }
+  }
+
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })
+}
+
+/**
+ * Determine if we should run the daily rank-tracking job on this cron tick.
+ * Returns true when the most recently-checked tracked keyword was checked
+ * before the start of today (UTC) — i.e., we have not yet run today.
+ */
+async function rankCheckDue(): Promise<boolean> {
+  const db = createServiceClient()
+  const { data, error } = await db
+    .from('tracked_keywords')
+    .select('last_checked_at')
+    .order('last_checked_at', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[cron] rankCheckDue query failed:', error)
+    return false
+  }
+  // No tracked keywords yet — nothing to do, but still "due" is fine; the
+  // job is a cheap no-op.
+  if (!data?.last_checked_at) return true
+
+  const last = new Date(data.last_checked_at)
+  const now = new Date()
+  const sameUtcDay =
+    last.getUTCFullYear() === now.getUTCFullYear() &&
+    last.getUTCMonth() === now.getUTCMonth() &&
+    last.getUTCDate() === now.getUTCDate()
+  return !sameUtcDay
+}
+
+/**
+ * Iterate non-paused monitored sites, run HTTP checks that are due, record
+ * results, and refresh the 30-day uptime percentage.
+ */
+async function runUptimeChecks(): Promise<{ checked: number; skipped: number; errors: number }> {
+  const db = createServiceClient()
+
+  const { data: sites, error } = await db
+    .from('monitored_sites')
+    .select('*')
+    .neq('status', 'paused')
+
+  if (error) {
+    console.error('[cron] Failed to load monitored sites:', error)
+    return { checked: 0, skipped: 0, errors: 1 }
+  }
+
+  const now = Date.now()
+  let checked = 0
+  let skipped = 0
+  let errors = 0
+
+  for (const site of (sites ?? []) as MonitoredSiteRow[]) {
+    const interval = (site.check_interval_minutes ?? 15) * 60_000
+    if (site.last_check_at) {
+      const last = new Date(site.last_check_at).getTime()
+      if (now - last < interval) {
+        skipped++
+        continue
+      }
+    }
+
+    try {
+      const result = await checkSite(site.url)
+      await recordCheck(site.id, result)
+      // Refresh 30d uptime on up→down transitions or roughly once per hour
+      if (!result.up || Math.random() < 0.1) {
+        await computeUptime30d(site.id)
+      }
+      checked++
+    } catch (err) {
+      console.error('[cron] uptime check failed for', site.id, err)
+      errors++
+    }
+  }
+
+  return { checked, skipped, errors }
 }
 
 async function spawnRecurringTasks() {

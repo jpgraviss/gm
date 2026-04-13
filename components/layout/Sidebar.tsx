@@ -46,7 +46,14 @@ const navigation: NavSection[] = [
       { label: 'Companies', href: '/crm/companies', icon: <Building2 size={16} />,  billingVisible: true },
       { label: 'Contacts',  href: '/crm/contacts',  icon: <Users size={16} />,      billingVisible: true },
       { label: 'Sequences', href: '/crm/sequences', icon: <Mail size={16} />,       billingVisible: true },
-      { label: 'Inbox',     href: '/inbox',          icon: <Inbox size={16} />,      billingVisible: true },
+      { label: 'Inbox',     href: '/inbox/unified',  icon: <Inbox size={16} />,      billingVisible: true },
+    ],
+  },
+  {
+    section: 'Marketing',
+    items: [
+      { label: 'Broadcasts', href: '/marketing', icon: <Mail size={16} />,    allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Forms',      href: '/forms',     icon: <FileText size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
     ],
   },
   {

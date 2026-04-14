@@ -61,12 +61,19 @@ export default function TeamLoginPage() {
   const handleGoogleCredential = useCallback(async ({ credential }: { credential: string }) => {
     setGoogleLoading(true)
     setError('')
+    if (!credential) {
+      setError('No credential returned from Google. Try signing in again.')
+      setGoogleLoading(false)
+      return
+    }
     const result = await loginWithGoogle(credential)
     setGoogleLoading(false)
     if (result.ok) {
       router.push('/')
     } else {
-      setError(result.error ?? 'Google sign-in failed. Please try again.')
+      // eslint-disable-next-line no-console
+      console.error('[team-login] google sign-in failed:', result)
+      setError(result.error || 'Sign-in failed — check the browser console for details.')
     }
   }, [loginWithGoogle, router])
 

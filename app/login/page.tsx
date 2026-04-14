@@ -248,7 +248,7 @@ export default function LoginPage() {
                     SIGN IN
                   </h2>
                   <p className="text-gray-500 text-sm">Access your project dashboard, invoices, and files</p>
-                  <p className="text-[10px] text-gray-300 mt-1">build 2026-04-14.v4</p>
+                  <p className="text-[10px] text-gray-300 mt-1">build 2026-04-14.v5</p>
                 </div>
 
                 {/* ── Google Sign-In (official GIS rendered button) ── */}

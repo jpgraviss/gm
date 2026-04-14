@@ -51,6 +51,7 @@ async function isRateLimited(limiter: Ratelimit | null, key: string, fallbackMax
 // ── Public routes that don't require authentication ─────────────────────────
 const PUBLIC_PREFIXES = [
   '/api/auth/google-verify',
+  '/api/auth/health',            // Diagnostic endpoint — masked env var view
   '/api/calendar/settings/',
   '/api/calendar/slots',
   '/api/calendar/callback',

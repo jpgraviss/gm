@@ -16,7 +16,19 @@ export function getSupabaseClient(): SupabaseClient {
         'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment.'
       )
     }
-    _client = createClient(supabaseUrl, supabaseAnonKey)
+    _client = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        // Magic-link flow — must work across devices (request on phone,
+        // click on laptop). Implicit flow puts the session in the URL
+        // fragment so no code_verifier lookup is required.
+        flowType: 'implicit',
+        // Detect session from URL hash on page load (handles magic-link
+        // redirects and Google SSO callback automatically).
+        detectSessionInUrl: true,
+        autoRefreshToken: true,
+        persistSession: true,
+      },
+    })
   }
   return _client
 }

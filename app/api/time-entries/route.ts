@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapEntry(row: any) {
@@ -27,19 +28,26 @@ export async function GET(req: NextRequest) {
   const weekStart = searchParams.get('weekStart')
   const weekEnd   = searchParams.get('weekEnd')
   const member    = searchParams.get('member')
+  const { limit, cursor } = parsePagination(req)
   const db = createServiceClient()
-  let query = db.from('time_entries').select('*').order('date', { ascending: false })
+  let query = db
+    .from('time_entries')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit + 1)
   if (weekStart) query = query.gte('date', weekStart)
   if (weekEnd)   query = query.lte('date', weekEnd)
   if (member)    query = query.eq('team_member', member)
   const approvalStatus = searchParams.get('approval_status')
   if (approvalStatus) query = query.eq('approval_status', approvalStatus)
+  if (cursor) query = query.lt('created_at', cursor)
   const { data, error } = await query
   if (error) {
     console.error('[time-entries GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch time entries' }, { status: 500 })
   }
-  return NextResponse.json((data ?? []).map(mapEntry))
+  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  return paginatedJson(rows.map(mapEntry), nextCursor)
 }
 
 export async function PATCH(req: NextRequest) {

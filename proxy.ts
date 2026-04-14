@@ -63,6 +63,10 @@ const PUBLIC_PREFIXES = [
   '/api/auth/verify-email',
   '/api/signatures/',
   '/api/email/sign-request',
+  '/api/forms/public/',          // Public form embed endpoints
+  '/api/sequences/webhooks',     // Resend webhook
+  '/api/sequences/unsubscribe',
+  '/api/portal/insights',        // Portal client read-only insights
 ]
 
 function getClientIp(req: NextRequest): string {
@@ -75,8 +79,12 @@ export async function proxy(req: NextRequest) {
   // Only apply to API routes
   if (!pathname.startsWith('/api/')) return NextResponse.next()
 
+  const isPublicRoute = PUBLIC_PREFIXES.some(p => pathname.startsWith(p))
+
   // ── CSRF protection for state-changing requests ─────────────────────────
-  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+  // Public routes are intentionally exempt — they're embedded on external
+  // sites (forms, booking widgets) and must allow cross-origin POSTs.
+  if (!isPublicRoute && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     const origin = req.headers.get('origin')
     const host = req.headers.get('host')
     if (origin && host) {
@@ -98,7 +106,7 @@ export async function proxy(req: NextRequest) {
   }
 
   // ── Public routes: no auth required ──────────────────────────────────────
-  if (PUBLIC_PREFIXES.some(p => pathname.startsWith(p))) {
+  if (isPublicRoute) {
     // Rate-limit public booking creation (20 per hour per IP)
     if (pathname.startsWith('/api/bookings') && req.method === 'POST') {
       const ip = getClientIp(req)

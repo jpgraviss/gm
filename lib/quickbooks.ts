@@ -102,31 +102,155 @@ interface QBInvoice {
   Line?: unknown[]
   EmailStatus?: string
   PrintStatus?: string
-  LinkedTxn?: { TxnType?: string }[]
+  LinkedTxn?: { TxnType?: string; TxnId?: string }[]
+}
+
+interface QBCustomer {
+  Id: string
+  DisplayName?: string
+  CompanyName?: string
+  PrimaryEmailAddr?: { Address?: string }
+  PrimaryPhone?: { FreeFormNumber?: string }
+  BillAddr?: { Line1?: string; City?: string; CountrySubDivisionCode?: string; PostalCode?: string }
+  Balance?: number
+  Active?: boolean
+}
+
+interface QBPayment {
+  Id: string
+  TxnDate?: string
+  TotalAmt?: number
+  PaymentMethodRef?: { name?: string }
+  CustomerRef?: { name?: string }
+  Line?: { LinkedTxn?: { TxnId?: string; TxnType?: string }[] }[]
+}
+
+function qbBaseUrl(): string {
+  return QB_ENVIRONMENT === 'production'
+    ? 'https://quickbooks.api.intuit.com'
+    : 'https://sandbox-quickbooks.api.intuit.com'
+}
+
+async function qbFetch<T>(path: string, accessToken: string): Promise<T> {
+  const res = await fetch(path, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept:        'application/json',
+      'Content-Type': 'application/json',
+    },
+  })
+  if (!res.ok) throw new Error(`QBO fetch failed: ${res.status} ${res.statusText}`)
+  return res.json() as Promise<T>
+}
+
+/**
+ * Paginated QBO query — QBO limits to 1000 per page. Loops using STARTPOSITION.
+ */
+async function fetchAllFromQBO<T>(
+  entity: 'Invoice' | 'Customer' | 'Payment',
+  auth: { accessToken: string; realmId: string },
+): Promise<T[]> {
+  const results: T[] = []
+  let start = 1
+  const pageSize = 1000
+  while (true) {
+    const query = encodeURIComponent(`SELECT * FROM ${entity} STARTPOSITION ${start} MAXRESULTS ${pageSize}`)
+    const url = `${qbBaseUrl()}/v3/company/${auth.realmId}/query?query=${query}&minorversion=65`
+    const data = await qbFetch<{ QueryResponse?: Record<string, T[]> }>(url, auth.accessToken)
+    const rows = data?.QueryResponse?.[entity] ?? []
+    results.push(...rows)
+    if (rows.length < pageSize) break
+    start += pageSize
+    // Safety: QB caps at 100k rows — abort if we somehow loop past that
+    if (start > 100_000) break
+  }
+  return results
+}
+
+export async function syncCustomersFromQBO(): Promise<{ customersSynced: number; errors: number }> {
+  const auth = await getValidAccessToken()
+  if (!auth) throw new Error('QuickBooks not connected or token invalid')
+
+  const customers = await fetchAllFromQBO<QBCustomer>('Customer', auth)
+  const db = createServiceClient()
+  let synced = 0
+  let errors = 0
+
+  for (const c of customers) {
+    try {
+      const companyName = c.CompanyName || c.DisplayName || 'Unknown'
+      // Upsert into crm_companies using name as the match key. Only write
+      // QB-specific fields so existing CRM data is not overwritten.
+      const { data: existing } = await db
+        .from('crm_companies')
+        .select('id')
+        .eq('name', companyName)
+        .maybeSingle()
+
+      if (existing?.id) {
+        await db.from('crm_companies').update({
+          phone:   c.PrimaryPhone?.FreeFormNumber ?? undefined,
+        }).eq('id', existing.id)
+      } else {
+        await db.from('crm_companies').insert({
+          id: `co-qb-${c.Id}`,
+          name: companyName,
+          phone: c.PrimaryPhone?.FreeFormNumber ?? null,
+          status: 'Prospect',
+          created_date: new Date().toISOString().split('T')[0],
+          created_at: new Date().toISOString(),
+        })
+      }
+      synced++
+    } catch (err) {
+      console.error('[qb sync customer]', err)
+      errors++
+    }
+  }
+
+  return { customersSynced: synced, errors }
+}
+
+export async function syncPaymentsFromQBO(): Promise<{ paymentsSynced: number; errors: number }> {
+  const auth = await getValidAccessToken()
+  if (!auth) throw new Error('QuickBooks not connected or token invalid')
+
+  const payments = await fetchAllFromQBO<QBPayment>('Payment', auth)
+  const db = createServiceClient()
+  let synced = 0
+  let errors = 0
+
+  for (const p of payments) {
+    try {
+      // Each payment can apply to multiple invoices via Line[].LinkedTxn
+      const linkedInvoiceIds: string[] = []
+      for (const line of (p.Line ?? [])) {
+        for (const txn of (line.LinkedTxn ?? [])) {
+          if (txn.TxnType === 'Invoice' && txn.TxnId) linkedInvoiceIds.push(txn.TxnId)
+        }
+      }
+
+      // Update the matched invoices with payment date
+      for (const qbInvoiceId of linkedInvoiceIds) {
+        await db.from('invoices').update({
+          paid_date: p.TxnDate ?? null,
+        }).eq('qb_invoice_id', qbInvoiceId)
+      }
+      synced++
+    } catch (err) {
+      console.error('[qb sync payment]', err)
+      errors++
+    }
+  }
+
+  return { paymentsSynced: synced, errors }
 }
 
 export async function syncInvoicesFromQBO(): Promise<{ invoicesSynced: number; paymentsSynced: number; errors: number }> {
   const auth = await getValidAccessToken()
   if (!auth) throw new Error('QuickBooks not connected or token invalid')
 
-  const baseUrl = QB_ENVIRONMENT === 'production'
-    ? 'https://quickbooks.api.intuit.com'
-    : 'https://sandbox-quickbooks.api.intuit.com'
-
-  const headers = {
-    Authorization: `Bearer ${auth.accessToken}`,
-    Accept:        'application/json',
-    'Content-Type': 'application/json',
-  }
-
-  // Fetch invoices from QBO
-  const invoiceRes = await fetch(
-    `${baseUrl}/v3/company/${auth.realmId}/query?query=SELECT%20*%20FROM%20Invoice%20MAXRESULTS%20100&minorversion=65`,
-    { headers },
-  )
-  if (!invoiceRes.ok) throw new Error(`QBO invoice fetch failed: ${invoiceRes.status}`)
-  const invoiceData = await invoiceRes.json()
-  const qbInvoices: QBInvoice[] = invoiceData?.QueryResponse?.Invoice || []
+  const qbInvoices = await fetchAllFromQBO<QBInvoice>('Invoice', auth)
 
   const db = createServiceClient()
   let invoicesSynced = 0
@@ -156,9 +280,18 @@ export async function syncInvoicesFromQBO(): Promise<{ invoicesSynced: number; p
 
       await db.from('invoices').upsert(row, { onConflict: 'qb_invoice_id', ignoreDuplicates: false })
       invoicesSynced++
-    } catch {
+    } catch (err) {
+      console.error('[qb sync invoice]', err)
       errors++
     }
+  }
+
+  // Sync linked payment details after invoices are in place
+  try {
+    await syncPaymentsFromQBO()
+  } catch (err) {
+    console.error('[qb sync payments step]', err)
+    errors++
   }
 
   // Update config stats
@@ -174,4 +307,24 @@ export async function syncInvoicesFromQBO(): Promise<{ invoicesSynced: number; p
   }
 
   return { invoicesSynced, paymentsSynced, errors }
+}
+
+/**
+ * Full sync: customers first, then invoices (which triggers payment sync).
+ * Safe to call repeatedly — all writes are upserts.
+ */
+export async function syncAllFromQBO(): Promise<{
+  customersSynced: number
+  invoicesSynced: number
+  paymentsSynced: number
+  errors: number
+}> {
+  const customerResult = await syncCustomersFromQBO()
+  const invoiceResult  = await syncInvoicesFromQBO()
+  return {
+    customersSynced: customerResult.customersSynced,
+    invoicesSynced:  invoiceResult.invoicesSynced,
+    paymentsSynced:  invoiceResult.paymentsSynced,
+    errors:          customerResult.errors + invoiceResult.errors,
+  }
 }

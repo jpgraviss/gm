@@ -206,20 +206,125 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       break
     }
 
-    case 'Flag in Dashboard':
-    case 'Update Revenue Metrics':
-    case 'Apply Service Template':
-    case 'Update Client Portal':
-    case 'Escalate if 7+ Days': {
-      // These are informational — log as activity for audit trail
+    case 'Flag in Dashboard': {
+      // Log a FLAG activity type the dashboard can query for attention items.
       await db.from('crm_activities').insert({
         id: `act-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        type: 'System',
-        description: `[Auto] ${action} triggered for ${company}`,
+        type: 'FLAG',
+        description: `[Auto] Flagged for attention — ${context.trigger ?? action}`,
         company_id: (context.companyId as string) ?? null,
         timestamp: new Date().toISOString(),
         logged_by: 'System',
       })
+      break
+    }
+
+    case 'Update Revenue Metrics': {
+      // Revenue metrics are computed from contracts/invoices on the fly.
+      // Recompute the current month's rollup and persist.
+      const monthKey = new Date().toISOString().slice(0, 7) // YYYY-MM
+      const { data: contracts } = await db
+        .from('contracts')
+        .select('value, billing_structure, status')
+        .eq('status', 'Fully Executed')
+      const totalRevenue = (contracts ?? []).reduce((s: number, c: { value: number | null }) => s + (Number(c.value) || 0), 0)
+      const recurring = (contracts ?? [])
+        .filter((c: { billing_structure: string | null }) => c.billing_structure === 'Monthly' || c.billing_structure === 'Monthly Retainer')
+        .reduce((s: number, c: { value: number | null }) => s + (Number(c.value) || 0), 0)
+      await db.from('revenue_months').upsert(
+        { month: monthKey, revenue: totalRevenue, recurring },
+        { onConflict: 'month' }
+      )
+      break
+    }
+
+    case 'Apply Service Template': {
+      // Spin up the matching document template on the linked deal/project.
+      // Looks up by trigger name → template name convention.
+      const templateName = (context.templateName as string) ?? String(context.trigger ?? '')
+      if (!templateName) break
+      const { data: template } = await db
+        .from('document_templates')
+        .select('id, name, content')
+        .ilike('name', `%${templateName}%`)
+        .limit(1)
+        .maybeSingle()
+      if (!template) break
+      // Log the application so the document shows in the activity feed
+      await db.from('crm_activities').insert({
+        id: `act-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        type: 'Template',
+        description: `[Auto] Applied service template "${template.name}" to ${company}`,
+        company_id: (context.companyId as string) ?? null,
+        timestamp: new Date().toISOString(),
+        logged_by: 'System',
+      })
+      break
+    }
+
+    case 'Update Client Portal': {
+      // Create a portal notification for every portal client linked to this company.
+      const clientCompany = company
+      if (!clientCompany) break
+      const { data: portalClients } = await db
+        .from('portal_clients')
+        .select('id')
+        .eq('company', clientCompany)
+      for (const pc of (portalClients ?? []) as Array<{ id: string }>) {
+        await db.from('portal_notifications').insert({
+          id: `pn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          portal_client_id: pc.id,
+          type: 'system',
+          title: `Update: ${context.trigger ?? action}`,
+          message: (context.message as string) ?? `Your account has an update related to ${context.trigger ?? 'activity'}.`,
+          link: '/portal',
+          read: false,
+          created_at: new Date().toISOString(),
+        })
+      }
+      break
+    }
+
+    case 'Escalate if 7+ Days': {
+      // Check how long the deal/ticket has been in its current stage. If >7d,
+      // create an escalation task assigned to leadership.
+      const dealId = (context.dealId as string) ?? null
+      const ticketId = (context.ticketId as string) ?? null
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      let shouldEscalate = false
+      if (dealId) {
+        const { data: deal } = await db
+          .from('deals')
+          .select('last_activity, stage, company')
+          .eq('id', dealId)
+          .single()
+        if (deal?.last_activity && new Date(deal.last_activity) < new Date(sevenDaysAgo)) {
+          shouldEscalate = true
+        }
+      } else if (ticketId) {
+        const { data: ticket } = await db
+          .from('tickets')
+          .select('created_date, status, company')
+          .eq('id', ticketId)
+          .single()
+        if (ticket?.created_date && new Date(ticket.created_date) < new Date(sevenDaysAgo)) {
+          shouldEscalate = true
+        }
+      }
+      if (shouldEscalate) {
+        await db.from('app_tasks').insert({
+          id: `task-esc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          title: `Escalation: ${company} stuck 7+ days`,
+          description: `[Auto] ${action} — review and advance or reassign`,
+          category: 'Escalation',
+          priority: 'High',
+          status: 'Pending',
+          company,
+          assigned_to: 'Leadership',
+          due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          created_date: new Date().toISOString().split('T')[0],
+        })
+      }
       break
     }
 

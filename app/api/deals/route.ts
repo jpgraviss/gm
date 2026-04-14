@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, DEAL_STAGES } from '@/lib/validation'
+import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDeal(row: any) {
@@ -22,15 +23,22 @@ function mapDeal(row: any) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const stage = searchParams.get('stage')
+  const { limit, cursor } = parsePagination(req)
   const db = createServiceClient()
-  let query = db.from('deals').select('*').order('created_at', { ascending: false })
+  let query = db
+    .from('deals')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit + 1)
   if (stage) query = query.eq('stage', stage)
+  if (cursor) query = query.lt('created_at', cursor)
   const { data, error } = await query
   if (error) {
     console.error('[deals GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch deals' }, { status: 500 })
   }
-  return NextResponse.json((data ?? []).map(mapDeal))
+  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  return paginatedJson(rows.map(mapDeal), nextCursor)
 }
 
 export async function POST(req: NextRequest) {

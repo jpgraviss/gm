@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, FileText, ScrollText, CreditCard,
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
   Settings, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare, CheckSquare, Inbox,
-  CalendarDays, Clock,
+  CalendarDays, Clock, Activity,
 } from 'lucide-react'
 
 interface NavItem {
@@ -46,7 +46,14 @@ const navigation: NavSection[] = [
       { label: 'Companies', href: '/crm/companies', icon: <Building2 size={16} />,  billingVisible: true },
       { label: 'Contacts',  href: '/crm/contacts',  icon: <Users size={16} />,      billingVisible: true },
       { label: 'Sequences', href: '/crm/sequences', icon: <Mail size={16} />,       billingVisible: true },
-      { label: 'Inbox',     href: '/inbox',          icon: <Inbox size={16} />,      billingVisible: true },
+      { label: 'Inbox',     href: '/inbox/unified',  icon: <Inbox size={16} />,      billingVisible: true },
+    ],
+  },
+  {
+    section: 'Marketing',
+    items: [
+      { label: 'Broadcasts', href: '/marketing', icon: <Mail size={16} />,    allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Forms',      href: '/forms',     icon: <FileText size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
     ],
   },
   {
@@ -75,8 +82,11 @@ const navigation: NavSection[] = [
   {
     section: 'Intel',
     items: [
-      { label: 'Reports',    href: '/reports',    icon: <BarChart3 size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
-      { label: 'Automation', href: '/automation', icon: <Zap size={16} />,       allowedUnits: ['Leadership/Admin'] },
+      { label: 'Reports',         href: '/reports',         icon: <BarChart3 size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Client Reports',  href: '/reports/client',  icon: <FileText size={16} />,  allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Rank Tracker',    href: '/rank-tracker',    icon: <TrendingUp size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Site Monitoring', href: '/monitoring',      icon: <Activity size={16} />,   allowedUnits: ['Leadership/Admin', 'Delivery/Operations'] },
+      { label: 'Automation',      href: '/automation',      icon: <Zap size={16} />,       allowedUnits: ['Leadership/Admin'] },
     ],
   },
   {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRecord(row: any) {
@@ -24,15 +25,22 @@ function mapRecord(row: any) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
+  const { limit, cursor } = parsePagination(req)
   const db = createServiceClient()
-  let query = db.from('maintenance_records').select('*').order('created_at', { ascending: false })
+  let query = db
+    .from('maintenance_records')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit + 1)
   if (status) query = query.eq('status', status)
+  if (cursor) query = query.lt('created_at', cursor)
   const { data, error } = await query
   if (error) {
     console.error('[maintenance GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch maintenance records' }, { status: 500 })
   }
-  return NextResponse.json((data ?? []).map(mapRecord))
+  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  return paginatedJson(rows.map(mapRecord), nextCursor)
 }
 
 export async function POST(req: NextRequest) {

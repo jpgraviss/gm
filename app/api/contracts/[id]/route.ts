@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
+import { requireRole } from '@/lib/rbac'
 
 // Valid status transitions — keys are current status, values are allowed next statuses
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -112,8 +113,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json(mapContract(data))
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'Invalid contract id' }, { status: 400 })
   }

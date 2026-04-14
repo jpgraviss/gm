@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
+import { requireRole } from '@/lib/rbac'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const denied = await requireRole(req, 'Super Admin')
+  if (denied) return denied
   let body: Record<string, unknown>
   try {
     body = await req.json()
@@ -35,8 +38,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json(data)
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const denied = await requireRole(req, 'Super Admin')
+  if (denied) return denied
   const db = createServiceClient()
   const { error } = await db.from('team_members').delete().eq('id', id)
   if (error) {

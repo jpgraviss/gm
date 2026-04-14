@@ -23,8 +23,9 @@ import { useToast } from '@/components/ui/Toast'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
-  ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload,
+  ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload, BarChart3,
 } from 'lucide-react'
+import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 
 // ─── Status colors ────────────────────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Cli
 
 // ─── Company Detail Panel ─────────────────────────────────────────────────────
 
-function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, contracts, invoices, projects, crmActivities }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void; crmContacts: CRMContact[]; deals: Deal[]; contracts: Contract[]; invoices: Invoice[]; projects: Project[]; crmActivities: CRMActivity[] }) {
+function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, crmContacts, deals, contracts, invoices, projects, crmActivities }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void; onOpenIntegrations?: () => void; crmContacts: CRMContact[]; deals: Deal[]; contracts: Contract[]; invoices: Invoice[]; projects: Project[]; crmActivities: CRMActivity[] }) {
   const { toast } = useToast()
   const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'activity'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
@@ -176,6 +177,11 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, crmContacts, deals, 
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
+              {onOpenIntegrations && (
+                <button onClick={onOpenIntegrations} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0" title="Client integrations">
+                  <BarChart3 size={15} className="text-white/60" />
+                </button>
+              )}
               {onEdit && (
                 <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0" title="Edit company">
                   <Pencil size={15} className="text-white/60" />
@@ -703,6 +709,7 @@ export default function CompaniesPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('All')
   const [selectedCompany, setSelectedCompany] = useState<CRMCompany | null>(null)
+  const [integrationsCompany, setIntegrationsCompany] = useState<CRMCompany | null>(null)
   const [editingCompany, setEditingCompany] = useState<CRMCompany | null>(null)
   const [localCompanies, setLocalCompanies] = useState<CRMCompany[]>([])
   const [creatingCompany, setCreatingCompany] = useState(false)
@@ -959,6 +966,14 @@ export default function CompaniesPage() {
           onClose={() => setSelectedCompany(null)}
           onEdit={() => setEditingCompany(localCompanies.find(c => c.id === selectedCompany.id) ?? selectedCompany)}
           onDelete={() => handleDeleteCompany(selectedCompany.id)}
+          onOpenIntegrations={() => setIntegrationsCompany(selectedCompany)}
+        />
+      )}
+      {integrationsCompany && (
+        <ClientIntegrationsPanel
+          companyName={integrationsCompany.name}
+          companyId={integrationsCompany.id}
+          onClose={() => setIntegrationsCompany(null)}
         />
       )}
       {editingCompany && (

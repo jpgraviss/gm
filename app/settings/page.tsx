@@ -745,6 +745,9 @@ export default function SettingsPage() {
         {activeTab === 'Integrations' && (
           <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
             <h3 className="text-sm font-bold text-gray-800 mb-5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Connected Integrations</h3>
+
+            <MarketingIntegrationsSection />
+
             <div className="flex flex-col gap-3">
               {/* Gmail — live connect/disconnect */}
               <div className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
@@ -1138,5 +1141,172 @@ export default function SettingsPage() {
         )
       })()}
     </>
+  )
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Marketing integrations (Phase C: GSC, GA4, Ads, GBP, Meta)
+// ───────────────────────────────────────────────────────────────────────────
+
+interface MarketingStatus {
+  product: 'search_console' | 'analytics' | 'ads' | 'business_profile'
+  connected: boolean
+  accountEmail: string | null
+  lastSyncAt: string | null
+  connectedAt: string | null
+  reauthRequired: boolean
+}
+
+interface MetaStatus {
+  connected: boolean
+  accountEmail: string | null
+  lastSyncAt: string | null
+  connectedAt: string | null
+  reauthRequired: boolean
+}
+
+const GOOGLE_PRODUCT_META: Record<MarketingStatus['product'], { name: string; description: string; icon: string }> = {
+  search_console:   { name: 'Google Search Console', description: 'Pull keyword impressions, clicks, and ranking data for client reporting.', icon: '🔍' },
+  analytics:        { name: 'Google Analytics 4',    description: 'Display session, user, and conversion metrics in client reports.',       icon: '📊' },
+  ads:              { name: 'Google Ads',            description: 'Read campaign performance for client ad-spend reporting.',               icon: '💰' },
+  business_profile: { name: 'Google Business Profile', description: 'Show reviews, reply to reviews, track local insights.',                icon: '⭐' },
+}
+
+function MarketingIntegrationsSection() {
+  const [statuses, setStatuses] = useState<MarketingStatus[]>([])
+  const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null)
+
+  useEffect(() => {
+    fetch('/api/integrations/google-marketing/status')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => { if (Array.isArray(data)) setStatuses(data) })
+      .catch(() => {/* non-fatal */})
+
+    fetch('/api/integrations/meta/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setMetaStatus)
+      .catch(() => {/* non-fatal */})
+  }, [])
+
+  const anyGoogleConnected = statuses.some((s) => s.connected)
+  const anyGoogleReauth = statuses.some((s) => s.reauthRequired)
+  const metaReauth = metaStatus?.reauthRequired ?? false
+
+  async function disconnectGoogleProduct(product: MarketingStatus['product']) {
+    if (!confirm(`Disconnect ${GOOGLE_PRODUCT_META[product].name}?`)) return
+    try {
+      const res = await fetch('/api/integrations/google-marketing/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product }),
+      })
+      if (res.ok) {
+        setStatuses((prev) => prev.map((s) => s.product === product ? { ...s, connected: false } : s))
+      }
+    } catch {/* best-effort */}
+  }
+
+  async function disconnectMeta() {
+    if (!confirm('Disconnect Meta Ads?')) return
+    try {
+      const res = await fetch('/api/integrations/meta/disconnect', { method: 'POST' })
+      if (res.ok) setMetaStatus({ connected: false, accountEmail: null, lastSyncAt: null, connectedAt: null, reauthRequired: false })
+    } catch {/* best-effort */}
+  }
+
+  return (
+    <div className="mb-6 pb-6 border-b border-gray-100">
+      {(anyGoogleReauth || metaReauth) && (
+        <div className="mb-4 flex items-start gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50">
+          <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs text-amber-800">
+            <p className="font-semibold">Re-authorization required</p>
+            <p className="text-amber-700 mt-0.5">
+              At least one integration has passed the 180-day re-consent window. Click Reconnect
+              below to refresh authorization. Data sync is paused until reconnected.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-sm font-bold text-gray-800">Google Marketing</p>
+          <p className="text-xs text-gray-500">Search Console, Analytics, Ads, and Business Profile — one connection, four products.</p>
+        </div>
+        {!anyGoogleConnected ? (
+          <a
+            href="/api/integrations/google-marketing/connect"
+            className="text-xs font-medium px-3 py-1.5 rounded-lg text-white whitespace-nowrap"
+            style={{ background: '#015035' }}
+          >
+            Connect
+          </a>
+        ) : (
+          <a
+            href="/api/integrations/google-marketing/connect"
+            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 whitespace-nowrap"
+          >
+            Reconnect
+          </a>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+        {statuses.map((s) => {
+          const meta = GOOGLE_PRODUCT_META[s.product]
+          return (
+            <div key={s.product} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50">
+              <div className="text-xl flex-shrink-0">{meta.icon}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-800 truncate">{meta.name}</p>
+                <p className="text-[10px] text-gray-400 truncate">{meta.description}</p>
+                {s.connected && s.accountEmail && (
+                  <p className="text-[10px] text-emerald-700 truncate">Connected as {s.accountEmail}</p>
+                )}
+              </div>
+              <span className={`text-[10px] font-semibold flex-shrink-0 ${s.connected ? 'text-emerald-600' : 'text-gray-400'}`}>
+                {s.connected ? (
+                  <button
+                    onClick={() => disconnectGoogleProduct(s.product)}
+                    className="text-[10px] font-semibold text-gray-500 hover:text-red-600 underline"
+                  >
+                    Disconnect
+                  </button>
+                ) : 'Not connected'}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Meta row */}
+      <div className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50">
+        <div className="text-2xl flex-shrink-0">📘</div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-800">Meta Ads (Facebook + Instagram)</p>
+          <p className="text-xs text-gray-500">Pull campaign performance for client social-media marketing reports.</p>
+          {metaStatus?.connected && metaStatus.accountEmail && (
+            <p className="text-[11px] text-emerald-700 mt-0.5">Connected as {metaStatus.accountEmail}</p>
+          )}
+        </div>
+        {metaStatus?.connected ? (
+          <button
+            onClick={disconnectMeta}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 whitespace-nowrap"
+          >
+            Disconnect
+          </button>
+        ) : (
+          <a
+            href="/api/integrations/meta/connect"
+            className="text-xs font-medium px-3 py-1.5 rounded-lg text-white whitespace-nowrap"
+            style={{ background: '#015035' }}
+          >
+            Connect
+          </a>
+        )}
+      </div>
+    </div>
   )
 }

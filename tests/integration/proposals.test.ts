@@ -31,7 +31,7 @@ import { GET, POST } from '@/app/api/proposals/route'
 describe('GET /api/proposals', () => {
   it('returns mapped proposals', async () => {
     const req = new NextRequest(new URL('http://localhost/api/proposals'))
-    const res = await GET()
+    const res = await GET(req)
     const data = await res.json()
 
     expect(res.status).toBe(200)

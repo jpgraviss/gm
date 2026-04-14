@@ -7,7 +7,18 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import {
   Globe, CheckCircle, FolderKanban, FileText, MessageSquare,
   Download, Upload, Bell, ChevronDown, ChevronRight, X, AlertTriangle, LogOut,
+  Search, BarChart3, Star, Activity, TrendingUp,
 } from 'lucide-react'
+
+interface PortalInsights {
+  company: { name: string }
+  period: { label: string }
+  seo?: { clicks: number; impressions: number; avgPosition: number; ctr: number }
+  traffic?: { sessions: number; users: number; pageviews: number; bounceRate: number }
+  reputation?: { newReviews: number; averageRating: number; totalReviews: number }
+  ranking?: { tracked: number; top3: number; top10: number; improved: number; declined: number }
+  uptime?: { sitesMonitored: number; uptimePercent: number; incidents: number }
+}
 import { useToast } from '@/components/ui/Toast'
 
 export default function ClientPortalPage() {
@@ -16,7 +27,9 @@ export default function ClientPortalPage() {
   const company = user?.company ?? ''
   const contactName = user?.name ?? ''
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files' | 'insights'>('overview')
+  const [insights, setInsights] = useState<PortalInsights | null>(null)
+  const [insightsLoading, setInsightsLoading] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [project, setProject] = useState<any>(null)
@@ -48,6 +61,20 @@ export default function ClientPortalPage() {
       fetch(`/api/files?company=${q}`).then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => toast('Failed to load files', 'error')),
     ]).finally(() => setLoading(false))
   }, [company])
+
+  // Load portal insights lazily when the Insights tab opens
+  useEffect(() => {
+    if (activeTab !== 'insights' || !company || insights) return
+    setInsightsLoading(true)
+    fetch(`/api/portal/insights?company=${encodeURIComponent(company)}`)
+      .then(async (r) => {
+        if (!r.ok) return null
+        return (await r.json()) as PortalInsights
+      })
+      .then((d) => { if (d) setInsights(d) })
+      .catch(() => {/* non-fatal */})
+      .finally(() => setInsightsLoading(false))
+  }, [activeTab, company, insights])
 
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
@@ -96,6 +123,7 @@ export default function ClientPortalPage() {
         {([
           { id: 'overview', label: 'Overview',    icon: <Globe size={13} /> },
           { id: 'project',  label: 'My Project',  icon: <FolderKanban size={13} /> },
+          { id: 'insights', label: 'Insights',    icon: <BarChart3 size={13} /> },
           { id: 'billing',  label: `Billing${openInvoices.length > 0 ? ` (${openInvoices.length})` : ''}`, icon: <FileText size={13} /> },
           { id: 'tickets',  label: 'Support',     icon: <MessageSquare size={13} /> },
           { id: 'files',    label: 'Files',        icon: <Download size={13} /> },
@@ -248,6 +276,106 @@ export default function ClientPortalPage() {
                 <FolderKanban size={32} className="mx-auto mb-3 text-gray-300" />
                 <p className="text-sm">No active project yet.</p>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Insights */}
+        {activeTab === 'insights' && (
+          <div className="max-w-4xl mx-auto flex flex-col gap-5">
+            <div className="bg-white rounded-2xl border border-gray-100 p-5">
+              <h2 className="text-base font-bold text-gray-900 mb-1">Performance Insights</h2>
+              <p className="text-xs text-gray-500">Live data from your marketing services — last 28 days.</p>
+            </div>
+
+            {insightsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
+              </div>
+            ) : !insights ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+                <BarChart3 size={28} className="text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-500 font-medium">Insights not yet available</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Your account manager will configure your integrations soon. Check back shortly.
+                </p>
+              </div>
+            ) : (
+              <>
+                {insights.seo && (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Search size={16} className="text-emerald-700" />
+                      <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Search Performance</h3>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <InsightMetric label="Clicks" value={insights.seo.clicks.toLocaleString()} />
+                      <InsightMetric label="Impressions" value={insights.seo.impressions.toLocaleString()} />
+                      <InsightMetric label="Avg CTR" value={`${(insights.seo.ctr * 100).toFixed(2)}%`} />
+                      <InsightMetric label="Avg Position" value={insights.seo.avgPosition.toFixed(1)} />
+                    </div>
+                  </div>
+                )}
+
+                {insights.traffic && (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <BarChart3 size={16} className="text-emerald-700" />
+                      <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Website Traffic</h3>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <InsightMetric label="Sessions" value={insights.traffic.sessions.toLocaleString()} />
+                      <InsightMetric label="Users" value={insights.traffic.users.toLocaleString()} />
+                      <InsightMetric label="Pageviews" value={insights.traffic.pageviews.toLocaleString()} />
+                      <InsightMetric label="Bounce Rate" value={`${(insights.traffic.bounceRate * 100).toFixed(1)}%`} />
+                    </div>
+                  </div>
+                )}
+
+                {insights.reputation && (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Star size={16} className="text-emerald-700" />
+                      <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Reputation</h3>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <InsightMetric label="Average Rating" value={`${insights.reputation.averageRating.toFixed(1)} ★`} />
+                      <InsightMetric label="New Reviews" value={insights.reputation.newReviews.toString()} />
+                      <InsightMetric label="Total Reviews" value={insights.reputation.totalReviews.toString()} />
+                    </div>
+                  </div>
+                )}
+
+                {insights.ranking && (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <TrendingUp size={16} className="text-emerald-700" />
+                      <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Keyword Rankings</h3>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <InsightMetric label="Tracked" value={insights.ranking.tracked.toString()} />
+                      <InsightMetric label="Top 3" value={insights.ranking.top3.toString()} />
+                      <InsightMetric label="Top 10" value={insights.ranking.top10.toString()} />
+                      <InsightMetric label="Improved" value={insights.ranking.improved.toString()} />
+                      <InsightMetric label="Declined" value={insights.ranking.declined.toString()} />
+                    </div>
+                  </div>
+                )}
+
+                {insights.uptime && (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Activity size={16} className="text-emerald-700" />
+                      <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Website Uptime</h3>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <InsightMetric label="Sites" value={insights.uptime.sitesMonitored.toString()} />
+                      <InsightMetric label="Uptime (30d)" value={`${insights.uptime.uptimePercent}%`} />
+                      <InsightMetric label="Incidents" value={insights.uptime.incidents.toString()} />
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -415,6 +543,15 @@ export default function ClientPortalPage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function InsightMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+      <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{label}</p>
+      <p className="text-xl font-bold text-gray-900">{value}</p>
     </div>
   )
 }

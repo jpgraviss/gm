@@ -1,11 +1,14 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getQBConfig, createOAuthClient } from '@/lib/quickbooks'
 import { logAudit } from '@/lib/audit'
+import { requireRole } from '@/lib/rbac'
 
 // POST /api/quickbooks/disconnect
 // Revokes tokens and removes QB config
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
   try {
     const config = await getQBConfig()
     if (!config) {

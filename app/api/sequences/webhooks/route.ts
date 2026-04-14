@@ -16,6 +16,10 @@ interface ResendWebhookPayload {
   data: {
     email_id: string
     to: string[]
+    subject?: string
+    link?: string // present on email.clicked
+    click?: { link: string; ipAddress?: string; userAgent?: string }
+    bounce?: { type?: string; subType?: string; message?: string }
     headers?: { name: string; value: string }[]
   }
 }
@@ -96,10 +100,72 @@ export async function POST(req: NextRequest) {
 
   const db = createServiceClient()
 
-  // Extract sequence/enrollment IDs from custom headers
+  // Extract sequence/enrollment/broadcast IDs from custom headers
   const sequenceId = extractHeader(data.headers, 'X-Sequence-Id')
   const enrollmentId = extractHeader(data.headers, 'X-Enrollment-Id')
+  const broadcastId = extractHeader(data.headers, 'X-Broadcast-Id')
+  const recipientId = extractHeader(data.headers, 'X-Recipient-Id')
   const contactEmail = data.to?.[0]
+
+  // ── Broadcast events ─────────────────────────────────────────────────────
+  // If this is a broadcast event, update the broadcast_recipients row and the
+  // aggregate counters on the parent broadcast. Then return without falling
+  // through to the sequence logic.
+  if (broadcastId && recipientId) {
+    const eventColumnMap: Record<string, string> = {
+      'email.delivered': 'delivered_at',
+      'email.opened':    'opened_at',
+      'email.clicked':   'clicked_at',
+      'email.bounced':   'bounced_at',
+      'email.complained': 'unsubscribed_at',
+    }
+    const statusMap: Record<string, string> = {
+      'email.delivered': 'delivered',
+      'email.opened':    'opened',
+      'email.clicked':   'clicked',
+      'email.bounced':   'bounced',
+      'email.complained': 'unsubscribed',
+    }
+    const timestampCol = eventColumnMap[type]
+    const newStatus = statusMap[type]
+    if (timestampCol && newStatus) {
+      await db
+        .from('broadcast_recipients')
+        .update({ [timestampCol]: new Date().toISOString(), status: newStatus })
+        .eq('id', recipientId)
+
+      // Increment the broadcast aggregate counter
+      const counterMap: Record<string, string> = {
+        'email.delivered': 'total_delivered',
+        'email.opened':    'total_opened',
+        'email.clicked':   'total_clicked',
+        'email.bounced':   'total_bounced',
+        'email.complained': 'total_unsubscribed',
+      }
+      const counterCol = counterMap[type]
+      if (counterCol) {
+        const { data: bc } = await db.from('broadcasts').select(counterCol).eq('id', broadcastId).single()
+        const current = (bc as Record<string, number> | null)?.[counterCol] ?? 0
+        await db.from('broadcasts').update({ [counterCol]: current + 1 }).eq('id', broadcastId)
+      }
+
+      // Bounces + complaints → global suppression
+      if (type === 'email.bounced' || type === 'email.complained') {
+        await db.from('sequence_suppression_list').upsert(
+          {
+            id: `sup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            email: contactEmail?.toLowerCase(),
+            reason: type === 'email.bounced' ? 'bounced' : 'complained',
+            source: `broadcast:${broadcastId}`,
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: 'email' },
+        )
+      }
+    }
+
+    return NextResponse.json({ ok: true, event: newStatus, broadcast_id: broadcastId })
+  }
 
   // Look up enrollment by headers or by email match
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -156,6 +222,22 @@ export async function POST(req: NextRequest) {
 
   const seqId = enrollment.sequence_id as string
 
+  // Build event metadata — capture click URL and bounce details when present
+  const metadata: Record<string, unknown> = {
+    email_id: data.email_id,
+    resend_event: type,
+    subject: data.subject,
+  }
+  if (type === 'email.clicked') {
+    metadata.link = data.click?.link ?? data.link ?? null
+    metadata.user_agent = data.click?.userAgent ?? null
+  }
+  if (type === 'email.bounced') {
+    metadata.bounce_type = data.bounce?.type ?? null
+    metadata.bounce_subtype = data.bounce?.subType ?? null
+    metadata.bounce_message = data.bounce?.message ?? null
+  }
+
   // Insert activity record with step_index from enrollment
   await db.from('sequence_activities').insert({
     id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -164,9 +246,38 @@ export async function POST(req: NextRequest) {
     contact_email: contactEmail,
     step_index: enrollment.current_step ?? 0,
     event_type: eventType,
-    metadata: { email_id: data.email_id, resend_event: type },
+    metadata,
     created_at: new Date().toISOString(),
   })
+
+  // Update enrollment delivery status on delivered event
+  if (type === 'email.delivered') {
+    await db
+      .from('sequence_enrollments')
+      .update({
+        delivery_status: 'delivered',
+        last_delivered_at: new Date().toISOString(),
+      })
+      .eq('id', enrollment.id)
+  }
+
+  // Mirror engagement events to the CRM contact timeline
+  if (enrollment.contact_id && (type === 'email.opened' || type === 'email.clicked' || type === 'email.bounced')) {
+    const descriptionMap: Record<string, string> = {
+      'email.opened': `Opened sequence email`,
+      'email.clicked': `Clicked link in sequence email${metadata.link ? ` (${metadata.link})` : ''}`,
+      'email.bounced': `Sequence email bounced`,
+    }
+    await db.from('crm_activities').insert({
+      id: `act-seq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: 'Email',
+      description: descriptionMap[type],
+      contact_id: enrollment.contact_id,
+      company_id: null,
+      timestamp: new Date().toISOString(),
+      logged_by: 'System',
+    })
+  }
 
   // Handle bounces
   if (type === 'email.bounced') {

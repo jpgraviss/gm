@@ -272,10 +272,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ credential }),
       })
 
-      const data = await res.json()
+      // Parse JSON safely — server might return HTML on timeout/crash
+      let data: { user?: AuthUser; error?: string } = {}
+      try {
+        data = await res.json()
+      } catch {
+        return {
+          ok: false,
+          error: `Sign-in server error (HTTP ${res.status}). Please retry.`,
+        }
+      }
 
       if (!res.ok || !data.user) {
-        return { ok: false, error: data.error ?? 'Google sign-in failed. Please try again.' }
+        return { ok: false, error: data.error ?? `Sign-in failed (HTTP ${res.status})` }
       }
 
       const profile: AuthUser = data.user
@@ -285,8 +294,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (profile.userType === 'staff') fetchMembers()
       try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
       return { ok: true }
-    } catch {
-      return { ok: false, error: 'Google sign-in failed. Please try again.' }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? `Network error: ${err.message}` : 'Network error. Please try again.',
+      }
     }
   }
 

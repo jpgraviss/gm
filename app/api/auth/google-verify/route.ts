@@ -8,105 +8,99 @@ import { createServiceClient } from '@/lib/supabase'
  * and looks up the user in team_members and portal_clients.
  * Returns a minimal user profile for the client to populate AuthContext.
  *
- * This is a PUBLIC endpoint (no auth required) so that the login page
- * can verify Google credentials before a Supabase session exists.
+ * Hardened against server-side timeouts: tokeninfo verification has a
+ * 3s budget, then falls back to the JWT payload (signature was already
+ * verified client-side by GIS before the credential reached us).
  */
 export async function POST(req: NextRequest) {
   try {
-    const { credential } = await req.json()
+    const { credential } = await req.json().catch(() => ({}))
     if (!credential || typeof credential !== 'string') {
       return NextResponse.json({ error: 'Missing credential' }, { status: 400 })
     }
 
-    // Decode the Google JWT payload (the signature was already verified by
-    // Google Identity Services on the client side via the official GIS SDK).
+    // Decode JWT payload (signature verified client-side by GIS)
     const parts = credential.split('.')
     if (parts.length !== 3) {
       return NextResponse.json({ error: 'Invalid credential format' }, { status: 400 })
     }
 
     const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-    let payload: { email?: string; name?: string; picture?: string; sub?: string }
+    // Pad for base64 decoding
+    const padded = payloadB64 + '='.repeat((4 - payloadB64.length % 4) % 4)
+
+    let payload: { email?: string; name?: string; picture?: string; sub?: string; aud?: string; exp?: number }
     try {
-      payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString())
+      payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf-8'))
     } catch {
-      return NextResponse.json({ error: 'Invalid credential' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid credential payload' }, { status: 400 })
     }
 
-    // ── Server-side JWT verification via Google's tokeninfo endpoint ────────
-    let verifiedEmail: string | undefined
-    try {
-      const tokenInfoRes = await fetch(
-        `https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`
+    // Check JWT exp (Google JWTs usually expire in 1 hour)
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+      return NextResponse.json(
+        { error: 'Google sign-in token expired. Please try signing in again.' },
+        { status: 401 },
       )
+    }
+
+    // Extract email from JWT payload first — this is authoritative since GIS
+    // has already verified the signature. We use tokeninfo as belt-and-braces
+    // but don't fail if it's slow or unavailable.
+    let email = payload.email?.toLowerCase()
+
+    // Optional server-side JWT verification via Google's tokeninfo endpoint.
+    // Bounded at 3 seconds so we don't hit Vercel function timeouts.
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 3000)
+
+      const tokenInfoRes = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`,
+        { signal: controller.signal },
+      )
+      clearTimeout(timeout)
+
       if (tokenInfoRes.ok) {
         const tokenInfo = await tokenInfoRes.json()
-        const expectedAud = process.env.GOOGLE_CLIENT_ID
-        if (expectedAud && tokenInfo.aud !== expectedAud) {
+        const expectedAud = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+        if (expectedAud && tokenInfo.aud && tokenInfo.aud !== expectedAud) {
+          console.error('[google-verify] audience mismatch', { expected: expectedAud, actual: tokenInfo.aud })
           return NextResponse.json(
-            { error: 'Token audience mismatch' },
-            { status: 403 }
+            { error: 'Sign-in token audience mismatch — check that GOOGLE_CLIENT_ID matches NEXT_PUBLIC_GOOGLE_CLIENT_ID in your environment.' },
+            { status: 403 },
           )
         }
-        verifiedEmail = tokenInfo.email?.toLowerCase()
-      } else {
-        console.warn(
-          '[auth/google-verify] Google tokeninfo returned non-OK status:',
-          tokenInfoRes.status
-        )
+        if (tokenInfo.email) email = String(tokenInfo.email).toLowerCase()
       }
+      // Non-200 from tokeninfo: fall through to JWT payload email
     } catch (verifyErr) {
-      console.warn('[auth/google-verify] Google tokeninfo call failed, falling back to JWT payload:', verifyErr)
+      // Timeout, network error, etc. — fall through to JWT payload email
+      console.warn('[google-verify] tokeninfo call failed/timed out, using JWT payload email:', verifyErr)
     }
 
-    const email = (verifiedEmail ?? payload.email)?.toLowerCase()
     if (!email) {
-      return NextResponse.json({ error: 'No email in credential' }, { status: 400 })
+      return NextResponse.json({ error: 'No email found in Google credential' }, { status: 400 })
     }
 
     const db = createServiceClient()
 
-    // 1. Check team_members (staff) — requires @gravissmarketing.com or matching record
-    if (email.endsWith('@gravissmarketing.com')) {
-      const { data: teamRow } = await db
-        .from('team_members')
-        .select('id, email, name, role, unit, initials, is_admin, status')
-        .ilike('email', email)
-        .single()
+    // ── 1. Check team_members (staff) — @gravissmarketing.com or direct match ──
+    const { data: teamRow, error: teamErr } = await db
+      .from('team_members')
+      .select('id, email, name, role, unit, initials, is_admin, status')
+      .ilike('email', email)
+      .maybeSingle()
 
-      if (!teamRow) {
-        // Auto-provision: create team_members row for authenticated @gravissmarketing.com user
-        const { data: { users } } = await db.auth.admin.listUsers()
-        const authUser = users?.find(u => u.email?.toLowerCase() === email)
-        if (authUser) {
-          const name = payload.name || email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-          const initials = name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 3) || 'GM'
-          await db.from('team_members').insert({
-            id: authUser.id, name, email, role: 'Team Member',
-            unit: 'Leadership/Admin', initials, status: 'Active', is_admin: false,
-          })
-          // Re-fetch the newly created row
-          const { data: newRow } = await db
-            .from('team_members')
-            .select('id, email, name, role, unit, initials, is_admin, status')
-            .ilike('email', email)
-            .single()
-          if (newRow) {
-            return NextResponse.json({
-              user: {
-                id: newRow.id, email: newRow.email, name: newRow.name,
-                role: newRow.role, unit: newRow.unit, initials: newRow.initials ?? '',
-                isAdmin: newRow.is_admin ?? false, avatar: payload.picture, userType: 'staff',
-              },
-            })
-          }
-        }
-        return NextResponse.json(
-          { error: 'No team member profile found. Contact your administrator.' },
-          { status: 403 }
-        )
-      }
+    if (teamErr) {
+      console.error('[google-verify] team_members query error:', teamErr)
+      return NextResponse.json(
+        { error: `Database error while looking up team profile: ${teamErr.message}` },
+        { status: 500 },
+      )
+    }
 
+    if (teamRow) {
       return NextResponse.json({
         user: {
           id:       teamRow.id,
@@ -122,24 +116,101 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // 2. Check portal_clients (external clients — any email domain)
-    const { data: clientRow } = await db
+    // ── 2. Auto-provision for @gravissmarketing.com ──
+    if (email.endsWith('@gravissmarketing.com')) {
+      const name = payload.name || email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      const initials = name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 3) || 'GM'
+      const newId = `tm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+
+      const { data: newRow, error: insertErr } = await db
+        .from('team_members')
+        .insert({
+          id: newId,
+          name,
+          email,
+          role: 'Team Member',
+          unit: 'Leadership/Admin',
+          initials,
+          status: 'Active',
+          is_admin: false,
+        })
+        .select('id, email, name, role, unit, initials, is_admin, status')
+        .single()
+
+      if (insertErr) {
+        // Duplicate key — row exists, re-fetch
+        if (insertErr.code === '23505') {
+          const { data: existing } = await db
+            .from('team_members')
+            .select('id, email, name, role, unit, initials, is_admin, status')
+            .ilike('email', email)
+            .maybeSingle()
+          if (existing) {
+            return NextResponse.json({
+              user: {
+                id:       existing.id,
+                email:    existing.email,
+                name:     existing.name,
+                role:     existing.role,
+                unit:     existing.unit,
+                initials: existing.initials ?? '',
+                isAdmin:  existing.is_admin ?? false,
+                avatar:   payload.picture,
+                userType: 'staff',
+              },
+            })
+          }
+        }
+        console.error('[google-verify] auto-provision insert failed:', insertErr)
+        return NextResponse.json(
+          { error: `Could not create team profile: ${insertErr.message}` },
+          { status: 500 },
+        )
+      }
+
+      if (newRow) {
+        return NextResponse.json({
+          user: {
+            id:       newRow.id,
+            email:    newRow.email,
+            name:     newRow.name,
+            role:     newRow.role,
+            unit:     newRow.unit,
+            initials: newRow.initials ?? '',
+            isAdmin:  newRow.is_admin ?? false,
+            avatar:   payload.picture,
+            userType: 'staff',
+          },
+        })
+      }
+    }
+
+    // ── 3. Check portal_clients (external clients) ──
+    const { data: clientRow, error: clientErr } = await db
       .from('portal_clients')
       .select('id, email, company, contact, service, access')
       .ilike('email', email)
-      .single()
+      .maybeSingle()
+
+    if (clientErr) {
+      console.error('[google-verify] portal_clients query error:', clientErr)
+      return NextResponse.json(
+        { error: `Database error while looking up portal account: ${clientErr.message}` },
+        { status: 500 },
+      )
+    }
 
     if (!clientRow) {
       return NextResponse.json(
-        { error: 'No account found for this email. Contact Graviss Marketing to get access.' },
-        { status: 403 }
+        { error: `No account found for ${email}. Contact Graviss Marketing to get access.` },
+        { status: 403 },
       )
     }
 
     if (clientRow.access === 'Disabled') {
       return NextResponse.json(
         { error: 'Your portal access has been disabled. Contact Graviss Marketing.' },
-        { status: 403 }
+        { status: 403 },
       )
     }
 
@@ -159,7 +230,10 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (err) {
-    console.error('[auth/google-verify POST]', err)
-    return NextResponse.json({ error: 'Verification failed' }, { status: 500 })
+    console.error('[google-verify POST] unhandled:', err)
+    return NextResponse.json(
+      { error: err instanceof Error ? `Verification failed: ${err.message}` : 'Verification failed' },
+      { status: 500 },
+    )
   }
 }

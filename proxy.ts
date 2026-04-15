@@ -1,48 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Ratelimit } from '@upstash/ratelimit'
-import { Redis } from '@upstash/redis'
 
 // ── Rate limiters ────────────────────────────────────────────────────────────
-// Uses Upstash Redis when env vars are valid. Falls back to in-memory if
-// Upstash init throws (bad URL, malformed token, edge runtime issue).
+// In-memory only. Upstash Redis was removed because module-load failures
+// (bad URL/token, edge runtime issues) were crashing the entire proxy with
+// MIDDLEWARE_INVOCATION_FAILED, blocking every request to the site.
 //
-// CRITICAL: every line below is wrapped in try/catch because an unhandled
-// throw at module load makes the entire proxy crash with
-// MIDDLEWARE_INVOCATION_FAILED, breaking EVERY request to the app.
+// In-memory is fine for a small team — single Vercel instance handles
+// requests serially per-region. If you need cross-instance rate limiting,
+// re-introduce Upstash inside a try/catch with proven config.
 
-const isUpstashConfigured = Boolean(
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-)
-
-function createLimiter(requests: number, window: string): Ratelimit | null {
-  if (!isUpstashConfigured) return null
-  try {
-    return new Ratelimit({
-      redis: Redis.fromEnv(),
-      limiter: Ratelimit.slidingWindow(requests, window as `${number} ${'s' | 'm' | 'h' | 'd'}`),
-      analytics: false, // disable analytics (saves Redis commands)
-      prefix: 'gravhub',
-    })
-  } catch (err) {
-    // Upstash init failed (invalid URL, edge runtime issue, etc.) —
-    // fall back to in-memory limiting silently. Don't crash the proxy.
-    console.error('[proxy] Upstash init failed, falling back to memory:', err)
-    return null
-  }
-}
-
-let adminLimiter:   Ratelimit | null = null
-let bookingLimiter: Ratelimit | null = null
-let apiLimiter:     Ratelimit | null = null
-try {
-  adminLimiter   = createLimiter(5, '1 h')
-  bookingLimiter = createLimiter(20, '1 h')
-  apiLimiter     = createLimiter(200, '1 m')
-} catch (err) {
-  console.error('[proxy] limiter setup failed:', err)
-}
-
-// In-memory fallback for local dev (no Upstash) and for when Upstash init fails
 const memoryMap = new Map<string, { count: number; resetAt: number }>()
 
 function memoryLimited(key: string, max: number, windowMs: number): boolean {
@@ -56,24 +22,10 @@ function memoryLimited(key: string, max: number, windowMs: number): boolean {
   return entry.count > max
 }
 
-async function isRateLimited(limiter: Ratelimit | null, key: string, fallbackMax: number, fallbackWindowMs: number): Promise<boolean> {
-  if (limiter) {
-    try {
-      const { success } = await limiter.limit(key)
-      return !success
-    } catch (err) {
-      // Upstash call failed at runtime — fall through to memory limiter
-      console.error('[proxy] limiter.limit failed, falling back to memory:', err)
-      return memoryLimited(key, fallbackMax, fallbackWindowMs)
-    }
-  }
-  return memoryLimited(key, fallbackMax, fallbackWindowMs)
-}
-
 // ── Public routes that don't require authentication ─────────────────────────
 const PUBLIC_PREFIXES = [
   '/api/auth/google-verify',
-  '/api/auth/health',            // Diagnostic endpoint — masked env var view
+  '/api/auth/health',
   '/api/calendar/settings/',
   '/api/calendar/slots',
   '/api/calendar/callback',
@@ -86,17 +38,17 @@ const PUBLIC_PREFIXES = [
   '/api/auth/verify-email',
   '/api/signatures/',
   '/api/email/sign-request',
-  '/api/forms/public/',          // Public form embed endpoints
-  '/api/sequences/webhooks',     // Resend webhook
+  '/api/forms/public/',
+  '/api/sequences/webhooks',
   '/api/sequences/unsubscribe',
-  '/api/portal/insights',        // Portal client read-only insights
+  '/api/portal/insights',
 ]
 
 function getClientIp(req: NextRequest): string {
   return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
 }
 
-async function proxyImpl(req: NextRequest): Promise<NextResponse> {
+function proxyImpl(req: NextRequest): NextResponse {
   const { pathname } = req.nextUrl
 
   // Only apply to API routes
@@ -130,10 +82,9 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
 
   // ── Public routes: no auth required ──────────────────────────────────────
   if (isPublicRoute) {
-    // Rate-limit public booking creation (20 per hour per IP)
     if (pathname.startsWith('/api/bookings') && req.method === 'POST') {
       const ip = getClientIp(req)
-      if (await isRateLimited(bookingLimiter, `booking:${ip}`, 20, 60 * 60 * 1000)) {
+      if (memoryLimited(`booking:${ip}`, 20, 60 * 60 * 1000)) {
         return NextResponse.json(
           { error: 'Too many booking requests. Try again later.' },
           { status: 429 }
@@ -164,7 +115,7 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
 
   // General API rate limit: 200 requests per minute per IP
   const ip = getClientIp(req)
-  if (await isRateLimited(apiLimiter, `api:${ip}`, 200, 60 * 1000)) {
+  if (memoryLimited(`api:${ip}`, 200, 60 * 1000)) {
     return NextResponse.json(
       { error: 'Rate limit exceeded. Try again shortly.' },
       { status: 429 }
@@ -175,15 +126,14 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
 }
 
 /**
- * Public proxy entry point. Wraps proxyImpl in a try/catch so any
- * unhandled error returns NextResponse.next() instead of crashing
+ * Proxy entry point — wraps proxyImpl in try/catch so any unhandled
+ * exception logs and returns NextResponse.next() instead of crashing
  * with MIDDLEWARE_INVOCATION_FAILED. The proxy MUST never block the
- * entire site — security checks fail open to a 401 from the route
- * itself, never to a 500 here.
+ * entire site.
  */
-export async function proxy(req: NextRequest): Promise<NextResponse> {
+export function proxy(req: NextRequest): NextResponse {
   try {
-    return await proxyImpl(req)
+    return proxyImpl(req)
   } catch (err) {
     console.error('[proxy] unhandled error, falling through:', err)
     return NextResponse.next()

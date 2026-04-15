@@ -3,30 +3,46 @@ import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 
 // ── Rate limiters ────────────────────────────────────────────────────────────
-// Uses Upstash Redis in production (persistent across instances).
-// Falls back to in-memory when UPSTASH env vars are not set (local dev).
+// Uses Upstash Redis when env vars are valid. Falls back to in-memory if
+// Upstash init throws (bad URL, malformed token, edge runtime issue).
+//
+// CRITICAL: every line below is wrapped in try/catch because an unhandled
+// throw at module load makes the entire proxy crash with
+// MIDDLEWARE_INVOCATION_FAILED, breaking EVERY request to the app.
 
 const isUpstashConfigured = Boolean(
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
 )
 
-function createLimiter(requests: number, window: string) {
-  if (isUpstashConfigured) {
+function createLimiter(requests: number, window: string): Ratelimit | null {
+  if (!isUpstashConfigured) return null
+  try {
     return new Ratelimit({
       redis: Redis.fromEnv(),
       limiter: Ratelimit.slidingWindow(requests, window as `${number} ${'s' | 'm' | 'h' | 'd'}`),
-      analytics: true,
+      analytics: false, // disable analytics (saves Redis commands)
       prefix: 'gravhub',
     })
+  } catch (err) {
+    // Upstash init failed (invalid URL, edge runtime issue, etc.) —
+    // fall back to in-memory limiting silently. Don't crash the proxy.
+    console.error('[proxy] Upstash init failed, falling back to memory:', err)
+    return null
   }
-  return null // fallback below
 }
 
-const adminLimiter   = createLimiter(5, '1 h')
-const bookingLimiter = createLimiter(20, '1 h')
-const apiLimiter     = createLimiter(200, '1 m')
+let adminLimiter:   Ratelimit | null = null
+let bookingLimiter: Ratelimit | null = null
+let apiLimiter:     Ratelimit | null = null
+try {
+  adminLimiter   = createLimiter(5, '1 h')
+  bookingLimiter = createLimiter(20, '1 h')
+  apiLimiter     = createLimiter(200, '1 m')
+} catch (err) {
+  console.error('[proxy] limiter setup failed:', err)
+}
 
-// In-memory fallback for local dev (no Upstash)
+// In-memory fallback for local dev (no Upstash) and for when Upstash init fails
 const memoryMap = new Map<string, { count: number; resetAt: number }>()
 
 function memoryLimited(key: string, max: number, windowMs: number): boolean {
@@ -42,8 +58,14 @@ function memoryLimited(key: string, max: number, windowMs: number): boolean {
 
 async function isRateLimited(limiter: Ratelimit | null, key: string, fallbackMax: number, fallbackWindowMs: number): Promise<boolean> {
   if (limiter) {
-    const { success } = await limiter.limit(key)
-    return !success
+    try {
+      const { success } = await limiter.limit(key)
+      return !success
+    } catch (err) {
+      // Upstash call failed at runtime — fall through to memory limiter
+      console.error('[proxy] limiter.limit failed, falling back to memory:', err)
+      return memoryLimited(key, fallbackMax, fallbackWindowMs)
+    }
   }
   return memoryLimited(key, fallbackMax, fallbackWindowMs)
 }
@@ -74,7 +96,7 @@ function getClientIp(req: NextRequest): string {
   return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
 }
 
-export async function proxy(req: NextRequest) {
+async function proxyImpl(req: NextRequest): Promise<NextResponse> {
   const { pathname } = req.nextUrl
 
   // Only apply to API routes
@@ -150,6 +172,22 @@ export async function proxy(req: NextRequest) {
   }
 
   return NextResponse.next()
+}
+
+/**
+ * Public proxy entry point. Wraps proxyImpl in a try/catch so any
+ * unhandled error returns NextResponse.next() instead of crashing
+ * with MIDDLEWARE_INVOCATION_FAILED. The proxy MUST never block the
+ * entire site — security checks fail open to a 401 from the route
+ * itself, never to a 500 here.
+ */
+export async function proxy(req: NextRequest): Promise<NextResponse> {
+  try {
+    return await proxyImpl(req)
+  } catch (err) {
+    console.error('[proxy] unhandled error, falling through:', err)
+    return NextResponse.next()
+  }
 }
 
 export const config = {

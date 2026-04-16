@@ -1,10 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-// Mock Upstash so tests use in-memory fallback
-vi.mock('@upstash/ratelimit', () => ({ Ratelimit: vi.fn() }))
-vi.mock('@upstash/redis', () => ({ Redis: { fromEnv: vi.fn() } }))
-
 import { proxy } from '@/proxy'
 
 function makeRequest(

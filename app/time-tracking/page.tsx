@@ -722,56 +722,52 @@ export default function TimeTrackingPage() {
           ))}
         </div>
 
-        {/* ── Filters ── */}
-        <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3 overflow-x-auto">
-          {/* Member filter */}
-          <div className="flex items-center gap-1 bg-white border border-gray-100 rounded-lg p-1">
+        {/* ── Filters (single row) ── */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          {/* Member filter as dropdown */}
+          <select
+            value={filterMember}
+            onChange={e => setFilterMember(e.target.value)}
+            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+          >
             {allMembers.map(m => (
-              <button
-                key={m}
-                onClick={() => setFilterMember(m)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  filterMember === m ? 'bg-[#012b1e] text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                {m}
-              </button>
+              <option key={m} value={m}>{m}</option>
             ))}
-          </div>
+          </select>
 
-          {/* Billable filter */}
-          <div className="flex items-center gap-1 bg-white border border-gray-100 rounded-lg p-1">
-            {(['All', 'Billable', 'Non-Billable'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilterBillable(f)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  filterBillable === f ? 'bg-[#012b1e] text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
+          <span className="text-gray-300">|</span>
 
-          {/* Approval status filter */}
-          <div className="flex items-center gap-1 bg-white border border-gray-100 rounded-lg p-1">
-            {(['All', 'pending', 'approved', 'rejected'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilterApproval(f)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors capitalize ${
-                  filterApproval === f ? 'bg-[#012b1e] text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
+          {/* Billable pills */}
+          {(['All', 'Billable', 'Non-Billable'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilterBillable(f)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors flex-shrink-0 ${
+                filterBillable === f ? 'bg-[#012b1e] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
 
-          <div className="ml-auto text-xs text-gray-400">
+          <span className="text-gray-300">|</span>
+
+          {/* Approval pills */}
+          {(['All', 'pending', 'approved', 'rejected'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilterApproval(f)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors capitalize flex-shrink-0 ${
+                filterApproval === f ? 'bg-[#012b1e] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+
+          <span className="ml-auto text-xs text-gray-400 flex-shrink-0 whitespace-nowrap">
             {weekEntries.length} entries · {(totalMins / 60).toFixed(1)}h logged
-          </div>
+          </span>
         </div>
 
         {/* ── Time Entries ── */}

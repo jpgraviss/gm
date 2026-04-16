@@ -52,8 +52,9 @@ const navigation: NavSection[] = [
   {
     section: 'Marketing',
     items: [
-      { label: 'Broadcasts', href: '/marketing', icon: <Mail size={16} />,    allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'Forms',      href: '/forms',     icon: <FileText size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Social Media', href: '/social',     icon: <MessageSquare size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Broadcasts',   href: '/marketing',  icon: <Mail size={16} />,          allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Forms',        href: '/forms',       icon: <FileText size={16} />,      allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
     ],
   },
   {

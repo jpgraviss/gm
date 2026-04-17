@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { buildClientReport } from '@/lib/client-reports'
 
 /**
- * GET /api/portal/insights?company=Acme+Corp&days=28
+ * GET /api/portal/insights?company=Company+Name&days=28
  *
  * Portal-facing endpoint. Reads the client_integrations binding for the
  * company and returns a trimmed version of the client report — only the

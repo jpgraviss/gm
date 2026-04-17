@@ -344,7 +344,7 @@ function AddKeywordModal({
             <input
               value={companyName}
               onChange={e => setCompanyName(e.target.value)}
-              placeholder="Acme Inc."
+              placeholder="Company name"
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -353,7 +353,7 @@ function AddKeywordModal({
             <input
               value={siteUrl}
               onChange={e => setSiteUrl(e.target.value)}
-              placeholder="https://example.com/ or sc-domain:example.com"
+              placeholder="https://site.com or sc-domain:site.com"
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-xs"
             />
           </div>

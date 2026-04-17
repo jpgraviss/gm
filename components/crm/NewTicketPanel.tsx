@@ -124,7 +124,7 @@ export default function NewTicketPanel({ onSave, onClose }: Props) {
             </div>
             <div>
               <FieldLabel>Contact Email</FieldLabel>
-              <Input type="email" placeholder="email@example.com" value={form.contactEmail} onChange={e => set('contactEmail', e.target.value)} />
+              <Input type="email" placeholder="email@company.com" value={form.contactEmail} onChange={e => set('contactEmail', e.target.value)} />
             </div>
           </div>
 

@@ -616,7 +616,7 @@ function ContractPanel({
                   type="email"
                   value={sigEmail}
                   onChange={e => setSigEmail(e.target.value)}
-                  placeholder="client@example.com"
+                  placeholder="client@company.com"
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
                 />
               </div>
@@ -626,7 +626,7 @@ function ContractPanel({
                   type="text"
                   value={sigName}
                   onChange={e => setSigName(e.target.value)}
-                  placeholder="John Doe"
+                  placeholder="Signer name"
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
                 />
               </div>

@@ -95,7 +95,7 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
               type="text"
               value={company}
               onChange={e => setCompany(e.target.value)}
-              placeholder="Acme Corp"
+              placeholder="Company name"
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
             />
           </div>
@@ -106,7 +106,7 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
               type="text"
               value={contact}
               onChange={e => setContact(e.target.value)}
-              placeholder="Jane Smith"
+              placeholder="Full name"
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
             />
           </div>
@@ -117,7 +117,7 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="jane@acme.com"
+              placeholder="email@company.com"
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
             />
           </div>

@@ -326,9 +326,9 @@ export default function AdminPage() {
 
   function downloadCSVTemplate(type: 'contacts' | 'companies' | 'pipeline') {
     const templates: Record<string, string> = {
-      contacts: 'first_name,last_name,email,phone,title,company_name\nJane,Doe,jane@example.com,555-1234,CEO,Acme Inc\n',
-      companies: 'name,industry,website,phone,hq,size,annual_revenue\nAcme Inc,Technology,https://acme.com,555-5678,Austin TX,50,2500000\n',
-      pipeline: 'company,contact,stage,value,service_type,close_date,assigned_rep,probability\nAcme Inc,Jane Doe,Lead,5000,Website,2024-06-30,Jonathan Graviss,25\n',
+      contacts: 'first_name,last_name,email,phone,title,company_name\nFirst,Last,email@company.com,000-0000,CEO,Example Co\n',
+      companies: 'name,industry,website,phone,hq,size,annual_revenue\nExample Co,Technology,https://example-co.com,000-0000,Austin TX,50,2500000\n',
+      pipeline: 'company,contact,stage,value,service_type,close_date,assigned_rep,probability\nExample Co,First Last,Lead,5000,Website,2024-06-30,Jonathan Graviss,25\n',
     }
     const blob = new Blob([templates[type]], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)

@@ -47,8 +47,8 @@ const FIELD_TYPES: Array<{ type: string; label: string; icon: React.ReactNode; m
 function newField(type: string, mapsTo?: string): FormField {
   const id = `f-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
   const defaults: Record<string, { label: string; name: string; placeholder?: string }> = {
-    text:     { label: 'First name', name: 'first_name', placeholder: 'Jane' },
-    email:    { label: 'Email',      name: 'email',      placeholder: 'jane@company.com' },
+    text:     { label: 'First name', name: 'first_name', placeholder: 'First name' },
+    email:    { label: 'Email',      name: 'email',      placeholder: 'email@company.com' },
     phone:    { label: 'Phone',      name: 'phone',      placeholder: '(555) 123-4567' },
     textarea: { label: 'Message',    name: 'message',    placeholder: 'Tell us about your project…' },
     select:   { label: 'Budget',     name: 'budget' },

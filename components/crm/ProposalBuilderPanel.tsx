@@ -930,17 +930,17 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="sm:col-span-2">
                   <label className="text-[11px] font-semibold text-gray-500 mb-1 block">Company Name *</label>
-                  <input value={company} onChange={e => setCompany(e.target.value)} placeholder="Acme Corp"
+                  <input value={company} onChange={e => setCompany(e.target.value)} placeholder="Company name"
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold text-gray-500 mb-1 block">Contact Name</label>
-                  <input value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Jane Smith"
+                  <input value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Full name"
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold text-gray-500 mb-1 block">Contact Email</label>
-                  <input value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="jane@acme.com"
+                  <input value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="email@company.com"
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                 </div>
                 <div>

@@ -419,9 +419,9 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
 
               <div className="space-y-4">
                 {[
-                  { label: 'Full Name *', value: name, setter: setName, placeholder: 'Jane Smith', icon: User, type: 'text', required: true },
-                  { label: 'Email Address *', value: email, setter: setEmail, placeholder: 'jane@company.com', icon: Mail, type: 'email', required: true },
-                  { label: 'Company', value: company, setter: setCompany, placeholder: 'Acme Corp', icon: Building2, type: 'text', required: false },
+                  { label: 'Full Name *', value: name, setter: setName, placeholder: 'Full name', icon: User, type: 'text', required: true },
+                  { label: 'Email Address *', value: email, setter: setEmail, placeholder: 'email@company.com', icon: Mail, type: 'email', required: true },
+                  { label: 'Company', value: company, setter: setCompany, placeholder: 'Company name', icon: Building2, type: 'text', required: false },
                   { label: 'Phone', value: phone, setter: setPhone, placeholder: '+1 (555) 000-0000', icon: Phone, type: 'tel', required: false },
                 ].map(field => (
                   <div key={field.label}>

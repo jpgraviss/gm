@@ -411,7 +411,7 @@ function AddSiteModal({
             <input
               value={url}
               onChange={e => setUrl(e.target.value)}
-              placeholder="https://example.com"
+              placeholder="https://client-site.com"
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -556,7 +556,7 @@ function SiteDetailPanel({
                     <input
                       value={draftUrl}
                       onChange={e => setDraftUrl(e.target.value)}
-                      placeholder="https://example.com"
+                      placeholder="https://client-site.com"
                       className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                     <input

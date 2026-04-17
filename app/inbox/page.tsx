@@ -535,7 +535,7 @@ export default function InboxPage() {
                 <input
                   value={composeTo}
                   onChange={e => setComposeTo(e.target.value)}
-                  placeholder="recipient@example.com"
+                  placeholder="to@company.com"
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
                 />
               </div>
@@ -544,7 +544,7 @@ export default function InboxPage() {
                 <input
                   value={composeCc}
                   onChange={e => setComposeCc(e.target.value)}
-                  placeholder="cc@example.com"
+                  placeholder="cc@company.com"
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
                 />
               </div>

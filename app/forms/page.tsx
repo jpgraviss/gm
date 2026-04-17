@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import {
   Plus, X, Trash2, Copy, ExternalLink, FileText, Eye, Pencil,
   Type, Mail, Phone, AlignLeft, ListChecks, CheckSquare, Hash, Link2,
+  GripVertical,
 } from 'lucide-react'
 
 interface FormField {
@@ -259,6 +261,18 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
   function updateField(id: string, patch: Partial<FormField>) {
     setDraft(d => ({ ...d, fields: d.fields.map(f => f.id === id ? { ...f, ...patch } : f) }))
   }
+  function handleDragEnd(result: DropResult) {
+    if (!result.destination) return
+    const from = result.source.index
+    const to = result.destination.index
+    if (from === to) return
+    setDraft(d => {
+      const fields = [...d.fields]
+      const [moved] = fields.splice(from, 1)
+      fields.splice(to, 0, moved)
+      return { ...d, fields }
+    })
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
@@ -301,29 +315,41 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
               <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Fields</label>
               <span className="text-[11px] text-gray-400">{draft.fields.length} field{draft.fields.length === 1 ? '' : 's'}</span>
             </div>
-            <div className="flex flex-col gap-2">
-              {draft.fields.map(f => (
-                <div key={f.id} className="p-3 border border-gray-200 rounded-xl flex flex-col gap-2 bg-gray-50/50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{f.type}</span>
-                    <input
-                      value={f.label}
-                      onChange={e => updateField(f.id, { label: e.target.value })}
-                      placeholder="Label"
-                      className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={f.required ?? false}
-                        onChange={e => updateField(f.id, { required: e.target.checked })}
-                        className="w-3.5 h-3.5 rounded border-gray-300"
-                      /> Required
-                    </label>
-                    <button onClick={() => removeField(f.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="form-fields">
+                {(provided) => (
+                  <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col gap-2">
+                    {draft.fields.map((f, index) => (
+                      <Draggable key={f.id} draggableId={f.id} index={index}>
+                        {(dragProvided, snapshot) => (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            className={`p-3 border rounded-xl flex flex-col gap-2 ${snapshot.isDragging ? 'border-emerald-300 bg-emerald-50 shadow-lg' : 'border-gray-200 bg-gray-50/50'}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div {...dragProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-gray-200 touch-none">
+                                <GripVertical size={14} className="text-gray-400" />
+                              </div>
+                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{f.type}</span>
+                              <input
+                                value={f.label}
+                                onChange={e => updateField(f.id, { label: e.target.value })}
+                                placeholder="Label"
+                                className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              />
+                              <label className="flex items-center gap-1 text-[11px] text-gray-600">
+                                <input
+                                  type="checkbox"
+                                  checked={f.required ?? false}
+                                  onChange={e => updateField(f.id, { required: e.target.checked })}
+                                  className="w-3.5 h-3.5 rounded border-gray-300"
+                                /> Required
+                              </label>
+                              <button onClick={() => removeField(f.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                   <div className="flex items-center gap-2">
                     <input
                       value={f.name}
@@ -346,9 +372,15 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
                       className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
                     />
                   )}
-                </div>
-              ))}
-            </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
 
             <div className="mt-3">
               <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Add field</p>

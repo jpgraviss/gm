@@ -483,7 +483,7 @@ export default function SalesEnablementPage() {
     }
   }
 
-  async function useTemplate(tmpl: SalesTemplate) {
+  async function applyTemplate(tmpl: SalesTemplate) {
     try {
       const res = await fetch(`/api/sales-templates/${tmpl.id}`, {
         method: 'PATCH',
@@ -701,7 +701,7 @@ export default function SalesEnablementPage() {
                     )}
                     <div className="flex gap-2 mt-3">
                       <button
-                        onClick={() => useTemplate(tmpl)}
+                        onClick={() => applyTemplate(tmpl)}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white hover:opacity-90 transition-opacity"
                         style={{ background: '#015035' }}
                       >

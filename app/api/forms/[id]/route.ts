@@ -76,7 +76,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireRole(req, 'Team Member')
+  const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
   const { id } = await params

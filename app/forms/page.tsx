@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import {
   Plus, X, Trash2, Copy, ExternalLink, FileText, Eye, Pencil,
   Type, Mail, Phone, AlignLeft, ListChecks, CheckSquare, Hash, Link2,
+  GripVertical,
 } from 'lucide-react'
 
 interface FormField {
@@ -30,6 +32,11 @@ interface LeadForm {
   successMessage: string
   status: 'Active' | 'Paused' | 'Draft'
   submissionsCount: number
+  primaryColor?: string
+  textColor?: string
+  bgColor?: string
+  bgTransparent?: boolean
+  fontFamily?: string
   createdAt: string
 }
 
@@ -259,6 +266,18 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
   function updateField(id: string, patch: Partial<FormField>) {
     setDraft(d => ({ ...d, fields: d.fields.map(f => f.id === id ? { ...f, ...patch } : f) }))
   }
+  function handleDragEnd(result: DropResult) {
+    if (!result.destination) return
+    const from = result.source.index
+    const to = result.destination.index
+    if (from === to) return
+    setDraft(d => {
+      const fields = [...d.fields]
+      const [moved] = fields.splice(from, 1)
+      fields.splice(to, 0, moved)
+      return { ...d, fields }
+    })
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
@@ -301,29 +320,41 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
               <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Fields</label>
               <span className="text-[11px] text-gray-400">{draft.fields.length} field{draft.fields.length === 1 ? '' : 's'}</span>
             </div>
-            <div className="flex flex-col gap-2">
-              {draft.fields.map(f => (
-                <div key={f.id} className="p-3 border border-gray-200 rounded-xl flex flex-col gap-2 bg-gray-50/50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{f.type}</span>
-                    <input
-                      value={f.label}
-                      onChange={e => updateField(f.id, { label: e.target.value })}
-                      placeholder="Label"
-                      className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={f.required ?? false}
-                        onChange={e => updateField(f.id, { required: e.target.checked })}
-                        className="w-3.5 h-3.5 rounded border-gray-300"
-                      /> Required
-                    </label>
-                    <button onClick={() => removeField(f.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="form-fields">
+                {(provided) => (
+                  <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col gap-2">
+                    {draft.fields.map((f, index) => (
+                      <Draggable key={f.id} draggableId={f.id} index={index}>
+                        {(dragProvided, snapshot) => (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            className={`p-3 border rounded-xl flex flex-col gap-2 ${snapshot.isDragging ? 'border-emerald-300 bg-emerald-50 shadow-lg' : 'border-gray-200 bg-gray-50/50'}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div {...dragProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-gray-200 touch-none">
+                                <GripVertical size={14} className="text-gray-400" />
+                              </div>
+                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{f.type}</span>
+                              <input
+                                value={f.label}
+                                onChange={e => updateField(f.id, { label: e.target.value })}
+                                placeholder="Label"
+                                className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              />
+                              <label className="flex items-center gap-1 text-[11px] text-gray-600">
+                                <input
+                                  type="checkbox"
+                                  checked={f.required ?? false}
+                                  onChange={e => updateField(f.id, { required: e.target.checked })}
+                                  className="w-3.5 h-3.5 rounded border-gray-300"
+                                /> Required
+                              </label>
+                              <button onClick={() => removeField(f.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                   <div className="flex items-center gap-2">
                     <input
                       value={f.name}
@@ -346,9 +377,15 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
                       className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
                     />
                   )}
-                </div>
-              ))}
-            </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
 
             <div className="mt-3">
               <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Add field</p>
@@ -397,6 +434,51 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
               />
             </div>
           </section>
+
+          {/* Styling */}
+          <section>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Appearance</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Button color</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                  <input value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Text color</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                  <input value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Background</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                  <input value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Font</label>
+                <select value={draft.fontFamily ?? 'system-ui'} onChange={e => setDraft(d => ({ ...d, fontFamily: e.target.value }))} className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2 bg-white">
+                  <option value="system-ui">System (default)</option>
+                  <option value="'Inter', sans-serif">Inter</option>
+                  <option value="'Montserrat', sans-serif">Montserrat</option>
+                  <option value="'Open Sans', sans-serif">Open Sans</option>
+                  <option value="'Roboto', sans-serif">Roboto</option>
+                  <option value="'Lato', sans-serif">Lato</option>
+                  <option value="'Poppins', sans-serif">Poppins</option>
+                  <option value="Georgia, serif">Georgia (serif)</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2 flex items-center gap-2 mt-1">
+                <input type="checkbox" checked={draft.bgTransparent ?? false} onChange={e => setDraft(d => ({ ...d, bgTransparent: e.target.checked }))} className="w-4 h-4 rounded border-gray-300 text-emerald-600" />
+                <label className="text-xs text-gray-600">Transparent background (for embedding on colored pages)</label>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div className="p-4 border-t border-gray-100 flex gap-2">
@@ -426,38 +508,75 @@ function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) 
   const iframeCode = `<iframe src="${appUrl}/f/${form.slug}" width="100%" height="600" style="border:none;border-radius:12px;" title="${form.name}"></iframe>`
   const scriptCode = `<div data-gravhub-form="${form.slug}"></div>\n<script src="${appUrl}/api/forms/public/${form.slug}/embed.js" async></script>`
   const directLink = `${appUrl}/f/${form.slug}`
+  const wpShortcode = `<!-- GravHub Form: ${form.name} -->\n<div data-gravhub-form="${form.slug}"></div>\n<script src="${appUrl}/api/forms/public/${form.slug}/embed.js" async></script>\n<!-- End GravHub Form -->`
+  const [copied, setCopied] = useState('')
 
-  function copy(text: string) {
+  function copy(text: string, label: string) {
     navigator.clipboard.writeText(text)
+    setCopied(label)
+    setTimeout(() => setCopied(''), 2000)
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 flex-shrink-0">
           <div>
             <h3 className="text-base font-bold text-gray-900">Embed: {form.name}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Drop one of these into any website</p>
+            <p className="text-xs text-gray-500 mt-0.5">Copy any of these to embed on a website</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={16} /></button>
         </div>
-        <div className="p-5 flex flex-col gap-4">
+        <div className="p-5 flex flex-col gap-4 overflow-y-auto">
+
+          {/* Direct link */}
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Direct link</label>
             <div className="flex gap-2">
               <input readOnly value={directLink} className="flex-1 text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
-              <button onClick={() => copy(directLink)} className="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50">Copy</button>
+              <button onClick={() => copy(directLink, 'link')} className={`px-3 py-2 rounded-lg border text-xs font-medium ${copied === 'link' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                {copied === 'link' ? 'Copied!' : 'Copy'}
+              </button>
             </div>
           </div>
+
+          {/* WordPress */}
           <div>
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Iframe (quick embed)</label>
-            <textarea readOnly value={iframeCode} rows={3} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
-            <button onClick={() => copy(iframeCode)} className="mt-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50">Copy iframe</button>
+            <div className="flex items-center gap-2 mb-1.5">
+              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">WordPress / HTML</label>
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">Recommended</span>
+            </div>
+            <p className="text-[11px] text-gray-400 mb-2">Paste into a WordPress Custom HTML block, Elementor HTML widget, or any HTML page. Auto-resizes to fit content.</p>
+            <textarea readOnly value={wpShortcode} rows={4} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
+            <button onClick={() => copy(wpShortcode, 'wp')} className={`mt-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium ${copied === 'wp' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              {copied === 'wp' ? 'Copied!' : 'Copy for WordPress'}
+            </button>
           </div>
+
+          {/* Iframe */}
           <div>
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">JavaScript (auto-resize)</label>
-            <textarea readOnly value={scriptCode} rows={3} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
-            <button onClick={() => copy(scriptCode)} className="mt-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50">Copy script tag</button>
+            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Iframe (simple embed)</label>
+            <p className="text-[11px] text-gray-400 mb-2">Works everywhere. Fixed height — no auto-resize.</p>
+            <textarea readOnly value={iframeCode} rows={2} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
+            <button onClick={() => copy(iframeCode, 'iframe')} className={`mt-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium ${copied === 'iframe' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              {copied === 'iframe' ? 'Copied!' : 'Copy iframe'}
+            </button>
+          </div>
+
+          {/* Instructions */}
+          <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <p className="text-[11px] font-semibold text-gray-600 mb-2">How to embed in WordPress</p>
+            <ol className="text-[11px] text-gray-500 flex flex-col gap-1.5 pl-4 list-decimal">
+              <li>Open the page or post in WordPress editor</li>
+              <li>Add a <strong>Custom HTML</strong> block (or Elementor HTML widget)</li>
+              <li>Paste the WordPress/HTML code above</li>
+              <li>Save and preview — the form loads automatically</li>
+              <li>Submissions appear in GravHub → Forms → click the form → Submissions</li>
+            </ol>
+            <p className="text-[11px] text-gray-400 mt-2">
+              The form inherits your custom colors, font, and transparent background settings.
+              Edit these in the form editor under <strong>Appearance</strong>.
+            </p>
           </div>
         </div>
       </div>

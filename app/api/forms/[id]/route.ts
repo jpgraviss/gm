@@ -22,6 +22,11 @@ function mapForm(row: any) {
     owner:           row.owner ?? undefined,
     status:          row.status,
     submissionsCount: row.submissions_count ?? 0,
+    primaryColor:    row.primary_color ?? '#015035',
+    textColor:       row.text_color ?? '#111827',
+    bgColor:         row.bg_color ?? '#f9fafb',
+    bgTransparent:   row.bg_transparent ?? false,
+    fontFamily:      row.font_family ?? 'system-ui',
     createdAt:       row.created_at,
     updatedAt:       row.updated_at,
   }
@@ -56,6 +61,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.tags !== undefined)            update.tags = body.tags
   if (body.owner !== undefined)           update.owner = body.owner
   if (body.status !== undefined)          update.status = body.status
+  if (body.primaryColor !== undefined)   update.primary_color = body.primaryColor
+  if (body.textColor !== undefined)      update.text_color = body.textColor
+  if (body.bgColor !== undefined)        update.bg_color = body.bgColor
+  if (body.bgTransparent !== undefined)  update.bg_transparent = body.bgTransparent
+  if (body.fontFamily !== undefined)     update.font_family = body.fontFamily
 
   const { data, error } = await db.from('forms').update(update).eq('id', id).select().single()
   if (error || !data) {

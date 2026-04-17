@@ -186,6 +186,8 @@ export default function LoginPage() {
             'Real-time project progress tracking',
             'View invoices & payment history',
             'Submit support tickets',
+            'Approve social media posts',
+            'View marketing performance insights',
             'Access shared files & deliverables',
           ].map(f => (
             <div key={f} className="flex items-center gap-3">

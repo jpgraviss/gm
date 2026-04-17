@@ -12,8 +12,8 @@ function mapEnrollment(row: any) {
     studentName:   row.student_name,
     studentEmail:  row.student_email,
     progress:      row.progress ?? {},
-    completedAt:   row.completed_at ?? null,
-    certificateId: row.certificate_id ?? null,
+    completedAt:   row.completed_at ?? undefined,
+    certificateId: row.certificate_id ?? undefined,
     status:        row.status,
     createdAt:     row.created_at,
     updatedAt:     row.updated_at,
@@ -55,12 +55,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const db = createServiceClient()
 
-  // Verify course exists
-  const { data: course, error: courseErr } = await db.from('courses').select('id, enrolled_count').eq('id', id).single()
-  if (courseErr || !course) {
-    return NextResponse.json({ error: 'Course not found' }, { status: 404 })
-  }
-
   const { data, error } = await db
     .from('course_enrollments')
     .insert({
@@ -81,11 +75,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   // Increment enrolled_count on the course
-  await db
-    .from('courses')
-    .update({ enrolled_count: (course.enrolled_count ?? 0) + 1 })
-    .eq('id', id)
+  const { data: course } = await db.from('courses').select('enrolled_count').eq('id', id).single()
+  if (course) {
+    await db.from('courses').update({ enrolled_count: (course.enrolled_count ?? 0) + 1 }).eq('id', id)
+  }
 
-  logAudit({ userName: 'system', action: 'enrolled_student', module: 'sales_enablement', type: 'action', metadata: { courseId: id, enrollmentId: data.id, studentEmail: body.studentEmail } })
+  logAudit({ userName: 'system', action: 'enrolled_student', module: 'courses', type: 'action', metadata: { courseId: id, enrollmentId: data.id, studentEmail: body.studentEmail } })
   return NextResponse.json(mapEnrollment(data), { status: 201 })
 }

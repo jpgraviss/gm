@@ -9,13 +9,13 @@ function mapTemplate(row: any) {
     id:          row.id,
     workspaceId: row.workspace_id,
     title:       row.title,
-    category:    row.category ?? '',
+    category:    row.category ?? undefined,
     content:     row.content ?? '',
-    subject:     row.subject ?? '',
+    subject:     row.subject ?? undefined,
     tags:        row.tags ?? [],
     usageCount:  row.usage_count ?? 0,
     status:      row.status,
-    createdBy:   row.created_by ?? null,
+    createdBy:   row.created_by ?? undefined,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
   }
@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
       .eq('id', body.id)
       .single()
     if (fetchErr || !existing) {
+      console.error('[sales-templates POST useTemplate]', fetchErr)
       return NextResponse.json({ error: 'Template not found' }, { status: 404 })
     }
     const { data, error } = await db
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
       .select()
       .single()
     if (error || !data) {
-      console.error('[sales-templates POST useTemplate]', error)
+      console.error('[sales-templates POST useTemplate update]', error)
       return NextResponse.json({ error: error?.message || 'Failed to increment usage' }, { status: 500 })
     }
     return NextResponse.json(mapTemplate(data))
@@ -98,6 +99,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  logAudit({ userName: 'system', action: 'created_sales_template', module: 'sales_enablement', type: 'action', metadata: { templateId: data.id, title: data.title } })
+  logAudit({ userName: 'system', action: 'created_sales_template', module: 'sales-templates', type: 'action', metadata: { templateId: data.id, title: data.title } })
   return NextResponse.json(mapTemplate(data), { status: 201 })
 }

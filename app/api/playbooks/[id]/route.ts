@@ -9,11 +9,11 @@ function mapPlaybook(row: any) {
     id:          row.id,
     workspaceId: row.workspace_id,
     title:       row.title,
-    category:    row.category ?? '',
+    category:    row.category ?? undefined,
     content:     row.content ?? '',
     tags:        row.tags ?? [],
     status:      row.status,
-    createdBy:   row.created_by ?? null,
+    createdBy:   row.created_by ?? undefined,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
   }
@@ -35,11 +35,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const db = createServiceClient()
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  if (body.title !== undefined)    update.title = body.title
-  if (body.category !== undefined) update.category = body.category
-  if (body.content !== undefined)  update.content = body.content
-  if (body.tags !== undefined)     update.tags = body.tags
-  if (body.status !== undefined)   update.status = body.status
+  if (body.title !== undefined)       update.title = body.title
+  if (body.category !== undefined)    update.category = body.category
+  if (body.content !== undefined)     update.content = body.content
+  if (body.tags !== undefined)        update.tags = body.tags
+  if (body.status !== undefined)      update.status = body.status
+  if (body.workspaceId !== undefined) update.workspace_id = body.workspaceId
 
   const { data, error } = await db.from('playbooks').update(update).eq('id', id).select().single()
   if (error || !data) {
@@ -60,6 +61,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     console.error('[playbooks DELETE]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  logAudit({ userName: 'system', action: 'deleted_playbook', module: 'sales_enablement', type: 'warning', metadata: { playbookId: id } })
+  logAudit({ userName: 'system', action: 'deleted_playbook', module: 'playbooks', type: 'warning', metadata: { playbookId: id } })
   return NextResponse.json({ deleted: id })
 }

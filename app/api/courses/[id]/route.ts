@@ -10,11 +10,11 @@ function mapCourse(row: any) {
     workspaceId:   row.workspace_id,
     title:         row.title,
     description:   row.description ?? '',
-    thumbnailUrl:  row.thumbnail_url ?? null,
+    thumbnailUrl:  row.thumbnail_url ?? undefined,
     modules:       row.modules ?? [],
     status:        row.status,
     price:         row.price ?? 0,
-    accessType:    row.access_type ?? 'free',
+    accessType:    row.access_type ?? undefined,
     tags:          row.tags ?? [],
     enrolledCount: row.enrolled_count ?? 0,
     createdAt:     row.created_at,
@@ -46,6 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.price !== undefined)        update.price = body.price
   if (body.accessType !== undefined)   update.access_type = body.accessType
   if (body.tags !== undefined)         update.tags = body.tags
+  if (body.workspaceId !== undefined)  update.workspace_id = body.workspaceId
 
   const { data, error } = await db.from('courses').update(update).eq('id', id).select().single()
   if (error || !data) {
@@ -66,6 +67,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     console.error('[courses DELETE]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  logAudit({ userName: 'system', action: 'deleted_course', module: 'sales_enablement', type: 'warning', metadata: { courseId: id } })
+  logAudit({ userName: 'system', action: 'deleted_course', module: 'courses', type: 'warning', metadata: { courseId: id } })
   return NextResponse.json({ deleted: id })
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapEnrollment(row: any) {
@@ -10,8 +11,8 @@ function mapEnrollment(row: any) {
     studentName:   row.student_name,
     studentEmail:  row.student_email,
     progress:      row.progress ?? {},
-    completedAt:   row.completed_at ?? null,
-    certificateId: row.certificate_id ?? null,
+    completedAt:   row.completed_at ?? undefined,
+    certificateId: row.certificate_id ?? undefined,
     status:        row.status,
     createdAt:     row.created_at,
     updatedAt:     row.updated_at,
@@ -46,8 +47,13 @@ export async function PATCH(
     .single()
 
   if (error || !data) {
-    console.error('[enrollments PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Enrollment not found' }, { status: error ? 500 : 404 })
+    console.error('[enrollment PATCH]', error)
+    return NextResponse.json({ error: error?.message || 'Failed to update enrollment' }, { status: 500 })
   }
+
+  if (body.completed === true) {
+    logAudit({ userName: 'system', action: 'completed_enrollment', module: 'courses', type: 'success', metadata: { courseId: id, enrollmentId } })
+  }
+
   return NextResponse.json(mapEnrollment(data))
 }

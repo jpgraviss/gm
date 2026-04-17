@@ -10,11 +10,11 @@ function mapCourse(row: any) {
     workspaceId:   row.workspace_id,
     title:         row.title,
     description:   row.description ?? '',
-    thumbnailUrl:  row.thumbnail_url ?? null,
+    thumbnailUrl:  row.thumbnail_url ?? undefined,
     modules:       row.modules ?? [],
     status:        row.status,
     price:         row.price ?? 0,
-    accessType:    row.access_type ?? 'free',
+    accessType:    row.access_type ?? undefined,
     tags:          row.tags ?? [],
     enrolledCount: row.enrolled_count ?? 0,
     createdAt:     row.created_at,
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       modules:        body.modules ?? [],
       status:         body.status ?? 'Draft',
       price:          body.price ?? 0,
-      access_type:    body.accessType ?? 'free',
+      access_type:    body.accessType ?? null,
       tags:           body.tags ?? [],
       enrolled_count: 0,
     })
@@ -74,6 +74,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  logAudit({ userName: 'system', action: 'created_course', module: 'sales_enablement', type: 'action', metadata: { courseId: data.id, title: data.title } })
+  logAudit({ userName: 'system', action: 'created_course', module: 'courses', type: 'action', metadata: { courseId: data.id, title: data.title } })
   return NextResponse.json(mapCourse(data), { status: 201 })
 }

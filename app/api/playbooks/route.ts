@@ -9,11 +9,11 @@ function mapPlaybook(row: any) {
     id:          row.id,
     workspaceId: row.workspace_id,
     title:       row.title,
-    category:    row.category ?? '',
+    category:    row.category ?? undefined,
     content:     row.content ?? '',
     tags:        row.tags ?? [],
     status:      row.status,
-    createdBy:   row.created_by ?? null,
+    createdBy:   row.created_by ?? undefined,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
   }
@@ -71,6 +71,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  logAudit({ userName: 'system', action: 'created_playbook', module: 'sales_enablement', type: 'action', metadata: { playbookId: data.id, title: data.title } })
+  logAudit({ userName: 'system', action: 'created_playbook', module: 'playbooks', type: 'action', metadata: { playbookId: data.id, title: data.title } })
   return NextResponse.json(mapPlaybook(data), { status: 201 })
 }

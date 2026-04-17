@@ -7,7 +7,7 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import {
   Globe, CheckCircle, FolderKanban, FileText, MessageSquare,
   Download, Upload, Bell, ChevronDown, ChevronRight, X, AlertTriangle, LogOut,
-  Search, BarChart3, Star, Activity, TrendingUp,
+  Search, BarChart3, Star, Activity, TrendingUp, Share2,
 } from 'lucide-react'
 
 interface PortalInsights {
@@ -27,10 +27,21 @@ export default function ClientPortalPage() {
   const company = user?.company ?? ''
   const contactName = user?.name ?? ''
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files' | 'insights'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files' | 'insights' | 'social'>('overview')
   const [insights, setInsights] = useState<PortalInsights | null>(null)
   const [insightsLoading, setInsightsLoading] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
+
+  // Notifications
+  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; message?: string; link?: string; read: boolean; createdAt: string }>>([])
+  const [showNotifications, setShowNotifications] = useState(false)
+
+  // Social posts for approval
+  const [pendingPosts, setPendingPosts] = useState<Array<{ id: string; content: string; platforms: string[]; scheduledAt?: string; status: string; approvalStatus: string }>>([])
+  const [publishedPosts, setPublishedPosts] = useState<Array<{ id: string; content: string; platforms: string[]; publishedAt?: string; status: string }>>([])
+  const [socialLoading, setSocialLoading] = useState(false)
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [project, setProject] = useState<any>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,6 +87,70 @@ export default function ClientPortalPage() {
       .finally(() => setInsightsLoading(false))
   }, [activeTab, company, insights])
 
+  // Fetch notifications on mount
+  useEffect(() => {
+    if (!user?.id) return
+    fetch(`/api/portal-clients/notifications?clientId=${encodeURIComponent(user.id)}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => { if (Array.isArray(data)) setNotifications(data) })
+      .catch(() => {/* non-fatal */})
+  }, [user?.id])
+
+  // Load social posts lazily when Social tab opens
+  useEffect(() => {
+    if (activeTab !== 'social' || !company) return
+    setSocialLoading(true)
+    const q = encodeURIComponent(company)
+    Promise.all([
+      fetch(`/api/social-posts?company=${q}&status=pending_approval`).then(r => (r.ok ? r.json() : [])),
+      fetch(`/api/social-posts?company=${q}&status=published`).then(r => (r.ok ? r.json() : [])),
+    ])
+      .then(([pending, published]) => {
+        if (Array.isArray(pending)) setPendingPosts(pending)
+        if (Array.isArray(published)) setPublishedPosts(published.slice(0, 10))
+      })
+      .catch(() => {/* non-fatal */})
+      .finally(() => setSocialLoading(false))
+  }, [activeTab, company])
+
+  async function markNotificationRead(id: string) {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+    fetch('/api/portal-clients/notifications', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [id], read: true }),
+    }).catch(() => {/* best-effort */})
+  }
+
+  async function handleApprovePost(postId: string) {
+    try {
+      const res = await fetch(`/api/social-posts/${postId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approvalStatus: 'approved' }),
+      })
+      if (!res.ok) { toast('Failed to approve', 'error'); return }
+      setPendingPosts(prev => prev.filter(p => p.id !== postId))
+      toast('Post approved', 'success')
+    } catch { toast('Failed to approve', 'error') }
+  }
+
+  async function handleRejectPost(postId: string) {
+    try {
+      const res = await fetch(`/api/social-posts/${postId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approvalStatus: 'rejected', rejectionReason: rejectReason }),
+      })
+      if (!res.ok) { toast('Failed to reject', 'error'); return }
+      setPendingPosts(prev => prev.filter(p => p.id !== postId))
+      setRejectingId(null)
+      setRejectReason('')
+      toast('Post rejected', 'success')
+    } catch { toast('Failed to reject', 'error') }
+  }
+
+  const unreadCount = notifications.filter(n => !n.read).length
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
 
@@ -96,12 +171,49 @@ export default function ClientPortalPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-lg hover:bg-white/10 transition-colors">
-            <Bell size={16} className="text-white/60" />
-            {openInvoices.length > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-400 rounded-full" />
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(v => !v)}
+              className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
+            >
+              <Bell size={16} className="text-white/60" />
+              {unreadCount > 0 && (
+                <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            {showNotifications && (
+              <div className="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-bold text-gray-900">Notifications</p>
+                  <button onClick={() => setShowNotifications(false)} className="p-1 rounded hover:bg-gray-100"><X size={14} className="text-gray-400" /></button>
+                </div>
+                <div className="max-h-72 overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-8">No notifications yet</p>
+                  ) : (
+                    notifications.slice(0, 15).map(n => (
+                      <button
+                        key={n.id}
+                        onClick={() => markNotificationRead(n.id)}
+                        className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${!n.read ? 'bg-emerald-50/40' : ''}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          {!n.read && <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 mt-1.5" />}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-gray-900 truncate">{n.title}</p>
+                            {n.message && <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>}
+                            <p className="text-[10px] text-gray-400 mt-1">{formatDate(n.createdAt)}</p>
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
             )}
-          </button>
+          </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10">
             <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-[10px] font-bold text-white">
               {contactName.split(' ').map(n => n[0]).join('')}
@@ -126,6 +238,7 @@ export default function ClientPortalPage() {
           { id: 'insights', label: 'Insights',    icon: <BarChart3 size={13} /> },
           { id: 'billing',  label: `Billing${openInvoices.length > 0 ? ` (${openInvoices.length})` : ''}`, icon: <FileText size={13} /> },
           { id: 'tickets',  label: 'Support',     icon: <MessageSquare size={13} /> },
+          { id: 'social',   label: `Social${pendingPosts.length > 0 ? ` (${pendingPosts.length})` : ''}`, icon: <Share2 size={13} /> },
           { id: 'files',    label: 'Files',        icon: <Download size={13} /> },
         ] as const).map(tab => (
           <button
@@ -479,6 +592,101 @@ export default function ClientPortalPage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Social — post approval */}
+        {activeTab === 'social' && (
+          <div className="max-w-3xl mx-auto flex flex-col gap-5">
+            {socialLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
+              </div>
+            ) : (
+              <>
+                {/* Pending approval */}
+                {pendingPosts.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                    <h3 className="text-sm font-bold text-gray-900 mb-1">Pending Your Approval</h3>
+                    <p className="text-xs text-gray-500 mb-4">Review and approve these posts before they go live.</p>
+                    <div className="flex flex-col gap-3">
+                      {pendingPosts.map(post => (
+                        <div key={post.id} className="p-4 border border-amber-200 bg-amber-50/50 rounded-xl">
+                          <p className="text-sm text-gray-900 whitespace-pre-wrap mb-2">{post.content.slice(0, 300)}{post.content.length > 300 ? '…' : ''}</p>
+                          <div className="flex items-center gap-2 mb-3">
+                            {post.platforms.map(p => {
+                              const colors: Record<string, string> = { facebook: '#1877F2', instagram: '#E4405F', linkedin: '#0A66C2', google_business: '#4285F4' }
+                              const labels: Record<string, string> = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', google_business: 'Google' }
+                              return (
+                                <span key={p} className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${colors[p] ?? '#999'}18`, color: colors[p] ?? '#999' }}>
+                                  {labels[p] ?? p}
+                                </span>
+                              )
+                            })}
+                            {post.scheduledAt && <span className="text-[10px] text-gray-400 ml-auto">{formatDate(post.scheduledAt)}</span>}
+                          </div>
+                          {rejectingId === post.id ? (
+                            <div className="flex flex-col gap-2">
+                              <textarea
+                                value={rejectReason}
+                                onChange={e => setRejectReason(e.target.value)}
+                                placeholder="Reason for rejection (optional)"
+                                rows={2}
+                                className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                              />
+                              <div className="flex gap-2">
+                                <button onClick={() => handleRejectPost(post.id)} className="px-3 py-1.5 text-xs font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700">Confirm Reject</button>
+                                <button onClick={() => { setRejectingId(null); setRejectReason('') }} className="px-3 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <button onClick={() => handleApprovePost(post.id)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white rounded-lg hover:opacity-90" style={{ background: '#015035' }}>
+                                <CheckCircle size={12} /> Approve
+                              </button>
+                              <button onClick={() => setRejectingId(post.id)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100">
+                                <X size={12} /> Reject
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {pendingPosts.length === 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+                    <CheckCircle size={28} className="text-emerald-300 mx-auto mb-3" />
+                    <p className="text-sm text-gray-500 font-medium">No posts pending approval</p>
+                    <p className="text-xs text-gray-400 mt-1">Your team will submit posts here for your review before publishing.</p>
+                  </div>
+                )}
+
+                {/* Recently published */}
+                {publishedPosts.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                    <h3 className="text-sm font-bold text-gray-900 mb-3">Recently Published</h3>
+                    <div className="flex flex-col gap-2">
+                      {publishedPosts.map(post => (
+                        <div key={post.id} className="p-3 border border-gray-100 rounded-xl">
+                          <p className="text-xs text-gray-700 line-clamp-2">{post.content}</p>
+                          <div className="flex items-center gap-2 mt-2">
+                            {post.platforms.map(p => {
+                              const colors: Record<string, string> = { facebook: '#1877F2', instagram: '#E4405F', linkedin: '#0A66C2', google_business: '#4285F4' }
+                              const labels: Record<string, string> = { facebook: 'FB', instagram: 'IG', linkedin: 'LI', google_business: 'G' }
+                              return <span key={p} className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: `${colors[p] ?? '#999'}15`, color: colors[p] ?? '#999' }}>{labels[p] ?? p}</span>
+                            })}
+                            {post.publishedAt && <span className="text-[10px] text-gray-400 ml-auto">{formatDate(post.publishedAt)}</span>}
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Published</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 

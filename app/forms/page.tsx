@@ -508,38 +508,75 @@ function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) 
   const iframeCode = `<iframe src="${appUrl}/f/${form.slug}" width="100%" height="600" style="border:none;border-radius:12px;" title="${form.name}"></iframe>`
   const scriptCode = `<div data-gravhub-form="${form.slug}"></div>\n<script src="${appUrl}/api/forms/public/${form.slug}/embed.js" async></script>`
   const directLink = `${appUrl}/f/${form.slug}`
+  const wpShortcode = `<!-- GravHub Form: ${form.name} -->\n<div data-gravhub-form="${form.slug}"></div>\n<script src="${appUrl}/api/forms/public/${form.slug}/embed.js" async></script>\n<!-- End GravHub Form -->`
+  const [copied, setCopied] = useState('')
 
-  function copy(text: string) {
+  function copy(text: string, label: string) {
     navigator.clipboard.writeText(text)
+    setCopied(label)
+    setTimeout(() => setCopied(''), 2000)
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 flex-shrink-0">
           <div>
             <h3 className="text-base font-bold text-gray-900">Embed: {form.name}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Drop one of these into any website</p>
+            <p className="text-xs text-gray-500 mt-0.5">Copy any of these to embed on a website</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={16} /></button>
         </div>
-        <div className="p-5 flex flex-col gap-4">
+        <div className="p-5 flex flex-col gap-4 overflow-y-auto">
+
+          {/* Direct link */}
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Direct link</label>
             <div className="flex gap-2">
               <input readOnly value={directLink} className="flex-1 text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
-              <button onClick={() => copy(directLink)} className="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50">Copy</button>
+              <button onClick={() => copy(directLink, 'link')} className={`px-3 py-2 rounded-lg border text-xs font-medium ${copied === 'link' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                {copied === 'link' ? 'Copied!' : 'Copy'}
+              </button>
             </div>
           </div>
+
+          {/* WordPress */}
           <div>
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Iframe (quick embed)</label>
-            <textarea readOnly value={iframeCode} rows={3} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
-            <button onClick={() => copy(iframeCode)} className="mt-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50">Copy iframe</button>
+            <div className="flex items-center gap-2 mb-1.5">
+              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">WordPress / HTML</label>
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">Recommended</span>
+            </div>
+            <p className="text-[11px] text-gray-400 mb-2">Paste into a WordPress Custom HTML block, Elementor HTML widget, or any HTML page. Auto-resizes to fit content.</p>
+            <textarea readOnly value={wpShortcode} rows={4} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
+            <button onClick={() => copy(wpShortcode, 'wp')} className={`mt-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium ${copied === 'wp' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              {copied === 'wp' ? 'Copied!' : 'Copy for WordPress'}
+            </button>
           </div>
+
+          {/* Iframe */}
           <div>
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">JavaScript (auto-resize)</label>
-            <textarea readOnly value={scriptCode} rows={3} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
-            <button onClick={() => copy(scriptCode)} className="mt-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50">Copy script tag</button>
+            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Iframe (simple embed)</label>
+            <p className="text-[11px] text-gray-400 mb-2">Works everywhere. Fixed height — no auto-resize.</p>
+            <textarea readOnly value={iframeCode} rows={2} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
+            <button onClick={() => copy(iframeCode, 'iframe')} className={`mt-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium ${copied === 'iframe' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              {copied === 'iframe' ? 'Copied!' : 'Copy iframe'}
+            </button>
+          </div>
+
+          {/* Instructions */}
+          <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <p className="text-[11px] font-semibold text-gray-600 mb-2">How to embed in WordPress</p>
+            <ol className="text-[11px] text-gray-500 flex flex-col gap-1.5 pl-4 list-decimal">
+              <li>Open the page or post in WordPress editor</li>
+              <li>Add a <strong>Custom HTML</strong> block (or Elementor HTML widget)</li>
+              <li>Paste the WordPress/HTML code above</li>
+              <li>Save and preview — the form loads automatically</li>
+              <li>Submissions appear in GravHub → Forms → click the form → Submissions</li>
+            </ol>
+            <p className="text-[11px] text-gray-400 mt-2">
+              The form inherits your custom colors, font, and transparent background settings.
+              Edit these in the form editor under <strong>Appearance</strong>.
+            </p>
           </div>
         </div>
       </div>

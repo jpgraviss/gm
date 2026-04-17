@@ -72,6 +72,7 @@ export default function ClientReportsPage() {
   const [endDate, setEndDate] = useState(lastOfMonth())
   const [loading, setLoading] = useState(false)
   const [report, setReport] = useState<ClientReport | null>(null)
+  const [bindingLoaded, setBindingLoaded] = useState(false)
 
   useEffect(() => {
     fetch('/api/crm/companies?limit=500')
@@ -79,6 +80,31 @@ export default function ClientReportsPage() {
       .then(data => { if (Array.isArray(data)) setCompanies(data.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))) })
       .catch(() => {/* non-fatal */})
   }, [])
+
+  // Auto-fill integration properties from client bindings when company changes
+  useEffect(() => {
+    if (!companyName) {
+      setBindingLoaded(false)
+      return
+    }
+    fetch(`/api/client-integrations?company=${encodeURIComponent(companyName)}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          const b = data[0]
+          if (b.gscSiteUrl) setGscSiteUrl(b.gscSiteUrl)
+          if (b.ga4PropertyId) setGa4PropertyId(b.ga4PropertyId)
+          if (b.gbpLocationName) setGbpLocationName(b.gbpLocationName)
+          setBindingLoaded(true)
+        } else {
+          setGscSiteUrl('')
+          setGa4PropertyId('')
+          setGbpLocationName('')
+          setBindingLoaded(false)
+        }
+      })
+      .catch(() => { setBindingLoaded(false) })
+  }, [companyName])
 
   const companyOptions = useMemo(() => companies.map(c => c.name).sort(), [companies])
 
@@ -144,6 +170,20 @@ export default function ClientReportsPage() {
                 {companyOptions.map(name => <option key={name} value={name} />)}
               </datalist>
             </div>
+
+            {companyName && bindingLoaded && (
+              <div className="sm:col-span-2 flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-xl">
+                <span className="text-[11px] text-emerald-700 font-medium">Integration properties auto-filled from client bindings.</span>
+                <a href="/crm/companies" className="text-[11px] text-emerald-800 underline font-semibold ml-auto whitespace-nowrap">Edit bindings →</a>
+              </div>
+            )}
+            {companyName && !bindingLoaded && (
+              <div className="sm:col-span-2 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-xl">
+                <span className="text-[11px] text-amber-700 font-medium">No integration bindings found for this client. Set them up in CRM → Companies to auto-fill.</span>
+                <a href="/crm/companies" className="text-[11px] text-amber-800 underline font-semibold ml-auto whitespace-nowrap">Configure →</a>
+              </div>
+            )}
+
             <div>
               <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Search Console site URL</label>
               <input

@@ -99,6 +99,16 @@ export default function IntegrationsPage() {
           </div>
         </div>
 
+        {/* No bindings help */}
+        {clientNames.length === 0 && (
+          <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <span className="text-xs text-amber-800 flex-1">
+              No client integration bindings found. Go to <strong>CRM → Companies</strong>, open a company, and click the chart icon to bind their GSC, Analytics, Ads, and Business Profile properties.
+            </span>
+            <a href="/crm/companies" className="text-xs font-semibold text-amber-900 underline whitespace-nowrap">Go to Companies →</a>
+          </div>
+        )}
+
         {/* Tab navigation */}
         <div className="flex gap-1 border-b border-gray-200">
           {TABS.map(t => (

@@ -45,6 +45,11 @@ export interface Form {
   owner?: string
   status: 'Active' | 'Paused' | 'Draft'
   submissionsCount: number
+  primaryColor: string
+  textColor: string
+  bgColor: string
+  bgTransparent: boolean
+  fontFamily: string
   createdAt: string
   updatedAt: string
 }
@@ -89,6 +94,12 @@ export function validateSubmission(
       const str = String(value)
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str)) {
         return `Field "${field.label}" must be a valid email`
+      }
+    }
+    if (field.type === 'phone' && value) {
+      const digits = String(value).replace(/\D/g, '')
+      if (digits.length < 7 || digits.length > 15) {
+        return `Field "${field.label}" must be a valid phone number (7-15 digits)`
       }
     }
     if (field.type === 'url' && value) {

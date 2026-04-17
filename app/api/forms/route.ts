@@ -23,6 +23,11 @@ function mapForm(row: any) {
     owner:           row.owner ?? undefined,
     status:          row.status,
     submissionsCount: row.submissions_count ?? 0,
+    primaryColor:    row.primary_color ?? '#015035',
+    textColor:       row.text_color ?? '#111827',
+    bgColor:         row.bg_color ?? '#f9fafb',
+    bgTransparent:   row.bg_transparent ?? false,
+    fontFamily:      row.font_family ?? 'system-ui',
     createdAt:       row.created_at,
     updatedAt:       row.updated_at,
   }
@@ -83,6 +88,11 @@ export async function POST(req: NextRequest) {
       tags:            body.tags ?? [],
       owner:           body.owner ?? null,
       status:          body.status ?? 'Active',
+      primary_color:   body.primaryColor ?? '#015035',
+      text_color:      body.textColor ?? '#111827',
+      bg_color:        body.bgColor ?? '#f9fafb',
+      bg_transparent:  body.bgTransparent ?? false,
+      font_family:     body.fontFamily ?? 'system-ui',
     })
     .select()
     .single()

@@ -32,6 +32,11 @@ interface LeadForm {
   successMessage: string
   status: 'Active' | 'Paused' | 'Draft'
   submissionsCount: number
+  primaryColor?: string
+  textColor?: string
+  bgColor?: string
+  bgTransparent?: boolean
+  fontFamily?: string
   createdAt: string
 }
 
@@ -427,6 +432,51 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
                 onChange={e => setDraft(d => ({ ...d, successMessage: e.target.value }))}
                 className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
+            </div>
+          </section>
+
+          {/* Styling */}
+          <section>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Appearance</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Button color</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                  <input value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Text color</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                  <input value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Background</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                  <input value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Font</label>
+                <select value={draft.fontFamily ?? 'system-ui'} onChange={e => setDraft(d => ({ ...d, fontFamily: e.target.value }))} className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2 bg-white">
+                  <option value="system-ui">System (default)</option>
+                  <option value="'Inter', sans-serif">Inter</option>
+                  <option value="'Montserrat', sans-serif">Montserrat</option>
+                  <option value="'Open Sans', sans-serif">Open Sans</option>
+                  <option value="'Roboto', sans-serif">Roboto</option>
+                  <option value="'Lato', sans-serif">Lato</option>
+                  <option value="'Poppins', sans-serif">Poppins</option>
+                  <option value="Georgia, serif">Georgia (serif)</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2 flex items-center gap-2 mt-1">
+                <input type="checkbox" checked={draft.bgTransparent ?? false} onChange={e => setDraft(d => ({ ...d, bgTransparent: e.target.checked }))} className="w-4 h-4 rounded border-gray-300 text-emerald-600" />
+                <label className="text-xs text-gray-600">Transparent background (for embedding on colored pages)</label>
+              </div>
             </div>
           </section>
         </div>

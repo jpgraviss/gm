@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
   const db = createServiceClient()
   const { data: form } = await db
     .from('forms')
-    .select('id, name, description, fields, submit_label, success_message, redirect_url, status')
+    .select('id, name, description, fields, submit_label, success_message, redirect_url, status, primary_color, text_color, bg_color, bg_transparent, font_family')
     .eq('slug', slug)
     .single()
 
@@ -40,6 +40,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       submitLabel:    form.submit_label,
       successMessage: form.success_message,
       redirectUrl:    form.redirect_url,
+      primaryColor:   form.primary_color,
+      textColor:      form.text_color,
+      bgColor:        form.bg_color,
+      bgTransparent:  form.bg_transparent,
+      fontFamily:     form.font_family,
     },
     { headers: corsHeaders },
   )

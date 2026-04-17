@@ -320,6 +320,7 @@ interface DashboardData {
   recentInvoices: Array<{ id: string; company: string; amount: number; status: string; dueDate: string; serviceType: string; contractId: string }>
   activityFeed: Array<{ id: string; user: string; action: string; module: string; type: string; timestamp: string }>
   revenueByMonth: RevenueMonth[]
+  automations: Array<{ name: string; status: string; runs: number }>
 }
 
 const emptyData: DashboardData = {
@@ -329,6 +330,7 @@ const emptyData: DashboardData = {
   recentInvoices: [],
   activityFeed: [],
   revenueByMonth: [],
+  automations: [],
 }
 
 // ─── Live ET Clock ────────────────────────────────────────────────────────────
@@ -761,20 +763,27 @@ export default function DashboardPage() {
                 <h3 className="font-bold text-gray-800 text-sm">Automation</h3>
               </div>
               <div className="flex flex-col gap-2">
-                {[
-                  { label: 'Contract follow-up',   status: 'Running',   dot: '#22c55e', cls: 'text-emerald-600' },
-                  { label: 'Invoice reminders',    status: 'Running',   dot: '#22c55e', cls: 'text-emerald-600' },
-                  { label: 'Renewal alerts (60d)', status: 'Triggered', dot: '#f97316', cls: 'text-orange-500'  },
-                  { label: 'Project kickoff flow', status: 'Queued',    dot: '#3b82f6', cls: 'text-blue-500'    },
-                ].map(a => (
-                  <div key={a.label} className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-gray-500">{a.label}</span>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: a.dot }} />
-                      <span className={`text-[11px] font-bold ${a.cls}`}>{a.status}</span>
-                    </div>
-                  </div>
-                ))}
+                {data.automations && data.automations.length > 0 ? (
+                  data.automations.slice(0, 4).map((a: { name: string; status: string; runs: number }, i: number) => {
+                    const statusMap: Record<string, { dot: string; cls: string }> = {
+                      Active:  { dot: '#22c55e', cls: 'text-emerald-600' },
+                      Paused:  { dot: '#9ca3af', cls: 'text-gray-500' },
+                      Draft:   { dot: '#3b82f6', cls: 'text-blue-500' },
+                    }
+                    const style = statusMap[a.status] ?? statusMap.Active
+                    return (
+                      <div key={i} className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-gray-500 truncate">{a.name}</span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ background: style.dot }} />
+                          <span className={`text-[11px] font-bold ${style.cls}`}>{a.status}</span>
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <p className="text-[11px] text-gray-400">No automations configured</p>
+                )}
               </div>
             </div>
           </div>

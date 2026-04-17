@@ -5,13 +5,14 @@ export async function GET() {
   try {
   const db = createServiceClient()
 
-  const [dealsRes, invoicesRes, contractsRes, renewalsRes, revenueRes, activityRes] = await Promise.all([
+  const [dealsRes, invoicesRes, contractsRes, renewalsRes, revenueRes, activityRes, automationsRes] = await Promise.all([
     db.from('deals').select('id,stage,value,company,assigned_rep,last_activity,service_type,close_date').order('created_at', { ascending: false }),
     db.from('invoices').select('id,company,amount,status,due_date,issued_date,paid_date,service_type,contract_id').order('created_at', { ascending: false }),
     db.from('contracts').select('id,company,status,value,renewal_date,service_type,assigned_rep').order('created_at', { ascending: false }),
     db.from('renewals').select('id,company,status,days_until_expiry,expiration_date').order('expiration_date', { ascending: true }),
     db.from('revenue_months').select('*').order('month', { ascending: true }),
     db.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(20),
+    db.from('automations').select('id,name,status,runs').order('created_at', { ascending: false }).limit(10),
   ])
 
   const deals     = dealsRes.data    ?? []
@@ -39,6 +40,10 @@ export async function GET() {
 
   const revenueByMonth = revenueMonths.map((r: Record<string, unknown>) => ({ month: r.month, revenue: r.revenue, recurring: r.recurring }))
 
+  const automations = (automationsRes.data ?? []).map((a: Record<string, unknown>) => ({
+    name: a.name, status: a.status, runs: a.runs ?? 0,
+  }))
+
   return NextResponse.json({
     metrics: { activeClients, openDeals, pipelineValue, monthlyRevenue, overdueInvoices, upcomingRenewals },
     recentDeals,
@@ -46,6 +51,7 @@ export async function GET() {
     recentInvoices,
     activityFeed,
     revenueByMonth,
+    automations,
   })
   } catch (err) {
     console.error('[dashboard GET]', err)

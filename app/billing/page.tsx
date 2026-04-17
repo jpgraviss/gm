@@ -243,7 +243,7 @@ export default function BillingPage() {
           setQbStatus(null)
         }
       })
-      .catch(() => toast('Failed to load QuickBooks status', 'error'))
+      .catch(() => {/* QB not configured — silently ignore */})
   }
 
   async function handleQBSync() {

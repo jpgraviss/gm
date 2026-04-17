@@ -76,9 +76,13 @@ export default function FormsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function createForm() {
-    const name = prompt('Form name (e.g. "Contact Form", "Free Audit Request")')
-    if (!name) return
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [newFormName, setNewFormName] = useState('')
+
+  async function createForm(name: string) {
+    if (!name.trim()) return
+    setShowNewForm(false)
+    setNewFormName('')
     try {
       const res = await fetch('/api/forms', {
         method: 'POST',
@@ -139,7 +143,7 @@ export default function FormsPage() {
 
   return (
     <>
-      <Header title="Forms" subtitle="Embeddable lead-capture forms" action={{ label: 'New Form', onClick: createForm }} />
+      <Header title="Forms" subtitle="Embeddable lead-capture forms" action={{ label: 'New Form', onClick: () => setShowNewForm(true) }} />
       <div className="page-content">
         {forms.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
@@ -147,7 +151,7 @@ export default function FormsPage() {
             <p className="text-sm text-gray-500 font-medium">No forms yet</p>
             <p className="text-xs text-gray-400 mt-1 mb-4">Create a form and embed it on any website.</p>
             <button
-              onClick={createForm}
+              onClick={() => setShowNewForm(true)}
               className="px-4 py-2 rounded-xl text-white text-sm font-semibold"
               style={{ background: '#015035' }}
             >
@@ -201,6 +205,43 @@ export default function FormsPage() {
       )}
       {showEmbed && (
         <EmbedModal form={showEmbed} onClose={() => setShowEmbed(null)} />
+      )}
+      {showNewForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-900">New Form</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Give it a name — you can customize fields after.</p>
+            </div>
+            <div className="p-5">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Form name</label>
+              <input
+                autoFocus
+                value={newFormName}
+                onChange={e => setNewFormName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && newFormName.trim()) createForm(newFormName.trim()) }}
+                placeholder='e.g. "Contact Form", "Free Audit Request"'
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div className="p-4 border-t border-gray-100 flex gap-2">
+              <button
+                onClick={() => createForm(newFormName.trim())}
+                disabled={!newFormName.trim()}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
+                style={{ background: '#015035' }}
+              >
+                Create Form
+              </button>
+              <button
+                onClick={() => { setShowNewForm(false); setNewFormName('') }}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

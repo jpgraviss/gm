@@ -70,16 +70,20 @@ export default function MarketingPage() {
       .finally(() => setLoading(false))
   }
 
-  async function createBroadcast() {
-    const name = prompt('Broadcast name (internal only)')
-    if (!name) return
-    const subject = prompt('Email subject line')
-    if (!subject) return
+  const [showNewModal, setShowNewModal] = useState(false)
+  const [newBcName, setNewBcName] = useState('')
+  const [newBcSubject, setNewBcSubject] = useState('')
+
+  async function createBroadcast(name: string, subject: string) {
+    if (!name.trim() || !subject.trim()) return
+    setShowNewModal(false)
+    setNewBcName('')
+    setNewBcSubject('')
     try {
       const res = await fetch('/api/broadcasts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, subject }),
+        body: JSON.stringify({ name: name.trim(), subject: subject.trim() }),
       })
       if (!res.ok) { toast('Failed to create broadcast', 'error'); return }
       const created = await res.json()
@@ -135,7 +139,7 @@ export default function MarketingPage() {
       <Header
         title="Email Marketing"
         subtitle="Broadcasts and campaigns"
-        action={{ label: 'New Broadcast', onClick: createBroadcast }}
+        action={{ label: 'New Broadcast', onClick: () => setShowNewModal(true) }}
       />
       <div className="page-content">
 
@@ -178,7 +182,7 @@ export default function MarketingPage() {
             <p className="text-sm text-gray-500 font-medium">No broadcasts yet</p>
             <p className="text-xs text-gray-400 mt-1 mb-4">Create one to send your first email campaign.</p>
             <button
-              onClick={createBroadcast}
+              onClick={() => setShowNewModal(true)}
               className="px-4 py-2 rounded-xl text-white text-sm font-semibold"
               style={{ background: '#015035' }}
             >
@@ -256,6 +260,54 @@ export default function MarketingPage() {
           onSave={(patch) => updateBroadcast(selected.id, patch)}
           onRefresh={load}
         />
+      )}
+      {showNewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-900">New Broadcast</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Name is internal — subject line is what recipients see.</p>
+            </div>
+            <div className="p-5 flex flex-col gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Broadcast name</label>
+                <input
+                  autoFocus
+                  value={newBcName}
+                  onChange={e => setNewBcName(e.target.value)}
+                  placeholder="e.g. April Newsletter, SEO Tips Blast"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Email subject line</label>
+                <input
+                  value={newBcSubject}
+                  onChange={e => setNewBcSubject(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && newBcName.trim() && newBcSubject.trim()) createBroadcast(newBcName.trim(), newBcSubject.trim()) }}
+                  placeholder="e.g. 5 SEO tips to boost your traffic"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-100 flex gap-2">
+              <button
+                onClick={() => createBroadcast(newBcName.trim(), newBcSubject.trim())}
+                disabled={!newBcName.trim() || !newBcSubject.trim()}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
+                style={{ background: '#015035' }}
+              >
+                Create Draft
+              </button>
+              <button
+                onClick={() => { setShowNewModal(false); setNewBcName(''); setNewBcSubject('') }}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

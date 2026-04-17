@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, FileText, ScrollText, CreditCard,
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
   Settings, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare, CheckSquare, Inbox,
-  CalendarDays, Clock, Activity, Plug,
+  CalendarDays, Clock, Activity, Plug, BookOpen, GraduationCap,
 } from 'lucide-react'
 
 interface NavItem {
@@ -52,8 +52,16 @@ const navigation: NavSection[] = [
   {
     section: 'Marketing',
     items: [
-      { label: 'Broadcasts', href: '/marketing', icon: <Mail size={16} />,    allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'Forms',      href: '/forms',     icon: <FileText size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Social Media', href: '/social',     icon: <MessageSquare size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Broadcasts',   href: '/marketing',  icon: <Mail size={16} />,          allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Forms',        href: '/forms',       icon: <FileText size={16} />,      allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+    ],
+  },
+  {
+    section: 'Sales',
+    items: [
+      { label: 'Enablement', href: '/sales-enablement', icon: <BookOpen size={16} />,      allowedUnits: ['Leadership/Admin', 'Sales'] },
+      { label: 'Courses',    href: '/courses',           icon: <GraduationCap size={16} />, allowedUnits: ['Leadership/Admin', 'Sales'] },
     ],
   },
   {

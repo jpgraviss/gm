@@ -5,7 +5,7 @@ import { createMockDb } from '../helpers/mock-db'
 const MOCK_TICKET_ROW = {
   id: 'tkt-123',
   subject: 'Login issue',
-  company: 'Acme Corp',
+  company: 'Test Company',
   status: 'Open',
   priority: 'High',
   source: 'Email',
@@ -13,7 +13,7 @@ const MOCK_TICKET_ROW = {
   created_date: '2026-04-08',
   tags: ['auth'],
   messages: [{ id: 'm1', author: 'Client', text: 'Cannot log in', date: '2026-04-08', internal: false }],
-  contact_name: 'Jane Doe',
+  contact_name: 'Test User',
   contact_email: 'jane@acme.com',
   service_type: 'Website',
   project_id: null,
@@ -53,7 +53,7 @@ describe('POST /api/tickets', () => {
       method: 'POST',
       body: JSON.stringify({
         subject: 'Login issue',
-        company: 'Acme Corp',
+        company: 'Test Company',
         priority: 'High',
         status: 'Open',
       }),

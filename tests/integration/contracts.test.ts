@@ -5,7 +5,7 @@ import { createMockDb } from '../helpers/mock-db'
 const MOCK_CONTRACT_ROW = {
   id: 'c-123',
   proposal_id: 'p-456',
-  company: 'Acme Corp',
+  company: 'Test Company',
   status: 'Draft',
   value: 30000,
   billing_structure: 'Monthly',
@@ -38,7 +38,7 @@ describe('GET /api/contracts', () => {
 
     expect(res.status).toBe(200)
     expect(Array.isArray(data)).toBe(true)
-    expect(data[0].company).toBe('Acme Corp')
+    expect(data[0].company).toBe('Test Company')
     expect(data[0].billingStructure).toBe('Monthly')
     expect(data[0].proposalId).toBe('p-456')
   })
@@ -49,7 +49,7 @@ describe('POST /api/contracts', () => {
     const req = new NextRequest(new URL('http://localhost/api/contracts'), {
       method: 'POST',
       body: JSON.stringify({
-        company: 'Acme Corp',
+        company: 'Test Company',
         value: 30000,
         serviceType: 'Website',
         billingStructure: 'Monthly',

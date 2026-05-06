@@ -543,7 +543,7 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
         .from('document_templates')
         .select('id, name, type, version, is_default, created_at')
         .order('type')
-      if (!data || data.length === 0) return 'No document templates found. Run the seed-templates.sql script to install the default templates.'
+      if (!data || data.length === 0) return 'No document templates found. Create templates in Settings or Admin.'
       return JSON.stringify(data)
     }
 

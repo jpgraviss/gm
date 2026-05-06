@@ -5,7 +5,7 @@ import { createMockDb } from '../helpers/mock-db'
 const MOCK_PROPOSAL_ROW = {
   id: 'p-123',
   deal_id: null,
-  company: 'Acme Corp',
+  company: 'Test Company',
   status: 'Draft',
   value: 25000,
   service_type: 'SEO',
@@ -36,7 +36,7 @@ describe('GET /api/proposals', () => {
 
     expect(res.status).toBe(200)
     expect(Array.isArray(data)).toBe(true)
-    expect(data[0].company).toBe('Acme Corp')
+    expect(data[0].company).toBe('Test Company')
     expect(data[0].serviceType).toBe('SEO')
     expect(data[0].value).toBe(25000)
     // Verify snake_case → camelCase mapping
@@ -50,7 +50,7 @@ describe('POST /api/proposals', () => {
     const req = new NextRequest(new URL('http://localhost/api/proposals'), {
       method: 'POST',
       body: JSON.stringify({
-        company: 'Acme Corp',
+        company: 'Test Company',
         value: 25000,
         serviceType: 'SEO',
         assignedRep: 'Jonathan Graviss',
@@ -60,7 +60,7 @@ describe('POST /api/proposals', () => {
     const res = await POST(req)
     expect(res.status).toBe(201)
     const data = await res.json()
-    expect(data.company).toBe('Acme Corp')
+    expect(data.company).toBe('Test Company')
   })
 
   it('rejects missing company', async () => {

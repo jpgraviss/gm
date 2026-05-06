@@ -14,7 +14,7 @@ const dealSchema = {
 describe('deals route validation', () => {
   it('accepts valid deal data with all fields', () => {
     const body = {
-      company: 'Acme Corp',
+      company: 'Test Company',
       stage: 'Proposal Sent',
       value: 75000,
       serviceType: 'Web Development',
@@ -44,7 +44,7 @@ describe('deals route validation', () => {
   })
 
   it('rejects invalid stage', () => {
-    const body = { company: 'Acme', stage: 'InvalidStage' }
+    const body = { company: `Test Co`, stage: 'InvalidStage' }
     const result = validate(body, dealSchema)
     expect(result).toEqual({
       valid: false,
@@ -60,31 +60,31 @@ describe('deals route validation', () => {
   })
 
   it('rejects negative value', () => {
-    const body = { company: 'Acme', value: -500 }
+    const body = { company: `Test Co`, value: -500 }
     const result = validate(body, dealSchema)
     expect(result).toEqual({ valid: false, error: 'value must be at least 0' })
   })
 
   it('rejects value over 100M', () => {
-    const body = { company: 'Acme', value: 100_000_001 }
+    const body = { company: `Test Co`, value: 100_000_001 }
     const result = validate(body, dealSchema)
     expect(result).toEqual({ valid: false, error: 'value must be at most 100000000' })
   })
 
   it('accepts value at exactly 100M boundary', () => {
-    const body = { company: 'Acme', value: 100_000_000 }
+    const body = { company: `Test Co`, value: 100_000_000 }
     const result = validate(body, dealSchema)
     expect(result.valid).toBe(true)
   })
 
   it('accepts value of zero', () => {
-    const body = { company: 'Acme', value: 0 }
+    const body = { company: `Test Co`, value: 0 }
     const result = validate(body, dealSchema)
     expect(result.valid).toBe(true)
   })
 
   it('rejects probability over 100', () => {
-    const body = { company: 'Acme', probability: 101 }
+    const body = { company: `Test Co`, probability: 101 }
     const result = validate(body, dealSchema)
     expect(result).toEqual({ valid: false, error: 'probability must be at most 100' })
   })
@@ -96,7 +96,7 @@ describe('deals route validation', () => {
   })
 
   it('rejects non-string value for stage', () => {
-    const body = { company: 'Acme', stage: 123 }
+    const body = { company: `Test Co`, stage: 123 }
     const result = validate(body, dealSchema)
     expect(result).toEqual({ valid: false, error: 'Invalid type for stage: expected string' })
   })

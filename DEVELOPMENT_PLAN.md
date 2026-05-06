@@ -18,7 +18,7 @@
 | **Admin** (users, audit logs, imports, invitations) | 100% | All functional, dynamic team members from DB |
 | **Automation Engine** | 100% | Engine built + trigger hooks + daily cron scheduler for time-based triggers (overdue invoices, renewals) |
 | **Error Handling / UX** | 95% | Toast wired to all user-facing errors. Loading spinners on all pages. 3 acceptable silent catches remain (CSS fallback, greeting, JSON parse). |
-| **Database Migrations** | 100% | All 16 migrations applied. Schema, seeds, and templates loaded. |
+| **Database Migrations** | 100% | All migrations applied. Schema fully managed through migrations. |
 | **Security** | 80% | Proxy auth (renamed from middleware for Next 16) + CSRF + encrypted tokens + RLS write policies applied. Sentry DSN not yet configured. Rate limit still in-memory. |
 | **CI / Build** | 100% | `next build`, `tsc --noEmit`, `vitest run`, and `eslint` all green. GitHub Actions workflow runs on every PR. |
 
@@ -54,7 +54,7 @@
    - `add_maintenance_fields` — end_date, cancellation_fee, payment_terms on maintenance_records
    - `add_projects_notes` — notes (JSONB) and overview on projects
    - `add_addendum_change_fields` — change_type, value_delta, term_delta_months, scope_added, scope_removed, effective_date on contract_addendums
-8. **Schema & Seeds Loaded** — `schema.sql`, `schema_calendar.sql`, `setup.sql`, `seed.sql`, `seed-templates.sql` all applied.
+8. **Schema Applied** — `schema.sql`, `schema_calendar.sql`, and all migrations applied. No seed data — all content created through the application.
 
 ### TIER 4: Build Hygiene — ALL DONE (Apr 4)
 9. **Build unblocked** — Lazy `getResend()` helper in `lib/resend.ts` so module-load no longer throws without `RESEND_API_KEY`.

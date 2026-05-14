@@ -43,7 +43,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   // /book/* routes are public — clients book without logging in
-  const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/')
+  const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/') || pathname.startsWith('/unsubscribe/')
 
   // Inject brand CSS variables from settings
   useEffect(() => {

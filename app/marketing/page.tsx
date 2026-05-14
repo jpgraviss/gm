@@ -4,9 +4,13 @@ import { useEffect, useState } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import { formatDate } from '@/lib/utils'
+import EmailBlockEditor from '@/components/email/EmailBlockEditor'
+import EmailPreview from '@/components/email/EmailPreview'
+import TemplatePicker from '@/components/email/TemplatePicker'
+import { type EmailBlock, renderEmailHTML } from '@/lib/email-builder'
 import {
   Mail, Send, Users, Trash2, Eye, Edit, X, Sparkles, CheckCircle,
-  AlertCircle, Clock, BarChart3, ChevronLeft,
+  AlertCircle, Clock, BarChart3, ChevronLeft, Palette, Layout,
 } from 'lucide-react'
 
 interface AudienceFilter {
@@ -325,14 +329,18 @@ function BroadcastEditor({
   onRefresh: () => void
 }) {
   const { toast } = useToast()
-  const [tab, setTab] = useState<'compose' | 'audience' | 'send'>('compose')
+  const [tab, setTab] = useState<'compose' | 'design' | 'preview' | 'audience' | 'send'>('compose')
   const [draft, setDraft] = useState<Broadcast>(broadcast)
   const [audiencePreview, setAudiencePreview] = useState<{ total: number; suppressed: number; estimated: number; sample: Array<{ id: string; email: string; name: string }> } | null>(null)
   const [sending, setSending] = useState(false)
+  const [emailBlocks, setEmailBlocks] = useState<EmailBlock[]>([])
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
 
   const isSent = broadcast.status === 'sent' || broadcast.status === 'sending'
 
   async function save() {
+    // Render blocks to HTML before saving
+    const htmlFromBlocks = emailBlocks.length > 0 ? renderEmailHTML(emailBlocks) : draft.htmlBody
     const updated = await onSave({
       name:        draft.name,
       subject:     draft.subject,
@@ -340,7 +348,7 @@ function BroadcastEditor({
       fromEmail:   draft.fromEmail,
       replyTo:     draft.replyTo,
       previewText: draft.previewText,
-      htmlBody:    draft.htmlBody,
+      htmlBody:    htmlFromBlocks,
       audienceFilter: draft.audienceFilter,
     })
     if (updated) setDraft(updated)
@@ -391,16 +399,22 @@ function BroadcastEditor({
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-gray-200 px-5">
-          {(['compose', 'audience', 'send'] as const).map(t => (
+        <div className="flex gap-1 border-b border-gray-200 px-5 overflow-x-auto">
+          {([
+            { id: 'compose' as const, label: 'Compose', icon: <Edit size={13} /> },
+            { id: 'design' as const, label: 'Design', icon: <Layout size={13} /> },
+            { id: 'preview' as const, label: 'Preview', icon: <Eye size={13} /> },
+            { id: 'audience' as const, label: 'Audience', icon: <Users size={13} /> },
+            { id: 'send' as const, label: 'Send', icon: <Send size={13} /> },
+          ]).map(t => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2.5 text-sm font-medium capitalize border-b-2 transition-colors ${
-                tab === t ? 'border-emerald-600 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+                tab === t.id ? 'border-emerald-600 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              {t === 'send' ? 'Review & Send' : t}
+              {t.icon} {t.label}
             </button>
           ))}
         </div>
@@ -468,23 +482,48 @@ function BroadcastEditor({
                   className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
                 />
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">HTML body</label>
-                  <span className="text-[10px] text-gray-400">
-                    Merge fields: <code className="bg-gray-100 px-1 rounded">{'{{first_name}}'}</code> <code className="bg-gray-100 px-1 rounded">{'{{company}}'}</code>
-                  </span>
-                </div>
-                <textarea
-                  value={draft.htmlBody}
-                  onChange={e => setDraft(d => ({ ...d, htmlBody: e.target.value }))}
-                  disabled={isSent}
-                  rows={14}
-                  placeholder="<p>Hi {{first_name}},</p><p>...</p>"
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono disabled:bg-gray-50 resize-none"
-                />
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-gray-400">
+                  Merge fields: <code className="bg-gray-100 px-1 rounded">{'{{first_name}}'}</code> <code className="bg-gray-100 px-1 rounded">{'{{company}}'}</code>
+                </p>
+                <button
+                  onClick={() => setTab('design')}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
+                >
+                  <Layout size={12} /> Open email designer →
+                </button>
               </div>
             </>
+          )}
+
+          {/* Design tab — drag-and-drop email builder */}
+          {tab === 'design' && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-gray-900">Email Designer</p>
+                <button
+                  onClick={() => setShowTemplatePicker(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white hover:opacity-90"
+                  style={{ background: '#015035' }}
+                >
+                  <Palette size={12} /> Templates
+                </button>
+              </div>
+              {!isSent ? (
+                <EmailBlockEditor blocks={emailBlocks} onChange={setEmailBlocks} />
+              ) : (
+                <div className="py-8 text-center text-xs text-gray-400">
+                  Email already sent — design is read-only
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Preview tab — desktop/mobile preview */}
+          {tab === 'preview' && (
+            <div className="h-[500px]">
+              <EmailPreview blocks={emailBlocks} subject={draft.subject} preheader={draft.previewText} />
+            </div>
           )}
 
           {tab === 'audience' && (
@@ -610,6 +649,14 @@ function BroadcastEditor({
             </>
           )}
         </div>
+
+        {/* Template picker modal */}
+        {showTemplatePicker && (
+          <TemplatePicker
+            onSelect={(blocks) => { setEmailBlocks(blocks); setShowTemplatePicker(false); setTab('design') }}
+            onClose={() => setShowTemplatePicker(false)}
+          />
+        )}
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-100 flex gap-2">

@@ -328,6 +328,7 @@ export interface ContactTask {
 }
 
 export type ContactLifecycleStage = 'lead' | 'opportunity' | 'client' | 'other'
+export type ContactLeadStatus = 'new' | 'open' | 'in_progress' | 'open_deal' | 'unqualified' | 'attempted_to_contact' | 'connected' | 'bad_timing'
 
 export interface CRMContact {
   id: string
@@ -350,6 +351,7 @@ export interface CRMContact {
   createdDate: string
   lastActivity?: string
   lifecycleStage?: ContactLifecycleStage
+  leadStatus?: ContactLeadStatus
 }
 
 export interface CRMCompany {

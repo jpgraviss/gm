@@ -4,7 +4,7 @@ import { createMockDb } from '../helpers/mock-db'
 
 const MOCK_DEAL_ROW = {
   id: 'deal-123',
-  company: 'Trailhead Media',
+  company: 'Test Company',
   stage: 'Proposal Sent',
   value: 7800,
   service_type: 'Website',
@@ -12,7 +12,7 @@ const MOCK_DEAL_ROW = {
   assigned_rep: 'Jonathan Graviss',
   probability: 60,
   last_activity: '2026-04-08',
-  contact: { id: 'c1', name: 'John Doe', email: 'j@t.com', phone: '', title: 'CEO' },
+  contact: { id: 'c1', name: 'Test Contact', email: 'test@test.com', phone: '', title: 'CEO' },
   notes: ['Initial call completed'],
   created_at: '2026-04-01T00:00:00Z',
 }
@@ -36,7 +36,7 @@ describe('GET /api/deals', () => {
 
     expect(res.status).toBe(200)
     expect(Array.isArray(data)).toBe(true)
-    expect(data[0].company).toBe('Trailhead Media')
+    expect(data[0].company).toBe('Test Company')
     expect(data[0].serviceType).toBe('Website')
     expect(data[0].assignedRep).toBe('Jonathan Graviss')
   })
@@ -47,7 +47,7 @@ describe('POST /api/deals', () => {
     const req = new NextRequest(new URL('http://localhost/api/deals'), {
       method: 'POST',
       body: JSON.stringify({
-        company: 'Trailhead Media',
+        company: 'Test Company',
         stage: 'Proposal Sent',
         value: 7800,
         serviceType: 'Website',

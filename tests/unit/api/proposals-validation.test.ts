@@ -14,11 +14,11 @@ const proposalSchema = {
 describe('proposals route validation', () => {
   it('accepts valid proposal data with all fields', () => {
     const body = {
-      company: 'Acme Corp',
+      company: 'Test Company',
       status: 'Draft',
       value: 25000,
       serviceType: 'SEO',
-      assignedRep: 'Jane Doe',
+      assignedRep: 'Test User',
       items: [{ description: 'SEO Audit', amount: 5000 }],
     }
     const result = validate(body, proposalSchema)
@@ -44,7 +44,7 @@ describe('proposals route validation', () => {
   })
 
   it('rejects invalid status', () => {
-    const body = { company: 'Acme', status: 'Bogus' }
+    const body = { company: 'TestCo', status: 'Bogus' }
     const result = validate(body, proposalSchema)
     expect(result).toEqual({
       valid: false,
@@ -60,31 +60,31 @@ describe('proposals route validation', () => {
   })
 
   it('rejects negative value', () => {
-    const body = { company: 'Acme', value: -1 }
+    const body = { company: 'TestCo', value: -1 }
     const result = validate(body, proposalSchema)
     expect(result).toEqual({ valid: false, error: 'value must be at least 0' })
   })
 
   it('rejects value over 100M', () => {
-    const body = { company: 'Acme', value: 200_000_000 }
+    const body = { company: 'TestCo', value: 200_000_000 }
     const result = validate(body, proposalSchema)
     expect(result).toEqual({ valid: false, error: 'value must be at most 100000000' })
   })
 
   it('accepts value of zero', () => {
-    const body = { company: 'Acme', value: 0 }
+    const body = { company: 'TestCo', value: 0 }
     const result = validate(body, proposalSchema)
     expect(result.valid).toBe(true)
   })
 
   it('rejects non-array items', () => {
-    const body = { company: 'Acme', items: 'not-an-array' }
+    const body = { company: 'TestCo', items: 'not-an-array' }
     const result = validate(body, proposalSchema)
     expect(result).toEqual({ valid: false, error: 'Invalid type for items: expected array' })
   })
 
   it('accepts empty items array', () => {
-    const body = { company: 'Acme', items: [] }
+    const body = { company: 'TestCo', items: [] }
     const result = validate(body, proposalSchema)
     expect(result.valid).toBe(true)
   })

@@ -66,7 +66,7 @@ describe('automations-engine', () => {
   }
 
   it('ignores unknown events and does not query the database', async () => {
-    fireAutomations('totally_unknown_event', { company: 'Acme' })
+    fireAutomations('totally_unknown_event', { company: 'TestCo' })
     await flushPromises()
     expect(mockDb.from).not.toHaveBeenCalled()
   })
@@ -74,7 +74,7 @@ describe('automations-engine', () => {
   it('fires "Create Draft Contract" on proposal_accepted', async () => {
     setupAutomations('Proposal Accepted', ['Create Draft Contract'])
     fireAutomations('proposal_accepted', {
-      company: 'Acme Corp',
+      company: 'Test Company',
       proposalId: 'p-123',
       value: 50000,
       assigned_rep: 'John',
@@ -87,7 +87,7 @@ describe('automations-engine', () => {
     expect(insertCalls['contracts']).toBeDefined()
     expect(insertCalls['contracts'][0]).toEqual(
       expect.objectContaining({
-        company: 'Acme Corp',
+        company: 'Test Company',
         status: 'Draft',
         value: 50000,
         assigned_rep: 'John',
@@ -100,7 +100,7 @@ describe('automations-engine', () => {
     setupAutomations('Invoice Paid', ['Create Billing Task'])
     fireAutomations('invoice_paid', {
       company: 'Beta LLC',
-      assigned_rep: 'Jane',
+      assigned_rep: 'Tester',
     })
     await flushPromises()
 

@@ -7,8 +7,8 @@ import NewTicketPanel, { type NewTicketFormData } from '@/components/crm/NewTick
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import {
-  MessageSquare, CheckCircle, Clock, AlertTriangle, X, ExternalLink,
-  Plus, ChevronRight, ArrowUpRight, Send, User, Tag, FolderKanban,
+  MessageSquare, CheckCircle, Clock, X, ExternalLink,
+  Plus, ChevronRight, Send, User, FolderKanban,
   Zap, Circle, Trash2, Search, Inbox,
 } from 'lucide-react'
 

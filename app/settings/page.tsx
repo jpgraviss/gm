@@ -83,20 +83,33 @@ const COMPANY_DEFAULTS = {
   zip: '78028',
 }
 
-const NOTIF_DEFAULTS = [
-  { label: 'Contract requires signature', enabled: true, category: 'Contracts' },
-  { label: 'Contract fully executed', enabled: true, category: 'Contracts' },
-  { label: 'Invoice overdue by 3+ days', enabled: true, category: 'Billing' },
-  { label: 'Payment received', enabled: true, category: 'Billing' },
-  { label: 'Renewal within 90 days', enabled: true, category: 'Renewals' },
-  { label: 'Renewal within 30 days', enabled: true, category: 'Renewals' },
-  { label: 'New deal created', enabled: false, category: 'CRM' },
-  { label: 'Proposal viewed by client', enabled: true, category: 'Proposals' },
-  { label: 'Proposal accepted / declined', enabled: true, category: 'Proposals' },
-  { label: 'Project milestone completed', enabled: true, category: 'Projects' },
-  { label: 'New client ticket submitted', enabled: true, category: 'Tickets' },
-  { label: 'Ticket unresponded for 24h', enabled: true, category: 'Tickets' },
-  { label: 'Client portal login', enabled: false, category: 'Portal' },
+type ChannelPref = 'in-app' | 'email+in-app' | 'muted'
+type ActivityNotif = { label: string; enabled: boolean; channel: ChannelPref }
+
+const ACTIVITY_NOTIF_DEFAULTS: ActivityNotif[] = [
+  { label: 'New ticket assigned to me', enabled: true, channel: 'in-app' },
+  { label: 'Ticket status changed', enabled: true, channel: 'in-app' },
+  { label: 'New deal created', enabled: false, channel: 'in-app' },
+  { label: 'Deal stage changed', enabled: true, channel: 'in-app' },
+  { label: 'Contract signed', enabled: true, channel: 'email+in-app' },
+  { label: 'Invoice overdue', enabled: true, channel: 'email+in-app' },
+  { label: 'Task assigned to me', enabled: true, channel: 'in-app' },
+  { label: 'Task due today', enabled: true, channel: 'in-app' },
+  { label: 'New form submission', enabled: true, channel: 'in-app' },
+  { label: 'Proposal accepted/declined', enabled: true, channel: 'email+in-app' },
+  { label: 'New contact created', enabled: false, channel: 'in-app' },
+]
+
+const QUIET_HOURS_DEFAULTS = {
+  enabled: false,
+  start: '22:00',
+  end: '08:00',
+}
+
+const CHANNEL_OPTIONS: { value: ChannelPref; label: string }[] = [
+  { value: 'in-app', label: 'In-app only' },
+  { value: 'email+in-app', label: 'Email + in-app' },
+  { value: 'muted', label: 'Muted' },
 ]
 
 const BRANDING_DEFAULTS = {
@@ -180,7 +193,11 @@ export default function SettingsPage() {
   const router         = useRouter()
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>(() => {
-    if (typeof window !== 'undefined' && searchParams.get('tab') === 'integrations') return 'Integrations'
+    if (typeof window !== 'undefined') {
+      const t = searchParams.get('tab')
+      if (t === 'integrations') return 'Integrations'
+      if (t === 'notifications') return 'Notifications'
+    }
     return 'Company'
   })
   const [saved, setSaved] = useState<string | null>(null)
@@ -265,7 +282,8 @@ export default function SettingsPage() {
   const [inviteError, setInviteError] = useState('')
 
   // Notifications
-  const [notifications, setNotifications] = useState(NOTIF_DEFAULTS)
+  const [activityNotifs, setActivityNotifs] = useState<ActivityNotif[]>(ACTIVITY_NOTIF_DEFAULTS)
+  const [quietHours, setQuietHours] = useState(QUIET_HOURS_DEFAULTS)
 
   // Branding
   const [branding, setBranding] = useState(BRANDING_DEFAULTS)
@@ -302,7 +320,8 @@ export default function SettingsPage() {
       .then(d => {
         if (!d || !d.id) {
           setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
-          setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
+          setActivityNotifs(loadLS('gravhub_activity_notifs', ACTIVITY_NOTIF_DEFAULTS))
+          setQuietHours(loadLS('gravhub_quiet_hours', QUIET_HOURS_DEFAULTS))
           setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
           setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
           setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
@@ -311,7 +330,8 @@ export default function SettingsPage() {
           return
         }
         if (d.company          && Object.keys(d.company).length)           setCompany(d.company)
-        if (Array.isArray(d.notifications)   && d.notifications.length)    setNotifications(d.notifications)
+        if (Array.isArray(d.notification_preferences?.activity) && d.notification_preferences.activity.length) setActivityNotifs(d.notification_preferences.activity)
+        if (d.notification_preferences?.quiet_hours) setQuietHours(prev => ({ ...prev, ...d.notification_preferences.quiet_hours }))
         if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(d.invoice_defaults)
         if (Array.isArray(d.pipelines) && d.pipelines.length) setPipelines(d.pipelines)
         else if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length) setPipelines([{ id: 'sales', name: 'Sales Pipeline', stages: d.pipeline_stages.map((name: string, i: number) => ({ id: `s${i}`, name, color: STAGE_COLORS_CYCLE[i % STAGE_COLORS_CYCLE.length] })) }])
@@ -325,7 +345,8 @@ export default function SettingsPage() {
       })
       .catch(() => {
         setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
-        setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
+        setActivityNotifs(loadLS('gravhub_activity_notifs', ACTIVITY_NOTIF_DEFAULTS))
+          setQuietHours(loadLS('gravhub_quiet_hours', QUIET_HOURS_DEFAULTS))
         setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
         setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
         setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
@@ -356,7 +377,7 @@ export default function SettingsPage() {
   }
 
   function saveNotifications() {
-    patchSettings({ notifications }, 'Notifications')
+    patchSettings({ notification_preferences: { activity: activityNotifs, quiet_hours: quietHours } }, 'Notifications')
   }
 
   function saveInvoiceDefaults() {
@@ -938,23 +959,73 @@ export default function SettingsPage() {
 
         {/* ── Notifications ── */}
         {activeTab === 'Notifications' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Notification Preferences</h3>
-              {saved === 'Notifications' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
-            </div>
-            <div className="flex flex-col gap-1">
-              {notifications.map(n => (
-                <div key={n.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0 gap-3">
-                  <div className="min-w-0">
+          <div className="space-y-5">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Activity Notifications</h3>
+                {saved === 'Notifications' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+              </div>
+              <div className="hidden sm:grid grid-cols-[1fr_80px_160px] gap-x-4 px-3 pb-2 border-b border-gray-100">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Event</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Enabled</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Channel</span>
+              </div>
+              <div className="flex flex-col">
+                {activityNotifs.map(n => (
+                  <div key={n.label} className="grid grid-cols-1 sm:grid-cols-[1fr_80px_160px] gap-x-4 gap-y-2 items-center py-3 px-3 border-b border-gray-50 last:border-0">
                     <span className="text-sm text-gray-700">{n.label}</span>
-                    <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{n.category}</span>
+                    <div className="flex sm:justify-center">
+                      <Toggle enabled={n.enabled} onChange={() => setActivityNotifs(prev => prev.map(x => x.label === n.label ? { ...x, enabled: !x.enabled } : x))} />
+                    </div>
+                    <select
+                      value={n.channel}
+                      onChange={e => setActivityNotifs(prev => prev.map(x => x.label === n.label ? { ...x, channel: e.target.value as ChannelPref } : x))}
+                      disabled={!n.enabled}
+                      className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-700 bg-gray-50 focus:outline-none focus:border-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {CHANNEL_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
                   </div>
-                  <Toggle enabled={n.enabled} onChange={() => setNotifications(prev => prev.map(x => x.label === n.label ? { ...x, enabled: !x.enabled } : x))} />
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-            <button onClick={saveNotifications} className="flex items-center gap-2 mt-5 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-5" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Quiet Hours</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm text-gray-700 font-medium">Enable quiet hours</p>
+                  <p className="text-xs text-gray-400 mt-0.5">During quiet hours, notifications are queued and delivered after</p>
+                </div>
+                <Toggle enabled={quietHours.enabled} onChange={() => setQuietHours(prev => ({ ...prev, enabled: !prev.enabled }))} />
+              </div>
+              {quietHours.enabled && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pl-0 sm:pl-1">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Start Time</label>
+                    <input
+                      type="time"
+                      value={quietHours.start}
+                      onChange={e => setQuietHours(prev => ({ ...prev, start: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">End Time</label>
+                    <input
+                      type="time"
+                      value={quietHours.end}
+                      onChange={e => setQuietHours(prev => ({ ...prev, end: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button onClick={saveNotifications} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
               {saved === 'Notifications' ? <><CheckCircle size={14} /> Saved!</> : 'Save Preferences'}
             </button>
           </div>

@@ -93,10 +93,15 @@ function getMonthKey(ts: string): string {
   return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
-function EngagementScoreBar({ score, breakdown }: { score: number; breakdown: { emailsOpened: number; linksClicked: number; proposalsViewed: number; meetings: number } }) {
+function EngagementScoreBar({ score, breakdown, points, thresholds }: {
+  score: number
+  breakdown: { emailsOpened: number; linksClicked: number; proposalsViewed: number; meetings: number }
+  points: { emailOpened: number; linkClicked: number; proposalViewed: number; meetingHeld: number }
+  thresholds: { cold: number; hot: number }
+}) {
   const maxScore = 200
   const pct = Math.min(100, Math.round((score / maxScore) * 100))
-  const level = score >= 100 ? 'hot' : score >= 40 ? 'warm' : 'cold'
+  const level = score >= thresholds.hot ? 'hot' : score >= thresholds.cold ? 'warm' : 'cold'
   const cfg = {
     hot:  { label: 'Hot',  color: '#ef4444', bg: '#fef2f2', icon: <Flame size={14} /> },
     warm: { label: 'Warm', color: '#f59e0b', bg: '#fffbeb', icon: <Thermometer size={14} /> },
@@ -120,10 +125,10 @@ function EngagementScoreBar({ score, breakdown }: { score: number; breakdown: { 
       </div>
       <div className="grid grid-cols-4 gap-2 text-center">
         {[
-          { label: 'Opens', val: breakdown.emailsOpened, pts: 5 },
-          { label: 'Clicks', val: breakdown.linksClicked, pts: 10 },
-          { label: 'Proposals', val: breakdown.proposalsViewed, pts: 15 },
-          { label: 'Meetings', val: breakdown.meetings, pts: 20 },
+          { label: 'Opens', val: breakdown.emailsOpened, pts: points.emailOpened },
+          { label: 'Clicks', val: breakdown.linksClicked, pts: points.linkClicked },
+          { label: 'Proposals', val: breakdown.proposalsViewed, pts: points.proposalViewed },
+          { label: 'Meetings', val: breakdown.meetings, pts: points.meetingHeld },
         ].map(s => (
           <div key={s.label} className="text-center">
             <p className="text-sm font-semibold text-gray-900">{s.val}</p>
@@ -1014,7 +1019,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
           {/* ══════ ABOUT TAB ══════ */}
           {tab === 'about' && (
             <div className="flex flex-col">
-              <EngagementScoreBar score={engagementScore} breakdown={engagementBreakdown} />
+              <EngagementScoreBar score={engagementScore} breakdown={engagementBreakdown} points={engagementPoints} thresholds={engagementThresholds} />
 
               <button
                 onClick={() => setAboutOpen(v => !v)}

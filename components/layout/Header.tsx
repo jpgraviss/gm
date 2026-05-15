@@ -153,13 +153,21 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
                 </div>
 
                 {/* Footer */}
-                <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/60">
+                <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-100 bg-gray-50/60">
                   <Link
                     href="/tasks"
                     onClick={() => setNotificationsOpen(false)}
                     className="text-xs text-green-700 hover:text-green-800 font-medium transition-colors"
                   >
                     View all tasks →
+                  </Link>
+                  <Link
+                    href="/settings?tab=notifications"
+                    onClick={() => setNotificationsOpen(false)}
+                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors"
+                  >
+                    <Bell size={11} />
+                    Preferences
                   </Link>
                 </div>
               </div>

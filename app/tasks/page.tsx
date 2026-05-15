@@ -7,10 +7,9 @@ import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority, TeamMember 
 import {
   CheckSquare, Clock, AlertCircle, CheckCircle2, Plus, X, ChevronRight, ChevronLeft,
   Building2, User, Calendar, Flag, Tag, Trash2, Circle, Repeat, Search,
+  LayoutList, Columns3, Eye,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
-
-// ─── Config ───────────────────────────────────────────────────────────────────
 
 const categoryColors: Record<AppTaskCategory, string> = {
   Deal:     'bg-blue-100 text-blue-700',
@@ -28,6 +27,31 @@ const priorityConfig: Record<TaskPriority, { badge: string; dot: string; label: 
   Low:    { badge: 'bg-gray-100 text-gray-500',   dot: '#9ca3af', label: 'Low' },
 }
 
+type StatusColumn = 'Pending' | 'In Progress' | 'Review' | 'Completed'
+type FilterTab = 'All' | 'Pending' | 'In Progress' | 'Review' | 'Completed'
+type ViewMode = 'list' | 'kanban'
+
+const STATUS_COLUMNS: { key: StatusColumn; label: string; color: string; icon: React.ReactNode }[] = [
+  { key: 'Pending',     label: 'To Do',       color: '#6b7280', icon: <Circle size={14} /> },
+  { key: 'In Progress', label: 'In Progress', color: '#3b82f6', icon: <Clock size={14} /> },
+  { key: 'Review',      label: 'Review',      color: '#8b5cf6', icon: <Eye size={14} /> },
+  { key: 'Completed',   label: 'Done',         color: '#015035', icon: <CheckCircle2 size={14} /> },
+]
+
+const STATUS_LABEL_MAP: Record<StatusColumn, string> = {
+  Pending: 'To Do',
+  'In Progress': 'In Progress',
+  Review: 'Review',
+  Completed: 'Done',
+}
+
+const STATUS_BADGE_MAP: Record<StatusColumn, string> = {
+  Pending: 'bg-gray-100 text-gray-600',
+  'In Progress': 'bg-blue-100 text-blue-700',
+  Review: 'bg-purple-100 text-purple-700',
+  Completed: 'bg-emerald-100 text-emerald-700',
+}
+
 function getToday() {
   return new Date().toISOString().split('T')[0]
 }
@@ -42,19 +66,23 @@ function isDueToday(dueDate: string, status: AppTaskStatus) {
 
 function dueDateLabel(dueDate: string, status: AppTaskStatus) {
   if (status === 'Completed') return { text: 'Completed', cls: 'text-emerald-600' }
-  if (isOverdue(dueDate, status)) return { text: `Overdue · ${dueDate}`, cls: 'text-red-600 font-semibold' }
+  if (isOverdue(dueDate, status)) return { text: `Overdue`, cls: 'text-red-600 font-semibold' }
   if (isDueToday(dueDate, status)) return { text: 'Due Today', cls: 'text-orange-500 font-semibold' }
-  return { text: `Due ${dueDate}`, cls: 'text-gray-400' }
+  return { text: dueDate, cls: 'text-gray-400' }
 }
 
-// ─── New Task Panel ────────────────────────────────────────────────────────────
+function getTaskColumn(task: AppTask): StatusColumn {
+  if (task.status === 'Completed') return 'Completed'
+  if (task.status === 'In Progress' && task.category === 'Contract') return 'Review'
+  return task.status as StatusColumn
+}
 
-function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) => void; onClose: () => void; teamMembers: TeamMember[] }) {
+function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) => void; onClose: () => void; teamMembers: TeamMember[] }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<AppTaskCategory>('General')
   const [priority, setPriority] = useState<TaskPriority>('Medium')
-  const [assignedTo, setAssignedTo] = useState('')
+  const [assignedTo, setAssignedTo] = useState(teamMembers[0]?.name ?? '')
   const [dueDate, setDueDate] = useState(getToday())
   const [company, setCompany] = useState('')
   const [recurring, setRecurring] = useState(false)
@@ -81,64 +109,47 @@ function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
     })
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex pointer-events-none">
-      <div className="flex-1 pointer-events-auto" onClick={onClose} />
-      <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(460px, 100vw)' }}>
+  const inputCls = "w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 focus:border-[#015035] placeholder-gray-400 transition-colors"
+  const selectCls = `${inputCls} bg-white`
+  const labelCls = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5"
 
-        <div className="p-5 flex items-start justify-between flex-shrink-0" style={{ background: '#012b1e' }}>
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="px-6 py-5 flex items-center justify-between border-b border-gray-100">
           <div>
-            <h2 className="text-white font-bold text-base">New Task</h2>
-            <p className="text-white/50 text-xs mt-0.5">Assign and track an action item</p>
+            <h2 className="text-lg font-bold text-gray-900">New Task</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Create and assign an action item</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10">
-            <X size={16} className="text-white/70" />
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
+            <X size={18} className="text-gray-400" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Task Title *</label>
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Follow up on Apex proposal"
-              autoFocus
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
-            />
+            <label className={labelCls}>Task Title *</label>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Follow up on Apex proposal" autoFocus className={inputCls} />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Additional context or steps..."
-              rows={3}
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 resize-none"
-            />
+            <label className={labelCls}>Description</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Additional context or steps..." rows={3} className={`${inputCls} resize-none`} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Category</label>
-              <select
-                value={category}
-                onChange={e => setCategory(e.target.value as AppTaskCategory)}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-              >
+              <label className={labelCls}>Category</label>
+              <select value={category} onChange={e => setCategory(e.target.value as AppTaskCategory)} className={selectCls}>
                 {(['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'General'] as AppTaskCategory[]).map(c => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Priority</label>
-              <select
-                value={priority}
-                onChange={e => setPriority(e.target.value as TaskPriority)}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-              >
+              <label className={labelCls}>Priority</label>
+              <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className={selectCls}>
                 <option value="High">High</option>
                 <option value="Medium">Medium</option>
                 <option value="Low">Low</option>
@@ -148,21 +159,12 @@ function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Due Date *</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
+              <label className={labelCls}>Due Date *</label>
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Assign To</label>
-              <select
-                value={assignedTo}
-                onChange={e => setAssignedTo(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-              >
+              <label className={labelCls}>Assign To</label>
+              <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className={selectCls}>
                 {teamMembers.map(m => (
                   <option key={m.id} value={m.name}>{m.name}</option>
                 ))}
@@ -171,24 +173,13 @@ function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company (optional)</label>
-            <input
-              value={company}
-              onChange={e => setCompany(e.target.value)}
-              placeholder="e.g. Coastal Realty"
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
-            />
+            <label className={labelCls}>Company (optional)</label>
+            <input value={company} onChange={e => setCompany(e.target.value)} placeholder="e.g. Coastal Realty" className={inputCls} />
           </div>
 
-          {/* Recurrence toggle */}
           <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={recurring}
-                onChange={e => setRecurring(e.target.checked)}
-                className="accent-emerald-600 w-4 h-4"
-              />
+              <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)} className="accent-[#015035] w-4 h-4" />
               <Repeat size={14} className="text-gray-500" />
               <span className="text-sm font-medium text-gray-700">Repeat this task</span>
             </label>
@@ -196,11 +187,7 @@ function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Frequency</label>
-                  <select
-                    value={recFrequency}
-                    onChange={e => setRecFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')}
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                  >
+                  <select value={recFrequency} onChange={e => setRecFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 bg-white">
                     <option value="daily">Daily</option>
                     <option value="weekly">Weekly</option>
                     <option value="monthly">Monthly</option>
@@ -208,48 +195,29 @@ function NewTaskPanel({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Every</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={99}
-                    value={recInterval}
-                    onChange={e => setRecInterval(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
+                  <input type="number" min={1} max={99} value={recInterval} onChange={e => setRecInterval(Math.max(1, parseInt(e.target.value) || 1))} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#015035]/40" />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">End Date (optional)</label>
-                  <input
-                    type="date"
-                    value={recEndDate}
-                    onChange={e => setRecEndDate(e.target.value)}
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
+                  <input type="date" value={recEndDate} onChange={e => setRecEndDate(e.target.value)} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#015035]/40" />
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
-          <button
-            onClick={save}
-            disabled={!canSave}
-            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 transition-opacity hover:opacity-90"
-            style={{ background: '#015035' }}
-          >
-            Create Task
-          </button>
-          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+        <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors">
             Cancel
+          </button>
+          <button onClick={save} disabled={!canSave} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 transition-all hover:opacity-90" style={{ background: '#015035' }}>
+            Create Task
           </button>
         </div>
       </div>
     </div>
   )
 }
-
-// ─── Task Detail Panel ─────────────────────────────────────────────────────────
 
 function TaskPanel({
   task,
@@ -275,31 +243,21 @@ function TaskPanel({
   const catColor = categoryColors[task.category]
   const overdue = isOverdue(task.dueDate, task.status)
 
-  const fieldSelect = "text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+  const fieldSelect = "text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 bg-white"
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
       <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(460px, 100vw)' }}>
-
-        {/* Header */}
         <div className="p-5 flex-shrink-0" style={{ background: '#012b1e' }}>
           <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mb-3">
             <ChevronLeft size={14} /> Back
           </button>
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${catColor}`}>
-                {task.category}
-              </span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${pri.badge}`}>
-                {pri.label} Priority
-              </span>
-              {overdue && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-700">
-                  Overdue
-                </span>
-              )}
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${catColor}`}>{task.category}</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${pri.badge}`}>{pri.label} Priority</span>
+              {overdue && <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-700">Overdue</span>}
             </div>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0">
               <X size={18} className="text-white/60" />
@@ -331,48 +289,30 @@ function TaskPanel({
               placeholder="Add a description..."
             />
           ) : (
-            <p
-              className="text-white/50 text-xs mt-2 leading-relaxed cursor-pointer hover:bg-white/5 rounded px-1 -mx-1 py-0.5 min-h-[20px]"
-              onClick={() => { setEditDesc(task.description ?? ''); setEditingDesc(true) }}
-            >
+            <p className="text-white/50 text-xs mt-2 leading-relaxed cursor-pointer hover:bg-white/5 rounded px-1 -mx-1 py-0.5 min-h-[20px]" onClick={() => { setEditDesc(task.description ?? ''); setEditingDesc(true) }}>
               {task.description || 'Click to add description...'}
             </p>
           )}
         </div>
 
-        {/* Editable Fields */}
         <div className="flex-1 overflow-y-auto p-5">
           <div className="flex flex-col gap-4 mb-5">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Assignee</label>
-                <select
-                  value={task.assignedTo}
-                  onChange={e => onUpdate(task.id, { assignedTo: e.target.value })}
-                  className={fieldSelect}
-                >
+                <select value={task.assignedTo} onChange={e => onUpdate(task.id, { assignedTo: e.target.value })} className={fieldSelect}>
                   {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Due Date</label>
-                <input
-                  type="date"
-                  value={task.dueDate}
-                  onChange={e => onUpdate(task.id, { dueDate: e.target.value })}
-                  className={fieldSelect}
-                />
+                <input type="date" value={task.dueDate} onChange={e => onUpdate(task.id, { dueDate: e.target.value })} className={fieldSelect} />
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Priority</label>
-                <select
-                  value={task.priority}
-                  onChange={e => onUpdate(task.id, { priority: e.target.value as TaskPriority })}
-                  className={fieldSelect}
-                >
+                <select value={task.priority} onChange={e => onUpdate(task.id, { priority: e.target.value as TaskPriority })} className={fieldSelect}>
                   <option value="High">High</option>
                   <option value="Medium">Medium</option>
                   <option value="Low">Low</option>
@@ -380,28 +320,17 @@ function TaskPanel({
               </div>
               <div>
                 <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Category</label>
-                <select
-                  value={task.category}
-                  onChange={e => onUpdate(task.id, { category: e.target.value as AppTaskCategory })}
-                  className={fieldSelect}
-                >
+                <select value={task.category} onChange={e => onUpdate(task.id, { category: e.target.value as AppTaskCategory })} className={fieldSelect}>
                   {(['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'General'] as AppTaskCategory[]).map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
               </div>
             </div>
-
             <div>
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Company</label>
-              <input
-                value={task.company ?? ''}
-                onChange={e => onUpdate(task.id, { company: e.target.value || undefined })}
-                placeholder="No company"
-                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-300"
-              />
+              <input value={task.company ?? ''} onChange={e => onUpdate(task.id, { company: e.target.value || undefined })} placeholder="No company" className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 placeholder-gray-300" />
             </div>
-
             {task.recurrence && (
               <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
                 <Repeat size={12} />
@@ -410,7 +339,6 @@ function TaskPanel({
             )}
           </div>
 
-          {/* Status control */}
           <div className="border border-gray-100 rounded-xl p-4 bg-gray-50">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Status</p>
             <div className="flex flex-col gap-2">
@@ -418,19 +346,10 @@ function TaskPanel({
                 <button
                   key={s}
                   onClick={() => onUpdateStatus(task.id, s)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    task.status === s
-                      ? 'text-white'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${task.status === s ? 'text-white' : 'text-gray-600 hover:bg-gray-100'}`}
                   style={task.status === s ? { background: '#015035' } : {}}
                 >
-                  {s === 'Completed'
-                    ? <CheckCircle2 size={15} />
-                    : s === 'In Progress'
-                    ? <Clock size={15} />
-                    : <Circle size={15} />
-                  }
+                  {s === 'Completed' ? <CheckCircle2 size={15} /> : s === 'In Progress' ? <Clock size={15} /> : <Circle size={15} />}
                   {s}
                 </button>
               ))}
@@ -444,29 +363,17 @@ function TaskPanel({
           )}
         </div>
 
-        {/* Footer */}
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
           {task.status !== 'Completed' ? (
-            <button
-              onClick={() => onUpdateStatus(task.id, 'Completed')}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-sm font-semibold"
-              style={{ background: '#015035' }}
-            >
+            <button onClick={() => onUpdateStatus(task.id, 'Completed')} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: '#015035' }}>
               <CheckCircle2 size={14} /> Mark Complete
             </button>
           ) : (
-            <button
-              onClick={() => onUpdateStatus(task.id, 'Pending')}
-              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
-            >
+            <button onClick={() => onUpdateStatus(task.id, 'Pending')} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
               Reopen Task
             </button>
           )}
-          <button
-            onClick={() => { onDelete(task.id); onClose() }}
-            className="p-2.5 rounded-xl border border-gray-200 hover:bg-red-50 hover:border-red-200 transition-colors"
-            title="Delete task"
-          >
+          <button onClick={() => { onDelete(task.id); onClose() }} className="p-2.5 rounded-xl border border-gray-200 hover:bg-red-50 hover:border-red-200 transition-colors" title="Delete task">
             <Trash2 size={14} className="text-gray-400 hover:text-red-500" />
           </button>
         </div>
@@ -475,9 +382,150 @@ function TaskPanel({
   )
 }
 
-// ─── Main Page ─────────────────────────────────────────────────────────────────
+function KanbanCard({ task, onClick, onToggleComplete }: { task: AppTask; onClick: () => void; onToggleComplete: () => void }) {
+  const pri = priorityConfig[task.priority]
+  const overdue = isOverdue(task.dueDate, task.status)
+  const isCompleted = task.status === 'Completed'
 
-type FilterTab = 'All' | 'Due Today' | 'Overdue' | 'In Progress' | 'Pending' | 'Completed'
+  return (
+    <div
+      onClick={onClick}
+      className={`bg-white rounded-xl border p-3.5 cursor-pointer hover:shadow-md transition-all group ${overdue ? 'border-red-200' : 'border-gray-150 hover:border-gray-300'}`}
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <p className={`text-sm font-medium leading-snug ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>{task.title}</p>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${pri.badge}`}>{pri.label}</span>
+      </div>
+
+      {task.company && (
+        <div className="flex items-center gap-1 text-xs text-gray-400 mb-2">
+          <Building2 size={10} />
+          <span>{task.company}</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-100">
+        <div className="flex items-center gap-1.5">
+          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+            {task.assignedTo.split(' ').map(n => n[0]).join('').slice(0, 2)}
+          </div>
+          <span className="text-xs text-gray-500 truncate max-w-[80px]">{task.assignedTo.split(' ')[0]}</span>
+        </div>
+        <div className={`flex items-center gap-1 text-xs ${overdue ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+          <Calendar size={10} />
+          <span>{task.dueDate.slice(5)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function KanbanBoard({ tasks, onSelectTask, onToggleComplete }: { tasks: AppTask[]; onSelectTask: (t: AppTask) => void; onToggleComplete: (id: string) => void }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      {STATUS_COLUMNS.map(col => {
+        const columnTasks = tasks.filter(t => getTaskColumn(t) === col.key)
+        return (
+          <div key={col.key} className="flex flex-col min-h-[300px]">
+            <div className="flex items-center justify-between mb-3 px-1">
+              <div className="flex items-center gap-2">
+                <span style={{ color: col.color }}>{col.icon}</span>
+                <span className="text-sm font-semibold text-gray-700">{col.label}</span>
+                <span className="text-xs font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{columnTasks.length}</span>
+              </div>
+            </div>
+            <div className="flex-1 bg-gray-50/70 rounded-xl p-2.5 flex flex-col gap-2.5 border border-gray-100">
+              {columnTasks.map(task => (
+                <KanbanCard key={task.id} task={task} onClick={() => onSelectTask(task)} onToggleComplete={() => onToggleComplete(task.id)} />
+              ))}
+              {columnTasks.length === 0 && (
+                <div className="flex-1 flex items-center justify-center py-8">
+                  <p className="text-xs text-gray-300 font-medium">No tasks</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ListView({ tasks, onSelectTask, onToggleComplete }: { tasks: AppTask[]; onSelectTask: (t: AppTask) => void; onToggleComplete: (id: string, completed: boolean) => void }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="hidden sm:grid grid-cols-[40px_1fr_100px_120px_100px_120px_100px] gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+        <div />
+        <div>Task</div>
+        <div>Priority</div>
+        <div>Due Date</div>
+        <div>Status</div>
+        <div>Assignee</div>
+        <div>Category</div>
+      </div>
+      <div className="divide-y divide-gray-100">
+        {tasks.map(task => {
+          const due = dueDateLabel(task.dueDate, task.status)
+          const pri = priorityConfig[task.priority]
+          const isCompleted = task.status === 'Completed'
+          const overdue = isOverdue(task.dueDate, task.status)
+          const column = getTaskColumn(task)
+
+          return (
+            <div
+              key={task.id}
+              className={`grid grid-cols-1 sm:grid-cols-[40px_1fr_100px_120px_100px_120px_100px] gap-2 px-4 py-3 items-center hover:bg-gray-50/80 transition-colors cursor-pointer ${overdue ? 'bg-red-50/30' : ''} ${isCompleted ? 'opacity-60' : ''}`}
+              onClick={() => onSelectTask(task)}
+            >
+              <div className="flex items-center justify-center">
+                <button
+                  onClick={e => { e.stopPropagation(); onToggleComplete(task.id, isCompleted) }}
+                  className={`w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center transition-colors ${isCompleted ? 'border-[#015035] bg-[#015035]' : 'border-gray-300 hover:border-[#015035]'}`}
+                >
+                  {isCompleted && <CheckCircle2 size={10} className="text-white" />}
+                </button>
+              </div>
+              <div className="min-w-0">
+                <p className={`text-sm font-medium truncate ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>{task.title}</p>
+                {task.company && <p className="text-xs text-gray-400 truncate mt-0.5 flex items-center gap-1"><Building2 size={9} /> {task.company}</p>}
+              </div>
+              <div className="hidden sm:block">
+                <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-semibold ${pri.badge}`}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: pri.dot }} />
+                  {pri.label}
+                </span>
+              </div>
+              <div className="hidden sm:block">
+                <span className={`text-xs ${due.cls}`}>{due.text}</span>
+              </div>
+              <div className="hidden sm:block">
+                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE_MAP[column]}`}>
+                  {STATUS_LABEL_MAP[column]}
+                </span>
+              </div>
+              <div className="hidden sm:flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                  {task.assignedTo.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                </div>
+                <span className="text-xs text-gray-600 truncate">{task.assignedTo.split(' ')[0]}</span>
+              </div>
+              <div className="hidden sm:block">
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${categoryColors[task.category]}`}>{task.category}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {tasks.length === 0 && (
+        <div className="text-center py-16">
+          <CheckSquare size={32} className="text-gray-300 mx-auto mb-3" />
+          <p className="text-sm text-gray-400 font-medium">No tasks found</p>
+          <p className="text-xs text-gray-300 mt-1">Try a different filter or create a new task</p>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const categories: AppTaskCategory[] = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'General']
 
@@ -486,11 +534,11 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<AppTask[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [filterTab, setFilterTab] = useState<FilterTab>('All')
-  const [filterCategory, setFilterCategory] = useState<AppTaskCategory | 'All'>('All')
   const [filterAssignee, setFilterAssignee] = useState<string>('All')
   const [selectedTask, setSelectedTask] = useState<AppTask | null>(null)
   const [creatingTask, setCreatingTask] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -505,9 +553,7 @@ export default function TasksPage() {
   function updateStatus(id: string, status: AppTaskStatus) {
     const today = getToday()
     const completedDate = status === 'Completed' ? today : undefined
-    setTasks(prev => prev.map(t =>
-      t.id === id ? { ...t, status, completedDate } : t
-    ))
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, status, completedDate } : t))
     if (selectedTask?.id === id) {
       setSelectedTask(prev => prev ? { ...prev, status, completedDate } : null)
     }
@@ -540,8 +586,7 @@ export default function TasksPage() {
 
   function deleteTask(id: string) {
     setTasks(prev => prev.filter(t => t.id !== id))
-    fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-      .catch(() => toast('Failed to delete task', 'error'))
+    fetch(`/api/tasks/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete task', 'error'))
   }
 
   function addTask(task: AppTask) {
@@ -554,40 +599,40 @@ export default function TasksPage() {
     }).catch(() => toast('Failed to save task', 'error'))
   }
 
-  // Computed stats
-  const overdueTasks = tasks.filter(t => isOverdue(t.dueDate, t.status))
-  const dueTodayTasks = tasks.filter(t => isDueToday(t.dueDate, t.status))
-  const inProgressTasks = tasks.filter(t => t.status === 'In Progress')
-  const completedTasks = tasks.filter(t => t.status === 'Completed')
+  function toggleComplete(id: string, currentlyCompleted?: boolean) {
+    updateStatus(id, currentlyCompleted ? 'Pending' : 'Completed')
+  }
 
-  // Filter
+  const today = getToday()
+  const totalTasks = tasks.length
+  const inProgressCount = tasks.filter(t => t.status === 'In Progress').length
+  const completedTodayCount = tasks.filter(t => t.completedDate === today).length
+  const overdueCount = tasks.filter(t => isOverdue(t.dueDate, t.status)).length
+
   const filtered = tasks.filter(t => {
-    if (filterTab === 'Due Today' && !isDueToday(t.dueDate, t.status)) return false
-    if (filterTab === 'Overdue' && !isOverdue(t.dueDate, t.status)) return false
-    if (filterTab === 'In Progress' && t.status !== 'In Progress') return false
-    if (filterTab === 'Pending' && t.status !== 'Pending') return false
-    if (filterTab === 'Completed' && t.status !== 'Completed') return false
-    if (filterCategory !== 'All' && t.category !== filterCategory) return false
+    if (filterTab !== 'All') {
+      const col = getTaskColumn(t)
+      if (col !== filterTab) return false
+    }
     if (filterAssignee !== 'All' && t.assignedTo !== filterAssignee) return false
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
-      if (!t.title.toLowerCase().includes(q) && !(t.company ?? '').toLowerCase().includes(q) && !(t.description ?? '').toLowerCase().includes(q)) return false
+      if (!t.title.toLowerCase().includes(q) && !(t.company ?? '').toLowerCase().includes(q)) return false
     }
     return true
   })
 
   const sortedFiltered = [...filtered].sort((a, b) => {
-    // Overdue first, then by due date, then completed last
     if (a.status === 'Completed' && b.status !== 'Completed') return 1
     if (a.status !== 'Completed' && b.status === 'Completed') return -1
     if (isOverdue(a.dueDate, a.status) && !isOverdue(b.dueDate, b.status)) return -1
     if (!isOverdue(a.dueDate, a.status) && isOverdue(b.dueDate, b.status)) return 1
-    const priortyOrder: Record<TaskPriority, number> = { High: 0, Medium: 1, Low: 2 }
-    if (priortyOrder[a.priority] !== priortyOrder[b.priority]) return priortyOrder[a.priority] - priortyOrder[b.priority]
+    const priorityOrder: Record<TaskPriority, number> = { High: 0, Medium: 1, Low: 2 }
+    if (priorityOrder[a.priority] !== priorityOrder[b.priority]) return priorityOrder[a.priority] - priorityOrder[b.priority]
     return a.dueDate.localeCompare(b.dueDate)
   })
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#015035]" /></div>
 
   return (
     <>
@@ -597,151 +642,77 @@ export default function TasksPage() {
         action={{ label: 'New Task', onClick: () => setCreatingTask(true) }}
       />
       <div className="page-content">
-
-        {/* Summary metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {[
-            { label: 'Overdue',     value: overdueTasks.length,    icon: <AlertCircle size={16} />,  color: '#ef4444', tab: 'Overdue' as FilterTab },
-            { label: 'Due Today',   value: dueTodayTasks.length,   icon: <Clock size={16} />,         color: '#f59e0b', tab: 'Due Today' as FilterTab },
-            { label: 'In Progress', value: inProgressTasks.length, icon: <CheckSquare size={16} />,  color: '#3b82f6', tab: 'In Progress' as FilterTab },
-            { label: 'Completed',   value: completedTasks.length,  icon: <CheckCircle2 size={16} />, color: '#015035', tab: 'Completed' as FilterTab },
+            { label: 'Total Tasks',     value: totalTasks,          icon: <CheckSquare size={18} />,  color: '#015035', bg: 'bg-emerald-50' },
+            { label: 'In Progress',     value: inProgressCount,     icon: <Clock size={18} />,         color: '#3b82f6', bg: 'bg-blue-50' },
+            { label: 'Completed Today', value: completedTodayCount, icon: <CheckCircle2 size={18} />, color: '#10b981', bg: 'bg-emerald-50' },
+            { label: 'Overdue',         value: overdueCount,        icon: <AlertCircle size={18} />,  color: '#ef4444', bg: 'bg-red-50' },
           ].map(m => (
-            <button
-              key={m.label}
-              onClick={() => setFilterTab(filterTab === m.tab ? 'All' : m.tab)}
-              className={`kpi-card flex items-center gap-3 text-left cursor-pointer w-full ${filterTab === m.tab ? 'outline outline-2 outline-offset-1' : ''}`}
-              style={{ '--kpi-accent': m.color, ...(filterTab === m.tab ? { outlineColor: m.color } : {}) } as React.CSSProperties}
-            >
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${m.color}15` }}>
+            <div key={m.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4">
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${m.bg}`}>
                 <span style={{ color: m.color }}>{m.icon}</span>
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900 tracking-tight">{m.value}</p>
-                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{m.label}</p>
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{m.label}</p>
               </div>
-            </button>
+            </div>
           ))}
         </div>
 
-        {/* Search + Filters */}
-        <div className="relative mb-3">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search tasks by title, company, or description..."
-            className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
-          />
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
-          {/* Status tabs */}
-          <div className="flex gap-1 overflow-x-auto pb-0.5 flex-1 min-w-0">
-            {(['All', 'Overdue', 'Due Today', 'Pending', 'In Progress', 'Completed'] as FilterTab[]).map(t => (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+          <div className="flex gap-1 overflow-x-auto pb-0.5">
+            {(['All', 'Pending', 'In Progress', 'Review', 'Completed'] as FilterTab[]).map(t => (
               <button
                 key={t}
                 onClick={() => setFilterTab(t)}
-                className={`filter-pill flex-shrink-0 ${filterTab === t ? 'active' : ''}`}
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${filterTab === t ? 'text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'}`}
+                style={filterTab === t ? { background: '#015035' } : {}}
               >
-                {t}
+                {t === 'Pending' ? 'To Do' : t === 'Completed' ? 'Done' : t}
               </button>
             ))}
           </div>
 
-          {/* Category + Assignee */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <select
-              value={filterCategory}
-              onChange={e => setFilterCategory(e.target.value as AppTaskCategory | 'All')}
-              className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-            >
-              <option value="All">All Categories</option>
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select
-              value={filterAssignee}
-              onChange={e => setFilterAssignee(e.target.value)}
-              className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-            >
-              <option value="All">All Assignees</option>
-              {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
-            </select>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+              <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`} title="List view">
+                <LayoutList size={16} />
+              </button>
+              <button onClick={() => setViewMode('kanban')} className={`p-1.5 rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`} title="Kanban view">
+                <Columns3 size={16} />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Task list */}
-        <div className="flex flex-col gap-2">
-          {sortedFiltered.map(task => {
-            const due = dueDateLabel(task.dueDate, task.status)
-            const pri = priorityConfig[task.priority]
-            const catColor = categoryColors[task.category]
-            const overdue = isOverdue(task.dueDate, task.status)
-            const isCompleted = task.status === 'Completed'
-
-            return (
-              <div
-                key={task.id}
-                className={`bg-white rounded-xl border px-4 py-3.5 flex items-center gap-3 hover:shadow-sm transition-all cursor-pointer ${
-                  overdue ? 'border-red-200 bg-red-50/30' : isCompleted ? 'border-gray-100 opacity-70' : 'border-gray-200'
-                }`}
-                onClick={() => setSelectedTask(task)}
-              >
-                {/* Complete toggle */}
-                <button
-                  onClick={e => { e.stopPropagation(); updateStatus(task.id, isCompleted ? 'Pending' : 'Completed') }}
-                  className="flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors hover:border-green-600"
-                  style={{ borderColor: isCompleted ? '#015035' : pri.dot, background: isCompleted ? '#015035' : 'transparent' }}
-                  title={isCompleted ? 'Mark incomplete' : 'Mark complete'}
-                >
-                  {isCompleted && <CheckCircle2 size={11} className="text-white" />}
-                </button>
-
-                {/* Priority dot */}
-                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: pri.dot }} />
-
-                {/* Main content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                    <p className={`text-sm font-medium ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                      {task.title}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${catColor}`}>{task.category}</span>
-                    {task.recurrence && (
-                      <span className="text-gray-400 flex items-center gap-0.5" title={`Repeats ${task.recurrence.frequency} every ${task.recurrence.interval}`}>
-                        <Repeat size={10} />
-                      </span>
-                    )}
-                    {task.company && (
-                      <span className="text-xs text-gray-400 flex items-center gap-1">
-                        <Building2 size={10} /> {task.company}
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-400 flex items-center gap-1">
-                      <User size={10} /> {task.assignedTo}
-                    </span>
-                    <span className={`text-xs flex items-center gap-1 ${due.cls}`}>
-                      <Calendar size={10} /> {due.text}
-                    </span>
-                  </div>
-                </div>
-
-                <ChevronRight size={14} className="text-gray-300 flex-shrink-0" />
-              </div>
-            )
-          })}
-
-          {sortedFiltered.length === 0 && (
-            <div className="text-center py-16">
-              <CheckSquare size={32} className="text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-400 font-medium">No tasks found</p>
-              <p className="text-xs text-gray-300 mt-1">Try a different filter or create a new task</p>
-            </div>
-          )}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-5">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search tasks by title or company..."
+              className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 focus:border-[#015035] placeholder-gray-400 transition-colors"
+            />
+          </div>
+          <select
+            value={filterAssignee}
+            onChange={e => setFilterAssignee(e.target.value)}
+            className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 bg-white min-w-[160px]"
+          >
+            <option value="All">All Assignees</option>
+            {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+          </select>
         </div>
 
-        {/* Count */}
+        {viewMode === 'kanban' ? (
+          <KanbanBoard tasks={sortedFiltered} onSelectTask={setSelectedTask} onToggleComplete={id => toggleComplete(id)} />
+        ) : (
+          <ListView tasks={sortedFiltered} onSelectTask={setSelectedTask} onToggleComplete={(id, completed) => toggleComplete(id, completed)} />
+        )}
+
         {sortedFiltered.length > 0 && (
           <p className="text-xs text-gray-400 mt-4 text-right">
             Showing {sortedFiltered.length} of {tasks.length} tasks
@@ -760,7 +731,7 @@ export default function TasksPage() {
         />
       )}
       {creatingTask && (
-        <NewTaskPanel onSave={addTask} onClose={() => setCreatingTask(false)} teamMembers={teamMembers} />
+        <NewTaskModal onSave={addTask} onClose={() => setCreatingTask(false)} teamMembers={teamMembers} />
       )}
     </>
   )

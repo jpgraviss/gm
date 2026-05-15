@@ -661,11 +661,14 @@ function ContractPanel({
   )
 }
 
+const filterTabs: Array<ContractStatus | 'All'> = ['All', 'Draft', 'Sent', 'Fully Executed', 'Expired']
+
 export default function ContractsPage() {
   const { toast } = useToast()
   const [localContracts, setLocalContracts] = useState<Contract[]>([])
   const [selected, setSelected] = useState<Contract | null>(null)
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'All'>('All')
+  const [searchQuery, setSearchQuery] = useState('')
   const [creatingContract, setCreatingContract] = useState(false)
   const [creatingAddendum, setCreatingAddendum] = useState(false)
   const [localAddendums, setLocalAddendums] = useState<Addendum[]>([])
@@ -686,7 +689,6 @@ export default function ContractsPage() {
     fetchProposals().then(setProposals)
   }, [])
 
-  // Fetch signatures and addendums when a contract is selected
   useEffect(() => {
     if (!selected) return
     fetch(`/api/signatures?contractId=${selected.id}`)
@@ -719,7 +721,6 @@ export default function ContractsPage() {
   }
 
   async function signInternally(contractId: string) {
-    // Create an internal signature request and open it in a new tab
     try {
       const res = await fetch('/api/signatures', {
         method: 'POST',
@@ -809,7 +810,6 @@ export default function ContractsPage() {
   async function updateContractStatus(id: string, status: ContractStatus) {
     const today = new Date().toISOString().split('T')[0]
 
-    // If sending for signature, email the client first
     if (status === 'Sent') {
       try {
         const emailRes = await fetch('/api/email/send-contract', {
@@ -892,130 +892,205 @@ export default function ContractsPage() {
     }
   }
 
-  const filtered = statusFilter === 'All' ? localContracts : localContracts.filter(c => c.status === statusFilter)
+  const byStatus = statusFilter === 'All' ? localContracts : localContracts.filter(c => c.status === statusFilter)
+  const filtered = searchQuery
+    ? byStatus.filter(c => c.company.toLowerCase().includes(searchQuery.toLowerCase()))
+    : byStatus
 
-  const statusCounts = allStatuses.reduce((acc, s) => {
-    acc[s] = localContracts.filter(c => c.status === s).length
-    return acc
-  }, {} as Record<ContractStatus, number>)
-
-  const activeValue = localContracts.filter(c => c.status === 'Fully Executed').reduce((s, c) => s + c.value, 0)
+  const totalContracts = localContracts.length
+  const activeCount = localContracts.filter(c => c.status === 'Fully Executed').length
+  const totalMRR = localContracts
+    .filter(c => c.status === 'Fully Executed')
+    .reduce((sum, c) => sum + (c.duration > 0 ? c.value / c.duration : 0), 0)
   const pendingSig = localContracts.filter(c => ['Sent', 'Viewed', 'Signed by Client', 'Countersign Needed'].includes(c.status)).length
 
-  const metrics = [
-    { label: 'Active Contracts', value: statusCounts['Fully Executed'].toString(), icon: <Shield size={16} />, color: '#22c55e', sub: 'Fully executed' },
-    { label: 'Pending Signature', value: pendingSig.toString(), icon: <ScrollText size={16} />, color: '#f59e0b', sub: 'Awaiting sig' },
-    { label: 'Total Contract Value', value: formatCurrency(localContracts.reduce((s, c) => s + c.value, 0)), icon: <DollarSign size={16} />, color: '#015035', sub: 'All contracts' },
-    { label: 'Executed Value', value: formatCurrency(activeValue), icon: <CheckCircle size={16} />, color: '#3b82f6', sub: 'Fully executed' },
+  const kpis = [
+    { label: 'Total Contracts', value: totalContracts.toString(), icon: <ScrollText size={18} />, color: '#015035' },
+    { label: 'Active', value: activeCount.toString(), icon: <Shield size={18} />, color: '#22c55e', sub: 'Fully Executed' },
+    { label: 'Total MRR', value: formatCurrency(Math.round(totalMRR)), icon: <TrendingUp size={18} />, color: '#3b82f6' },
+    { label: 'Pending Signatures', value: pendingSig.toString(), icon: <FileSignature size={18} />, color: '#f59e0b' },
   ]
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} /></div>
 
   return (
     <>
       <Header title="Contracts" subtitle="Track agreements and e-signatures" action={{ label: 'New Contract', onClick: () => setCreatingContract(true) }} />
       <div className="page-content">
-
-        {/* KPI cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {metrics.map(m => (
-            <div key={m.label} className="kpi-card" style={{ '--kpi-accent': m.color } as React.CSSProperties}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: `${m.color}15` }}>
-                <span style={{ color: m.color }}>{m.icon}</span>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {kpis.map(k => (
+            <div key={k.label} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${k.color}12` }}>
+                  <span style={{ color: k.color }}>{k.icon}</span>
+                </div>
+                {k.sub && <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{k.sub}</span>}
               </div>
-              <p className="text-2xl font-bold text-gray-900 mb-0.5 tracking-tight">{m.value}</p>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">{m.label}</p>
-              <p className="text-[11px] text-gray-400 mt-1">{m.sub}</p>
+              <p className="text-2xl font-bold text-gray-900 tracking-tight">{k.value}</p>
+              <p className="text-xs font-medium text-gray-500 mt-1">{k.label}</p>
             </div>
           ))}
         </div>
 
-        {/* Table */}
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 gap-3">
-            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
-              <button onClick={() => setStatusFilter('All')} className={`filter-pill flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
-              {allStatuses.map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)} className={`filter-pill flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>{s}</button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                onClick={() => setCreatingAddendum(true)}
-                className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-              >
-                <FilePlus2 size={12} /> Addendum
-              </button>
-              <span className="text-xs text-gray-400 font-semibold whitespace-nowrap">
-                {filtered.length} · {formatCurrency(filtered.reduce((s, c) => s + c.value, 0))}
-              </span>
+          <div className="px-5 py-4 border-b border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                {filterTabs.map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setStatusFilter(tab)}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                      statusFilter === tab
+                        ? 'text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`}
+                    style={statusFilter === tab ? { background: '#015035' } : undefined}
+                  >
+                    {tab}
+                    {tab !== 'All' && (
+                      <span className={`ml-1.5 text-[10px] ${statusFilter === tab ? 'text-white/70' : 'text-gray-400'}`}>
+                        {localContracts.filter(c => c.status === tab).length}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search company..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-700 placeholder-gray-400 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 w-full sm:w-56 transition-colors"
+                  />
+                </div>
+                <button
+                  onClick={() => setCreatingAddendum(true)}
+                  className="flex items-center gap-1 text-xs font-semibold px-3 py-2 rounded-lg transition-colors whitespace-nowrap border border-gray-200 text-gray-600 hover:bg-gray-50"
+                >
+                  <FilePlus2 size={13} /> Addendum
+                </button>
+              </div>
             </div>
           </div>
-          <div className="overflow-x-auto table-scroll">
-            <table className="data-table min-w-[560px]">
+
+          <div className="overflow-x-auto">
+            <table className="data-table min-w-[800px]">
               <thead>
                 <tr>
                   <th>Company</th>
+                  <th>Service</th>
                   <th>Status</th>
-                  <th className="hidden sm:table-cell">Service</th>
-                  <th>Value</th>
-                  <th className="hidden md:table-cell">Billing</th>
+                  <th className="text-right">Value</th>
+                  <th className="hidden md:table-cell">Start</th>
                   <th className="hidden md:table-cell">Renewal</th>
                   <th className="hidden lg:table-cell">Rep</th>
-                  <th>Action</th>
+                  <th className="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(c => (
-                  <tr key={c.id} onClick={() => setSelected(c)}>
+                  <tr key={c.id} className="group cursor-pointer" onClick={() => setSelected(c)}>
                     <td>
                       <p className="font-semibold text-gray-900">{c.company}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{c.id.toUpperCase()}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{c.id.toUpperCase()}</p>
                     </td>
-                    <td><StatusBadge label={c.status} colorClass={contractStatusColors[c.status]} /></td>
-                    <td className="hidden sm:table-cell"><StatusBadge label={c.serviceType} colorClass={serviceTypeColors[c.serviceType]} /></td>
-                    <td><span className="font-bold text-gray-900">{formatCurrency(c.value)}</span></td>
-                    <td className="hidden md:table-cell"><span className="text-gray-600">{c.billingStructure}</span></td>
-                    <td className="hidden md:table-cell"><span className="text-gray-500">{formatDate(c.renewalDate)}</span></td>
-                    <td className="hidden lg:table-cell"><span className="text-gray-500">{c.assignedRep}</span></td>
+                    <td>
+                      <StatusBadge label={c.serviceType} colorClass={serviceTypeColors[c.serviceType]} />
+                    </td>
+                    <td>
+                      <StatusBadge label={c.status} colorClass={contractStatusColors[c.status]} />
+                    </td>
+                    <td className="text-right">
+                      <span className="font-bold text-gray-900 tabular-nums">{formatCurrency(c.value)}</span>
+                    </td>
+                    <td className="hidden md:table-cell">
+                      <span className="text-sm text-gray-500">{formatDate(c.startDate)}</span>
+                    </td>
+                    <td className="hidden md:table-cell">
+                      <span className="text-sm text-gray-500">{formatDate(c.renewalDate)}</span>
+                    </td>
+                    <td className="hidden lg:table-cell">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                          {c.assignedRep.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <span className="text-sm text-gray-600">{c.assignedRep}</span>
+                      </div>
+                    </td>
                     <td onClick={e => e.stopPropagation()}>
-                      {c.status === 'Draft' && (
+                      <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => updateContractStatus(c.id, 'Sent')}
-                          className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors"
+                          onClick={() => setSelected(c)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                          title="View"
                         >
-                          Send
+                          <Eye size={14} />
                         </button>
-                      )}
-                      {c.status === 'Sent' && (
                         <button
-                          onClick={() => updateContractStatus(c.id, 'Signed by Client')}
-                          className="text-xs font-medium text-blue-500 bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors"
+                          onClick={() => setSelected(c)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                          title="Edit"
                         >
-                          Client Signed
+                          <Pencil size={14} />
                         </button>
-                      )}
-                      {(c.status === 'Signed by Client' || c.status === 'Countersign Needed') && (
-                        <button
-                          onClick={() => updateContractStatus(c.id, 'Fully Executed')}
-                          className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded-md hover:bg-orange-100 transition-colors"
-                        >
-                          Countersign
-                        </button>
-                      )}
-                      {c.status === 'Fully Executed' && (
-                        <span className="flex items-center gap-1 text-xs text-emerald-600">
-                          <CheckCircle size={12} /> Executed
-                        </span>
-                      )}
+                        {(c.status === 'Draft' || c.status === 'Sent' || c.status === 'Signed by Client' || c.status === 'Countersign Needed') && (
+                          <button
+                            onClick={() => {
+                              if (c.status === 'Draft') updateContractStatus(c.id, 'Sent')
+                              else if (c.status === 'Sent') updateContractStatus(c.id, 'Signed by Client')
+                              else updateContractStatus(c.id, 'Fully Executed')
+                            }}
+                            className="flex items-center gap-1 text-[11px] font-semibold text-white px-2.5 py-1 rounded-lg transition-opacity hover:opacity-90"
+                            style={{ background: '#015035' }}
+                            title="Send for Signature"
+                          >
+                            <Send size={11} />
+                            <span className="hidden xl:inline">
+                              {c.status === 'Draft' ? 'Send' : c.status === 'Sent' ? 'Client Signed' : 'Execute'}
+                            </span>
+                          </button>
+                        )}
+                        {c.status === 'Fully Executed' && (
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 px-2 py-1">
+                            <CheckCircle size={13} />
+                            <span className="hidden xl:inline">Executed</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
           {filtered.length === 0 && (
-            <div className="py-12 text-center text-gray-400 text-sm">No contracts in this status</div>
+            <div className="py-20 flex flex-col items-center justify-center text-center px-4">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#01503510' }}>
+                <ScrollText size={24} style={{ color: '#015035' }} />
+              </div>
+              <p className="text-sm font-semibold text-gray-700 mb-1">
+                {searchQuery ? 'No contracts found' : 'No contracts in this status'}
+              </p>
+              <p className="text-xs text-gray-400 max-w-xs">
+                {searchQuery
+                  ? `No results for "${searchQuery}". Try a different search term.`
+                  : 'Create a new contract to get started, or select a different filter above.'}
+              </p>
+              {!searchQuery && (
+                <button
+                  onClick={() => setCreatingContract(true)}
+                  className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-white px-4 py-2 rounded-lg transition-opacity hover:opacity-90"
+                  style={{ background: '#015035' }}
+                >
+                  <Plus size={14} /> New Contract
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

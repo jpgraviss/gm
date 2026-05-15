@@ -1,19 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-
 import NewTicketPanel, { type NewTicketFormData } from '@/components/crm/NewTicketPanel'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import {
   MessageSquare, CheckCircle, Clock, AlertTriangle, X, ExternalLink,
   Plus, ChevronRight, ArrowUpRight, Send, User, Tag, FolderKanban,
-  Zap, Circle, Trash2,
+  Zap, Circle, Trash2, Search, Inbox,
 } from 'lucide-react'
-
-// ─── Types ─────────────────────────────────────────────────────────────────────
 
 type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Client' | 'Resolved' | 'Closed'
 type TicketPriority = 'Low' | 'Medium' | 'High' | 'Urgent'
@@ -46,8 +43,6 @@ interface Ticket {
   linkedTaskId?: string
 }
 
-// ─── Status / Priority Config ─────────────────────────────────────────────────
-
 const statusConfig: Record<TicketStatus, { color: string; bg: string; icon: React.ReactNode }> = {
   'Open': { color: '#3b82f6', bg: '#eff6ff', icon: <Circle size={11} /> },
   'In Progress': { color: '#f59e0b', bg: '#fffbeb', icon: <Clock size={11} /> },
@@ -56,16 +51,16 @@ const statusConfig: Record<TicketStatus, { color: string; bg: string; icon: Reac
   'Closed': { color: '#9ca3af', bg: '#f9fafb', icon: <X size={11} /> },
 }
 
-const priorityConfig: Record<TicketPriority, { color: string; label: string }> = {
-  Low: { color: '#9ca3af', label: 'Low' },
-  Medium: { color: '#f59e0b', label: 'Medium' },
-  High: { color: '#ef4444', label: 'High' },
-  Urgent: { color: '#dc2626', label: 'Urgent' },
+const priorityConfig: Record<TicketPriority, { color: string; bg: string; border: string }> = {
+  Urgent: { color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+  High: { color: '#ef4444', bg: '#fef2f2', border: '#fecaca' },
+  Medium: { color: '#f59e0b', bg: '#fffbeb', border: '#fde68a' },
+  Low: { color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb' },
 }
 
 const allStatuses: TicketStatus[] = ['Open', 'In Progress', 'Waiting on Client', 'Resolved', 'Closed']
-
-// ─── Ticket Panel ─────────────────────────────────────────────────────────────
+const filterTabs: Array<TicketStatus | 'All'> = ['All', 'Open', 'In Progress', 'Resolved', 'Closed']
+const priorityLevels: Array<TicketPriority | 'All'> = ['All', 'Urgent', 'High', 'Medium', 'Low']
 
 function TicketPanel({
   ticket, onClose, onSendReply, onUpdateStatus, onDelete,
@@ -93,14 +88,13 @@ function TicketPanel({
       <div className="flex-1" onClick={onClose} style={{ pointerEvents: 'auto' }} />
       <div
         className="pointer-events-auto flex flex-col shadow-2xl border-l border-gray-200 bg-white"
-        style={{ width: 'min(480px, 100vw)', height: '100vh' }}
+        style={{ width: 'min(520px, 100vw)', height: '100vh' }}
       >
-        {/* Header */}
         <div className="flex-shrink-0 p-5 border-b border-white/10" style={{ background: '#012b1e' }}>
           <div className="flex items-start justify-between mb-3">
             <div className="flex-1 min-w-0 pr-2">
-              <p className="text-white/50 text-[11px] mb-0.5">{ticket.id.toUpperCase()} · {ticket.source}</p>
-              <h2 className="text-white text-sm font-bold leading-snug" style={{ fontFamily: 'var(--font-heading)' }}>
+              <p className="text-white/50 text-[11px] mb-1">{ticket.id.toUpperCase()} · {ticket.source}</p>
+              <h2 className="text-white text-base font-bold leading-snug" style={{ fontFamily: 'var(--font-heading)' }}>
                 {ticket.subject}
               </h2>
             </div>
@@ -110,19 +104,26 @@ function TicketPanel({
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span
-              className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full"
               style={{ background: cfg.bg, color: cfg.color }}
             >
               {cfg.icon} {ticket.status}
             </span>
-            <span className="text-[11px] font-semibold" style={{ color: priCfg.color }}>
+            <span
+              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full"
+              style={{ background: priCfg.bg, color: priCfg.color, border: `1px solid ${priCfg.border}` }}
+            >
               ● {ticket.priority}
             </span>
-            <span className="text-white/40 text-xs ml-auto">{ticket.company}</span>
+            <Link
+              href="/crm/pipeline"
+              className="text-white/50 text-xs ml-auto hover:text-white/80 transition-colors"
+            >
+              {ticket.company} →
+            </Link>
           </div>
         </div>
 
-        {/* Quick info */}
         <div className="flex-shrink-0 grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100">
           {[
             { label: 'Contact', value: ticket.contactName },
@@ -136,7 +137,6 @@ function TicketPanel({
           ))}
         </div>
 
-        {/* Linked project banner */}
         {ticket.projectId && (
           <div className="flex-shrink-0 mx-4 mt-3">
             <Link
@@ -153,7 +153,6 @@ function TicketPanel({
           </div>
         )}
 
-        {/* Auto-create task banner for unassigned open tickets */}
         {ticket.status === 'Open' && !ticket.assignedTo && (
           <div className="flex-shrink-0 mx-4 mt-3">
             <div className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
@@ -166,7 +165,6 @@ function TicketPanel({
           </div>
         )}
 
-        {/* Message thread */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between mb-1">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
@@ -212,7 +210,6 @@ function TicketPanel({
             ))}
         </div>
 
-        {/* Reply box */}
         <div className="flex-shrink-0 p-4 border-t border-gray-100">
           <div className="flex items-start gap-2">
             <textarea
@@ -260,14 +257,14 @@ function TicketPanel({
   )
 }
 
-// ─── Main Page ─────────────────────────────────────────────────────────────────
-
 export default function TicketsPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [localTickets, setLocalTickets] = useState<Ticket[]>([])
   const [selected, setSelected] = useState<Ticket | null>(null)
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'All'>('All')
+  const [priorityFilter, setPriorityFilter] = useState<TicketPriority | 'All'>('All')
+  const [searchQuery, setSearchQuery] = useState('')
   const [creatingTicket, setCreatingTicket] = useState(false)
 
   useEffect(() => {
@@ -365,15 +362,31 @@ export default function TicketsPage() {
     setCreatingTicket(false)
   }
 
-  const filtered = statusFilter === 'All' ? localTickets : localTickets.filter(t => t.status === statusFilter)
-
-  const counts = allStatuses.reduce((acc, s) => {
+  const counts = useMemo(() => allStatuses.reduce((acc, s) => {
     acc[s] = localTickets.filter(t => t.status === s).length
     return acc
-  }, {} as Record<TicketStatus, number>)
+  }, {} as Record<TicketStatus, number>), [localTickets])
 
-  const openUrgent = localTickets.filter(t => t.status === 'Open' && t.priority === 'Urgent').length
-  const unassigned = localTickets.filter(t => !t.assignedTo && t.status !== 'Resolved' && t.status !== 'Closed').length
+  const resolvedThisMonth = useMemo(() => {
+    const now = new Date()
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    return localTickets.filter(t => t.status === 'Resolved' && t.updatedDate.startsWith(ym)).length
+  }, [localTickets])
+
+  const filtered = useMemo(() => {
+    let list = localTickets
+    if (statusFilter !== 'All') list = list.filter(t => t.status === statusFilter)
+    if (priorityFilter !== 'All') list = list.filter(t => t.priority === priorityFilter)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      list = list.filter(t =>
+        t.subject.toLowerCase().includes(q) ||
+        t.company.toLowerCase().includes(q) ||
+        t.contactName.toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [localTickets, statusFilter, priorityFilter, searchQuery])
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
@@ -386,153 +399,195 @@ export default function TicketsPage() {
       />
       <div className="p-3 sm:p-6 flex-1">
 
-        {/* Info banner — Tickets concept */}
-        <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl mb-5">
-          <MessageSquare size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-blue-800">Client Ticket System</p>
-            <p className="text-xs text-blue-600 mt-0.5">
-              Clients submit requests via the <Link href="/portal" className="underline">Client Portal</Link> or email. Each ticket is linked to the client&apos;s project and can be converted to a project task automatically.
-            </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="metric-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#01503512' }}>
+                <MessageSquare size={16} style={{ color: '#015035' }} />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{localTickets.length}</p>
+            <p className="text-xs font-medium text-gray-500 mt-0.5">Total Tickets</p>
+          </div>
+          <div className="metric-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#3b82f612' }}>
+                <Circle size={16} className="text-blue-500" />
+              </div>
+              {counts['Open'] > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Active</span>
+              )}
+            </div>
+            <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{counts['Open']}</p>
+            <p className="text-xs font-medium text-gray-500 mt-0.5">Open</p>
+          </div>
+          <div className="metric-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#f59e0b12' }}>
+                <Clock size={16} className="text-amber-500" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>—</p>
+            <p className="text-xs font-medium text-gray-500 mt-0.5">Avg Response Time</p>
+          </div>
+          <div className="metric-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#22c55e12' }}>
+                <CheckCircle size={16} className="text-green-500" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{resolvedThisMonth}</p>
+            <p className="text-xs font-medium text-gray-500 mt-0.5">Resolved This Month</p>
           </div>
         </div>
 
-        {/* Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-          {[
-            { label: 'All', value: localTickets.length, color: '#6b7280', icon: <MessageSquare size={14} /> },
-            { label: 'Open', value: counts['Open'], color: '#3b82f6', icon: <Circle size={14} /> },
-            { label: 'In Progress', value: counts['In Progress'], color: '#f59e0b', icon: <Clock size={14} /> },
-            { label: 'Waiting on Client', value: counts['Waiting on Client'], color: '#8b5cf6', icon: <User size={14} /> },
-            { label: 'Resolved', value: counts['Resolved'], color: '#22c55e', icon: <CheckCircle size={14} /> },
-          ].map(m => (
-            <button
-              key={m.label}
-              onClick={() => setStatusFilter(m.label === 'All' ? 'All' : m.label as TicketStatus)}
-              className={`metric-card text-left p-3 transition-all ${statusFilter === m.label ? 'ring-2 ring-green-800 ring-offset-1' : ''}`}
-            >
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: `${m.color}18` }}>
-                <span style={{ color: m.color }}>{m.icon}</span>
-              </div>
-              <p className="text-xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{m.value}</p>
-              <p className="text-[10px] font-semibold text-gray-500 mt-0.5">{m.label}</p>
-            </button>
-          ))}
-        </div>
-
-        {/* Alert banners */}
-        {(openUrgent > 0 || unassigned > 0) && (
-          <div className="flex gap-3 mb-5 flex-wrap">
-            {openUrgent > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
-                <AlertTriangle size={13} className="text-red-500" />
-                <span className="text-xs font-semibold text-red-700">{openUrgent} urgent ticket{openUrgent > 1 ? 's' : ''} need immediate attention</span>
-              </div>
-            )}
-            {unassigned > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl">
-                <Zap size={13} className="text-amber-500" />
-                <span className="text-xs font-semibold text-amber-700">{unassigned} ticket{unassigned > 1 ? 's' : ''} unassigned</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Filter tabs */}
         <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-0.5">
-          <button onClick={() => setStatusFilter('All')} className={`tab-btn flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All ({localTickets.length})</button>
-          {allStatuses.map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>
-              {s} ({counts[s]})
+          {filterTabs.map(tab => (
+            <button
+              key={tab}
+              onClick={() => setStatusFilter(tab)}
+              className={`tab-btn flex-shrink-0 ${statusFilter === tab ? 'active' : ''}`}
+            >
+              {tab}{tab === 'All' ? ` (${localTickets.length})` : ` (${counts[tab] ?? 0})`}
             </button>
           ))}
         </div>
 
-        {/* Ticket list */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
+          <div className="relative flex-1 w-full sm:max-w-sm">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search by subject, company, or contact..."
+              className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent placeholder-gray-400 bg-white"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mr-1">Priority</span>
+            {priorityLevels.map(p => (
+              <button
+                key={p}
+                onClick={() => setPriorityFilter(p)}
+                className={`filter-pill ${priorityFilter === p ? 'active' : ''}`}
+              >
+                {p !== 'All' && <span style={{ color: priorityFilter === p ? 'white' : priorityConfig[p].color }}>●</span>}
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px]">
-            <thead>
-              <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
-                <th className="text-left py-2.5 px-4 font-semibold">Subject</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Company</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Status</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Priority</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Assigned</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Service</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Created</th>
-                <th className="py-2.5 px-4" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(t => {
-                const cfg = statusConfig[t.status]
-                const priCfg = priorityConfig[t.priority]
-                return (
-                  <tr
-                    key={t.id}
-                    className="hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors group"
-                    onClick={() => setSelected(t)}
-                  >
-                    <td className="py-3 px-4">
-                      <p className="text-sm font-semibold text-gray-900 leading-snug">{t.subject}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{t.id.toUpperCase()} · {t.source} · {t.messages.length} msg{t.messages.length !== 1 ? 's' : ''}</p>
-                    </td>
-                    <td className="py-3 px-4 hidden sm:table-cell">
-                      <p className="text-sm text-gray-700 font-medium">{t.company}</p>
-                      <p className="text-xs text-gray-400">{t.contactName}</p>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span
-                        className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit"
-                        style={{ background: cfg.bg, color: cfg.color }}
-                      >
-                        {cfg.icon} {t.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 hidden sm:table-cell">
-                      <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: priCfg.color }}>
-                        ● {t.priority}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 hidden md:table-cell">
-                      {t.assignedTo ? (
-                        <span className="text-xs text-gray-600">{t.assignedTo}</span>
-                      ) : (
-                        <span className="text-xs text-amber-500 font-medium">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 hidden md:table-cell">
-                      <span className="text-xs text-gray-500">{t.serviceType}</span>
-                    </td>
-                    <td className="py-3 px-4 hidden lg:table-cell">
-                      <span className="text-xs text-gray-400">{formatDate(t.createdDate)}</span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+            <table className="w-full min-w-[640px]">
+              <thead>
+                <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50/80">
+                  <th className="w-1" />
+                  <th className="text-left py-3 px-4 font-semibold">Subject</th>
+                  <th className="text-left py-3 px-4 font-semibold hidden sm:table-cell">Company</th>
+                  <th className="text-left py-3 px-4 font-semibold">Status</th>
+                  <th className="text-left py-3 px-4 font-semibold hidden md:table-cell">Assignee</th>
+                  <th className="text-left py-3 px-4 font-semibold hidden lg:table-cell">Created</th>
+                  <th className="py-3 px-4" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(t => {
+                  const sCfg = statusConfig[t.status]
+                  const pCfg = priorityConfig[t.priority]
+                  return (
+                    <tr
+                      key={t.id}
+                      className="hover:bg-gray-50/70 cursor-pointer border-b border-gray-100 last:border-0 transition-colors group"
+                      onClick={() => setSelected(t)}
+                    >
+                      <td className="w-1 p-0">
+                        <div className="w-1 h-full min-h-[56px] rounded-r-sm" style={{ background: pCfg.color }} />
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <p className="text-sm font-semibold text-gray-900 leading-snug group-hover:text-emerald-800 transition-colors">{t.subject}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1.5">
+                          <span>{t.id.toUpperCase()}</span>
+                          <span className="text-gray-300">·</span>
+                          <span>{t.source}</span>
+                          <span className="text-gray-300">·</span>
+                          <span>{t.messages.length} msg{t.messages.length !== 1 ? 's' : ''}</span>
+                        </p>
+                      </td>
+                      <td className="py-3.5 px-4 hidden sm:table-cell">
+                        <Link
+                          href="/crm/pipeline"
+                          onClick={e => e.stopPropagation()}
+                          className="text-sm font-medium text-gray-800 hover:text-emerald-700 transition-colors"
+                        >
+                          {t.company}
+                        </Link>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{t.contactName}</p>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
+                          style={{ background: sCfg.bg, color: sCfg.color }}
+                        >
+                          {sCfg.icon} {t.status}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 hidden md:table-cell">
+                        {t.assignedTo ? (
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                              style={{ background: '#015035' }}
+                            >
+                              {t.assignedTo.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <span className="text-xs text-gray-700 font-medium">{t.assignedTo}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-amber-500 font-medium">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 hidden lg:table-cell">
+                        <span className="text-xs text-gray-400">{formatDate(t.createdDate)}</span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
           {filtered.length === 0 && (
-            <div className="py-12 text-center text-gray-400 text-sm">No tickets in this status</div>
-          )}
-        </div>
-
-        {/* Auto-task explanation */}
-        <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
-          <div className="flex items-start gap-3">
-            <ArrowUpRight size={15} className="text-gray-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-xs font-semibold text-gray-700 mb-1">Auto-Task Integration</p>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                When a ticket is assigned to a team member and linked to a project, GravHub can automatically create a corresponding task inside that project — keeping client requests and delivery in sync. Ticket threads remain in the client portal; tasks appear on the internal project board.
+            <div className="py-16 flex flex-col items-center justify-center text-center px-4">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#01503510' }}>
+                <Inbox size={22} style={{ color: '#015035' }} />
+              </div>
+              <p className="text-sm font-semibold text-gray-700 mb-1">No tickets found</p>
+              <p className="text-xs text-gray-400 max-w-xs">
+                {searchQuery || priorityFilter !== 'All' || statusFilter !== 'All'
+                  ? 'Try adjusting your filters or search query.'
+                  : 'Create your first ticket to start tracking client requests.'}
               </p>
+              {!searchQuery && priorityFilter === 'All' && statusFilter === 'All' && (
+                <button
+                  onClick={() => setCreatingTicket(true)}
+                  className="mt-4 flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+                  style={{ background: '#015035' }}
+                >
+                  <Plus size={14} /> New Ticket
+                </button>
+              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
 

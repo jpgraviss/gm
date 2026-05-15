@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { X, DollarSign, User, Calendar, ChevronLeft, Search, FileText } from 'lucide-react'
-import { fetchCrmCompanies, fetchProposals } from '@/lib/supabase'
+import { fetchProposals } from '@/lib/supabase'
 import { useTeamMembers } from '@/lib/useTeamMembers'
-import type { ServiceType, CRMCompany, Proposal } from '@/lib/types'
+import CompanySelect from '@/components/ui/CompanySelect'
+import type { ServiceType, Proposal } from '@/lib/types'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 const BILLING_STRUCTURES = ['One-Time', 'Monthly Retainer', 'Quarterly', 'Annual']
@@ -62,16 +63,12 @@ export default function NewContractPanel({ onSave, onClose }: Props) {
     startDate: today,
   })
 
-  const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [proposalSearch, setProposalSearch] = useState('')
   const [showProposalPicker, setShowProposalPicker] = useState(false)
   const [linkedProposal, setLinkedProposal] = useState<Proposal | null>(null)
 
-  useEffect(() => { fetchCrmCompanies().then(setCrmCompanies) }, [])
   useEffect(() => { fetchProposals().then(setProposals) }, [])
-
-  const companyNames = crmCompanies.map(c => c.name)
 
   // Proposals eligible to be converted to contracts: exclude declined.
   const eligibleProposals = useMemo(
@@ -234,15 +231,11 @@ export default function NewContractPanel({ onSave, onClose }: Props) {
 
           <div>
             <FieldLabel>Company</FieldLabel>
-            <Input
-              list="contract-company-list"
-              placeholder="Select or type company name..."
+            <CompanySelect
               value={form.company}
-              onChange={e => set('company', e.target.value)}
+              onChange={(name) => set('company', name)}
+              placeholder="Select a company..."
             />
-            <datalist id="contract-company-list">
-              {companyNames.map(n => <option key={n} value={n} />)}
-            </datalist>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

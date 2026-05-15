@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, ChevronLeft } from 'lucide-react'
-import { fetchCrmCompanies } from '@/lib/supabase'
 import { useTeamMembers } from '@/lib/useTeamMembers'
-import type { CRMCompany } from '@/lib/types'
+import CompanySelect from '@/components/ui/CompanySelect'
 
 export interface NewContactFormData {
   firstName: string
@@ -51,9 +50,6 @@ interface Props {
 
 export default function NewContactPanel({ onSave, onClose }: Props) {
   const REPS = useTeamMembers()
-  const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
-
-  useEffect(() => { fetchCrmCompanies().then(setCrmCompanies) }, [])
 
   const [form, setForm] = useState<NewContactFormData>({
     firstName: '',
@@ -128,15 +124,11 @@ export default function NewContactPanel({ onSave, onClose }: Props) {
           {/* Company */}
           <div>
             <FieldLabel>Company</FieldLabel>
-            <Input
-              list="contact-company-list"
-              placeholder="Select or type company..."
+            <CompanySelect
               value={form.companyName}
-              onChange={e => set('companyName', e.target.value)}
+              onChange={(name) => set('companyName', name)}
+              placeholder="Select a company..."
             />
-            <datalist id="contact-company-list">
-              {crmCompanies.map(c => <option key={c.id} value={c.name} />)}
-            </datalist>
           </div>
 
           {/* Contact info */}

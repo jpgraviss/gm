@@ -11,7 +11,7 @@ import type { Invoice, InvoiceStatus, Contract, RevenueMonth } from '@/lib/types
 import {
   DollarSign, AlertCircle, CheckCircle, Clock, Send, RefreshCw,
   X, ExternalLink, ScrollText, Calendar, Zap, ArrowDownToLine,
-  RotateCcw, Link2, Info,
+  RotateCcw, Link2, Info, Search, FileText,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
@@ -203,6 +203,7 @@ export default function BillingPage() {
   const [contracts, setContracts] = useState<Contract[]>([])
   const [revenueByMonth, setRevenueByMonth] = useState<RevenueMonth[]>([])
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'All'>('All')
+  const [searchQuery, setSearchQuery] = useState('')
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
 
   // Billable time summary (view-only)
@@ -273,7 +274,11 @@ export default function BillingPage() {
     fetch('/api/time-entries/billable-summary').then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setBillableSummary(d) }).catch(() => toast('Failed to load billable time summary', 'error'))
   }, [])
 
-  const filtered = statusFilter === 'All' ? localInvoices : localInvoices.filter(i => i.status === statusFilter)
+  const filtered = localInvoices.filter(i => {
+    if (statusFilter !== 'All' && i.status !== statusFilter) return false
+    if (searchQuery.trim() && !i.company.toLowerCase().includes(searchQuery.toLowerCase())) return false
+    return true
+  })
   const maxRevenue = Math.max(1, ...revenueByMonth.map(r => r.revenue || 0))
 
   const metrics = {
@@ -538,20 +543,47 @@ export default function BillingPage() {
 
         {/* Invoice Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 gap-3">
-            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
-              <button onClick={() => setStatusFilter('All')} className={`filter-pill flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
-              {statuses.map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)} className={`filter-pill flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>
-                  <span className="flex items-center gap-1.5">
-                    {statusIcons[s]} {s}
-                  </span>
+          <div className="flex flex-col gap-0">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 gap-3">
+              <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
+                <button onClick={() => setStatusFilter('All')} className={`filter-pill flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>
+                  All ({localInvoices.length})
                 </button>
-              ))}
+                {statuses.map(s => {
+                  const count = localInvoices.filter(i => i.status === s).length
+                  return (
+                    <button key={s} onClick={() => setStatusFilter(s)} className={`filter-pill flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>
+                      <span className="flex items-center gap-1.5">
+                        {statusIcons[s]} {s} ({count})
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              <span className="text-xs text-gray-400 flex-shrink-0">
+                {filtered.length} · {formatCurrency(filtered.reduce((s, i) => s + i.amount, 0))}
+              </span>
             </div>
-            <span className="text-xs text-gray-400 flex-shrink-0">
-              {filtered.length} · {formatCurrency(filtered.reduce((s, i) => s + i.amount, 0))}
-            </span>
+            <div className="px-4 py-2.5 border-b border-gray-100">
+              <div className="relative max-w-xs">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search by company name..."
+                  className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white transition-colors"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px]">
@@ -560,7 +592,7 @@ export default function BillingPage() {
                   <th className="text-left py-2.5 px-4 font-semibold">Company</th>
                   <th className="text-left py-2.5 px-4 font-semibold">Status</th>
                   <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Service</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Amount</th>
+                  <th className="text-right py-2.5 px-4 font-semibold">Amount</th>
                   <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Issued</th>
                   <th className="text-left py-2.5 px-4 font-semibold">Due</th>
                   <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Paid</th>
@@ -585,7 +617,7 @@ export default function BillingPage() {
                     <td className="py-3 px-4 hidden sm:table-cell">
                       <StatusBadge label={inv.serviceType} colorClass={serviceTypeColors[inv.serviceType]} />
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 text-right">
                       <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
                         {formatCurrency(inv.amount)}
                       </span>
@@ -608,7 +640,27 @@ export default function BillingPage() {
               </tbody>
             </table>
             {filtered.length === 0 && (
-              <div className="py-12 text-center text-gray-400 text-sm">No invoices in this status</div>
+              <div className="py-16 text-center">
+                <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                  <FileText size={20} className="text-gray-400" />
+                </div>
+                <p className="text-sm font-semibold text-gray-600 mb-1">No invoices found</p>
+                <p className="text-xs text-gray-400 max-w-xs mx-auto">
+                  {searchQuery
+                    ? `No invoices match "${searchQuery}"${statusFilter !== 'All' ? ` in ${statusFilter} status` : ''}. Try a different search term.`
+                    : statusFilter !== 'All'
+                      ? `No ${statusFilter.toLowerCase()} invoices at the moment.`
+                      : 'No invoices have been created yet.'}
+                </p>
+                {(searchQuery || statusFilter !== 'All') && (
+                  <button
+                    onClick={() => { setSearchQuery(''); setStatusFilter('All') }}
+                    className="mt-3 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>

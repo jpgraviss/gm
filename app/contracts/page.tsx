@@ -12,7 +12,7 @@ import type { Contract, ContractStatus, Invoice, Project, Proposal, SignatureReq
 import {
   X, CheckCircle, Clock, AlertCircle, ScrollText, Calendar, DollarSign, User,
   ExternalLink, FileText, FolderKanban, Send, RefreshCw, Shield, Plus, FilePlus2,
-  PenTool, Mail,
+  PenTool, Mail, Search, Eye, Pencil, FileSignature, TrendingUp,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 

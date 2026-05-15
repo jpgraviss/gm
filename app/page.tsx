@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
+import { useSettings } from '@/lib/useSettings'
 import Link from 'next/link'
 import {
   TrendingUp, DollarSign, CheckCircle, RefreshCw,
@@ -39,23 +40,26 @@ const ROTATING_MESSAGES: { sub: string; emoji: string }[] = [
   { sub: 'Your CRM is only as strong as the reps using it.',          emoji: '🏋️' },
 ]
 
-function buildGreeting(firstName: string, now: Date): Greeting {
+function buildGreeting(firstName: string, now: Date, greetings?: { morning: string; afternoon: string; evening: string; night: string }): Greeting {
   const hour = now.getHours()
+  const g = greetings ?? { morning: 'Good Morning', afternoon: 'Good Afternoon', evening: 'Good Evening', night: 'Burning the midnight oil' }
 
   const timePrefix =
-    hour >= 5  && hour < 12 ? 'Good Morning'           :
-    hour >= 12 && hour < 17 ? 'Good Afternoon'          :
-    hour >= 17 && hour < 23 ? 'Good Evening'            :
-    'Burning the midnight oil'
+    hour >= 5  && hour < 12 ? g.morning    :
+    hour >= 12 && hour < 17 ? g.afternoon  :
+    hour >= 17 && hour < 23 ? g.evening    :
+    g.night
 
   return { headline: `${timePrefix}, ${firstName}!`, sub: '', emoji: '' }
 }
 
 function GreetingBanner({ name }: { name: string }) {
+  const settings = useSettings()
+  const messages = settings?.dashboard.rotatingMessages ?? ROTATING_MESSAGES
   const firstName = name.split(' ')[0]
   const [visible, setVisible]   = useState(false)
   const [headline, setHeadline] = useState('')
-  const [msgIndex, setMsgIndex] = useState(() => Math.floor(Math.random() * ROTATING_MESSAGES.length))
+  const [msgIndex, setMsgIndex] = useState(() => Math.floor(Math.random() * messages.length))
   const [fade, setFade]         = useState(true)
 
   useEffect(() => {
@@ -67,7 +71,7 @@ function GreetingBanner({ name }: { name: string }) {
       const THREE_MIN = 3 * 60 * 1000
       if (elapsed >= THREE_MIN) return
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setHeadline(buildGreeting(firstName, new Date()).headline)
+      setHeadline(buildGreeting(firstName, new Date(), settings?.dashboard.greetings).headline)
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setVisible(true)
       const hideTimer = setTimeout(() => setVisible(false), THREE_MIN - elapsed)
@@ -81,16 +85,16 @@ function GreetingBanner({ name }: { name: string }) {
     const interval = setInterval(() => {
       setFade(false)
       setTimeout(() => {
-        setMsgIndex(prev => (prev + 1) % ROTATING_MESSAGES.length)
+        setMsgIndex(prev => (prev + 1) % messages.length)
         setFade(true)
       }, 300)
     }, 30_000)
     return () => clearInterval(interval)
-  }, [visible])
+  }, [visible, messages.length])
 
   if (!visible) return null
 
-  const currentMsg = ROTATING_MESSAGES[msgIndex]
+  const currentMsg = messages[msgIndex] ?? messages[0]
 
   return (
     <div
@@ -1249,6 +1253,7 @@ function ExecutiveView({ data, user }: { data: DashboardData; user: { name: stri
 export default function DashboardPage() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const settings = useSettings()
   const [data, setData] = useState<DashboardData>(emptyData)
   const [loading, setLoading] = useState(true)
 
@@ -1282,7 +1287,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Header title="Dashboard" subtitle={`Graviss Marketing — ${viewLabel}`} />
+      <Header title="Dashboard" subtitle={`${settings?.company.name ?? 'Graviss Marketing'} — ${viewLabel}`} />
       <div className="page-content">
         {/* View selector + greeting */}
         <div className="flex items-center justify-between flex-wrap gap-3">

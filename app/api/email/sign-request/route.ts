@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getResend } from '@/lib/resend'
+import { getSettings } from '@/lib/settings'
 
 export async function POST(req: NextRequest) {
   try {
+    const settings = await getSettings()
     const { token, signerEmail, signerName, company, value } = await req.json()
 
     if (!token || !signerEmail) {
@@ -15,11 +17,11 @@ export async function POST(req: NextRequest) {
     const contactName = signerName || 'there'
 
     const { data, error } = await getResend().emails.send({
-      from: 'Graviss Marketing <contracts@gravissmarketing.com>',
-      replyTo: 'info@gravissmarketing.com',
+      from: `${settings.company.name} <${settings.email.signatureRequestFrom}>`,
+      replyTo: settings.email.replyTo,
       to: [signerEmail],
-      subject: `Signature Requested — ${company} | Graviss Marketing`,
-      html: signRequestEmailHtml({ contactName, company, formattedValue, signUrl }),
+      subject: `Signature Requested — ${company} | ${settings.company.name}`,
+      html: signRequestEmailHtml({ contactName, company, formattedValue, signUrl, settings }),
     })
 
     if (error) {

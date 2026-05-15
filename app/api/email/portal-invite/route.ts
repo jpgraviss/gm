@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getResend } from '@/lib/resend'
 import { createServiceClient } from '@/lib/supabase'
+import { getSettings } from '@/lib/settings'
 
 export async function POST(req: NextRequest) {
   try {
+    const settings = await getSettings()
     const { company, contactName, email, service, isResend: isResendInvite } = await req.json()
 
     if (!company || !email) {
@@ -28,13 +30,13 @@ export async function POST(req: NextRequest) {
     }
 
     const { data, error } = await getResend().emails.send({
-      from: 'GravHub <noreply@app.gravissmarketing.com>',
-      replyTo: 'info@gravissmarketing.com',
+      from: `${settings.email.fromName} <${settings.email.fromEmail}>`,
+      replyTo: settings.email.replyTo,
       to: [email],
       subject: isResendInvite
         ? `Reminder: Your ${company} client portal is ready`
-        : `Your Graviss Marketing client portal is ready`,
-      html: portalInviteHtml({ company, contactName, email, service, signInUrl: magicLinkUrl, isResend: isResendInvite }),
+        : `Your ${settings.company.name} client portal is ready`,
+      html: portalInviteHtml({ company, contactName, email, service, signInUrl: magicLinkUrl, isResend: isResendInvite, settings }),
     })
 
     if (error) {
@@ -56,6 +58,7 @@ function portalInviteHtml({
   service,
   signInUrl,
   isResend,
+  settings,
 }: {
   company: string
   contactName: string
@@ -63,6 +66,7 @@ function portalInviteHtml({
   service: string
   signInUrl: string
   isResend?: boolean
+  settings: Awaited<ReturnType<typeof getSettings>>
 }) {
   return `<!DOCTYPE html>
 <html>
@@ -75,15 +79,15 @@ function portalInviteHtml({
 
         <!-- Header -->
         <tr>
-          <td style="background:#012b1e;padding:32px 40px;">
+          <td style="background:${settings.branding.darkBg};padding:32px 40px;">
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td>
-                  <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.08em;font-family:'Syncopate',sans-serif;">GRAVISS MARKETING</h1>
+                  <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.08em;font-family:'Syncopate',sans-serif;">${settings.company.name.toUpperCase()}</h1>
                   <p style="margin:6px 0 0;color:rgba(255,255,255,0.55);font-size:12px;letter-spacing:0.04em;font-family:'Syncopate',sans-serif;">CLIENT PORTAL ACCESS</p>
                 </td>
                 <td align="right">
-                  <div style="background:#015035;border-radius:10px;padding:10px 16px;display:inline-block;">
+                  <div style="background:${settings.branding.primaryColor};border-radius:10px;padding:10px 16px;display:inline-block;">
                     <p style="margin:0;color:#ffffff;font-size:14px;font-weight:700;">${company[0]}</p>
                   </div>
                 </td>
@@ -110,7 +114,7 @@ function portalInviteHtml({
             <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6;">
               ${isResend
                 ? `Just a reminder that your <strong>${company}</strong> client portal is set up and ready to use. Access your project updates, invoices, and shared files anytime.`
-                : `Graviss Marketing has set up a dedicated client portal for <strong>${company}</strong>. Your portal gives you real-time visibility into your project, billing, and a direct line to our team.`
+                : `${settings.company.name} has set up a dedicated client portal for <strong>${company}</strong>. Your portal gives you real-time visibility into your project, billing, and a direct line to our team.`
               }
             </p>
 
@@ -148,7 +152,7 @@ function portalInviteHtml({
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
                 <td align="center">
-                  <a href="${signInUrl}" style="display:inline-block;background:#015035;color:#ffffff;font-size:14px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
+                  <a href="${signInUrl}" style="display:inline-block;background:${settings.branding.primaryColor};color:#ffffff;font-size:14px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
                     Access Your Client Portal →
                   </a>
                 </td>
@@ -169,7 +173,7 @@ function portalInviteHtml({
         <tr>
           <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 40px;text-align:center;">
             <p style="margin:0;font-size:12px;color:#9ca3af;">
-              &copy; ${new Date().getFullYear()} Graviss Marketing &middot; <a href="mailto:info@gravissmarketing.com" style="color:#015035;">info@gravissmarketing.com</a>
+              &copy; ${new Date().getFullYear()} ${settings.company.name} &middot; <a href="mailto:${settings.email.supportEmail}" style="color:${settings.branding.primaryColor};">${settings.email.supportEmail}</a>
             </p>
           </td>
         </tr>

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getResend } from '@/lib/resend'
+import { getSettings } from '@/lib/settings'
 
 export async function POST(req: NextRequest) {
   try {
+    const settings = await getSettings()
     const { to, clientName, title, message, link } = await req.json()
 
     if (!to || !title) {
@@ -13,11 +15,11 @@ export async function POST(req: NextRequest) {
     const portalLink = link || `${appUrl}/portal`
 
     const { data, error } = await getResend().emails.send({
-      from: 'GravHub <noreply@app.gravissmarketing.com>',
-      replyTo: 'info@gravissmarketing.com',
+      from: `${settings.email.fromName} <${settings.email.fromEmail}>`,
+      replyTo: settings.email.replyTo,
       to: [to],
       subject: title,
-      html: notificationEmailHtml({ clientName, title, message, portalLink, appUrl }),
+      html: notificationEmailHtml({ clientName, title, message, portalLink, appUrl, settings }),
     })
 
     if (error) {
@@ -38,12 +40,14 @@ function notificationEmailHtml({
   message,
   portalLink,
   appUrl,
+  settings,
 }: {
   clientName: string
   title: string
   message?: string
   portalLink: string
   appUrl: string
+  settings: Awaited<ReturnType<typeof getSettings>>
 }) {
   return `<!DOCTYPE html>
 <html>
@@ -56,15 +60,15 @@ function notificationEmailHtml({
 
         <!-- Header -->
         <tr>
-          <td style="background:#012b1e;padding:32px 40px;">
+          <td style="background:${settings.branding.darkBg};padding:32px 40px;">
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td>
-                  <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.08em;font-family:'Syncopate',sans-serif;">GRAVISS MARKETING</h1>
+                  <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.08em;font-family:'Syncopate',sans-serif;">${settings.company.name.toUpperCase()}</h1>
                   <p style="margin:6px 0 0;color:rgba(255,255,255,0.55);font-size:12px;letter-spacing:0.04em;font-family:'Syncopate',sans-serif;">CLIENT NOTIFICATION</p>
                 </td>
                 <td align="right">
-                  <div style="background:#015035;border-radius:10px;padding:10px 16px;display:inline-block;">
+                  <div style="background:${settings.branding.primaryColor};border-radius:10px;padding:10px 16px;display:inline-block;">
                     <p style="margin:0;color:#ffffff;font-size:14px;font-weight:700;">${(clientName || 'C')[0]}</p>
                   </div>
                 </td>
@@ -89,7 +93,7 @@ function notificationEmailHtml({
               Hi ${clientName || 'there'},
             </h2>
             <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6;">
-              You have a new update from Graviss Marketing.
+              You have a new update from ${settings.company.name}.
             </p>
 
             <!-- Notification card -->
@@ -107,7 +111,7 @@ function notificationEmailHtml({
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
                 <td align="center">
-                  <a href="${portalLink}" style="display:inline-block;background:#015035;color:#ffffff;font-size:14px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
+                  <a href="${portalLink}" style="display:inline-block;background:${settings.branding.primaryColor};color:#ffffff;font-size:14px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
                     View in Portal &rarr;
                   </a>
                 </td>
@@ -127,7 +131,7 @@ function notificationEmailHtml({
         <tr>
           <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 40px;text-align:center;">
             <p style="margin:0;font-size:12px;color:#9ca3af;">
-              &copy; ${new Date().getFullYear()} Graviss Marketing &middot; <a href="mailto:info@gravissmarketing.com" style="color:#015035;">info@gravissmarketing.com</a>
+              &copy; ${new Date().getFullYear()} ${settings.company.name} &middot; <a href="mailto:${settings.email.supportEmail}" style="color:${settings.branding.primaryColor};">${settings.email.supportEmail}</a>
             </p>
           </td>
         </tr>

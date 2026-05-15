@@ -346,7 +346,7 @@ export default function SettingsPage() {
       .catch(() => {
         setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
         setActivityNotifs(loadLS('gravhub_activity_notifs', ACTIVITY_NOTIF_DEFAULTS))
-          setQuietHours(loadLS('gravhub_quiet_hours', QUIET_HOURS_DEFAULTS))
+        setQuietHours(loadLS('gravhub_quiet_hours', QUIET_HOURS_DEFAULTS))
         setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
         setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
         setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { X, Download, Save, FileText, Plus, Minus, Check } from 'lucide-react'
+import { useSettings } from '@/lib/useSettings'
 import type { Proposal, ProposalLineItem, ServiceType } from '@/lib/types'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 
@@ -70,8 +71,10 @@ interface PdfProps {
 }
 
 function PdfTemplate(p: PdfProps) {
-  const BG = '#012b1e'
-  const GREEN = '#015035'
+  const settings = useSettings()
+  const companyName = settings?.company.name ?? 'Graviss Marketing'
+  const BG = settings?.branding.darkBg ?? '#012b1e'
+  const GREEN = settings?.branding.primaryColor ?? '#015035'
   const ACCENT = '#4ade80'
 
   const sectionTitle = (text: string) => (
@@ -127,7 +130,7 @@ function PdfTemplate(p: PdfProps) {
           <section>
             {sectionTitle('Executive Summary')}
             <p style={{ fontSize: 13, lineHeight: 1.8, color: '#374151' }}>
-              {p.execSummary || `Thank you for the opportunity to present this proposal to ${p.company}. At Graviss Marketing, we craft data-driven strategies tailored to your unique goals — delivering measurable growth, brand authority, and a stronger digital presence. This proposal outlines a comprehensive solution designed specifically for your business.`}
+              {p.execSummary || `Thank you for the opportunity to present this proposal to ${p.company}. At ${companyName}, we craft data-driven strategies tailored to your unique goals — delivering measurable growth, brand authority, and a stronger digital presence. This proposal outlines a comprehensive solution designed specifically for your business.`}
             </p>
           </section>
         )}
@@ -262,7 +265,7 @@ function PdfTemplate(p: PdfProps) {
 
         {/* Why Graviss */}
         <section style={{ background: '#f9fafb', borderRadius: 12, padding: '28px 32px', border: '1px solid #e5e7eb' }}>
-          {sectionTitle('Why Graviss Marketing')}
+          {sectionTitle(`Why ${companyName}`)}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
             {[
               { title: 'Results-Driven', body: 'Every strategy is built around measurable KPIs and transparent reporting.' },
@@ -312,13 +315,17 @@ function PdfTemplate(p: PdfProps) {
 
 // ─── Main Builder Component ───────────────────────────────────────────────────
 
-export default function ProposalBuilderPanel({ onSave, onClose, initialCompany = '', initialRep = 'Graviss Marketing', initialData }: Props) {
+export default function ProposalBuilderPanel({ onSave, onClose, initialCompany = '', initialRep, initialData }: Props) {
   const ALL_REPS = useTeamMembers()
+  const settings = useSettings()
+  const companyName = settings?.company.name ?? 'Graviss Marketing'
+  const brandPrimary = settings?.branding.primaryColor ?? '#015035'
+  const defaultRep = initialRep ?? companyName
   // Client info
   const [company, setCompany]           = useState(initialData?.company ?? initialCompany)
   const [contactName, setContactName]   = useState('')
   const [contactEmail, setContactEmail] = useState('')
-  const [rep, setRep]                   = useState(initialData?.assignedRep ?? initialRep)
+  const [rep, setRep]                   = useState(initialData?.assignedRep ?? defaultRep)
   const [discount, setDiscount]         = useState(0)
 
   // Website build
@@ -584,7 +591,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
       pdf.setFont('helvetica', 'bold')
       pdf.setFontSize(9)
       pdf.setTextColor(...WHITE)
-      pdf.text(rep || 'Graviss Marketing', W - MR, y + 9, { align: 'right' })
+      pdf.text(rep || companyName, W - MR, y + 9, { align: 'right' })
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(7.5)
       pdf.setTextColor(140, 140, 140)
@@ -594,7 +601,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
 
       // ── EXECUTIVE SUMMARY ─────────────────────────────────────────────
       const summaryBody = execSummary ||
-        `Thank you for the opportunity to present this proposal to ${company || 'your company'}. At Graviss Marketing, we craft data-driven strategies tailored to your unique goals — delivering measurable growth, brand authority, and a stronger digital presence. This proposal outlines a comprehensive solution designed specifically for your business.`
+        `Thank you for the opportunity to present this proposal to ${company || 'your company'}. At ${companyName}, we craft data-driven strategies tailored to your unique goals — delivering measurable growth, brand authority, and a stronger digital presence. This proposal outlines a comprehensive solution designed specifically for your business.`
 
       sectionTitle('Executive Summary')
       pdf.setFont('helvetica', 'normal')
@@ -785,7 +792,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
 
       // ── WHY GRAVISS ────────────────────────────────────────────────────
       checkPage(36)
-      sectionTitle('Why Graviss Marketing')
+      sectionTitle(`Why ${companyName}`)
       const pillars = [
         { title: 'Results-Driven', body: 'Every strategy is built around measurable KPIs and transparent reporting.' },
         { title: 'Dedicated Team', body: 'A committed account team that knows your business inside and out.' },
@@ -851,7 +858,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
         pdf.setTextColor(150, 150, 150)
         pdf.text('GRAVISS MARKETING', ML, H - 4.5)
         pdf.text(`Confidential · ${today}`, W / 2, H - 4.5, { align: 'center' })
-        pdf.text(rep || 'Graviss Marketing', W - MR, H - 4.5, { align: 'right' })
+        pdf.text(rep || companyName, W - MR, H - 4.5, { align: 'right' })
       }
 
       pdf.save(`Graviss-Proposal-${(company || 'Draft').replace(/\s+/g, '-')}.pdf`)
@@ -948,7 +955,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
                   <select value={rep} onChange={e => setRep(e.target.value)}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
                     <option value="Graviss Marketing">Graviss Marketing</option>
-                    {ALL_REPS.filter(r => r !== 'Graviss Marketing').map(r => <option key={r} value={r}>{r}</option>)}
+                    {ALL_REPS.filter(r => r !== companyName).map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
                 <div>

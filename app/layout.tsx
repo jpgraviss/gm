@@ -3,6 +3,7 @@ import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { UIProvider } from '@/contexts/UIContext'
 import { ToastProvider } from '@/components/ui/Toast'
+import { SettingsProvider } from '@/lib/useSettings'
 import AppShell from '@/components/layout/AppShell'
 
 export const metadata: Metadata = {
@@ -32,9 +33,11 @@ export default function RootLayout({
         <AuthProvider>
           <UIProvider>
             <ToastProvider>
-              <AppShell>
-                {children}
-              </AppShell>
+              <SettingsProvider>
+                <AppShell>
+                  {children}
+                </AppShell>
+              </SettingsProvider>
             </ToastProvider>
           </UIProvider>
         </AuthProvider>

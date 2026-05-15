@@ -26,6 +26,14 @@ function mapBroadcast(row: any) {
     totalClicked:    row.total_clicked ?? 0,
     totalBounced:    row.total_bounced ?? 0,
     totalUnsubscribed: row.total_unsubscribed ?? 0,
+    abTestEnabled:   row.ab_test_enabled ?? false,
+    variantBSubject: row.variant_b_subject ?? undefined,
+    abSplitPct:      row.ab_split_pct ?? 50,
+    abWinner:        row.ab_winner ?? undefined,
+    variantAOpens:   row.variant_a_opens ?? 0,
+    variantBOpens:   row.variant_b_opens ?? 0,
+    variantASent:    row.variant_a_sent ?? 0,
+    variantBSent:    row.variant_b_sent ?? 0,
     createdAt:       row.created_at,
     updatedAt:       row.updated_at,
   }
@@ -56,6 +64,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.audienceFilter !== undefined) update.audience_filter = body.audienceFilter
   if (body.status !== undefined)         update.status = body.status
   if (body.scheduledAt !== undefined)    update.scheduled_at = body.scheduledAt
+  if (body.abTestEnabled !== undefined) update.ab_test_enabled = body.abTestEnabled
+  if (body.variantBSubject !== undefined) update.variant_b_subject = body.variantBSubject
+  if (body.abSplitPct !== undefined)    update.ab_split_pct = body.abSplitPct
 
   const { data, error } = await db.from('broadcasts').update(update).eq('id', id).select().single()
   if (error || !data) {

@@ -9,7 +9,7 @@ import {
   Users, Shield, Bell, Palette, Building, Plus, Pencil, Link2,
   CheckCircle, AlertCircle, RefreshCw, Plug, Globe, Tag,
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
-  Trash2, X, Eye, EyeOff, AlertTriangle,
+  Trash2, X, Eye, EyeOff, AlertTriangle, Mail, LayoutDashboard,
 } from 'lucide-react'
 
 const membershipColors: Record<string, string> = {
@@ -21,7 +21,7 @@ const membershipColors: Record<string, string> = {
   Client: 'bg-green-100 text-green-700',
 }
 
-const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Notifications', 'Integrations', 'CRM Setup', 'Billing'] as const
+const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Dashboard', 'Notifications', 'Integrations', 'CRM Setup', 'Billing'] as const
 type Tab = typeof tabs[number]
 
 const tabIcons: Record<Tab, React.ReactNode> = {
@@ -29,6 +29,8 @@ const tabIcons: Record<Tab, React.ReactNode> = {
   Team: <Users size={15} />,
   Permissions: <Shield size={15} />,
   Branding: <Palette size={15} />,
+  'Email Defaults': <Mail size={15} />,
+  Dashboard: <LayoutDashboard size={15} />,
   Notifications: <Bell size={15} />,
   Integrations: <Plug size={15} />,
   'CRM Setup': <Tag size={15} />,
@@ -98,6 +100,28 @@ const NOTIF_DEFAULTS = [
 const BRANDING_DEFAULTS = {
   primaryColor: '#015035',
   secondaryColor: '#FFF3EA',
+  appName: 'GravHub',
+  darkBackground: '#012b1e',
+  logoText: 'GravHub',
+}
+
+const EMAIL_DEFAULTS = {
+  fromName: 'GravHub',
+  fromEmail: 'noreply@app.gravissmarketing.com',
+  replyTo: '',
+  supportEmail: '',
+  signatureRequestFrom: '',
+  footerText: '',
+}
+
+const DASHBOARD_DEFAULTS = {
+  greetings: {
+    morning: 'Good Morning',
+    afternoon: 'Good Afternoon',
+    evening: 'Good Evening',
+    night: 'Burning the midnight oil',
+  },
+  rotatingMessages: [] as { message: string; emoji: string }[],
 }
 
 const QB_SYNC_DEFAULTS = [
@@ -235,6 +259,12 @@ export default function SettingsPage() {
   // Branding
   const [branding, setBranding] = useState(BRANDING_DEFAULTS)
 
+  // Email Defaults
+  const [emailDefaults, setEmailDefaults] = useState(EMAIL_DEFAULTS)
+
+  // Dashboard Config
+  const [dashboardConfig, setDashboardConfig] = useState(DASHBOARD_DEFAULTS)
+
   // QB Sync
   const [qbSync, setQbSync] = useState(QB_SYNC_DEFAULTS)
 
@@ -273,7 +303,9 @@ export default function SettingsPage() {
         else if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length) setPipelines([{ id: 'sales', name: 'Sales Pipeline', stages: d.pipeline_stages.map((name: string, i: number) => ({ id: `s${i}`, name, color: STAGE_COLORS_CYCLE[i % STAGE_COLORS_CYCLE.length] })) }])
         if (Array.isArray(d.service_types)   && d.service_types.length)    setServiceTypes(d.service_types)
         if (Array.isArray(d.contact_tags)    && d.contact_tags.length)     setContactTags(d.contact_tags)
-        if (d.branding         && Object.keys(d.branding).length)          setBranding(d.branding)
+        if (d.branding         && Object.keys(d.branding).length)          setBranding(prev => ({ ...prev, ...d.branding }))
+        if (d.email_defaults   && Object.keys(d.email_defaults).length)    setEmailDefaults(prev => ({ ...prev, ...d.email_defaults }))
+        if (d.dashboard_config && Object.keys(d.dashboard_config).length)  setDashboardConfig(prev => ({ ...prev, ...d.dashboard_config }))
         if (Array.isArray(d.qb_sync)         && d.qb_sync.length)          setQbSync(d.qb_sync)
       })
       .catch(() => {
@@ -326,6 +358,14 @@ export default function SettingsPage() {
     // Apply immediately so the change reflects across the app without a reload
     document.documentElement.style.setProperty('--brand-primary', branding.primaryColor)
     document.documentElement.style.setProperty('--brand-secondary', branding.secondaryColor)
+  }
+
+  function saveEmailDefaults() {
+    patchSettings({ emailDefaults }, 'Email Defaults')
+  }
+
+  function saveDashboardConfig() {
+    patchSettings({ dashboardConfig }, 'Dashboard')
   }
 
   function saveQbSync() {
@@ -698,6 +738,20 @@ export default function SettingsPage() {
                   <input type="color" value={branding.secondaryColor} onChange={e => setBranding(p => ({ ...p, secondaryColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
                 </div>
               </div>
+              <EditableField label="App Name" value={branding.appName} onChange={v => setBranding(p => ({ ...p, appName: v }))} />
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Dark Background</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.darkBackground }} />
+                  <input
+                    className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                    value={branding.darkBackground}
+                    onChange={e => setBranding(p => ({ ...p, darkBackground: e.target.value }))}
+                  />
+                  <input type="color" value={branding.darkBackground} onChange={e => setBranding(p => ({ ...p, darkBackground: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
+                </div>
+              </div>
+              <EditableField label="Logo Text" value={branding.logoText} onChange={v => setBranding(p => ({ ...p, logoText: v }))} />
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Heading Font</label>
                 <div className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800" style={{ fontFamily: 'var(--font-syncopate), sans-serif', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
@@ -714,6 +768,96 @@ export default function SettingsPage() {
                 {saved === 'Branding' ? <><CheckCircle size={14} /> Saved!</> : 'Save Branding'}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* ── Email Defaults ── */}
+        {activeTab === 'Email Defaults' && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Email Defaults</h3>
+              {saved === 'Email Defaults' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <EditableField label="From Name" value={emailDefaults.fromName} onChange={v => setEmailDefaults(p => ({ ...p, fromName: v }))} />
+              <EditableField label="From Email" value={emailDefaults.fromEmail} onChange={v => setEmailDefaults(p => ({ ...p, fromEmail: v }))} type="email" />
+              <EditableField label="Reply-To Email" value={emailDefaults.replyTo} onChange={v => setEmailDefaults(p => ({ ...p, replyTo: v }))} type="email" />
+              <EditableField label="Support Email" value={emailDefaults.supportEmail} onChange={v => setEmailDefaults(p => ({ ...p, supportEmail: v }))} type="email" />
+              <EditableField label="Signature Request From" value={emailDefaults.signatureRequestFrom} onChange={v => setEmailDefaults(p => ({ ...p, signatureRequestFrom: v }))} />
+            </div>
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Footer Text</label>
+              <textarea
+                value={emailDefaults.footerText}
+                onChange={e => setEmailDefaults(p => ({ ...p, footerText: e.target.value }))}
+                placeholder="Custom text appended to email footer"
+                rows={3}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors resize-none"
+              />
+            </div>
+            <p className="text-[11px] text-gray-400 mb-5">These defaults are used in all outgoing emails (invites, proposals, contracts, broadcasts)</p>
+            <button onClick={saveEmailDefaults} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+              {saved === 'Email Defaults' ? <><CheckCircle size={14} /> Saved!</> : 'Save Email Defaults'}
+            </button>
+          </div>
+        )}
+
+        {/* ── Dashboard ── */}
+        {activeTab === 'Dashboard' && (
+          <div className="flex flex-col gap-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Greeting Messages</h3>
+                {saved === 'Dashboard' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <EditableField label="Morning Greeting" value={dashboardConfig.greetings.morning} onChange={v => setDashboardConfig(p => ({ ...p, greetings: { ...p.greetings, morning: v } }))} />
+                <EditableField label="Afternoon Greeting" value={dashboardConfig.greetings.afternoon} onChange={v => setDashboardConfig(p => ({ ...p, greetings: { ...p.greetings, afternoon: v } }))} />
+                <EditableField label="Evening Greeting" value={dashboardConfig.greetings.evening} onChange={v => setDashboardConfig(p => ({ ...p, greetings: { ...p.greetings, evening: v } }))} />
+                <EditableField label="Night Greeting" value={dashboardConfig.greetings.night} onChange={v => setDashboardConfig(p => ({ ...p, greetings: { ...p.greetings, night: v } }))} />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Rotating Messages</h3>
+              </div>
+              <div className="flex flex-col gap-2 mb-3">
+                {dashboardConfig.rotatingMessages.map((msg, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <input
+                      value={msg.message}
+                      onChange={e => setDashboardConfig(p => ({ ...p, rotatingMessages: p.rotatingMessages.map((m, j) => j === i ? { ...m, message: e.target.value } : m) }))}
+                      placeholder="Message text"
+                      className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                    />
+                    <input
+                      value={msg.emoji}
+                      onChange={e => setDashboardConfig(p => ({ ...p, rotatingMessages: p.rotatingMessages.map((m, j) => j === i ? { ...m, emoji: e.target.value } : m) }))}
+                      placeholder="Emoji"
+                      className="w-16 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors text-center"
+                    />
+                    <button
+                      onClick={() => setDashboardConfig(p => ({ ...p, rotatingMessages: p.rotatingMessages.filter((_, j) => j !== i) }))}
+                      className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => setDashboardConfig(p => ({ ...p, rotatingMessages: [...p.rotatingMessages, { message: '', emoji: '' }] }))}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-white text-xs font-medium"
+                style={{ background: '#015035' }}
+              >
+                <Plus size={12} /> Add Message
+              </button>
+            </div>
+
+            <button onClick={saveDashboardConfig} className="w-fit flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+              {saved === 'Dashboard' ? <><CheckCircle size={14} /> Saved!</> : 'Save Dashboard Settings'}
+            </button>
           </div>
         )}
 

@@ -9,6 +9,17 @@ export interface AudienceFilter {
   owner?: string
   hasEmail?: boolean
   companyStatus?: string
+  createdAfter?: string
+  createdBefore?: string
+  lastActivityAfter?: string
+  lastActivityBefore?: string
+  hasOpenedPrevious?: boolean
+  hasClickedPrevious?: boolean
+  neverContacted?: boolean
+  industry?: string
+  companySize?: string
+  excludeTags?: string[]
+  excludeRecentRecipientsDays?: number
 }
 
 export interface Broadcast {
@@ -48,6 +59,18 @@ export function applyAudienceFilter(query: any, filter: AudienceFilter): any {
   if (filter.lifecycleStage) q = q.eq('lifecycle_stage', filter.lifecycleStage)
   if (filter.owner) q = q.eq('owner', filter.owner)
   if (filter.tags && filter.tags.length > 0) q = q.contains('tags', filter.tags)
+  if (filter.createdAfter) q = q.gte('created_date', filter.createdAfter)
+  if (filter.createdBefore) q = q.lte('created_date', filter.createdBefore)
+  if (filter.lastActivityAfter) q = q.gte('last_activity', filter.lastActivityAfter)
+  if (filter.lastActivityBefore) q = q.lte('last_activity', filter.lastActivityBefore)
+  if (filter.neverContacted) q = q.is('last_activity', null)
+  if (filter.industry) q = q.eq('industry', filter.industry)
+  if (filter.companySize) q = q.eq('company_size', filter.companySize)
+  if (filter.excludeTags && filter.excludeTags.length > 0) {
+    for (const tag of filter.excludeTags) {
+      q = q.not('tags', 'cs', `{${tag}}`)
+    }
+  }
   return q
 }
 

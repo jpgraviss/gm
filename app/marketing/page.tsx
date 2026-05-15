@@ -4,9 +4,14 @@ import { useEffect, useState } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import { formatDate } from '@/lib/utils'
+import EmailBlockEditor from '@/components/email/EmailBlockEditor'
+import EmailPreview from '@/components/email/EmailPreview'
+import TemplatePicker from '@/components/email/TemplatePicker'
+import { type EmailBlock, renderEmailHTML } from '@/lib/email-builder'
 import {
   Mail, Send, Users, Trash2, Eye, Edit, X, Sparkles, CheckCircle,
-  AlertCircle, Clock, BarChart3, ChevronLeft,
+  AlertCircle, Clock, BarChart3, ChevronLeft, Palette, Layout, FlaskConical,
+  ChevronDown, ChevronRight, Calendar, Building2, Ban, MousePointerClick, ExternalLink,
 } from 'lucide-react'
 
 interface AudienceFilter {
@@ -15,6 +20,17 @@ interface AudienceFilter {
   owner?: string
   hasEmail?: boolean
   companyStatus?: string
+  createdAfter?: string
+  createdBefore?: string
+  lastActivityAfter?: string
+  lastActivityBefore?: string
+  hasOpenedPrevious?: boolean
+  hasClickedPrevious?: boolean
+  neverContacted?: boolean
+  industry?: string
+  companySize?: string
+  excludeTags?: string[]
+  excludeRecentRecipientsDays?: number
 }
 
 interface Broadcast {
@@ -38,6 +54,14 @@ interface Broadcast {
   totalClicked: number
   totalBounced: number
   totalUnsubscribed: number
+  abTestEnabled: boolean
+  variantBSubject?: string
+  abSplitPct: number
+  abWinner?: string
+  variantAOpens: number
+  variantBOpens: number
+  variantASent: number
+  variantBSent: number
   createdAt: string
   updatedAt: string
 }
@@ -313,6 +337,28 @@ export default function MarketingPage() {
   )
 }
 
+function AudienceSection({ title, icon, defaultOpen, children }: { title: string; icon: React.ReactNode; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen ?? false)
+  return (
+    <div className="rounded-xl border border-gray-200 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+      >
+        <span className="text-emerald-600">{icon}</span>
+        <span className="text-sm font-semibold text-gray-900 flex-1">{title}</span>
+        {open ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronRight size={14} className="text-gray-400" />}
+      </button>
+      {open && (
+        <div className="px-4 pb-4 flex flex-col gap-3 border-t border-gray-100 pt-3">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BroadcastEditor({
   broadcast,
   onClose,
@@ -325,14 +371,32 @@ function BroadcastEditor({
   onRefresh: () => void
 }) {
   const { toast } = useToast()
-  const [tab, setTab] = useState<'compose' | 'audience' | 'send'>('compose')
+  const [tab, setTab] = useState<'compose' | 'design' | 'preview' | 'audience' | 'send'>('compose')
   const [draft, setDraft] = useState<Broadcast>(broadcast)
   const [audiencePreview, setAudiencePreview] = useState<{ total: number; suppressed: number; estimated: number; sample: Array<{ id: string; email: string; name: string }> } | null>(null)
   const [sending, setSending] = useState(false)
+  const [emailBlocks, setEmailBlocks] = useState<EmailBlock[]>([])
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
+
+  const [clickData, setClickData] = useState<Array<{ url: string; totalClicks: number; uniqueClickers: number }>>([])
+  const [clicksLoading, setClicksLoading] = useState(false)
 
   const isSent = broadcast.status === 'sent' || broadcast.status === 'sending'
 
+  useEffect(() => {
+    if (broadcast.status === 'sent') {
+      setClicksLoading(true)
+      fetch(`/api/broadcasts/${broadcast.id}/clicks`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => { if (Array.isArray(data)) setClickData(data) })
+        .catch(() => {})
+        .finally(() => setClicksLoading(false))
+    }
+  }, [broadcast.id, broadcast.status])
+
   async function save() {
+    // Render blocks to HTML before saving
+    const htmlFromBlocks = emailBlocks.length > 0 ? renderEmailHTML(emailBlocks) : draft.htmlBody
     const updated = await onSave({
       name:        draft.name,
       subject:     draft.subject,
@@ -340,7 +404,7 @@ function BroadcastEditor({
       fromEmail:   draft.fromEmail,
       replyTo:     draft.replyTo,
       previewText: draft.previewText,
-      htmlBody:    draft.htmlBody,
+      htmlBody:    htmlFromBlocks,
       audienceFilter: draft.audienceFilter,
     })
     if (updated) setDraft(updated)
@@ -391,16 +455,22 @@ function BroadcastEditor({
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-gray-200 px-5">
-          {(['compose', 'audience', 'send'] as const).map(t => (
+        <div className="flex gap-1 border-b border-gray-200 px-5 overflow-x-auto">
+          {([
+            { id: 'compose' as const, label: 'Compose', icon: <Edit size={13} /> },
+            { id: 'design' as const, label: 'Design', icon: <Layout size={13} /> },
+            { id: 'preview' as const, label: 'Preview', icon: <Eye size={13} /> },
+            { id: 'audience' as const, label: 'Audience', icon: <Users size={13} /> },
+            { id: 'send' as const, label: 'Send', icon: <Send size={13} /> },
+          ]).map(t => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2.5 text-sm font-medium capitalize border-b-2 transition-colors ${
-                tab === t ? 'border-emerald-600 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+                tab === t.id ? 'border-emerald-600 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              {t === 'send' ? 'Review & Send' : t}
+              {t.icon} {t.label}
             </button>
           ))}
         </div>
@@ -427,6 +497,68 @@ function BroadcastEditor({
                   disabled={isSent}
                   className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
                 />
+              </div>
+              {/* A/B Testing */}
+              <div className="rounded-xl border border-gray-200 overflow-hidden">
+                <button
+                  onClick={() => !isSent && setDraft(d => ({ ...d, abTestEnabled: !d.abTestEnabled }))}
+                  disabled={isSent}
+                  className="flex items-center justify-between w-full px-4 py-3 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-2">
+                    <FlaskConical size={14} className="text-purple-500" />
+                    <span className="text-xs font-semibold text-gray-700">A/B Test Subject Line</span>
+                  </div>
+                  <div className={`w-9 h-5 rounded-full flex items-center transition-colors ${draft.abTestEnabled ? 'bg-purple-500' : 'bg-gray-200'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform mx-0.5 ${draft.abTestEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
+                </button>
+                {draft.abTestEnabled && (
+                  <div className="px-4 pb-4 pt-2 border-t border-gray-100 flex flex-col gap-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Variant A (original)</label>
+                        <p className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2 truncate">{draft.subject || '(empty)'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-purple-400 uppercase tracking-wide mb-1">Variant B</label>
+                        <input
+                          value={draft.variantBSubject ?? ''}
+                          onChange={e => setDraft(d => ({ ...d, variantBSubject: e.target.value }))}
+                          disabled={isSent}
+                          placeholder="Alternative subject line..."
+                          className="w-full text-sm border border-purple-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                        Split: {draft.abSplitPct ?? 50}% A / {100 - (draft.abSplitPct ?? 50)}% B
+                      </label>
+                      <input
+                        type="range" min={10} max={90} step={10}
+                        value={draft.abSplitPct ?? 50}
+                        onChange={e => setDraft(d => ({ ...d, abSplitPct: parseInt(e.target.value) }))}
+                        disabled={isSent}
+                        className="w-full accent-purple-500"
+                      />
+                    </div>
+                    {isSent && (draft.variantASent > 0 || draft.variantBSent > 0) && (
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div className="rounded-lg bg-gray-50 p-3 text-center">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase">Variant A</p>
+                          <p className="text-lg font-bold text-gray-900">{draft.variantASent > 0 ? `${Math.round((draft.variantAOpens / draft.variantASent) * 100)}%` : '—'}</p>
+                          <p className="text-[10px] text-gray-400">{draft.variantAOpens}/{draft.variantASent} opened</p>
+                        </div>
+                        <div className={`rounded-lg p-3 text-center ${draft.abWinner === 'B' ? 'bg-purple-50 border border-purple-200' : 'bg-gray-50'}`}>
+                          <p className="text-[10px] font-semibold text-purple-400 uppercase">Variant B {draft.abWinner === 'B' && '★'}</p>
+                          <p className="text-lg font-bold text-gray-900">{draft.variantBSent > 0 ? `${Math.round((draft.variantBOpens / draft.variantBSent) * 100)}%` : '—'}</p>
+                          <p className="text-[10px] text-gray-400">{draft.variantBOpens}/{draft.variantBSent} opened</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Preview text</label>
@@ -468,63 +600,222 @@ function BroadcastEditor({
                   className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
                 />
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">HTML body</label>
-                  <span className="text-[10px] text-gray-400">
-                    Merge fields: <code className="bg-gray-100 px-1 rounded">{'{{first_name}}'}</code> <code className="bg-gray-100 px-1 rounded">{'{{company}}'}</code>
-                  </span>
-                </div>
-                <textarea
-                  value={draft.htmlBody}
-                  onChange={e => setDraft(d => ({ ...d, htmlBody: e.target.value }))}
-                  disabled={isSent}
-                  rows={14}
-                  placeholder="<p>Hi {{first_name}},</p><p>...</p>"
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono disabled:bg-gray-50 resize-none"
-                />
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-gray-400">
+                  Merge fields: <code className="bg-gray-100 px-1 rounded">{'{{first_name}}'}</code> <code className="bg-gray-100 px-1 rounded">{'{{company}}'}</code>
+                </p>
+                <button
+                  onClick={() => setTab('design')}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
+                >
+                  <Layout size={12} /> Open email designer →
+                </button>
               </div>
             </>
           )}
 
+          {/* Design tab — drag-and-drop email builder */}
+          {tab === 'design' && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-gray-900">Email Designer</p>
+                <button
+                  onClick={() => setShowTemplatePicker(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white hover:opacity-90"
+                  style={{ background: '#015035' }}
+                >
+                  <Palette size={12} /> Templates
+                </button>
+              </div>
+              {!isSent ? (
+                <EmailBlockEditor blocks={emailBlocks} onChange={setEmailBlocks} />
+              ) : (
+                <div className="py-8 text-center text-xs text-gray-400">
+                  Email already sent — design is read-only
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Preview tab — desktop/mobile preview */}
+          {tab === 'preview' && (
+            <div className="h-[500px]">
+              <EmailPreview blocks={emailBlocks} subject={draft.subject} preheader={draft.previewText} />
+            </div>
+          )}
+
           {tab === 'audience' && (
             <>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Lifecycle stage</label>
-                <select
-                  value={draft.audienceFilter.lifecycleStage ?? ''}
-                  onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, lifecycleStage: e.target.value || undefined } }))}
-                  disabled={isSent}
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
-                >
-                  <option value="">Any stage</option>
-                  <option>Lead</option>
-                  <option>MQL</option>
-                  <option>SQL</option>
-                  <option>Customer</option>
-                  <option>Evangelist</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Tags (comma-separated, must contain all)</label>
-                <input
-                  value={(draft.audienceFilter.tags ?? []).join(', ')}
-                  onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) } }))}
-                  disabled={isSent}
-                  placeholder="seo-client, active"
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Owner</label>
-                <input
-                  value={draft.audienceFilter.owner ?? ''}
-                  onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, owner: e.target.value || undefined } }))}
-                  disabled={isSent}
-                  placeholder="Jonathan Graviss"
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
-                />
-              </div>
+              <AudienceSection title="Contact Properties" icon={<Users size={13} />} defaultOpen>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Lifecycle stage</label>
+                  <select
+                    value={draft.audienceFilter.lifecycleStage ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, lifecycleStage: e.target.value || undefined } }))}
+                    disabled={isSent}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  >
+                    <option value="">Any stage</option>
+                    <option>Lead</option>
+                    <option>MQL</option>
+                    <option>SQL</option>
+                    <option>Customer</option>
+                    <option>Evangelist</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Owner</label>
+                  <input
+                    value={draft.audienceFilter.owner ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, owner: e.target.value || undefined } }))}
+                    disabled={isSent}
+                    placeholder="Jonathan Graviss"
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Tags (comma-separated, must contain all)</label>
+                  <input
+                    value={(draft.audienceFilter.tags ?? []).join(', ')}
+                    onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) } }))}
+                    disabled={isSent}
+                    placeholder="seo-client, active"
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  />
+                </div>
+              </AudienceSection>
+
+              <AudienceSection title="Engagement" icon={<BarChart3 size={13} />}>
+                <div className="flex flex-col gap-2.5">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.audienceFilter.hasOpenedPrevious ?? false}
+                      onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, hasOpenedPrevious: e.target.checked || undefined } }))}
+                      disabled={isSent}
+                      className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm text-gray-700">Has opened a previous broadcast</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.audienceFilter.hasClickedPrevious ?? false}
+                      onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, hasClickedPrevious: e.target.checked || undefined } }))}
+                      disabled={isSent}
+                      className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm text-gray-700">Has clicked a previous broadcast</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.audienceFilter.neverContacted ?? false}
+                      onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, neverContacted: e.target.checked || undefined } }))}
+                      disabled={isSent}
+                      className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm text-gray-700">Never contacted</span>
+                  </label>
+                </div>
+              </AudienceSection>
+
+              <AudienceSection title="Date Filters" icon={<Calendar size={13} />}>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Created after</label>
+                  <input
+                    type="date"
+                    value={draft.audienceFilter.createdAfter ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, createdAfter: e.target.value || undefined } }))}
+                    disabled={isSent}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Created before</label>
+                  <input
+                    type="date"
+                    value={draft.audienceFilter.createdBefore ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, createdBefore: e.target.value || undefined } }))}
+                    disabled={isSent}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Last activity after</label>
+                  <input
+                    type="date"
+                    value={draft.audienceFilter.lastActivityAfter ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, lastActivityAfter: e.target.value || undefined } }))}
+                    disabled={isSent}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Last activity before</label>
+                  <input
+                    type="date"
+                    value={draft.audienceFilter.lastActivityBefore ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, lastActivityBefore: e.target.value || undefined } }))}
+                    disabled={isSent}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  />
+                </div>
+              </AudienceSection>
+
+              <AudienceSection title="Company" icon={<Building2 size={13} />}>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Industry</label>
+                  <input
+                    value={draft.audienceFilter.industry ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, industry: e.target.value || undefined } }))}
+                    disabled={isSent}
+                    placeholder="e.g. Technology, Healthcare"
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company size</label>
+                  <select
+                    value={draft.audienceFilter.companySize ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, companySize: e.target.value || undefined } }))}
+                    disabled={isSent}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  >
+                    <option value="">Any size</option>
+                    <option value="1-10">1-10</option>
+                    <option value="11-50">11-50</option>
+                    <option value="51-200">51-200</option>
+                    <option value="201-1000">201-1000</option>
+                    <option value="1001+">1001+</option>
+                  </select>
+                </div>
+              </AudienceSection>
+
+              <AudienceSection title="Exclusions" icon={<Ban size={13} />}>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Exclude tags (comma-separated)</label>
+                  <input
+                    value={(draft.audienceFilter.excludeTags ?? []).join(', ')}
+                    onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, excludeTags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) } }))}
+                    disabled={isSent}
+                    placeholder="unsubscribed, do-not-email"
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Exclude contacts who received a broadcast in the last N days</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={draft.audienceFilter.excludeRecentRecipientsDays ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, audienceFilter: { ...d.audienceFilter, excludeRecentRecipientsDays: e.target.value ? parseInt(e.target.value, 10) : undefined } }))}
+                    disabled={isSent}
+                    placeholder="e.g. 7"
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  />
+                </div>
+              </AudienceSection>
 
               {!isSent && (
                 <button
@@ -607,9 +898,53 @@ function BroadcastEditor({
                   </div>
                 </div>
               )}
+
+              {broadcast.status === 'sent' && (
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <MousePointerClick size={14} className="text-emerald-600" />
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Link Click Tracking</p>
+                  </div>
+                  {clicksLoading ? (
+                    <div className="flex items-center justify-center py-6">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-600" />
+                    </div>
+                  ) : clickData.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-4">No link clicks recorded yet</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {clickData.map((link, i) => (
+                        <div key={i} className="flex items-center gap-3 rounded-lg bg-gray-50 px-3 py-2.5">
+                          <ExternalLink size={12} className="text-gray-400 flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium text-gray-900 truncate" title={link.url}>
+                              {link.url.length > 60 ? link.url.slice(0, 60) + '...' : link.url}
+                            </p>
+                            <p className="text-[10px] text-gray-500">
+                              {link.uniqueClickers} unique {link.uniqueClickers === 1 ? 'clicker' : 'clickers'}
+                            </p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-sm font-bold text-emerald-700">{link.totalClicks}</p>
+                            <p className="text-[10px] text-gray-400">{link.totalClicks === 1 ? 'click' : 'clicks'}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
+
+        {/* Template picker modal */}
+        {showTemplatePicker && (
+          <TemplatePicker
+            onSelect={(blocks) => { setEmailBlocks(blocks); setShowTemplatePicker(false); setTab('design') }}
+            onClose={() => setShowTemplatePicker(false)}
+          />
+        )}
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-100 flex gap-2">

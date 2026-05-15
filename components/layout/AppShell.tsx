@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useUI } from '@/contexts/UIContext'
 import Sidebar from './Sidebar'
 import AssistantPanel from '@/components/ai/AssistantPanel'
+import CommandPalette from '@/components/ui/CommandPalette'
 import { ShieldAlert, X, Sparkles } from 'lucide-react'
 
 const PUBLIC_ROUTES = ['/login', '/team-login']
@@ -43,7 +44,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   // /book/* routes are public — clients book without logging in
-  const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/')
+  const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/') || pathname.startsWith('/unsubscribe/')
 
   // Inject brand CSS variables from settings
   useEffect(() => {
@@ -121,6 +122,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
+      <CommandPalette />
       {/* Mobile backdrop */}
       {sidebarOpen && (
         <div

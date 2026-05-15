@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUI } from '@/contexts/UIContext'
+import { useSettings } from '@/lib/useSettings'
 import {
   LayoutDashboard, Users, FileText, ScrollText, CreditCard,
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
@@ -107,6 +108,12 @@ export default function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const { closeSidebar } = useUI()
+  const settings = useSettings()
+
+  const brandPrimary = settings?.branding.primaryColor ?? '#015035'
+  const brandDarkBg = settings?.branding.darkBg ?? '#012b1e'
+  const appName = settings?.branding.appName ?? 'GravHub'
+  const companyName = settings?.company.name ?? 'Graviss Marketing'
 
   const handleLogout = () => {
     logout()
@@ -115,7 +122,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      style={{ background: '#012b1e' }}
+      style={{ background: brandDarkBg }}
       className="group flex flex-col flex-shrink-0 border-r border-white/5 h-screen sticky top-0
                  w-[230px] lg:w-14 lg:hover:w-[230px] transition-[width] duration-200 overflow-hidden"
     >
@@ -123,16 +130,15 @@ export default function Sidebar() {
       <div className="px-3 py-4 border-b border-white/[0.08] flex items-center gap-2.5 min-w-0 flex-shrink-0">
         <div
           className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--brand-primary, #015035)' }}
+          style={{ background: brandPrimary }}
         >
-          <span className="text-white text-xs font-bold" style={{ fontFamily: 'var(--font-heading)' }}>G</span>
+          <span className="text-white text-xs font-bold" style={{ fontFamily: 'var(--font-heading)' }}>{appName[0]}</span>
         </div>
-        {/* Logo text — always visible mobile, fades in on desktop hover */}
         <div className="flex-1 min-w-0 overflow-hidden whitespace-nowrap lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
           <span className="text-white text-sm font-bold tracking-widest block" style={{ fontFamily: 'var(--font-heading)' }}>
-            GravHub
+            {appName}
           </span>
-          <p className="text-white/40 text-[10px] tracking-wider">Graviss Marketing</p>
+          <p className="text-white/40 text-[10px] tracking-wider">{companyName}</p>
         </div>
         {/* Mobile close button */}
         <button

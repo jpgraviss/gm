@@ -5,6 +5,7 @@ import {
   createGoogleEvent,
   type CalendarSettings,
 } from '@/lib/google-calendar'
+import { getSettings } from '@/lib/settings'
 
 // GET /api/bookings?slug=jaycee-graviss&status=confirmed
 export async function GET(req: NextRequest) {
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many booking attempts. Please try again later.' }, { status: 429 })
   }
 
+  const appSettings = await getSettings()
   const body = await req.json()
   const {
     calendarSlug,
@@ -123,8 +125,8 @@ export async function POST(req: NextRequest) {
       const result = await createGoogleEvent(accessToken, {
         summary:       `${settings.title} — ${clientName}${clientCompany ? ` (${clientCompany})` : ''}`,
         description:   notes
-          ? `Booked via GravHub Scheduling\n\nClient notes: ${notes}`
-          : 'Booked via GravHub Scheduling',
+          ? `Booked via ${appSettings.branding.appName} Scheduling\n\nClient notes: ${notes}`
+          : `Booked via ${appSettings.branding.appName} Scheduling`,
         dateTimeStart: `${date}T${startTime}:00`,
         dateTimeEnd:   `${date}T${endTime}:00`,
         timezone:      settings.timezone,

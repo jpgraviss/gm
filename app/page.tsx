@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
+import { useSettings } from '@/lib/useSettings'
 import Link from 'next/link'
 import {
   TrendingUp, DollarSign, CheckCircle, RefreshCw,
   FolderKanban, Calendar, ArrowUpRight, ArrowRight,
   FileText, ScrollText, AlertCircle, Zap,
   Wrench, MessageSquare, CheckSquare, Clock,
+  ChevronDown, Mail, Send, Eye, BarChart3, Target,
+  Briefcase, Users,
 } from 'lucide-react'
 import { formatCurrency, contractStatusColors, invoiceStatusColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
@@ -37,23 +40,26 @@ const ROTATING_MESSAGES: { sub: string; emoji: string }[] = [
   { sub: 'Your CRM is only as strong as the reps using it.',          emoji: '🏋️' },
 ]
 
-function buildGreeting(firstName: string, now: Date): Greeting {
+function buildGreeting(firstName: string, now: Date, greetings?: { morning: string; afternoon: string; evening: string; night: string }): Greeting {
   const hour = now.getHours()
+  const g = greetings ?? { morning: 'Good Morning', afternoon: 'Good Afternoon', evening: 'Good Evening', night: 'Burning the midnight oil' }
 
   const timePrefix =
-    hour >= 5  && hour < 12 ? 'Good Morning'           :
-    hour >= 12 && hour < 17 ? 'Good Afternoon'          :
-    hour >= 17 && hour < 23 ? 'Good Evening'            :
-    'Burning the midnight oil'
+    hour >= 5  && hour < 12 ? g.morning    :
+    hour >= 12 && hour < 17 ? g.afternoon  :
+    hour >= 17 && hour < 23 ? g.evening    :
+    g.night
 
   return { headline: `${timePrefix}, ${firstName}!`, sub: '', emoji: '' }
 }
 
 function GreetingBanner({ name }: { name: string }) {
+  const settings = useSettings()
+  const messages = settings?.dashboard.rotatingMessages ?? ROTATING_MESSAGES
   const firstName = name.split(' ')[0]
   const [visible, setVisible]   = useState(false)
   const [headline, setHeadline] = useState('')
-  const [msgIndex, setMsgIndex] = useState(() => Math.floor(Math.random() * ROTATING_MESSAGES.length))
+  const [msgIndex, setMsgIndex] = useState(() => Math.floor(Math.random() * messages.length))
   const [fade, setFade]         = useState(true)
 
   useEffect(() => {
@@ -65,7 +71,7 @@ function GreetingBanner({ name }: { name: string }) {
       const THREE_MIN = 3 * 60 * 1000
       if (elapsed >= THREE_MIN) return
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setHeadline(buildGreeting(firstName, new Date()).headline)
+      setHeadline(buildGreeting(firstName, new Date(), settings?.dashboard.greetings).headline)
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setVisible(true)
       const hideTimer = setTimeout(() => setVisible(false), THREE_MIN - elapsed)
@@ -79,16 +85,16 @@ function GreetingBanner({ name }: { name: string }) {
     const interval = setInterval(() => {
       setFade(false)
       setTimeout(() => {
-        setMsgIndex(prev => (prev + 1) % ROTATING_MESSAGES.length)
+        setMsgIndex(prev => (prev + 1) % messages.length)
         setFade(true)
       }, 300)
     }, 30_000)
     return () => clearInterval(interval)
-  }, [visible])
+  }, [visible, messages.length])
 
   if (!visible) return null
 
-  const currentMsg = ROTATING_MESSAGES[msgIndex]
+  const currentMsg = messages[msgIndex] ?? messages[0]
 
   return (
     <div
@@ -574,220 +580,736 @@ function ContractorDashboard({ userName }: { userName: string }) {
   )
 }
 
-// ─── Main Dashboard ──────────────────────────────────────────────────────────
+// ─── Dashboard View Types ────────────────────────────────────────────────────
 
-export default function DashboardPage() {
-  const { user } = useAuth()
+type DashboardView = 'executive' | 'sales' | 'operations' | 'billing' | 'marketing' | 'contractor'
+
+const DASHBOARD_VIEWS: { id: DashboardView; label: string; icon: React.ReactNode; roles: string[] }[] = [
+  { id: 'executive',  label: 'Executive',  icon: <BarChart3 size={14} />,    roles: ['Leadership', 'Super Admin', 'Dept Manager', 'Department Manager'] },
+  { id: 'sales',      label: 'Sales',      icon: <TrendingUp size={14} />,   roles: ['Leadership', 'Super Admin', 'Dept Manager', 'Department Manager', 'Team Member'] },
+  { id: 'operations', label: 'Operations', icon: <FolderKanban size={14} />, roles: ['Leadership', 'Super Admin', 'Dept Manager', 'Department Manager', 'Team Member'] },
+  { id: 'billing',    label: 'Billing',    icon: <DollarSign size={14} />,   roles: ['Leadership', 'Super Admin', 'Dept Manager', 'Department Manager'] },
+  { id: 'marketing',  label: 'Marketing',  icon: <Mail size={14} />,         roles: ['Leadership', 'Super Admin', 'Dept Manager', 'Department Manager', 'Team Member'] },
+  { id: 'contractor', label: 'Contractor', icon: <Wrench size={14} />,       roles: ['Contractor'] },
+]
+
+// ─── View Selector ───────────────────────────────────────────────────────────
+
+function ViewSelector({ view, setView, views }: { view: DashboardView; setView: (v: DashboardView) => void; views: typeof DASHBOARD_VIEWS }) {
+  const [open, setOpen] = useState(false)
+  const current = views.find(v => v.id === view)
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-800 shadow-sm transition-colors"
+      >
+        {current?.icon}
+        {current?.label}
+        <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute top-full mt-1 left-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden min-w-[200px]">
+            {views.map(v => (
+              <button
+                key={v.id}
+                onClick={() => { setView(v.id); setOpen(false) }}
+                className={`flex items-center gap-2.5 w-full text-left px-4 py-2.5 text-sm font-medium transition-colors ${
+                  view === v.id ? 'bg-emerald-50 text-emerald-800' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <span className={view === v.id ? 'text-emerald-600' : 'text-gray-400'}>{v.icon}</span>
+                {v.label}
+                {view === v.id && <CheckCircle size={13} className="text-emerald-500 ml-auto" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Sales Dashboard ────────────────────────────────────────────────────────
+
+function SalesView({ data }: { data: DashboardData }) {
+  const m = data.metrics
+  const closedWon = data.recentDeals.filter(d => d.stage === 'Closed Won')
+  const totalDealValue = data.recentDeals.reduce((s, d) => s + d.value, 0)
+  const avgDealSize = data.recentDeals.length > 0 ? totalDealValue / data.recentDeals.length : 0
+  const winRate = data.recentDeals.length > 0 ? Math.round((closedWon.length / data.recentDeals.length) * 100) : 0
+
+  return (
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <KpiCard label="Pipeline Value" value={formatCurrency(m.pipelineValue)}  icon={<TrendingUp size={17} />}  accent="#3b82f6"  sub="Active deals"    href="/crm/pipeline" />
+        <KpiCard label="Open Deals"     value={String(m.openDeals)}             icon={<Target size={17} />}      accent="#8b5cf6"  sub="In progress"     href="/crm/pipeline" />
+        <KpiCard label="Win Rate"       value={`${winRate}%`}                   icon={<CheckCircle size={17} />} accent="#22c55e"  sub={`${closedWon.length} closed won`} />
+        <KpiCard label="Avg Deal"       value={formatCurrency(avgDealSize)}     icon={<DollarSign size={17} />}  accent="#015035"  sub="Average value" />
+        <KpiCard label="Proposals"      value={String(data.recentContracts.filter(c => c.status === 'Draft' || c.status === 'Sent').length)} icon={<FileText size={17} />} accent="#f59e0b" sub="Pending" href="/proposals" />
+        <KpiCard label="Renewals"       value={String(m.upcomingRenewals)}      icon={<RefreshCw size={17} />}   accent="#ef4444"  sub="Due in 60d"      href="/renewals" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Revenue chart */}
+        <div className="metric-card lg:col-span-2">
+          <div className="flex items-start justify-between mb-5">
+            <div>
+              <h3 className="font-bold text-gray-800 text-sm">Deal Revenue Forecast</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">Revenue by month</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-bold text-gray-900">{formatCurrency(data.revenueByMonth.reduce((s, r) => s + r.revenue, 0))}</p>
+              <p className="text-[11px] text-gray-400">all time</p>
+            </div>
+          </div>
+          <RevenueChart data={data.revenueByMonth} />
+        </div>
+
+        {/* Pipeline by stage */}
+        <div className="metric-card">
+          <h3 className="font-bold text-gray-800 text-sm mb-1">Pipeline by Stage</h3>
+          <p className="text-[11px] text-gray-400 mb-4">{m.openDeals} active deals</p>
+          {data.recentDeals.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">No deals yet</p>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {data.recentDeals.map(d => (
+                <div key={d.id} className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{d.company}</p>
+                    <p className="text-[10px] text-gray-400">{d.stage} · {d.serviceType}</p>
+                  </div>
+                  <span className="text-xs font-bold ml-2" style={{ color: '#015035' }}>{formatCurrency(d.value)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <Link href="/crm/pipeline" className="mt-4 flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 transition-colors">
+            View Pipeline <ArrowRight size={12} />
+          </Link>
+        </div>
+      </div>
+
+      {/* Team activity + contracts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="metric-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-gray-800 text-sm">Recent Contracts</h3>
+            <Link href="/contracts" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">View All <ArrowRight size={11} /></Link>
+          </div>
+          {data.recentContracts.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">No contracts yet</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-gray-50">
+              {data.recentContracts.slice(0, 5).map(c => (
+                <div key={c.id} className="flex items-center justify-between py-2.5">
+                  <div>
+                    <p className="text-[12px] font-semibold text-gray-800">{c.company}</p>
+                    <StatusBadge label={c.status} colorClass={contractStatusColors[c.status as keyof typeof contractStatusColors] ?? 'bg-gray-100 text-gray-600'} />
+                  </div>
+                  <span className="text-xs font-bold text-gray-700">{formatCurrency(c.value)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="metric-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-gray-800 text-sm">Team Activity Totals</h3>
+            <span className="text-[10px] text-gray-400 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full">Last 30 days</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Deals Created', value: data.recentDeals.length, color: '#3b82f6' },
+              { label: 'Contracts', value: data.recentContracts.length, color: '#015035' },
+              { label: 'Invoices', value: data.recentInvoices.length, color: '#22c55e' },
+            ].map(s => (
+              <div key={s.label} className="text-center p-3 bg-gray-50 rounded-xl">
+                <p className="text-xl font-bold" style={{ color: s.color }}>{s.value}</p>
+                <p className="text-[10px] text-gray-500 font-medium mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── Operations Dashboard ───────────────────────────────────────────────────
+
+function OperationsView() {
   const { toast } = useToast()
-  const [data, setData] = useState<DashboardData>(emptyData)
+  const [projects, setProjects] = useState<ContractorProject[]>([])
+  const [tickets, setTickets] = useState<ContractorTicket[]>([])
+  const [tasks, setTasks] = useState<ContractorTask[]>([])
   const [loading, setLoading] = useState(true)
 
-  const isContractor = user?.role === 'Contractor' || user?.unit === 'Contractors'
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/projects').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('/api/tickets').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('/api/tasks').then(r => r.ok ? r.json() : []).catch(() => []),
+    ]).then(([p, t, tk]) => {
+      if (Array.isArray(p)) setProjects(p)
+      if (Array.isArray(t)) setTickets(t)
+      if (Array.isArray(tk)) setTasks(tk)
+    }).catch(() => toast('Failed to load operations data', 'error'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="flex items-center justify-center h-32"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" /></div>
+
+  const activeProjects = projects.filter(p => !['Completed', 'Cancelled'].includes(p.status))
+  const completedProjects = projects.filter(p => p.status === 'Completed')
+  const openTickets = tickets.filter(t => !['Closed', 'Resolved'].includes(t.status))
+  const highPriTickets = openTickets.filter(t => t.priority === 'High' || t.priority === 'Urgent')
+  const pendingTasks = tasks.filter(t => t.status !== 'Done' && t.status !== 'Completed')
+  const inProgressTasks = tasks.filter(t => t.status === 'In Progress')
+
+  return (
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <KpiCard label="Active Projects"    value={String(activeProjects.length)}    icon={<FolderKanban size={17} />}  accent="#8b5cf6"  sub="In progress"     href="/projects" />
+        <KpiCard label="Open Tickets"       value={String(openTickets.length)}       icon={<MessageSquare size={17} />} accent="#f59e0b"  sub={`${highPriTickets.length} high priority`} href="/tickets" />
+        <KpiCard label="Pending Tasks"      value={String(pendingTasks.length)}      icon={<CheckSquare size={17} />}   accent="#3b82f6"  sub={`${inProgressTasks.length} in progress`}  href="/tasks" />
+        <KpiCard label="Completed"          value={String(completedProjects.length)} icon={<CheckCircle size={17} />}   accent="#22c55e"  sub="Projects done"   href="/projects" />
+        <KpiCard label="Total Tasks"        value={String(tasks.length)}             icon={<Briefcase size={17} />}     accent="#015035"  sub="All time"        href="/tasks" />
+        <KpiCard label="Total Tickets"      value={String(tickets.length)}           icon={<AlertCircle size={17} />}   accent="#ef4444"  sub="All time"        href="/tickets" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="metric-card">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <FolderKanban size={14} style={{ color: '#8b5cf6' }} />
+              <h3 className="font-bold text-gray-800 text-sm">Active Projects</h3>
+            </div>
+            <Link href="/projects" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">View All <ArrowRight size={11} /></Link>
+          </div>
+          {activeProjects.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">No active projects</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-gray-50">
+              {activeProjects.slice(0, 6).map(p => (
+                <Link key={p.id} href="/projects" className="flex items-center justify-between py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-semibold text-gray-800 truncate">{p.company}</p>
+                    <p className="text-[11px] text-gray-400">{p.serviceType}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${p.progress}%`, background: '#015035' }} />
+                    </div>
+                    <span className="text-[11px] font-bold text-gray-500 w-8 text-right">{p.progress}%</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="metric-card">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <MessageSquare size={14} style={{ color: '#f59e0b' }} />
+              <h3 className="font-bold text-gray-800 text-sm">Open Tickets</h3>
+            </div>
+            <Link href="/tickets" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">View All <ArrowRight size={11} /></Link>
+          </div>
+          {openTickets.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">No open tickets</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-gray-50">
+              {openTickets.slice(0, 6).map(t => {
+                const priColor = t.priority === 'High' || t.priority === 'Urgent' ? 'text-red-600 bg-red-50' : t.priority === 'Medium' ? 'text-orange-600 bg-orange-50' : 'text-gray-600 bg-gray-50'
+                return (
+                  <Link key={t.id} href="/tickets" className="flex items-center justify-between py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold text-gray-800 truncate">{t.subject}</p>
+                      <p className="text-[11px] text-gray-400">{t.company}</p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ml-2 ${priColor}`}>{t.priority}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tasks grid */}
+      <div className="metric-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <CheckSquare size={14} style={{ color: '#3b82f6' }} />
+            <h3 className="font-bold text-gray-800 text-sm">Pending Tasks</h3>
+          </div>
+          <Link href="/tasks" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">View All <ArrowRight size={11} /></Link>
+        </div>
+        {pendingTasks.length === 0 ? (
+          <p className="text-xs text-gray-400 py-4 text-center">All tasks completed</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {pendingTasks.slice(0, 9).map(t => (
+              <Link key={t.id} href="/tasks" className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: t.status === 'In Progress' ? '#3b82f6' : '#d1d5db' }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-medium text-gray-800 truncate">{t.title}</p>
+                  {t.due_date && <p className="text-[10px] text-gray-400">Due {t.due_date}</p>}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+// ─── Billing Dashboard ──────────────────────────────────────────────────────
+
+function BillingView({ data }: { data: DashboardData }) {
+  const paidInvoices = data.recentInvoices.filter(i => i.status === 'Paid')
+  const overdueInvoices = data.recentInvoices.filter(i => i.status === 'Overdue')
+  const pendingInvoices = data.recentInvoices.filter(i => i.status === 'Sent' || i.status === 'Viewed')
+  const totalPaid = paidInvoices.reduce((s, i) => s + i.amount, 0)
+  const totalOverdue = overdueInvoices.reduce((s, i) => s + i.amount, 0)
+  const totalPending = pendingInvoices.reduce((s, i) => s + i.amount, 0)
+
+  return (
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <KpiCard label="Collected"       value={formatCurrency(data.metrics.monthlyRevenue)} icon={<DollarSign size={17} />}   accent="#22c55e"  sub="Total paid"       href="/billing" />
+        <KpiCard label="Overdue"         value={formatCurrency(totalOverdue)}                icon={<AlertCircle size={17} />}  accent="#ef4444"  sub={`${overdueInvoices.length} invoices`} href="/billing" />
+        <KpiCard label="Pending"         value={formatCurrency(totalPending)}                icon={<Clock size={17} />}        accent="#f59e0b"  sub={`${pendingInvoices.length} awaiting`} href="/billing" />
+        <KpiCard label="Active Clients"  value={String(data.metrics.activeClients)}          icon={<Users size={17} />}        accent="#015035"  sub="With contracts"   href="/contracts" />
+        <KpiCard label="Total Invoiced"  value={formatCurrency(data.recentInvoices.reduce((s, i) => s + i.amount, 0))} icon={<FileText size={17} />} accent="#8b5cf6" sub="All invoices" href="/billing" />
+        <KpiCard label="Renewals (60d)"  value={String(data.metrics.upcomingRenewals)}       icon={<RefreshCw size={17} />}    accent="#3b82f6"  sub="Coming up"        href="/renewals" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="metric-card lg:col-span-2">
+          <div className="flex items-start justify-between mb-5">
+            <div>
+              <h3 className="font-bold text-gray-800 text-sm">Revenue by Month</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-3">
+                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-700" /> One-time</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-100 border border-emerald-200" /> Recurring</span>
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-bold text-gray-900">{formatCurrency(data.revenueByMonth.reduce((s, r) => s + r.revenue, 0))}</p>
+              <p className="text-[11px] text-gray-400">all time</p>
+            </div>
+          </div>
+          <RevenueChart data={data.revenueByMonth} />
+        </div>
+
+        {/* Overdue invoices */}
+        <div className="metric-card">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle size={14} className="text-red-500" />
+            <h3 className="font-bold text-gray-800 text-sm">Overdue Invoices</h3>
+          </div>
+          {overdueInvoices.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">No overdue invoices</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-gray-50">
+              {overdueInvoices.map(inv => (
+                <Link key={inv.id} href="/billing" className="flex items-center justify-between py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
+                  <div>
+                    <p className="text-[12px] font-semibold text-gray-800">{inv.company}</p>
+                    <p className="text-[10px] text-gray-400">Due {inv.dueDate}</p>
+                  </div>
+                  <span className="text-xs font-bold text-red-600">{formatCurrency(inv.amount)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* All invoices */}
+      <div className="metric-card">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-gray-800 text-sm">Recent Invoices</h3>
+          <Link href="/billing" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">View All <ArrowRight size={11} /></Link>
+        </div>
+        <div className="flex flex-col divide-y divide-gray-50">
+          {data.recentInvoices.map(inv => (
+            <div key={inv.id} className="flex items-center justify-between py-2.5">
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-semibold text-gray-800">{inv.company}</p>
+                <p className="text-[10px] text-gray-400">{inv.serviceType}</p>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status as keyof typeof invoiceStatusColors] ?? 'bg-gray-100 text-gray-600'} />
+                <span className="text-xs font-bold text-gray-700 w-20 text-right">{formatCurrency(inv.amount)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── Marketing Dashboard ────────────────────────────────────────────────────
+
+function MarketingView() {
+  const { toast } = useToast()
+  const [broadcasts, setBroadcasts] = useState<Array<{ id: string; name: string; subject: string; status: string; totalSent: number; totalOpened: number; totalClicked: number; createdAt: string }>>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (isContractor) return // Contractor dashboard fetches its own data
-    fetch('/api/dashboard')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.metrics) setData(d) })
-      .catch(() => toast('Failed to load dashboard data', 'error'))
+    fetch('/api/broadcasts')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setBroadcasts(data) })
+      .catch(() => toast('Failed to load marketing data', 'error'))
       .finally(() => setLoading(false))
-  }, [isContractor])
+  }, [])
 
-  if (isContractor && user) return <ContractorDashboard userName={user.name} />
+  if (loading) return <div className="flex items-center justify-center h-32"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" /></div>
 
+  const sent = broadcasts.filter(b => b.status === 'sent')
+  const totalSent = broadcasts.reduce((s, b) => s + (b.totalSent || 0), 0)
+  const totalOpened = broadcasts.reduce((s, b) => s + (b.totalOpened || 0), 0)
+  const totalClicked = broadcasts.reduce((s, b) => s + (b.totalClicked || 0), 0)
+  const avgOpen = totalSent > 0 ? Math.round((totalOpened / totalSent) * 100) : 0
+  const avgClick = totalSent > 0 ? Math.round((totalClicked / totalSent) * 100) : 0
+
+  return (
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <KpiCard label="Broadcasts Sent" value={String(sent.length)}          icon={<Send size={17} />}      accent="#015035"  sub="Campaigns"       href="/marketing" />
+        <KpiCard label="Emails Sent"     value={totalSent.toLocaleString()}   icon={<Mail size={17} />}      accent="#3b82f6"  sub="Total delivered" href="/marketing" />
+        <KpiCard label="Avg Open Rate"   value={`${avgOpen}%`}               icon={<Eye size={17} />}       accent="#22c55e"  sub="Across campaigns" />
+        <KpiCard label="Avg Click Rate"  value={`${avgClick}%`}              icon={<Target size={17} />}    accent="#8b5cf6"  sub="Click-through" />
+        <KpiCard label="Total Opens"     value={totalOpened.toLocaleString()} icon={<BarChart3 size={17} />} accent="#f59e0b"  sub="All time" />
+        <KpiCard label="Drafts"          value={String(broadcasts.filter(b => b.status === 'draft').length)} icon={<FileText size={17} />} accent="#6b7280" sub="In progress" href="/marketing" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="metric-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-gray-800 text-sm">Recent Broadcasts</h3>
+            <Link href="/marketing" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">View All <ArrowRight size={11} /></Link>
+          </div>
+          {broadcasts.length === 0 ? (
+            <div className="text-center py-8">
+              <Mail size={24} className="text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-400 font-medium">No broadcasts yet</p>
+              <p className="text-xs text-gray-300 mt-1">Create one to start sending campaigns</p>
+            </div>
+          ) : (
+            <div className="flex flex-col divide-y divide-gray-50">
+              {broadcasts.slice(0, 6).map(b => {
+                const openRate = b.totalSent > 0 ? Math.round((b.totalOpened / b.totalSent) * 100) : 0
+                return (
+                  <Link key={b.id} href="/marketing" className="flex items-center justify-between py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold text-gray-800 truncate">{b.name}</p>
+                      <p className="text-[11px] text-gray-400 truncate">{b.subject}</p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                      {b.status === 'sent' && <span className="text-[10px] font-bold text-emerald-600">{openRate}% opened</span>}
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${b.status === 'sent' ? 'bg-emerald-50 text-emerald-600' : b.status === 'draft' ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-600'}`}>
+                        {b.status}
+                      </span>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Quick links */}
+        <div className="flex flex-col gap-4">
+          <div className="metric-card">
+            <h3 className="font-bold text-gray-800 text-sm mb-3">Marketing Tools</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: 'Broadcasts',  href: '/marketing',      icon: <Mail size={16} />,          color: '#015035' },
+                { label: 'Forms',       href: '/forms',          icon: <FileText size={16} />,      color: '#3b82f6' },
+                { label: 'Sequences',   href: '/crm/sequences',  icon: <Zap size={16} />,           color: '#8b5cf6' },
+                { label: 'Social',      href: '/social',         icon: <MessageSquare size={16} />, color: '#f59e0b' },
+              ].map(link => (
+                <Link key={link.href} href={link.href} className="flex items-center gap-2.5 p-3 rounded-xl border border-gray-100 hover:bg-gray-50 hover:shadow-sm transition-all">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${link.color}15` }}>
+                    <span style={{ color: link.color }}>{link.icon}</span>
+                  </div>
+                  <span className="text-xs font-semibold text-gray-700">{link.label}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <div className="metric-card">
+            <h3 className="font-bold text-gray-800 text-sm mb-3">Performance Summary</h3>
+            <div className="flex flex-col gap-2">
+              {[
+                { label: 'Total Campaigns', value: String(broadcasts.length) },
+                { label: 'Emails Delivered', value: totalSent.toLocaleString(), green: true },
+                { label: 'Total Opens', value: totalOpened.toLocaleString(), green: true },
+                { label: 'Total Clicks', value: totalClicked.toLocaleString() },
+                { label: 'Avg Open Rate', value: `${avgOpen}%`, green: avgOpen > 20 },
+              ].map(s => (
+                <div key={s.label} className="flex items-center justify-between py-0.5">
+                  <span className="text-[12px] text-gray-500">{s.label}</span>
+                  <span className={`text-[12px] font-bold ${s.green ? 'text-emerald-600' : 'text-gray-800'}`}>{s.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── Executive View ─────────────────────────────────────────────────────────
+
+function ExecutiveView({ data, user }: { data: DashboardData; user: { name: string; isAdmin?: boolean } | null }) {
   const m = data.metrics
   const pendingContracts = data.recentContracts.filter(c =>
     ['Sent', 'Viewed', 'Countersign Needed', 'Signed by Client'].includes(c.status)
   )
   const overdueInvoices = data.recentInvoices.filter(i => i.status === 'Overdue')
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  return (
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <KpiCard label="Pipeline"       value={formatCurrency(m.pipelineValue)}  icon={<TrendingUp size={17} />}   accent="#3b82f6"  sub="Active deals"        href="/crm/pipeline" />
+        <KpiCard label="Active Clients" value={String(m.activeClients)}          icon={<CheckCircle size={17} />}  accent="#015035"  sub="Executed contracts"  href="/contracts" />
+        <KpiCard label="Collected"      value={formatCurrency(m.monthlyRevenue)} icon={<DollarSign size={17} />}   accent="#22c55e"  sub="Payments received"   href="/billing" />
+        <KpiCard label="Open Deals"     value={String(m.openDeals)}              icon={<RefreshCw size={17} />}    accent="#8b5cf6"  sub="In pipeline"         href="/crm/pipeline" />
+        <KpiCard label="Overdue"        value={String(m.overdueInvoices)}        icon={<FolderKanban size={17} />} accent="#f59e0b"  sub="Invoices overdue"    href="/billing" />
+        <KpiCard label="Renewals (60d)" value={String(m.upcomingRenewals)}       icon={<Calendar size={17} />}     accent="#ef4444"  sub="Due soon"            href="/renewals" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="metric-card lg:col-span-2">
+          <div className="flex items-start justify-between mb-5">
+            <div>
+              <h3 className="font-bold text-gray-800 text-sm">Revenue by Month</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-3">
+                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-700" /> One-time</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-100 border border-emerald-200" /> Recurring</span>
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-bold text-gray-900">{formatCurrency(data.revenueByMonth.reduce((s, r) => s + r.revenue, 0))}</p>
+              <p className="text-[11px] text-gray-400">total</p>
+            </div>
+          </div>
+          <RevenueChart data={data.revenueByMonth} />
+        </div>
+
+        <div className="metric-card">
+          <h3 className="font-bold text-gray-800 text-sm mb-1">Pipeline by Stage</h3>
+          <p className="text-[11px] text-gray-400 mb-4">{m.openDeals} active deals</p>
+          {data.recentDeals.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">No deals yet</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {data.recentDeals.slice(0, 4).map(d => (
+                <div key={d.id} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-700 font-medium truncate max-w-[140px]">{d.company}</span>
+                  <span className="text-gray-500 font-bold ml-2">{formatCurrency(d.value)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <Link href="/crm/pipeline" className="mt-4 flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 transition-colors">
+            View Pipeline <ArrowRight size={12} />
+          </Link>
+        </div>
+      </div>
+
+      <div className={`grid grid-cols-1 ${user?.isAdmin ? 'lg:grid-cols-3' : ''} gap-4`}>
+        {user?.isAdmin && (
+          <div className="metric-card lg:col-span-2">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-gray-800 text-sm">Recent Activity</h3>
+              <span className="text-[11px] text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">Live feed</span>
+            </div>
+            <div className="flex flex-col divide-y divide-gray-50">
+              {data.activityFeed.length === 0 ? (
+                <p className="text-xs text-gray-400 py-4 text-center">No activity yet.</p>
+              ) : data.activityFeed.map((item) => {
+                const meta = activityMeta[item.type] ?? activityMeta.action
+                return (
+                  <div key={item.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${meta.color}14`, color: meta.color }}>
+                      {meta.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-gray-800 leading-snug">{item.action}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] text-gray-500 font-semibold">{item.user}</span>
+                        <span className="text-gray-300 text-xs">·</span>
+                        <span className="text-[11px] text-gray-400">{item.module}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-4">
+          <div className="metric-card">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertCircle size={14} className="text-orange-500" />
+              <h3 className="font-bold text-gray-800 text-sm">Needs Attention</h3>
+            </div>
+            <div className="flex flex-col">
+              {pendingContracts.slice(0, 3).map(c => (
+                <Link key={c.id} href="/contracts" className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
+                  <div>
+                    <p className="text-[12px] font-semibold text-gray-800">{c.company}</p>
+                    <StatusBadge label={c.status} colorClass={contractStatusColors[c.status as keyof typeof contractStatusColors] ?? 'bg-gray-100 text-gray-600'} />
+                  </div>
+                  <span className="text-xs font-bold text-gray-700 ml-2">{formatCurrency(c.value)}</span>
+                </Link>
+              ))}
+              {overdueInvoices.map(inv => (
+                <Link key={inv.id} href="/billing" className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
+                  <div>
+                    <p className="text-[12px] font-semibold text-gray-800">{inv.company}</p>
+                    <StatusBadge label="Invoice Overdue" colorClass={invoiceStatusColors['Overdue']} />
+                  </div>
+                  <span className="text-xs font-bold text-red-600 ml-2">{formatCurrency(inv.amount)}</span>
+                </Link>
+              ))}
+              {pendingContracts.length === 0 && overdueInvoices.length === 0 && (
+                <p className="text-xs text-gray-400 py-3 text-center">All clear</p>
+              )}
+            </div>
+          </div>
+
+          <div className="metric-card">
+            <h3 className="font-bold text-gray-800 text-sm mb-3">Quick Stats</h3>
+            <div className="flex flex-col gap-2">
+              {[
+                { label: 'Open Deals', value: String(m.openDeals) },
+                { label: 'Active Clients', value: String(m.activeClients), green: true },
+                { label: 'Overdue Invoices', value: String(m.overdueInvoices), red: m.overdueInvoices > 0 },
+                { label: 'Renewals Due', value: String(m.upcomingRenewals), red: m.upcomingRenewals > 0 },
+                { label: 'Pipeline Value', value: formatCurrency(m.pipelineValue), green: true },
+              ].map(s => (
+                <div key={s.label} className="flex items-center justify-between py-0.5">
+                  <span className="text-[12px] text-gray-500">{s.label}</span>
+                  <span className={`text-[12px] font-bold ${s.green ? 'text-emerald-600' : (s as {red?: boolean}).red ? 'text-red-500' : 'text-gray-800'}`}>{s.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="metric-card">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap size={14} style={{ color: '#015035' }} />
+              <h3 className="font-bold text-gray-800 text-sm">Automation</h3>
+            </div>
+            <div className="flex flex-col gap-2">
+              {data.automations && data.automations.length > 0 ? (
+                data.automations.slice(0, 4).map((a, i) => {
+                  const statusMap: Record<string, { dot: string; cls: string }> = {
+                    Active: { dot: '#22c55e', cls: 'text-emerald-600' },
+                    Paused: { dot: '#9ca3af', cls: 'text-gray-500' },
+                    Draft: { dot: '#3b82f6', cls: 'text-blue-500' },
+                  }
+                  const style = statusMap[a.status] ?? statusMap.Active
+                  return (
+                    <div key={i} className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-gray-500 truncate">{a.name}</span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: style.dot }} />
+                        <span className={`text-[11px] font-bold ${style.cls}`}>{a.status}</span>
+                      </div>
+                    </div>
+                  )
+                })
+              ) : (
+                <p className="text-[11px] text-gray-400">No automations configured</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── Main Dashboard ──────────────────────────────────────────────────────────
+
+export default function DashboardPage() {
+  const { user } = useAuth()
+  const { toast } = useToast()
+  const settings = useSettings()
+  const [data, setData] = useState<DashboardData>(emptyData)
+  const [loading, setLoading] = useState(true)
+
+  const isContractor = user?.role === 'Contractor' || user?.unit === 'Contractors'
+  const isAdmin = user?.isAdmin || user?.role === 'Leadership' || user?.role === 'Super Admin'
+
+  const availableViews = isAdmin
+    ? DASHBOARD_VIEWS
+    : isContractor
+      ? DASHBOARD_VIEWS.filter(v => v.id === 'contractor')
+      : DASHBOARD_VIEWS.filter(v => v.id !== 'contractor' && v.roles.includes(user?.role ?? 'Team Member'))
+
+  const defaultView: DashboardView = isContractor ? 'contractor' : 'executive'
+  const [view, setView] = useState<DashboardView>(defaultView)
+
+  useEffect(() => {
+    if (view === 'contractor') return
+    if (view === 'operations') return
+    if (view === 'marketing') return
+    fetch('/api/dashboard')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.metrics) setData(d) })
+      .catch(() => toast('Failed to load dashboard data', 'error'))
+      .finally(() => setLoading(false))
+  }, [view])
+
+  const viewLabel = DASHBOARD_VIEWS.find(v => v.id === view)?.label ?? 'Dashboard'
+  const showSpinner = loading && !['contractor', 'operations', 'marketing'].includes(view)
+
+  if (showSpinner) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>
-      <Header title="Dashboard" subtitle="Graviss Marketing — Executive Overview" />
+      <Header title="Dashboard" subtitle={`${settings?.company.name ?? 'Graviss Marketing'} — ${viewLabel}`} />
       <div className="page-content">
+        {/* View selector + greeting */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <ViewSelector view={view} setView={setView} views={availableViews} />
+          {isAdmin && (
+            <span className="text-[10px] text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full font-medium">
+              Viewing all dashboards (Admin)
+            </span>
+          )}
+        </div>
 
-        {/* Greeting + Clock */}
         {user && <GreetingBanner name={user.name} />}
         {user && <MagicMomentToast name={user.name} />}
         <LiveClock />
 
-        {/* KPI Row */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-          <KpiCard label="Pipeline"       value={formatCurrency(m.pipelineValue)}  icon={<TrendingUp size={17} />}   accent="#3b82f6"  sub="Active deals"        href="/crm/pipeline" />
-          <KpiCard label="Active Clients" value={String(m.activeClients)}          icon={<CheckCircle size={17} />}  accent="#015035"  sub="Executed contracts"  href="/contracts" />
-          <KpiCard label="Collected"      value={formatCurrency(m.monthlyRevenue)} icon={<DollarSign size={17} />}   accent="#22c55e"  sub="Payments received"   href="/billing" />
-          <KpiCard label="Open Deals"     value={String(m.openDeals)}              icon={<RefreshCw size={17} />}    accent="#8b5cf6"  sub="In pipeline"         href="/crm/pipeline" />
-          <KpiCard label="Overdue"        value={String(m.overdueInvoices)}        icon={<FolderKanban size={17} />} accent="#f59e0b"  sub="Invoices overdue"    href="/billing" />
-          <KpiCard label="Renewals (60d)" value={String(m.upcomingRenewals)}       icon={<Calendar size={17} />}     accent="#ef4444"  sub="Due soon"            href="/renewals" />
-        </div>
-
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="metric-card lg:col-span-2">
-            <div className="flex items-start justify-between mb-5">
-              <div>
-                <h3 className="font-bold text-gray-800 text-sm">Revenue by Month</h3>
-                <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-3">
-                  <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-700" /> One-time</span>
-                  <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-100 border border-emerald-200" /> Recurring</span>
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(data.revenueByMonth.reduce((s, r) => s + r.revenue, 0))}</p>
-                <p className="text-[11px] text-gray-400">total</p>
-              </div>
-            </div>
-            <RevenueChart data={data.revenueByMonth} />
-          </div>
-
-          <div className="metric-card">
-            <h3 className="font-bold text-gray-800 text-sm mb-1">Pipeline by Stage</h3>
-            <p className="text-[11px] text-gray-400 mb-4">{m.openDeals} active deals</p>
-            {data.recentDeals.length === 0 ? (
-              <p className="text-xs text-gray-400 py-4 text-center">No deals yet</p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {data.recentDeals.slice(0, 4).map(d => (
-                  <div key={d.id} className="flex items-center justify-between text-xs">
-                    <span className="text-gray-700 font-medium truncate max-w-[140px]">{d.company}</span>
-                    <span className="text-gray-500 font-bold ml-2">{formatCurrency(d.value)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <Link href="/crm/pipeline" className="mt-4 flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 transition-colors">
-              View Pipeline <ArrowRight size={12} />
-            </Link>
-          </div>
-        </div>
-
-        {/* Bottom Row */}
-        <div className={`grid grid-cols-1 ${user?.isAdmin ? 'lg:grid-cols-3' : ''} gap-4`}>
-
-          {/* Activity feed — Admin / Super Admin only */}
-          {user?.isAdmin && (
-            <div className="metric-card lg:col-span-2">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-gray-800 text-sm">Recent Activity</h3>
-                <span className="text-[11px] text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">Live feed</span>
-              </div>
-              <div className="flex flex-col divide-y divide-gray-50">
-                {data.activityFeed.length === 0 ? (
-                  <p className="text-xs text-gray-400 py-4 text-center">No activity yet. Start by adding deals or contacts.</p>
-                ) : data.activityFeed.map((item) => {
-                  const meta = activityMeta[item.type] ?? activityMeta.action
-                  return (
-                    <div key={item.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-                      <div
-                        className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
-                        style={{ background: `${meta.color}14`, color: meta.color }}
-                      >
-                        {meta.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] text-gray-800 leading-snug">{item.action}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[11px] text-gray-500 font-semibold">{item.user}</span>
-                          <span className="text-gray-300 text-xs">·</span>
-                          <span className="text-[11px] text-gray-400">{item.module}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Right column */}
-          <div className="flex flex-col gap-4">
-
-            {/* Needs attention */}
-            <div className="metric-card">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertCircle size={14} className="text-orange-500" />
-                <h3 className="font-bold text-gray-800 text-sm">Needs Attention</h3>
-              </div>
-              <div className="flex flex-col">
-                {pendingContracts.slice(0, 3).map(c => (
-                  <Link key={c.id} href="/contracts" className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
-                    <div>
-                      <p className="text-[12px] font-semibold text-gray-800">{c.company}</p>
-                      <StatusBadge label={c.status} colorClass={contractStatusColors[c.status as keyof typeof contractStatusColors] ?? 'bg-gray-100 text-gray-600'} />
-                    </div>
-                    <span className="text-xs font-bold text-gray-700 ml-2">{formatCurrency(c.value)}</span>
-                  </Link>
-                ))}
-                {overdueInvoices.map(inv => (
-                  <Link key={inv.id} href="/billing" className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
-                    <div>
-                      <p className="text-[12px] font-semibold text-gray-800">{inv.company}</p>
-                      <StatusBadge label="Invoice Overdue" colorClass={invoiceStatusColors['Overdue']} />
-                    </div>
-                    <span className="text-xs font-bold text-red-600 ml-2">{formatCurrency(inv.amount)}</span>
-                  </Link>
-                ))}
-                {pendingContracts.length === 0 && overdueInvoices.length === 0 && (
-                  <p className="text-xs text-gray-400 py-3 text-center">All clear — nothing needs action</p>
-                )}
-              </div>
-            </div>
-
-            {/* Quick stats */}
-            <div className="metric-card">
-              <h3 className="font-bold text-gray-800 text-sm mb-3">Quick Stats</h3>
-              <div className="flex flex-col gap-2">
-                {[
-                  { label: 'Open Deals',       value: String(m.openDeals) },
-                  { label: 'Active Clients',   value: String(m.activeClients), green: true },
-                  { label: 'Overdue Invoices', value: String(m.overdueInvoices), red: m.overdueInvoices > 0 },
-                  { label: 'Renewals Due',     value: String(m.upcomingRenewals), red: m.upcomingRenewals > 0 },
-                  { label: 'Pipeline Value',   value: formatCurrency(m.pipelineValue), green: true },
-                ].map(s => (
-                  <div key={s.label} className="flex items-center justify-between py-0.5">
-                    <span className="text-[12px] text-gray-500">{s.label}</span>
-                    <span className={`text-[12px] font-bold ${s.green ? 'text-emerald-600' : (s as {red?: boolean}).red ? 'text-red-500' : 'text-gray-800'}`}>
-                      {s.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Automation */}
-            <div className="metric-card">
-              <div className="flex items-center gap-2 mb-3">
-                <Zap size={14} style={{ color: '#015035' }} />
-                <h3 className="font-bold text-gray-800 text-sm">Automation</h3>
-              </div>
-              <div className="flex flex-col gap-2">
-                {data.automations && data.automations.length > 0 ? (
-                  data.automations.slice(0, 4).map((a: { name: string; status: string; runs: number }, i: number) => {
-                    const statusMap: Record<string, { dot: string; cls: string }> = {
-                      Active:  { dot: '#22c55e', cls: 'text-emerald-600' },
-                      Paused:  { dot: '#9ca3af', cls: 'text-gray-500' },
-                      Draft:   { dot: '#3b82f6', cls: 'text-blue-500' },
-                    }
-                    const style = statusMap[a.status] ?? statusMap.Active
-                    return (
-                      <div key={i} className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-gray-500 truncate">{a.name}</span>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <div className="w-1.5 h-1.5 rounded-full" style={{ background: style.dot }} />
-                          <span className={`text-[11px] font-bold ${style.cls}`}>{a.status}</span>
-                        </div>
-                      </div>
-                    )
-                  })
-                ) : (
-                  <p className="text-[11px] text-gray-400">No automations configured</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Dashboard views */}
+        {view === 'executive' && <ExecutiveView data={data} user={user} />}
+        {view === 'sales' && <SalesView data={data} />}
+        {view === 'operations' && <OperationsView />}
+        {view === 'billing' && <BillingView data={data} />}
+        {view === 'marketing' && <MarketingView />}
+        {view === 'contractor' && user && <ContractorDashboard userName={user.name} />}
       </div>
     </>
   )

@@ -268,7 +268,7 @@ function EditContactPanel({
 
 function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts, projects, crmActivities }: { contact: CRMContact; onClose: () => void; onEdit?: () => void; crmCompanies: CRMCompany[]; deals: Deal[]; contracts: Contract[]; projects: Project[]; crmActivities: CRMActivity[] }) {
   const { toast } = useToast()
-  const [tab, setTab] = useState<'overview' | 'pipeline' | 'contracts' | 'notes' | 'tasks' | 'activity'>('overview')
+  const [tab, setTab] = useState<'activity' | 'associations' | 'about'>('activity')
   const [taskDone, setTaskDone] = useState<Set<string>>(
     new Set((contact.contactTasks ?? []).filter(t => t.completed).map(t => t.id))
   )
@@ -288,8 +288,8 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   const [localTags, setLocalTags] = useState<string[]>(contact.tags ?? [])
   const [newTag, setNewTag] = useState('')
   const [addingTag, setAddingTag] = useState(false)
-  const [addingToDeal, setAddingToDeal] = useState(false)
-  const [dealSearch, setDealSearch] = useState('')
+  const [aboutOpen, setAboutOpen] = useState(true)
+  const [moreMenu, setMoreMenu] = useState(false)
 
   function handleAddNote() {
     if (!newNoteBody.trim()) return
@@ -349,7 +349,6 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(entry),
       })
-      // Update contact's lastActivity date
       fetch(`/api/crm/contacts/${contact.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -382,582 +381,573 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
     persistTags(updated)
   }
 
-  // Cross-linked data
   const company = crmCompanies.find(c => c.id === contact.companyId)
   const contactDeals = deals.filter(d => d.company === contact.companyName)
   const contactContracts = contracts.filter(c => c.company === contact.companyName)
   const companyProject = projects.find(p => p.company === contact.companyName)
   const activeDeal = contactDeals.find(d => !d.stage.startsWith('Closed'))
   const executedContract = contactContracts.find(c => c.status === 'Fully Executed')
+  const totalActivities = localActivities.length + localNotes.length + localTasks.length
+
+  const LIFECYCLE_OPTIONS = ['Lead', 'Opportunity', 'Client', 'Other'] as const
+  const LEAD_STATUS_OPTIONS = ['New', 'Open', 'In Progress', 'Open Deal', 'Unqualified', 'Attempted to Contact', 'Connected', 'Bad Timing'] as const
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
-      <div className="flex-1 pointer-events-auto" onClick={onClose} />
-      <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(520px, 100vw)' }}>
+      <div className="flex-1 pointer-events-auto bg-black/30" onClick={onClose} />
+      <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200 w-full sm:w-[min(560px,100vw)]">
 
-        {/* Header */}
-        <div className="p-6 flex-shrink-0" style={{ background: '#012b1e' }}>
-          <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mb-3">
-            <ChevronLeft size={14} /> Back
-          </button>
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-4 flex-1 min-w-0 pr-3">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
-                {contact.firstName[0]}{contact.lastName[0]}
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-white text-lg font-bold" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
-                  {contact.fullName}
-                </h2>
-                <p className="text-white/60 text-sm">{contact.title}</p>
-                {contact.isPrimary && (
-                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full font-medium mt-1 inline-block">
-                    Primary Contact
-                  </span>
-                )}
-              </div>
+        {/* ── Header ── */}
+        <div className="flex-shrink-0" style={{ background: '#012b1e' }}>
+          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+            <button onClick={onClose} className="flex items-center gap-1 text-white/60 hover:text-white text-xs font-medium">
+              <ChevronLeft size={16} />
+            </button>
+            <div className="flex-1 text-center min-w-0 px-4">
+              <p className="text-white/50 text-[10px] uppercase tracking-wider font-semibold">Contact | {contact.companyName}</p>
             </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-1">
               {onEdit && (
                 <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-white/10" title="Edit contact">
-                  <Pencil size={15} className="text-white/60" />
+                  <Pencil size={14} className="text-white/50" />
                 </button>
               )}
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10">
-                <X size={18} className="text-white/60" />
+                <X size={14} className="text-white/50" />
               </button>
             </div>
           </div>
 
-          {/* Company link + action buttons */}
-          <Link
-            href="/crm/companies"
-            className="flex items-center gap-2 bg-white/10 hover:bg-white/15 rounded-xl p-3 transition-colors mb-3"
-          >
-            <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-              {company?.name[0] ?? '?'}
+          {/* Avatar + name */}
+          <div className="flex flex-col items-center px-5 pb-3">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold text-white mb-2 ring-2 ring-white/20" style={{ background: '#015035' }}>
+              {contact.firstName[0]}{contact.lastName[0]}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-sm font-semibold">{contact.companyName}</p>
-              {company && <p className="text-white/50 text-xs">{company.industry} · {company.hq}</p>}
-            </div>
-            <ChevronRight size={14} className="text-white/40 flex-shrink-0" />
-          </Link>
+            <h2 className="text-white text-base font-bold">{contact.emails[0] ?? contact.fullName}</h2>
+            <p className="text-white/50 text-xs">{contact.title}{contact.isPrimary ? ' · Primary' : ''}</p>
+          </div>
 
-          {/* Quick stats */}
-          <div className="grid grid-cols-3 gap-2">
+          {/* Circular action buttons */}
+          <div className="flex justify-center gap-6 pb-4">
             {[
-              { label: 'Pipeline Stage', value: activeDeal?.stage ?? 'No Deal' },
-              { label: 'Deal Value', value: activeDeal ? formatCurrency(activeDeal.value) : '—' },
-              { label: 'Contract', value: executedContract ? 'Active' : contactContracts.length > 0 ? 'Pending' : 'None' },
-            ].map(s => (
-              <div key={s.label} className="bg-white/10 rounded-xl p-2.5 text-center">
-                <p className="text-white text-xs font-bold truncate">{s.value}</p>
-                <p className="text-white/50 text-[10px] uppercase tracking-wide font-semibold mt-0.5">{s.label}</p>
+              { icon: <Phone size={16} />, label: 'Call', href: `tel:${contact.phones[0] ?? ''}`, type: 'link' as const },
+              { icon: <Mail size={16} />, label: 'Email', href: `mailto:${contact.emails[0] ?? ''}`, type: 'link' as const },
+              { icon: <Linkedin size={16} />, label: 'LinkedIn', href: contact.linkedIn ?? '', type: 'link' as const },
+              { icon: <Plus size={16} />, label: 'More', type: 'button' as const },
+            ].map(action => (
+              <div key={action.label} className="flex flex-col items-center gap-1.5">
+                {action.type === 'link' && action.href ? (
+                  <a
+                    href={action.href}
+                    target={action.label === 'LinkedIn' ? '_blank' : undefined}
+                    rel={action.label === 'LinkedIn' ? 'noopener noreferrer' : undefined}
+                    className="w-11 h-11 rounded-full border border-white/20 flex items-center justify-center text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+                  >
+                    {action.icon}
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => setMoreMenu(v => !v)}
+                    className="w-11 h-11 rounded-full border border-white/20 flex items-center justify-center text-white/70 hover:bg-white/10 hover:text-white transition-colors relative"
+                  >
+                    {action.icon}
+                  </button>
+                )}
+                <span className="text-white/50 text-[10px] font-medium">{action.label}</span>
               </div>
             ))}
           </div>
-        </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-2 px-5 py-3 border-b border-gray-100 flex-shrink-0">
-          <a href={`mailto:${contact.emails[0] ?? ''}`} className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
-            <Mail size={13} /> Email
-          </a>
-          <a href={`tel:${contact.phones[0] ?? ''}`} className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
-            <Phone size={13} /> Call
-          </a>
-          {contact.linkedIn && (
-            <a href={contact.linkedIn} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
-              <Linkedin size={13} /> LinkedIn
-            </a>
+          {/* More dropdown */}
+          {moreMenu && (
+            <div className="mx-5 mb-3 bg-white/10 rounded-xl p-2 flex flex-col gap-0.5">
+              <button onClick={() => { setLoggingActivity(true); setTab('activity'); setMoreMenu(false) }} className="flex items-center gap-2 text-white/80 hover:bg-white/10 rounded-lg px-3 py-2 text-xs font-medium">
+                <Plus size={13} /> Log Activity
+              </button>
+              <button onClick={() => { setAddingNote(true); setTab('activity'); setMoreMenu(false) }} className="flex items-center gap-2 text-white/80 hover:bg-white/10 rounded-lg px-3 py-2 text-xs font-medium">
+                <StickyNote size={13} /> Add Note
+              </button>
+              <button onClick={() => { setAddingTask(true); setTab('activity'); setMoreMenu(false) }} className="flex items-center gap-2 text-white/80 hover:bg-white/10 rounded-lg px-3 py-2 text-xs font-medium">
+                <CheckSquare size={13} /> Create Task
+              </button>
+              {contact.website && (
+                <a href={`https://${contact.website}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white/80 hover:bg-white/10 rounded-lg px-3 py-2 text-xs font-medium">
+                  <Globe size={13} /> Visit Website
+                </a>
+              )}
+            </div>
           )}
-          <button
-            onClick={() => { setLoggingActivity(true); setTab('activity') }}
-            className="ml-auto flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-white hover:opacity-90"
-            style={{ background: '#015035' }}
-          >
-            <Plus size={13} /> Log Activity
-          </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
-          {(['overview', 'pipeline', 'contracts', 'notes', 'tasks', 'activity'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}
+        {/* ── Tabs ── */}
+        <div className="flex border-b border-gray-200 flex-shrink-0">
+          {([
+            { id: 'activity' as const, label: 'Activity' },
+            { id: 'associations' as const, label: 'Associations' },
+            { id: 'about' as const, label: 'About' },
+          ]).map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex-1 py-3 text-xs font-semibold tracking-wide transition-colors border-b-2 ${
+                tab === t.id
+                  ? 'border-emerald-600 text-gray-900'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
             >
-              {t === 'notes' && localNotes.length > 0 ? (
-                <span className="flex items-center gap-1">{t}<span className="w-4 h-4 rounded-full bg-blue-100 text-blue-600 text-[9px] font-bold flex items-center justify-center">{localNotes.length}</span></span>
-              ) : t === 'tasks' && localTasks.filter(tk => !taskDone.has(tk.id)).length > 0 ? (
-                <span className="flex items-center gap-1">{t}<span className="w-4 h-4 rounded-full bg-orange-100 text-orange-600 text-[9px] font-bold flex items-center justify-center">{localTasks.filter(tk => !taskDone.has(tk.id)).length}</span></span>
-              ) : t}
+              {t.label}
             </button>
           ))}
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5">
+        {/* ── Content ── */}
+        <div className="flex-1 overflow-y-auto">
 
-          {/* ── Overview ── */}
-          {tab === 'overview' && (
-            <div className="flex flex-col gap-4">
-              <div className="p-4 bg-gray-50 rounded-xl">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Contact Info</p>
-                <div className="flex flex-col gap-2.5">
-                  {contact.emails.map((e, i) => (
-                    <InfoRow key={`e${i}`} icon={<Mail size={14} />} label={i === 0 ? 'Email' : 'Alt Email'} value={
-                      <a href={`mailto:${e}`} className="text-blue-500 hover:underline">{e}</a>
-                    } />
-                  ))}
-                  {contact.phones.map((p, i) => (
-                    <InfoRow key={`p${i}`} icon={<Phone size={14} />} label={i === 0 ? 'Phone' : 'Mobile'} value={p} />
-                  ))}
-                  {contact.website && (
-                    <InfoRow icon={<Globe size={14} />} label="Website" value={
-                      <a href={`https://${contact.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">{contact.website}</a>
-                    } />
-                  )}
-                  <InfoRow icon={<User size={14} />} label="Owner" value={contact.owner} />
-                  {contact.lastActivity && (
-                    <InfoRow icon={<Clock size={14} />} label="Last Activity" value={contact.lastActivity} />
-                  )}
-                </div>
+          {/* ══════ ACTIVITY TAB ══════ */}
+          {tab === 'activity' && (
+            <div className="flex flex-col">
+              {/* Filter + count */}
+              <div className="px-5 pt-4 pb-2">
+                <button className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1.5 transition-colors">
+                  Filter Activity ({totalActivities}/{totalActivities})
+                  <ChevronRight size={11} className="rotate-90" />
+                </button>
               </div>
 
-              <div className="p-4 bg-gray-50 rounded-xl">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tags</p>
-                  <button
-                    onClick={() => setAddingTag(v => !v)}
-                    className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900"
+              {/* AI Summarize button */}
+              <div className="px-5 pb-3">
+                <AiInsightsPanel
+                  type="contact"
+                  name={contact.fullName}
+                  context={[
+                    `Title: ${contact.title}`,
+                    `Company: ${contact.companyName}`,
+                    `Owner: ${contact.owner}`,
+                    activeDeal ? `Stage: ${activeDeal.stage}` : '',
+                    activeDeal ? `Deal Value: $${activeDeal.value.toLocaleString()}` : 'No active deal',
+                    executedContract ? 'Contract: Active' : contactContracts.length > 0 ? 'Contract: Pending' : 'Contract: None',
+                    localTags.length > 0 ? `Tags: ${localTags.join(', ')}` : '',
+                    contact.notes ? `Notes: ${contact.notes}` : '',
+                  ].filter(Boolean).join('\n')}
+                />
+              </div>
+
+              {/* Quick action buttons */}
+              <div className="flex justify-center gap-8 py-3 border-b border-gray-100">
+                <button
+                  onClick={() => setAddingNote(true)}
+                  className="flex flex-col items-center gap-1.5"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors">
+                    <StickyNote size={16} />
+                  </div>
+                  <span className="text-[10px] text-gray-500 font-medium">Add Note</span>
+                </button>
+                <button
+                  onClick={() => setAddingTask(true)}
+                  className="flex flex-col items-center gap-1.5"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors">
+                    <CheckSquare size={16} />
+                  </div>
+                  <span className="text-[10px] text-gray-500 font-medium">Create Task</span>
+                </button>
+                <button
+                  onClick={() => setLoggingActivity(true)}
+                  className="flex flex-col items-center gap-1.5"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors">
+                    <Plus size={16} />
+                  </div>
+                  <span className="text-[10px] text-gray-500 font-medium">Log Activity</span>
+                </button>
+              </div>
+
+              {/* Inline forms */}
+              <div className="px-5 pt-3 flex flex-col gap-3">
+                {loggingActivity && (
+                  <LogActivityForm
+                    onSave={handleSaveActivity}
+                    onCancel={() => setLoggingActivity(false)}
+                    authorName="You"
+                  />
+                )}
+
+                {addingNote && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex flex-col gap-2">
+                    <textarea
+                      value={newNoteBody}
+                      onChange={e => setNewNoteBody(e.target.value)}
+                      placeholder="Write your note here..."
+                      className="w-full text-sm border border-blue-200 rounded-lg p-2.5 bg-white outline-none resize-none leading-relaxed"
+                      rows={3}
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={handleAddNote} disabled={!newNoteBody.trim()} className="flex-1 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>
+                        Save Note
+                      </button>
+                      <button onClick={() => { setAddingNote(false); setNewNoteBody('') }} className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {addingTask && (
+                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl flex flex-col gap-2">
+                    <input
+                      value={newTaskTitle}
+                      onChange={e => setNewTaskTitle(e.target.value)}
+                      placeholder="Task title..."
+                      className="text-sm border border-orange-200 rounded-lg px-2.5 py-2 bg-white outline-none w-full"
+                      autoFocus
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <select value={newTaskType} onChange={e => setNewTaskType(e.target.value as ContactTask['taskType'])} className="text-xs border border-orange-200 rounded-lg px-2 py-1.5 bg-white outline-none text-gray-700">
+                        {Object.entries(taskTypeConfig).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+                      </select>
+                      <select value={newTaskPriority} onChange={e => setNewTaskPriority(e.target.value as ContactTask['priority'])} className="text-xs border border-orange-200 rounded-lg px-2 py-1.5 bg-white outline-none text-gray-700">
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                      </select>
+                    </div>
+                    <input type="date" value={newTaskDue} onChange={e => setNewTaskDue(e.target.value)} className="text-xs border border-orange-200 rounded-lg px-2.5 py-1.5 bg-white outline-none text-gray-700 w-full" />
+                    <div className="flex gap-2">
+                      <button onClick={handleAddTask} disabled={!newTaskTitle.trim() || !newTaskDue} className="flex-1 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>
+                        Save Task
+                      </button>
+                      <button onClick={() => { setAddingTask(false); setNewTaskTitle(''); setNewTaskDue('') }} className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Open tasks */}
+                {localTasks.filter(t => !taskDone.has(t.id)).length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Open Tasks</p>
+                    {localTasks.filter(t => !taskDone.has(t.id)).map(task => {
+                      const cfg = taskTypeConfig[task.taskType]
+                      const isOverdue = new Date(task.dueDate) < new Date()
+                      return (
+                        <div key={task.id} className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-100">
+                          <button
+                            onClick={() => setTaskDone(prev => {
+                              const next = new Set(prev)
+                              next.add(task.id)
+                              setLocalTasks(ts => ts.map(t => t.id === task.id ? { ...t, completed: true } : t))
+                              return next
+                            })}
+                          >
+                            <Circle size={16} className="text-gray-300 hover:text-emerald-500 transition-colors" />
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{task.title}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-medium" style={{ color: cfg.color }}>{cfg.label}</span>
+                              <span className={`text-[10px] ${isOverdue ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                                {isOverdue && 'Overdue · '}
+                                {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Notes */}
+                {localNotes.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Notes</p>
+                    {localNotes.map(note => (
+                      <div key={note.id} className="p-3 bg-white rounded-xl border border-gray-100">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-semibold text-gray-700">{note.author}</span>
+                          <span className="text-[10px] text-gray-400">
+                            {new Date(note.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line line-clamp-3">{note.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Activity timeline */}
+                <div className="pb-6">
+                  <ActivityTimeline activities={localActivities} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══════ ASSOCIATIONS TAB ══════ */}
+          {tab === 'associations' && (
+            <div className="flex flex-col">
+              {/* Companies section */}
+              <div className="border-b border-gray-100">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-5 pt-4 pb-2">Companies</p>
+                <Link
+                  href="/crm/companies"
+                  className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                      {company?.name[0] ?? contact.companyName[0]}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-900">{contact.companyName}</p>
+                        <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">Primary</span>
+                      </div>
+                      <p className="text-xs text-gray-400 truncate">{company?.website ?? ''}</p>
+                    </div>
+                  </div>
+                  <ChevronRight size={14} className="text-gray-300 flex-shrink-0" />
+                </Link>
+              </div>
+
+              {/* Deals section */}
+              <div className="border-b border-gray-100">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-5 pt-4 pb-2">Deals</p>
+                {contactDeals.map(d => (
+                  <Link
+                    key={d.id}
+                    href="/crm/pipeline"
+                    className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50"
                   >
-                    <Plus size={12} /> Add Tag
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-900">{d.serviceType}</p>
+                        <StatusBadge label={d.stage} colorClass={stageColors[d.stage]} />
+                      </div>
+                      <p className="text-xs text-gray-400">{formatCurrency(d.value)} · {d.probability}% probability</p>
+                    </div>
+                    <ChevronRight size={14} className="text-gray-300 flex-shrink-0" />
+                  </Link>
+                ))}
+                <Link
+                  href="/crm/pipeline"
+                  className="flex items-center gap-2 px-5 py-3 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  <Plus size={14} className="text-gray-400" /> Add Deals
+                </Link>
+              </div>
+
+              {/* Contracts section */}
+              <div className="border-b border-gray-100">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-5 pt-4 pb-2">Contracts</p>
+                {contactContracts.map(c => (
+                  <Link
+                    key={c.id}
+                    href="/contracts"
+                    className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-900">{c.serviceType}</p>
+                        <StatusBadge label={c.status} colorClass={contractStatusColors[c.status]} />
+                      </div>
+                      <p className="text-xs text-gray-400">{formatCurrency(c.value)} · {c.billingStructure}</p>
+                    </div>
+                    <ChevronRight size={14} className="text-gray-300 flex-shrink-0" />
+                  </Link>
+                ))}
+                <Link
+                  href="/contracts"
+                  className="flex items-center gap-2 px-5 py-3 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  <Plus size={14} className="text-gray-400" /> Add Contracts
+                </Link>
+              </div>
+
+              {/* Projects section */}
+              <div className="border-b border-gray-100">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-5 pt-4 pb-2">Projects</p>
+                {companyProject ? (
+                  <Link
+                    href="/projects"
+                    className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <FolderKanban size={16} className="text-gray-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900">{companyProject.serviceType}</p>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge label={companyProject.status} colorClass={projectStatusColors[companyProject.status]} />
+                          <span className="text-xs text-gray-400">{companyProject.progress}% complete</span>
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronRight size={14} className="text-gray-300 flex-shrink-0" />
+                  </Link>
+                ) : null}
+                <Link
+                  href="/projects"
+                  className="flex items-center gap-2 px-5 py-3 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  <Plus size={14} className="text-gray-400" /> Add Projects
+                </Link>
+              </div>
+
+              {/* Tickets section */}
+              <div>
+                <Link
+                  href="/tickets"
+                  className="flex items-center gap-2 px-5 py-3 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  <Plus size={14} className="text-gray-400" /> Add Tickets
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* ══════ ABOUT TAB ══════ */}
+          {tab === 'about' && (
+            <div className="flex flex-col">
+              {/* About this contact */}
+              <button
+                onClick={() => setAboutOpen(v => !v)}
+                className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+              >
+                <p className="text-sm font-bold text-gray-900">About this contact</p>
+                <ChevronRight size={14} className={`text-gray-400 transition-transform ${aboutOpen ? 'rotate-90' : ''}`} />
+              </button>
+
+              {aboutOpen && (
+                <div className="border-t border-gray-100">
+                  {/* Email */}
+                  <FieldRow label="Email" value={
+                    contact.emails[0] ? (
+                      <a href={`mailto:${contact.emails[0]}`} className="text-sm text-gray-900 hover:text-emerald-700">{contact.emails[0]}</a>
+                    ) : <span className="text-sm text-gray-300">—</span>
+                  } />
+
+                  {/* Phone */}
+                  <FieldRow label="Phone Number" value={
+                    contact.phones[0] ? (
+                      <a href={`tel:${contact.phones[0]}`} className="text-sm text-gray-900">{contact.phones[0]}</a>
+                    ) : <span className="text-sm text-gray-300">—</span>
+                  } />
+
+                  {/* Contact Owner */}
+                  <FieldRow label="Contact owner" value={
+                    <span className="text-sm font-medium text-gray-900">{contact.owner}</span>
+                  } />
+
+                  {/* Last Contacted */}
+                  <FieldRow label="Last Contacted" value={
+                    contact.lastActivity ? (
+                      <span className="text-sm text-gray-900">
+                        {new Date(contact.lastActivity).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                        {' at '}
+                        {new Date(contact.lastActivity).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                      </span>
+                    ) : <span className="text-sm text-gray-300">Never</span>
+                  } />
+
+                  {/* Lifecycle Stage */}
+                  <FieldRow label="Lifecycle Stage" value={
+                    <span className="text-sm font-medium text-gray-900 capitalize">{contact.lifecycleStage ?? 'Lead'}</span>
+                  } />
+
+                  {/* Lead Status */}
+                  <FieldRow label="Lead Status" value={
+                    <span className="text-sm text-gray-900 capitalize">{contact.leadStatus?.replace(/_/g, ' ') ?? '—'}</span>
+                  } />
+
+                  {/* Company Name */}
+                  <FieldRow label="Company Name" value={
+                    <Link href="/crm/companies" className="text-sm text-gray-900 hover:text-emerald-700">{contact.companyName}</Link>
+                  } />
+
+                  {/* Industry */}
+                  <FieldRow label="Industry" value={
+                    <span className="text-sm text-gray-900">{company?.industry || '—'}</span>
+                  } />
+
+                  {/* Title */}
+                  <FieldRow label="Job Title" value={
+                    <span className="text-sm text-gray-900">{contact.title || '—'}</span>
+                  } />
+
+                  {/* Website */}
+                  <FieldRow label="Website" value={
+                    contact.website ? (
+                      <a href={`https://${contact.website}`} target="_blank" rel="noopener noreferrer" className="text-sm text-emerald-700 hover:underline">{contact.website}</a>
+                    ) : <span className="text-sm text-gray-300">—</span>
+                  } />
+
+                  {/* LinkedIn */}
+                  <FieldRow label="LinkedIn" value={
+                    contact.linkedIn ? (
+                      <a href={contact.linkedIn} target="_blank" rel="noopener noreferrer" className="text-sm text-emerald-700 hover:underline truncate block">{contact.linkedIn.replace('https://www.linkedin.com/in/', '')}</a>
+                    ) : <span className="text-sm text-gray-300">—</span>
+                  } />
+
+                  {/* Created Date */}
+                  <FieldRow label="Created" value={
+                    <span className="text-sm text-gray-900">{contact.createdDate ? new Date(contact.createdDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                  } />
+                </div>
+              )}
+
+              {/* Tags */}
+              <div className="px-5 py-4 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-bold text-gray-900">Tags</p>
+                  <button onClick={() => setAddingTag(v => !v)} className="text-xs text-emerald-700 hover:text-emerald-900 font-medium">
+                    + Add
                   </button>
                 </div>
                 {addingTag && (
-                  <div className="flex gap-2 mb-2">
+                  <div className="flex gap-2 mb-3">
                     <input
                       value={newTag}
                       onChange={e => setNewTag(e.target.value)}
                       placeholder="New tag..."
-                      className="flex-1 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       autoFocus
                       onKeyDown={e => {
                         if (e.key === 'Enter') handleAddTag()
                         if (e.key === 'Escape') setAddingTag(false)
                       }}
                     />
-                    <button onClick={handleAddTag} className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium">Add</button>
+                    <button onClick={handleAddTag} className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold">Add</button>
                   </div>
                 )}
                 <div className="flex flex-wrap gap-1.5">
                   {localTags.map(tag => (
-                    <span key={tag} className="flex items-center gap-1 text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full group">
+                    <span key={tag} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full font-medium group">
                       {tag}
-                      <button onClick={() => handleRemoveTag(tag)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 transition-opacity">
+                      <button onClick={() => handleRemoveTag(tag)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity">
                         <X size={10} />
                       </button>
                     </span>
                   ))}
                   {localTags.length === 0 && !addingTag && (
-                    <span className="text-xs text-gray-400">No tags yet</span>
+                    <span className="text-xs text-gray-400">No tags</span>
                   )}
                 </div>
               </div>
-
-              {/* AI Insights */}
-              <AiInsightsPanel
-                type="contact"
-                name={contact.fullName}
-                context={[
-                  `Title: ${contact.title}`,
-                  `Company: ${contact.companyName}`,
-                  `Owner: ${contact.owner}`,
-                  activeDeal ? `Stage: ${activeDeal.stage}` : '',
-                  activeDeal ? `Deal Value: $${activeDeal.value.toLocaleString()}` : 'No active deal',
-                  executedContract ? 'Contract: Active' : contactContracts.length > 0 ? 'Contract: Pending' : 'Contract: None',
-                  localTags.length > 0 ? `Tags: ${localTags.join(', ')}` : '',
-                  contact.notes ? `Notes: ${contact.notes}` : '',
-                ].filter(Boolean).join('\n')}
-              />
-
-              {/* Active project */}
-              {companyProject && (
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Active Project</p>
-                    <Link href="/projects" className="text-xs text-blue-500 hover:underline flex items-center gap-1">
-                      View <ChevronRight size={11} />
-                    </Link>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-100">
-                    <div className="flex items-center gap-2">
-                      <FolderKanban size={14} className="text-gray-400" />
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">{companyProject.serviceType}</p>
-                        <StatusBadge label={companyProject.status} colorClass={projectStatusColors[companyProject.status]} />
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold" style={{ color: '#015035' }}>{companyProject.progress}%</p>
-                      <p className="text-[11px] text-gray-400">complete</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Pipeline ── */}
-          {tab === 'pipeline' && (
-            <div className="flex flex-col gap-3">
-              {contactDeals.map(d => (
-                <div key={d.id} className="p-4 bg-gray-50 rounded-xl">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <StatusBadge label={d.stage} colorClass={stageColors[d.stage]} />
-                      <StatusBadge label={d.serviceType} colorClass={serviceTypeColors[d.serviceType]} />
-                    </div>
-                    <p className="text-base font-bold flex-shrink-0" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
-                      {formatCurrency(d.value)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${d.probability}%`, background: '#015035' }} />
-                    </div>
-                    <span className="text-[11px] text-gray-500 font-medium">{d.probability}% probability</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-2">
-                    Close date: {new Date(d.closeDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  </p>
-                </div>
-              ))}
-              {contactDeals.length === 0 && (
-                <div className="text-center py-8">
-                  <TrendingUp size={24} className="text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">No pipeline deals linked.</p>
-                </div>
-              )}
-
-              {/* Add to Deal */}
-              {addingToDeal ? (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-gray-700">Find a Deal</p>
-                    <button onClick={() => { setAddingToDeal(false); setDealSearch('') }} className="text-gray-400 hover:text-gray-600">
-                      <X size={14} />
-                    </button>
-                  </div>
-                  <input
-                    value={dealSearch}
-                    onChange={e => setDealSearch(e.target.value)}
-                    placeholder="Search deals by company..."
-                    className="text-sm border border-blue-200 rounded-lg px-3 py-2 bg-white outline-none w-full"
-                    autoFocus
-                  />
-                  <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
-                    {deals
-                      .filter(d => d.company.toLowerCase().includes(dealSearch.toLowerCase()))
-                      .slice(0, 8)
-                      .map(d => (
-                        <button
-                          key={d.id}
-                          onClick={() => { setAddingToDeal(false); setDealSearch('') }}
-                          className="flex items-center justify-between text-left px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
-                        >
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">{d.company}</p>
-                            <p className="text-xs text-gray-500">{d.stage} · {d.serviceType}</p>
-                          </div>
-                          <span className="text-xs font-semibold text-emerald-700">{formatCurrency(d.value)}</span>
-                        </button>
-                      ))}
-                    {deals.filter(d => d.company.toLowerCase().includes(dealSearch.toLowerCase())).length === 0 && (
-                      <p className="text-sm text-gray-400 text-center py-4">No deals found</p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setAddingToDeal(true)}
-                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Plus size={14} /> Add to Deal
-                </button>
-              )}
-
-              <Link
-                href="/crm/pipeline"
-                className="flex items-center justify-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 py-2"
-              >
-                View full pipeline <ChevronRight size={13} />
-              </Link>
-            </div>
-          )}
-
-          {/* ── Contracts ── */}
-          {tab === 'contracts' && (
-            <div className="flex flex-col gap-3">
-              {contactContracts.map(c => (
-                <div key={c.id} className="p-4 bg-gray-50 rounded-xl">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <StatusBadge label={c.status} colorClass={contractStatusColors[c.status]} />
-                      <p className="text-xs text-gray-500 mt-1.5">{c.billingStructure}</p>
-                    </div>
-                    <p className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
-                      {formatCurrency(c.value)}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 mt-3">
-                    {[
-                      { label: 'Service', value: c.serviceType },
-                      { label: 'Start', value: new Date(c.startDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) },
-                      { label: 'Renewal', value: new Date(c.renewalDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) },
-                    ].map(f => (
-                      <div key={f.label} className="bg-white rounded-lg p-2.5 border border-gray-100">
-                        <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{f.label}</p>
-                        <p className="text-xs font-semibold text-gray-800">{f.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {contactContracts.length === 0 && (
-                <div className="text-center py-12">
-                  <ScrollText size={24} className="text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">No contracts found.</p>
-                </div>
-              )}
-              <Link
-                href="/contracts"
-                className="flex items-center justify-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 py-2"
-              >
-                View all contracts <ChevronRight size={13} />
-              </Link>
-            </div>
-          )}
-
-          {/* ── Notes ── */}
-          {tab === 'notes' && (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-gray-400">{localNotes.length} note{localNotes.length !== 1 ? 's' : ''}</p>
-                <button
-                  onClick={() => setAddingNote(v => !v)}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white"
-                  style={{ background: addingNote ? '#6b7280' : '#015035' }}
-                >
-                  <Plus size={12} /> {addingNote ? 'Cancel' : 'Add Note'}
-                </button>
-              </div>
-
-              {/* Inline add form */}
-              {addingNote && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex flex-col gap-2">
-                  <textarea
-                    value={newNoteBody}
-                    onChange={e => setNewNoteBody(e.target.value)}
-                    placeholder="Write your note here... (Granola meeting notes, call recap, etc.)"
-                    className="w-full text-sm border border-blue-200 rounded-lg p-2.5 bg-white outline-none resize-none leading-relaxed"
-                    rows={4}
-                    autoFocus
-                  />
-                  <button
-                    onClick={handleAddNote}
-                    disabled={!newNoteBody.trim()}
-                    className="py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40"
-                    style={{ background: '#015035' }}
-                  >
-                    Save Note
-                  </button>
-                </div>
-              )}
-
-              {localNotes.length === 0 && !addingNote ? (
-                <div className="text-center py-12">
-                  <StickyNote size={24} className="text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">No notes yet. Add your first note.</p>
-                </div>
-              ) : (
-                localNotes.map(note => (
-                  <div key={note.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
-                          {note.author.split(' ').map((n: string) => n[0]).join('')}
-                        </div>
-                        <span className="text-xs font-semibold text-gray-700">{note.author}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-[11px] text-gray-400">
-                        <Calendar size={11} />
-                        {new Date(note.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </div>
-                    </div>
-                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{note.body}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* ── Tasks ── */}
-          {tab === 'tasks' && (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-gray-400">
-                  {localTasks.filter(t => !taskDone.has(t.id)).length} open · {taskDone.size} done
-                </p>
-                <button
-                  onClick={() => setAddingTask(v => !v)}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white"
-                  style={{ background: addingTask ? '#6b7280' : '#015035' }}
-                >
-                  <Plus size={12} /> {addingTask ? 'Cancel' : 'Add Task'}
-                </button>
-              </div>
-
-              {/* Inline add task form */}
-              {addingTask && (
-                <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl flex flex-col gap-2">
-                  <input
-                    value={newTaskTitle}
-                    onChange={e => setNewTaskTitle(e.target.value)}
-                    placeholder="Task title (e.g. Follow up, Reschedule call...)"
-                    className="text-sm border border-orange-200 rounded-lg px-2.5 py-2 bg-white outline-none w-full"
-                    autoFocus
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <select
-                      value={newTaskType}
-                      onChange={e => setNewTaskType(e.target.value as ContactTask['taskType'])}
-                      className="text-xs border border-orange-200 rounded-lg px-2 py-1.5 bg-white outline-none text-gray-700"
-                    >
-                      {Object.entries(taskTypeConfig).map(([key, cfg]) => (
-                        <option key={key} value={key}>{cfg.label}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={newTaskPriority}
-                      onChange={e => setNewTaskPriority(e.target.value as ContactTask['priority'])}
-                      className="text-xs border border-orange-200 rounded-lg px-2 py-1.5 bg-white outline-none text-gray-700"
-                    >
-                      <option value="high">High Priority</option>
-                      <option value="medium">Medium Priority</option>
-                      <option value="low">Low Priority</option>
-                    </select>
-                  </div>
-                  <input
-                    type="date"
-                    value={newTaskDue}
-                    onChange={e => setNewTaskDue(e.target.value)}
-                    className="text-xs border border-orange-200 rounded-lg px-2.5 py-1.5 bg-white outline-none text-gray-700 w-full"
-                  />
-                  <button
-                    onClick={handleAddTask}
-                    disabled={!newTaskTitle.trim() || !newTaskDue}
-                    className="py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40"
-                    style={{ background: '#015035' }}
-                  >
-                    Save Task
-                  </button>
-                </div>
-              )}
-
-              {localTasks.length === 0 && !addingTask ? (
-                <div className="text-center py-12">
-                  <CheckSquare size={24} className="text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">No tasks yet for this contact.</p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {localTasks.map(task => {
-                    const done = taskDone.has(task.id)
-                    const cfg = taskTypeConfig[task.taskType]
-                    const pri = taskPriorityConfig[task.priority]
-                    const isOverdue = !done && new Date(task.dueDate) < new Date()
-                    return (
-                      <div key={task.id} className={`p-3.5 rounded-xl border transition-all ${done ? 'bg-gray-50 border-gray-100 opacity-60' : 'bg-white border-gray-200'}`}>
-                        <div className="flex items-start gap-3">
-                          <button
-                            onClick={() => setTaskDone(prev => {
-                              const next = new Set(prev)
-                              if (next.has(task.id)) next.delete(task.id)
-                              else { next.add(task.id); setLocalTasks(ts => ts.map(t => t.id === task.id ? { ...t, completed: true } : t)) }
-                              return next
-                            })}
-                            className="mt-0.5 flex-shrink-0"
-                          >
-                            {done
-                              ? <CheckCircle2 size={18} className="text-emerald-500" />
-                              : <Circle size={18} className="text-gray-300 hover:text-gray-400" />
-                            }
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium ${done ? 'line-through text-gray-400' : 'text-gray-900'}`}>{task.title}</p>
-                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                              <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium"
-                                style={{ background: `${cfg.color}15`, color: cfg.color }}>
-                                {cfg.icon}{cfg.label}
-                              </span>
-                              <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold"
-                                style={{ background: pri.bg, color: pri.color }}>
-                                {pri.label}
-                              </span>
-                              <span className={`flex items-center gap-1 text-[11px] ${isOverdue ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
-                                {isOverdue && <AlertCircle size={11} />}
-                                <Calendar size={11} />
-                                {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                {isOverdue && ' · Overdue'}
-                              </span>
-                              <span className="text-[11px] text-gray-400 ml-auto">{task.assignedTo.split(' ')[0]}</span>
-                            </div>
-                            {task.notes && !done && (
-                              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{task.notes}</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Activity ── */}
-          {tab === 'activity' && (
-            <ActivityTimeline activities={localActivities} />
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="p-4 border-t border-gray-100 flex-shrink-0">
-          {loggingActivity ? (
-            <LogActivityForm
-              onSave={handleSaveActivity}
-              onCancel={() => setLoggingActivity(false)}
-              authorName="You"
-            />
-          ) : (
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setLoggingActivity(true); setTab('activity') }}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold"
-                style={{ background: '#015035' }}
-              >
-                Log Activity
-              </button>
-              <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
-                Close
-              </button>
             </div>
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1 px-5 py-3 border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+      <span className="text-[11px] text-gray-400 font-medium">{label}</span>
+      {value}
     </div>
   )
 }

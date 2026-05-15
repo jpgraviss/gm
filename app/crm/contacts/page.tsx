@@ -10,7 +10,7 @@ import {
 } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import CRMSubNav from '@/components/crm/CRMSubNav'
-import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
+import { InfoRow } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
 import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
@@ -854,15 +854,15 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                                   {entry.description && (
                                     <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">{entry.description}</p>
                                   )}
-                                  {entry.metadata && (
+                                  {entry.metadata && typeof entry.metadata === 'object' && (
                                     <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                      {entry.metadata.outcome && (
+                                      {(entry.metadata as Record<string, string>).outcome && (
                                         <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">
-                                          {String(entry.metadata.outcome)}
+                                          {String((entry.metadata as Record<string, string>).outcome)}
                                         </span>
                                       )}
-                                      {entry.metadata.user && (
-                                        <span className="text-[10px] text-gray-400">by {String(entry.metadata.user)}</span>
+                                      {(entry.metadata as Record<string, string>).user && (
+                                        <span className="text-[10px] text-gray-400">by {String((entry.metadata as Record<string, string>).user)}</span>
                                       )}
                                     </div>
                                   )}
@@ -1002,7 +1002,8 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
           {/* ══════ ABOUT TAB ══════ */}
           {tab === 'about' && (
             <div className="flex flex-col">
-              {/* About this contact */}
+              <EngagementScoreBar score={engagementScore} breakdown={engagementBreakdown} />
+
               <button
                 onClick={() => setAboutOpen(v => !v)}
                 className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"

@@ -188,8 +188,8 @@ export default function PublicFormPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: bgCol, padding: '48px 16px', fontFamily: font }}>
-      <div style={{ maxWidth: 520, margin: '0 auto', background: form.bgTransparent ? 'transparent' : '#ffffff', borderRadius: form.bgTransparent ? 0 : 16, boxShadow: form.bgTransparent ? 'none' : '0 1px 3px rgba(0,0,0,0.08)', border: form.bgTransparent ? 'none' : '1px solid #e5e7eb', padding: form.bgTransparent ? '0' : '24px 32px' }}>
+    <div style={{ minHeight: isEmbed ? 'auto' : '100vh', background: isEmbed ? 'transparent' : bgCol, padding: isEmbed ? '12px 4px' : '48px 16px', fontFamily: font }}>
+      <div style={{ maxWidth: isEmbed ? '100%' : 520, margin: '0 auto', background: isEmbed ? 'transparent' : (form.bgTransparent ? 'transparent' : '#ffffff'), borderRadius: isEmbed ? 0 : (form.bgTransparent ? 0 : 16), boxShadow: isEmbed ? 'none' : (form.bgTransparent ? 'none' : '0 1px 3px rgba(0,0,0,0.08)'), border: isEmbed ? 'none' : (form.bgTransparent ? 'none' : '1px solid #e5e7eb'), padding: isEmbed ? '0 12px' : (form.bgTransparent ? '0' : '24px 32px') }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: textCol, marginBottom: 4 }}>{form.name}</h1>
         {form.description && (
           <p style={{ fontSize: 14, color: '#6b7280', marginBottom: 24 }}>{form.description}</p>

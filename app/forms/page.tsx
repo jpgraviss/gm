@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui/Toast'
 import {
   Plus, X, Trash2, Copy, ExternalLink, FileText, Eye, Pencil,
   Type, Mail, Phone, AlignLeft, ListChecks, CheckSquare, Hash, Link2,
-  GripVertical,
+  GripVertical, Code, MousePointerClick, Clock, ArrowUpFromDot, ScrollText, Check,
 } from 'lucide-react'
 
 interface FormField {
@@ -20,6 +20,17 @@ interface FormField {
   options?: string[]
   helpText?: string
   mapsTo?: string
+}
+
+interface PopupConfig {
+  trigger: 'button' | 'delay' | 'exit-intent' | 'scroll'
+  delay: number
+  scrollPercent: number
+  position: 'center' | 'bottom-right' | 'bottom-left'
+  animation: 'fade' | 'slide-up'
+  overlay: boolean
+  color: string
+  buttonText: string
 }
 
 interface LeadForm {
@@ -37,6 +48,7 @@ interface LeadForm {
   bgColor?: string
   bgTransparent?: boolean
   fontFamily?: string
+  popupConfig?: PopupConfig
   createdAt: string
 }
 
@@ -254,8 +266,20 @@ export default function FormsPage() {
   )
 }
 
+const DEFAULT_POPUP: PopupConfig = {
+  trigger: 'delay',
+  delay: 5,
+  scrollPercent: 50,
+  position: 'center',
+  animation: 'fade',
+  overlay: true,
+  color: '#015035',
+  buttonText: 'Contact Us',
+}
+
 function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => void; onSave: (f: LeadForm) => void }) {
   const [draft, setDraft] = useState<LeadForm>(form)
+  const [tab, setTab] = useState<'fields' | 'embed'>('fields')
 
   function addField(type: string, mapsTo?: string) {
     setDraft(d => ({ ...d, fields: [...d.fields, newField(type, mapsTo)] }))
@@ -291,194 +315,213 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10"><X size={16} className="text-white/70" /></button>
         </div>
 
+        <div className="flex border-b border-gray-100">
+          <button
+            onClick={() => setTab('fields')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${tab === 'fields' ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Fields & Settings
+          </button>
+          <button
+            onClick={() => setTab('embed')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${tab === 'embed' ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <Code size={12} /> Embed
+          </button>
+        </div>
+
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
-          {/* Basics */}
-          <section className="flex flex-col gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Form name</label>
-              <input
-                value={draft.name}
-                onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
-              <textarea
-                rows={2}
-                value={draft.description ?? ''}
-                onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
-                placeholder="Shown above the form on the public page"
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </section>
+          {tab === 'fields' && (
+            <>
+              <section className="flex flex-col gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Form name</label>
+                  <input
+                    value={draft.name}
+                    onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
+                  <textarea
+                    rows={2}
+                    value={draft.description ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
+                    placeholder="Shown above the form on the public page"
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </section>
 
-          {/* Fields */}
-          <section>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Fields</label>
-              <span className="text-[11px] text-gray-400">{draft.fields.length} field{draft.fields.length === 1 ? '' : 's'}</span>
-            </div>
-            <DragDropContext onDragEnd={handleDragEnd}>
-              <Droppable droppableId="form-fields">
-                {(provided) => (
-                  <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col gap-2">
-                    {draft.fields.map((f, index) => (
-                      <Draggable key={f.id} draggableId={f.id} index={index}>
-                        {(dragProvided, snapshot) => (
-                          <div
-                            ref={dragProvided.innerRef}
-                            {...dragProvided.draggableProps}
-                            className={`p-3 border rounded-xl flex flex-col gap-2 ${snapshot.isDragging ? 'border-emerald-300 bg-emerald-50 shadow-lg' : 'border-gray-200 bg-gray-50/50'}`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div {...dragProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-gray-200 touch-none">
-                                <GripVertical size={14} className="text-gray-400" />
+              <section>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Fields</label>
+                  <span className="text-[11px] text-gray-400">{draft.fields.length} field{draft.fields.length === 1 ? '' : 's'}</span>
+                </div>
+                <DragDropContext onDragEnd={handleDragEnd}>
+                  <Droppable droppableId="form-fields">
+                    {(provided) => (
+                      <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col gap-2">
+                        {draft.fields.map((f, index) => (
+                          <Draggable key={f.id} draggableId={f.id} index={index}>
+                            {(dragProvided, snapshot) => (
+                              <div
+                                ref={dragProvided.innerRef}
+                                {...dragProvided.draggableProps}
+                                className={`p-3 border rounded-xl flex flex-col gap-2 ${snapshot.isDragging ? 'border-emerald-300 bg-emerald-50 shadow-lg' : 'border-gray-200 bg-gray-50/50'}`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div {...dragProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-gray-200 touch-none">
+                                    <GripVertical size={14} className="text-gray-400" />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{f.type}</span>
+                                  <input
+                                    value={f.label}
+                                    onChange={e => updateField(f.id, { label: e.target.value })}
+                                    placeholder="Label"
+                                    className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                  />
+                                  <label className="flex items-center gap-1 text-[11px] text-gray-600">
+                                    <input
+                                      type="checkbox"
+                                      checked={f.required ?? false}
+                                      onChange={e => updateField(f.id, { required: e.target.checked })}
+                                      className="w-3.5 h-3.5 rounded border-gray-300"
+                                    /> Required
+                                  </label>
+                                  <button onClick={() => removeField(f.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    value={f.name}
+                                    onChange={e => updateField(f.id, { name: e.target.value.replace(/[^a-z0-9_]/gi, '_').toLowerCase() })}
+                                    placeholder="field_name"
+                                    className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none font-mono"
+                                  />
+                                  <input
+                                    value={f.placeholder ?? ''}
+                                    onChange={e => updateField(f.id, { placeholder: e.target.value })}
+                                    placeholder="Placeholder text"
+                                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                  />
+                                </div>
+                                {f.type === 'select' && (
+                                  <input
+                                    value={(f.options ?? []).join(', ')}
+                                    onChange={e => updateField(f.id, { options: e.target.value.split(',').map(o => o.trim()).filter(Boolean) })}
+                                    placeholder="Option 1, Option 2, Option 3"
+                                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                  />
+                                )}
                               </div>
-                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{f.type}</span>
-                              <input
-                                value={f.label}
-                                onChange={e => updateField(f.id, { label: e.target.value })}
-                                placeholder="Label"
-                                className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                              />
-                              <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                                <input
-                                  type="checkbox"
-                                  checked={f.required ?? false}
-                                  onChange={e => updateField(f.id, { required: e.target.checked })}
-                                  className="w-3.5 h-3.5 rounded border-gray-300"
-                                /> Required
-                              </label>
-                              <button onClick={() => removeField(f.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={f.name}
-                      onChange={e => updateField(f.id, { name: e.target.value.replace(/[^a-z0-9_]/gi, '_').toLowerCase() })}
-                      placeholder="field_name"
-                      className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none font-mono"
-                    />
-                    <input
-                      value={f.placeholder ?? ''}
-                      onChange={e => updateField(f.id, { placeholder: e.target.value })}
-                      placeholder="Placeholder text"
-                      className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
-                    />
-                  </div>
-                  {f.type === 'select' && (
-                    <input
-                      value={(f.options ?? []).join(', ')}
-                      onChange={e => updateField(f.id, { options: e.target.value.split(',').map(o => o.trim()).filter(Boolean) })}
-                      placeholder="Option 1, Option 2, Option 3"
-                      className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
-                    />
-                  )}
-                          </div>
-                        )}
-                      </Draggable>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                </DragDropContext>
+
+                <div className="mt-3">
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Add field</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {FIELD_TYPES.map(t => (
+                      <button
+                        key={t.type}
+                        onClick={() => addField(t.type, t.mapsTo)}
+                        className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-600 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
+                      >
+                        {t.icon} {t.label}
+                      </button>
                     ))}
-                    {provided.placeholder}
                   </div>
-                )}
-              </Droppable>
-            </DragDropContext>
+                </div>
+              </section>
 
-            <div className="mt-3">
-              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Add field</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                {FIELD_TYPES.map(t => (
-                  <button
-                    key={t.type}
-                    onClick={() => addField(t.type, t.mapsTo)}
-                    className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-600 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
+              <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Submit button label</label>
+                  <input
+                    value={draft.submitLabel}
+                    onChange={e => setDraft(d => ({ ...d, submitLabel: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</label>
+                  <select
+                    value={draft.status}
+                    onChange={e => setDraft(d => ({ ...d, status: e.target.value as LeadForm['status'] }))}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    {t.icon} {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
+                    <option>Active</option>
+                    <option>Paused</option>
+                    <option>Draft</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Success message</label>
+                  <input
+                    value={draft.successMessage}
+                    onChange={e => setDraft(d => ({ ...d, successMessage: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </section>
 
-          {/* Button + success */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Submit button label</label>
-              <input
-                value={draft.submitLabel}
-                onChange={e => setDraft(d => ({ ...d, submitLabel: e.target.value }))}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</label>
-              <select
-                value={draft.status}
-                onChange={e => setDraft(d => ({ ...d, status: e.target.value as LeadForm['status'] }))}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option>Active</option>
-                <option>Paused</option>
-                <option>Draft</option>
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Success message</label>
-              <input
-                value={draft.successMessage}
-                onChange={e => setDraft(d => ({ ...d, successMessage: e.target.value }))}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </section>
+              <section>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Appearance</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Button color</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                      <input value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Text color</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                      <input value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Background</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                      <input value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Font</label>
+                    <select value={draft.fontFamily ?? 'system-ui'} onChange={e => setDraft(d => ({ ...d, fontFamily: e.target.value }))} className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2 bg-white">
+                      <option value="system-ui">System (default)</option>
+                      <option value="'Inter', sans-serif">Inter</option>
+                      <option value="'Montserrat', sans-serif">Montserrat</option>
+                      <option value="'Open Sans', sans-serif">Open Sans</option>
+                      <option value="'Roboto', sans-serif">Roboto</option>
+                      <option value="'Lato', sans-serif">Lato</option>
+                      <option value="'Poppins', sans-serif">Poppins</option>
+                      <option value="Georgia, serif">Georgia (serif)</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2 flex items-center gap-2 mt-1">
+                    <input type="checkbox" checked={draft.bgTransparent ?? false} onChange={e => setDraft(d => ({ ...d, bgTransparent: e.target.checked }))} className="w-4 h-4 rounded border-gray-300 text-emerald-600" />
+                    <label className="text-xs text-gray-600">Transparent background (for embedding on colored pages)</label>
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
 
-          {/* Styling */}
-          <section>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Appearance</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Button color</label>
-                <div className="flex items-center gap-2">
-                  <input type="color" value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
-                  <input value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Text color</label>
-                <div className="flex items-center gap-2">
-                  <input type="color" value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
-                  <input value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Background</label>
-                <div className="flex items-center gap-2">
-                  <input type="color" value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
-                  <input value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Font</label>
-                <select value={draft.fontFamily ?? 'system-ui'} onChange={e => setDraft(d => ({ ...d, fontFamily: e.target.value }))} className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2 bg-white">
-                  <option value="system-ui">System (default)</option>
-                  <option value="'Inter', sans-serif">Inter</option>
-                  <option value="'Montserrat', sans-serif">Montserrat</option>
-                  <option value="'Open Sans', sans-serif">Open Sans</option>
-                  <option value="'Roboto', sans-serif">Roboto</option>
-                  <option value="'Lato', sans-serif">Lato</option>
-                  <option value="'Poppins', sans-serif">Poppins</option>
-                  <option value="Georgia, serif">Georgia (serif)</option>
-                </select>
-              </div>
-              <div className="sm:col-span-2 flex items-center gap-2 mt-1">
-                <input type="checkbox" checked={draft.bgTransparent ?? false} onChange={e => setDraft(d => ({ ...d, bgTransparent: e.target.checked }))} className="w-4 h-4 rounded border-gray-300 text-emerald-600" />
-                <label className="text-xs text-gray-600">Transparent background (for embedding on colored pages)</label>
-              </div>
-            </div>
-          </section>
+          {tab === 'embed' && (
+            <EmbedTabContent draft={draft} setDraft={setDraft} />
+          )}
         </div>
 
         <div className="p-4 border-t border-gray-100 flex gap-2">

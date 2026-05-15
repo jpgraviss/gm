@@ -98,8 +98,9 @@ const navigation: NavSection[] = [
   {
     section: 'System',
     items: [
-      { label: 'Admin',    href: '/admin',    icon: <ShieldCheck size={16} />, adminOnly: true },
-      { label: 'Settings', href: '/settings', icon: <Settings size={16} />,    allowedUnits: ['Leadership/Admin'] },
+      { label: 'Knowledge Base', href: '/knowledge-base', icon: <BookOpen size={16} /> },
+      { label: 'Admin',          href: '/admin',           icon: <ShieldCheck size={16} />, adminOnly: true },
+      { label: 'Settings',       href: '/settings',        icon: <Settings size={16} />,    allowedUnits: ['Leadership/Admin'] },
     ],
   },
 ]

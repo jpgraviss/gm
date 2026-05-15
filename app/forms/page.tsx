@@ -580,7 +580,7 @@ function EmbedTabContent({ draft, setDraft }: { draft: LeadForm; setDraft: React
   if (popup.color !== '#015035') attrs.push(`data-color="${popup.color}"`)
   if (popup.trigger === 'button' && popup.buttonText !== 'Contact Us') attrs.push(`data-button-text="${popup.buttonText}"`)
 
-  const popupCode = `<script src="${appUrl}/embed.js"\n  ${attrs.join('\n  ')}>\n</script>`
+  const popupCode = `<!-- GDPR: add data-require-consent="false" to skip cookie consent check -->\n<script src="${appUrl}/embed.js"\n  ${attrs.join('\n  ')}>\n</script>`
 
   return (
     <>
@@ -742,6 +742,7 @@ function EmbedTabContent({ draft, setDraft }: { draft: LeadForm; setDraft: React
         <ol className="text-[11px] text-gray-500 flex flex-col gap-1.5 pl-4 list-decimal">
           <li>Paste the embed code into your website before the closing <code className="bg-gray-200 px-1 rounded text-[10px]">&lt;/body&gt;</code> tag</li>
           <li>The script loads asynchronously and creates the popup based on your trigger settings</li>
+          <li>By default, the popup respects GDPR cookie consent — it only shows if a consent cookie is detected. Add <code className="bg-gray-200 px-1 rounded text-[10px]">data-require-consent=&quot;false&quot;</code> to disable this check</li>
           <li>After a visitor dismisses the popup, it won&apos;t show again for 24 hours</li>
           <li>Submissions appear in GravHub under this form&apos;s submissions</li>
         </ol>
@@ -768,7 +769,7 @@ function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) 
   if (!popup.overlay) popupAttrs.push('data-overlay="false"')
   if (popup.color !== '#015035') popupAttrs.push(`data-color="${popup.color}"`)
   if (popup.trigger === 'button' && popup.buttonText !== 'Contact Us') popupAttrs.push(`data-button-text="${popup.buttonText}"`)
-  const popupCode = `<script src="${appUrl}/embed.js"\n  ${popupAttrs.join('\n  ')}>\n</script>`
+  const popupCode = `<!-- GDPR: add data-require-consent="false" to skip cookie consent check -->\n<script src="${appUrl}/embed.js"\n  ${popupAttrs.join('\n  ')}>\n</script>`
 
   const [copied, setCopied] = useState('')
 

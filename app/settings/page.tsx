@@ -10,6 +10,7 @@ import {
   CheckCircle, AlertCircle, RefreshCw, Plug, Globe, Tag,
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
   Trash2, X, Eye, EyeOff, AlertTriangle, Mail, LayoutDashboard,
+  TrendingUp,
 } from 'lucide-react'
 
 const membershipColors: Record<string, string> = {
@@ -21,7 +22,7 @@ const membershipColors: Record<string, string> = {
   Client: 'bg-green-100 text-green-700',
 }
 
-const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Dashboard', 'Notifications', 'Integrations', 'CRM Setup', 'Billing'] as const
+const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Dashboard', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing'] as const
 type Tab = typeof tabs[number]
 
 const tabIcons: Record<Tab, React.ReactNode> = {
@@ -34,6 +35,7 @@ const tabIcons: Record<Tab, React.ReactNode> = {
   Notifications: <Bell size={15} />,
   Integrations: <Plug size={15} />,
   'CRM Setup': <Tag size={15} />,
+  Engagement: <TrendingUp size={15} />,
   Billing: <DollarSign size={15} />,
 }
 
@@ -103,6 +105,10 @@ const BRANDING_DEFAULTS = {
   appName: 'GravHub',
   darkBackground: '#012b1e',
   logoText: 'GravHub',
+  successColor: '#10b981',
+  warningColor: '#f59e0b',
+  dangerColor: '#dc2626',
+  infoColor: '#3b82f6',
 }
 
 const EMAIL_DEFAULTS = {
@@ -153,6 +159,11 @@ const PIPELINES_DEFAULT: PipelineConf[] = [{
 }]
 const SERVICE_TYPES_DEFAULT = ['Website', 'SEO', 'Social Media', 'Email Marketing', 'Branding', 'Custom']
 const CONTACT_TAGS_DEFAULT = ['Decision Maker', 'Executive', 'Signed Client', 'Warm Lead', 'Marketing', 'Healthcare', 'Partner']
+
+const ENGAGEMENT_DEFAULTS = {
+  points: { emailOpened: 5, linkClicked: 10, proposalViewed: 15, meetingHeld: 20 },
+  thresholds: { cold: 20, hot: 60 },
+}
 
 function loadLS<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback
@@ -281,6 +292,9 @@ export default function SettingsPage() {
   const [newService, setNewService] = useState('')
   const [newTag, setNewTag] = useState('')
 
+  // Engagement
+  const [engagement, setEngagement] = useState(ENGAGEMENT_DEFAULTS)
+
   // Load from API on mount (fall back to localStorage for backwards-compat, then defaults)
   useEffect(() => {
     fetch('/api/settings')
@@ -307,6 +321,7 @@ export default function SettingsPage() {
         if (d.email_defaults   && Object.keys(d.email_defaults).length)    setEmailDefaults(prev => ({ ...prev, ...d.email_defaults }))
         if (d.dashboard_config && Object.keys(d.dashboard_config).length)  setDashboardConfig(prev => ({ ...prev, ...d.dashboard_config }))
         if (Array.isArray(d.qb_sync)         && d.qb_sync.length)          setQbSync(d.qb_sync)
+        if (d.engagement && Object.keys(d.engagement).length) setEngagement(prev => ({ points: { ...prev.points, ...d.engagement.points }, thresholds: { ...prev.thresholds, ...d.engagement.thresholds } }))
       })
       .catch(() => {
         setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
@@ -355,9 +370,12 @@ export default function SettingsPage() {
 
   function saveBranding() {
     patchSettings({ branding }, 'Branding')
-    // Apply immediately so the change reflects across the app without a reload
     document.documentElement.style.setProperty('--brand-primary', branding.primaryColor)
     document.documentElement.style.setProperty('--brand-secondary', branding.secondaryColor)
+    document.documentElement.style.setProperty('--brand-success', branding.successColor)
+    document.documentElement.style.setProperty('--brand-warning', branding.warningColor)
+    document.documentElement.style.setProperty('--brand-danger', branding.dangerColor)
+    document.documentElement.style.setProperty('--brand-info', branding.infoColor)
   }
 
   function saveEmailDefaults() {

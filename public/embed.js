@@ -13,6 +13,7 @@
   var color = script.getAttribute('data-color') || '#015035';
   var buttonText = script.getAttribute('data-button-text') || 'Contact Us';
   var scrollPct = parseInt(script.getAttribute('data-scroll') || '50', 10);
+  var requireConsent = script.getAttribute('data-require-consent') !== 'false';
   var origin = script.src.replace(/\/embed\.js.*$/, '');
   var cookieKey = 'ghf_dismiss_' + slug;
   var shown = false;
@@ -28,7 +29,19 @@
     document.cookie = name + '=' + val + ';path=/;expires=' + d.toUTCString() + ';SameSite=Lax';
   }
 
+  function hasGdprConsent() {
+    if (!requireConsent) return true;
+    var consentCookies = ['gravhub_consent', 'cookie_consent', 'cookieconsent_status', 'CookieConsent', 'gdpr_consent'];
+    var acceptValues = ['allow', 'true', 'accepted', 'yes', '1'];
+    for (var i = 0; i < consentCookies.length; i++) {
+      var val = getCookie(consentCookies[i]);
+      if (val && acceptValues.indexOf(decodeURIComponent(val).toLowerCase()) !== -1) return true;
+    }
+    return false;
+  }
+
   if (getCookie(cookieKey)) return;
+  if (!hasGdprConsent()) return;
 
   var wrapper = document.createElement('div');
   wrapper.id = 'ghf-popup-' + slug;
@@ -91,6 +104,7 @@
   function showPopup() {
     if (shown) return;
     if (getCookie(cookieKey)) return;
+    if (!hasGdprConsent()) return;
     shown = true;
     wrapper.style.display = 'block';
     requestAnimationFrame(function () {
@@ -105,7 +119,9 @@
 
   function dismiss() {
     wrapper.style.display = 'none';
-    setCookie(cookieKey, '1', 24);
+    if (hasGdprConsent()) {
+      setCookie(cookieKey, '1', 24);
+    }
     shown = false;
     if (wrapper._triggerBtn) {
       wrapper._triggerBtn.style.display = 'none';

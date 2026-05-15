@@ -8,7 +8,7 @@ import {
   Zap, Mail, MessageSquare, Hash, User, Briefcase, Tag,
   Clock, GitBranch, Bell, ListTodo, Activity, Trash2,
   X, Play, Pause, ZoomIn, ZoomOut, Maximize2,
-  FileText, CheckCircle,
+  FileText, CheckCircle, ChevronRight, Check, AlertCircle, Loader2,
   Edit3, Copy, MousePointer,
 } from 'lucide-react'
 
@@ -243,11 +243,10 @@ function NodeConfigPanel({ node, onChange, onClose }: {
             <FieldLabel label="Email Template">
               <select value={(config.template as string) ?? ''} onChange={e => update('template', e.target.value)} className="cfg-input">
                 <option value="">Select template...</option>
-                <option value="welcome">Welcome Email</option>
-                <option value="follow_up">Follow-up</option>
-                <option value="reminder">Reminder</option>
-                <option value="invoice_overdue">Invoice Overdue</option>
-                <option value="proposal_sent">Proposal Sent</option>
+                <option value="welcome">Welcome Email — Sent to new contacts after signup</option>
+                <option value="follow_up">Follow Up — Check in after initial contact</option>
+                <option value="thank_you">Thank You — Post-meeting or post-purchase thank you</option>
+                <option value="onboarding">Onboarding — Getting started guide for new clients</option>
               </select>
             </FieldLabel>
             <FieldLabel label="From Name">

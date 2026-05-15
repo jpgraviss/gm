@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 
 interface FormField {
   id: string
@@ -45,7 +45,9 @@ function validateFieldLive(type: string, value: string): string | null {
 
 export default function PublicFormPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const slug = params?.slug as string
+  const isEmbed = searchParams?.get('embed') === '1'
   const [form, setForm] = useState<PublicForm | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -133,7 +135,10 @@ export default function PublicFormPage() {
         return
       }
       setSuccess(true)
-      if (data.redirectUrl) {
+      if (isEmbed) {
+        window.parent?.postMessage({ type: 'gravhub:submitted' }, '*')
+      }
+      if (data.redirectUrl && !isEmbed) {
         setTimeout(() => { window.location.href = data.redirectUrl }, 800)
       }
     } catch {
@@ -150,7 +155,7 @@ export default function PublicFormPage() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: bgCol, fontFamily: font }}>
+      <div style={{ minHeight: isEmbed ? 'auto' : '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isEmbed ? 'transparent' : bgCol, fontFamily: font, padding: isEmbed ? 24 : 0 }}>
         <div style={{ width: 32, height: 32, border: '3px solid #e5e7eb', borderTopColor: primary, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
@@ -159,7 +164,7 @@ export default function PublicFormPage() {
 
   if (error && !form) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: bgCol, fontFamily: font, padding: 24 }}>
+      <div style={{ minHeight: isEmbed ? 'auto' : '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isEmbed ? 'transparent' : bgCol, fontFamily: font, padding: 24 }}>
         <p style={{ fontSize: 14, color: '#6b7280' }}>{error}</p>
       </div>
     )
@@ -169,7 +174,7 @@ export default function PublicFormPage() {
 
   if (success) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: bgCol, fontFamily: font, padding: 24 }}>
+      <div style={{ minHeight: isEmbed ? 'auto' : '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isEmbed ? 'transparent' : bgCol, fontFamily: font, padding: 24 }}>
         <div style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: `${primary}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

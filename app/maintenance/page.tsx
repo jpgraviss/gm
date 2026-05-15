@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { fetchCrmContacts, fetchContracts, fetchInvoices } from '@/lib/supabase'
-import { formatCurrency, serviceTypeColors, formatDate } from '@/lib/utils'
+import { formatCurrency, serviceTypeColors, formatDate, getDaysUntil } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
+import CompanySelect from '@/components/ui/CompanySelect'
 import type { MaintenanceRecord, MaintenanceStatus, CRMContact, Contract, Invoice } from '@/lib/types'
 import {
   X, RefreshCw, DollarSign, Calendar, AlertTriangle, CheckCircle,
   Building2, ChevronRight, ChevronLeft, Clock, FileText, Ban, CreditCard,
-  Plus, Upload, Paperclip, Trash2, Edit2,
+  Plus, Upload, Paperclip, Trash2, Edit2, Search, TrendingUp, ShieldCheck,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useToast } from '@/components/ui/Toast'
@@ -22,9 +23,7 @@ const statusColors: Record<string, string> = {
   Past: 'bg-gray-100 text-gray-400',
 }
 
-type TabFilter = 'All' | 'Active' | 'Onboarding' | 'Pending Cancellation' | 'Past' | 'Cancelled'
-
-// ─── Add/Edit Record Panel ─────────────────────────────────────────────────────
+type TabFilter = 'All' | 'Active' | 'Expiring Soon' | 'Cancelled'
 
 function AddRecordPanel({
   initial,
@@ -35,8 +34,6 @@ function AddRecordPanel({
   onSave: (r: Omit<MaintenanceRecord, 'id'>) => void
   onClose: () => void
 }) {
-  const { toast } = useToast()
-  const [crmCompanies, setCrmCompanies] = useState<string[]>([])
   const defaultEnd = initial?.endDate ?? (() => {
     const d = new Date(initial?.startDate ?? new Date())
     d.setMonth(d.getMonth() + (initial?.contractDuration ?? 12))
@@ -56,13 +53,6 @@ function AddRecordPanel({
     nextBillingDate: initial?.nextBillingDate ?? new Date().toISOString().split('T')[0],
   })
 
-  useEffect(() => {
-    fetch('/api/crm/companies').then(r => r.ok ? r.json() : []).then(d => {
-      if (Array.isArray(d)) setCrmCompanies(d.map((c: { name: string }) => c.name))
-    }).catch(() => toast('Failed to load companies', 'error'))
-  }, [])
-
-  // Auto-calculate duration in months from start → end dates
   const autoMonths = useMemo(() => {
     const s = new Date(form.startDate)
     const e = new Date(form.endDate)
@@ -70,7 +60,6 @@ function AddRecordPanel({
     return Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24 * 30.44))
   }, [form.startDate, form.endDate])
 
-  // Default cancellation fee = 3x monthly
   const defaultCancellationFee = (parseFloat(form.monthlyFee) || 0) * 3
   const cancellationFee = form.cancellationFeeOverride ? parseFloat(form.cancellationFeeOverride) : defaultCancellationFee
 
@@ -95,53 +84,62 @@ function AddRecordPanel({
   const statuses: MaintenanceStatus[] = ['Active', 'Onboarding', 'Pending Cancellation', 'Cancelled', 'Past']
   const paymentTermOptions = ['Net 30', 'End of service', 'End of 30 days', 'Due on receipt', 'Net 15', 'Custom']
 
+  const labelClass = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1'
+  const inputClass = 'w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035] bg-white transition-colors'
+
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
-      <div className="flex-1 pointer-events-auto" onClick={onClose} />
+      <div className="flex-1 pointer-events-auto bg-black/20 backdrop-blur-sm" onClick={onClose} />
       <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(440px, 100vw)' }}>
         <div className="p-5 flex-shrink-0 border-b border-gray-100 flex items-center justify-between" style={{ background: '#012b1e' }}>
-          <h2 className="text-white text-base font-bold">{initial ? 'Edit Record' : 'Add Maintenance Record'}</h2>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
+              {initial ? <Edit2 size={16} className="text-white" /> : <Plus size={16} className="text-white" />}
+            </div>
+            <div>
+              <h2 className="text-white text-base font-bold">{initial ? 'Edit Record' : 'New Maintenance Record'}</h2>
+              <p className="text-white/50 text-xs mt-0.5">Fill in the details below</p>
+            </div>
+          </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10"><X size={16} className="text-white/60" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-          {/* Company — from CRM */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company *</label>
-            <select value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
-              <option value="">— Select a company —</option>
-              {crmCompanies.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <label className={labelClass}>Company *</label>
+            <CompanySelect
+              value={form.company}
+              onChange={(name) => setForm(p => ({ ...p, company: name }))}
+              required
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
+              <label className={labelClass}>Service Type</label>
               <select value={form.serviceType} onChange={e => setForm(p => ({ ...p, serviceType: e.target.value as MaintenanceRecord['serviceType'] }))}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+                className={inputClass}>
                 {serviceTypes.map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Status</label>
+              <label className={labelClass}>Status</label>
               <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value as MaintenanceStatus }))}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+                className={inputClass}>
                 {statuses.map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
           </div>
 
-          {/* Contract dates + auto-calculated duration */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Start Date</label>
+              <label className={labelClass}>Start Date</label>
               <input type="date" value={form.startDate} onChange={e => setForm(p => ({ ...p, startDate: e.target.value }))}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+                className={inputClass} />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">End Date</label>
+              <label className={labelClass}>End Date</label>
               <input type="date" value={form.endDate} onChange={e => setForm(p => ({ ...p, endDate: e.target.value }))}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+                className={inputClass} />
             </div>
           </div>
           {autoMonths > 0 && (
@@ -150,57 +148,51 @@ function AddRecordPanel({
             </p>
           )}
 
-          {/* Monthly fee */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Monthly Fee ($)</label>
+            <label className={labelClass}>Monthly Fee ($)</label>
             <input type="number" value={form.monthlyFee} onChange={e => setForm(p => ({ ...p, monthlyFee: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" placeholder="350" />
+              className={inputClass} placeholder="350" />
           </div>
 
-          {/* Cancellation */}
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex flex-col gap-3">
             <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide">Cancellation Terms</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Notice Window (days)</label>
+                <label className={labelClass}>Notice Window (days)</label>
                 <input type="number" value={form.cancellationWindow} onChange={e => setForm(p => ({ ...p, cancellationWindow: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white" placeholder="30" />
+                  className={inputClass} placeholder="30" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                  Cancellation Fee ($)
-                </label>
+                <label className={labelClass}>Cancellation Fee ($)</label>
                 <input type="number" value={form.cancellationFeeOverride} onChange={e => setForm(p => ({ ...p, cancellationFeeOverride: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white"
-                  placeholder={`${defaultCancellationFee.toFixed(2)} (3× monthly)`} />
+                  className={inputClass}
+                  placeholder={`${defaultCancellationFee.toFixed(2)} (3x monthly)`} />
               </div>
             </div>
             <p className="text-[11px] text-amber-700">
-              Default fee: <strong>${defaultCancellationFee.toFixed(2)}</strong> (3× monthly rate). Leave blank to use default, or enter a custom amount per contract terms.
+              Default fee: <strong>${defaultCancellationFee.toFixed(2)}</strong> (3x monthly rate). Leave blank to use default.
             </p>
           </div>
 
-          {/* Payment terms */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Payment Terms</label>
+            <label className={labelClass}>Payment Terms</label>
             <select value={form.paymentTerms} onChange={e => setForm(p => ({ ...p, paymentTerms: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+              className={inputClass}>
               {paymentTermOptions.map(o => <option key={o}>{o}</option>)}
             </select>
           </div>
 
-          {/* Next billing date */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Next Billing Date</label>
+            <label className={labelClass}>Next Billing Date</label>
             <input type="date" value={form.nextBillingDate} onChange={e => setForm(p => ({ ...p, nextBillingDate: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+              className={inputClass} />
           </div>
         </div>
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
           <button
             onClick={save}
             disabled={!form.company}
-            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 transition-opacity hover:opacity-90"
             style={{ background: '#015035' }}
           >
             {initial ? 'Save Changes' : 'Add Record'}
@@ -211,8 +203,6 @@ function AddRecordPanel({
     </div>
   )
 }
-
-// ─── Maintenance Detail Panel ──────────────────────────────────────────────
 
 function MaintenancePanel({
   record,
@@ -278,10 +268,8 @@ function MaintenancePanel({
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
-      <div className="flex-1 pointer-events-auto" onClick={onClose} />
+      <div className="flex-1 pointer-events-auto bg-black/20 backdrop-blur-sm" onClick={onClose} />
       <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(480px, 100vw)' }}>
-
-        {/* Header */}
         <div className="p-6 flex-shrink-0" style={{ background: '#012b1e' }}>
           <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mb-3">
             <ChevronLeft size={14} /> Back
@@ -329,16 +317,13 @@ function MaintenancePanel({
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
           {(['overview', 'invoices', 'documents'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}>{t}</button>
           ))}
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-5">
-
           {tab === 'overview' && (
             <div className="flex flex-col gap-4">
               <div className="p-4 bg-gray-50 rounded-xl">
@@ -366,7 +351,6 @@ function MaintenancePanel({
                 </div>
               </div>
 
-              {/* Billing */}
               <div className="p-4 bg-gray-50 rounded-xl">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Billing</p>
@@ -380,12 +364,12 @@ function MaintenancePanel({
                       <div>
                         <label className="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Monthly Fee</label>
                         <input type="number" value={newFee} onChange={e => setNewFee(e.target.value)}
-                          className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+                          className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#015035]" />
                       </div>
                       <div>
                         <label className="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Next Billing Date</label>
                         <input type="date" value={newBillingDate} onChange={e => setNewBillingDate(e.target.value)}
-                          className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+                          className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#015035]" />
                       </div>
                     </div>
                     <div className="flex gap-2 mt-1">
@@ -527,7 +511,7 @@ function MaintenancePanel({
               <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" className="hidden" onChange={handleFileUpload} />
               <button
                 onClick={() => fileRef.current?.click()}
-                className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500 hover:border-green-700 hover:text-green-700 hover:bg-green-50 transition-colors"
+                className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500 hover:border-[#015035] hover:text-[#015035] hover:bg-emerald-50 transition-colors"
               >
                 <Upload size={16} /> Upload Document (PDF, Word, Image)
               </button>
@@ -559,7 +543,6 @@ function MaintenancePanel({
           )}
         </div>
 
-        {/* Footer */}
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
           {isPendingCancel ? (
             <button
@@ -571,7 +554,7 @@ function MaintenancePanel({
           ) : record.status === 'Active' || record.status === 'Onboarding' ? (
             <button
               onClick={() => setShowBillingEdit(true)}
-              className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2"
+              className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
               style={{ background: '#015035' }}
             >
               <DollarSign size={14} /> Update Billing
@@ -579,7 +562,7 @@ function MaintenancePanel({
           ) : (
             <button
               onClick={() => onEdit(record)}
-              className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold"
+              className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-opacity"
               style={{ background: '#015035' }}
             >
               Edit Record
@@ -594,7 +577,18 @@ function MaintenancePanel({
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+function ExpiringBadge({ endDate }: { endDate?: string }) {
+  if (!endDate) return null
+  const days = getDaysUntil(endDate)
+  if (days > 30 || days < 0) return null
+  const color = days <= 7 ? '#ef4444' : days <= 14 ? '#f97316' : '#f59e0b'
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: color + '18', color }}>
+      <AlertTriangle size={10} />
+      {days}d left
+    </span>
+  )
+}
 
 export default function MaintenancePage() {
   const { toast } = useToast()
@@ -604,6 +598,7 @@ export default function MaintenancePage() {
   const [addingRecord, setAddingRecord] = useState(false)
   const [editingRecord, setEditingRecord] = useState<MaintenanceRecord | null>(null)
   const [tabFilter, setTabFilter] = useState<TabFilter>('All')
+  const [searchQuery, setSearchQuery] = useState('')
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -621,18 +616,31 @@ export default function MaintenancePage() {
 
   const activeRecords = records.filter(m => m.status === 'Active')
   const totalMRR = activeRecords.reduce((s, m) => s + m.monthlyFee, 0)
-  const totalARR = totalMRR * 12
+  const expiringIn30 = records.filter(r => {
+    if (!r.endDate || r.status === 'Cancelled' || r.status === 'Past') return false
+    const days = getDaysUntil(r.endDate)
+    return days >= 0 && days <= 30
+  })
+  const cancelledRecords = records.filter(r => r.status === 'Cancelled' || r.status === 'Past')
 
   const tabCounts: Record<TabFilter, number> = {
     All: records.length,
-    Active: records.filter(r => r.status === 'Active').length,
-    Onboarding: records.filter(r => r.status === 'Onboarding').length,
-    'Pending Cancellation': records.filter(r => r.status === 'Pending Cancellation').length,
-    Past: records.filter(r => r.status === 'Past').length,
-    Cancelled: records.filter(r => r.status === 'Cancelled').length,
+    Active: activeRecords.length,
+    'Expiring Soon': expiringIn30.length,
+    Cancelled: cancelledRecords.length,
   }
 
-  const filtered = tabFilter === 'All' ? records : records.filter(r => r.status === tabFilter)
+  const filtered = useMemo(() => {
+    let result = records
+    if (tabFilter === 'Active') result = activeRecords
+    else if (tabFilter === 'Expiring Soon') result = expiringIn30
+    else if (tabFilter === 'Cancelled') result = cancelledRecords
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter(r => r.company.toLowerCase().includes(q))
+    }
+    return result
+  }, [records, tabFilter, searchQuery, activeRecords, expiringIn30, cancelledRecords])
 
   async function handleAddRecord(data: Omit<MaintenanceRecord, 'id'>) {
     try {
@@ -704,109 +712,177 @@ export default function MaintenancePage() {
       />
       <div className="p-3 sm:p-6 flex-1">
 
-        {/* Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {[
-            { label: 'Active Clients', value: activeRecords.length.toString(), icon: <CheckCircle size={16} />, color: '#22c55e' },
-            { label: 'Monthly Recurring', value: formatCurrency(totalMRR), icon: <RefreshCw size={16} />, color: '#015035' },
-            { label: 'Annual Recurring', value: formatCurrency(totalARR), icon: <DollarSign size={16} />, color: '#8b5cf6' },
-            { label: 'Pending Cancel', value: tabCounts['Pending Cancellation'].toString(), icon: <AlertTriangle size={16} />, color: '#ef4444' },
+            {
+              label: 'Active Plans',
+              value: activeRecords.length.toString(),
+              sub: `of ${records.length} total`,
+              icon: <CheckCircle size={18} />,
+              color: '#22c55e',
+            },
+            {
+              label: 'MRR from Maintenance',
+              value: formatCurrency(totalMRR),
+              sub: `${formatCurrency(totalMRR * 12)}/yr`,
+              icon: <TrendingUp size={18} />,
+              color: '#015035',
+            },
+            {
+              label: 'Expiring in 30d',
+              value: expiringIn30.length.toString(),
+              sub: expiringIn30.length > 0 ? 'Needs attention' : 'All clear',
+              icon: <AlertTriangle size={18} />,
+              color: expiringIn30.length > 0 ? '#f59e0b' : '#22c55e',
+            },
+            {
+              label: 'Total Records',
+              value: records.length.toString(),
+              sub: `${cancelledRecords.length} cancelled`,
+              icon: <ShieldCheck size={18} />,
+              color: '#8b5cf6',
+            },
           ].map(m => (
-            <div key={m.label} className="metric-card">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ background: `${m.color}18` }}>
-                <span style={{ color: m.color }}>{m.icon}</span>
+            <div key={m.label} className="metric-card group">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105" style={{ background: `${m.color}14` }}>
+                  <span style={{ color: m.color }}>{m.icon}</span>
+                </div>
               </div>
-              <p className="text-xl font-bold text-gray-900 mb-0.5" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{m.value}</p>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{m.label}</p>
+              <p className="text-2xl font-bold text-gray-900 mb-0.5" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{m.value}</p>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{m.label}</p>
+              <p className="text-[10px] text-gray-400 mt-1">{m.sub}</p>
             </div>
           ))}
         </div>
 
-        {/* MRR Breakdown */}
-        {activeRecords.length > 0 && (
-          <div className="metric-card mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-800">Monthly Recurring Revenue Breakdown</h3>
-              <span className="text-xs text-gray-400">Total: {formatCurrency(totalMRR)}/mo</span>
-            </div>
-            <div className="flex flex-col gap-3">
-              {activeRecords.map(rec => (
-                <div key={rec.id} className="cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setSelected(rec)}>
-                  <div className="flex justify-between text-xs mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-gray-800">{rec.company}</span>
-                      <StatusBadge label={rec.serviceType} colorClass={serviceTypeColors[rec.serviceType]} />
-                    </div>
-                    <span className="font-bold text-gray-900">{formatCurrency(rec.monthlyFee)}/mo</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2">
-                    <div className="h-2 rounded-full" style={{ width: `${(rec.monthlyFee / totalMRR) * 100}%`, background: '#015035' }} />
-                  </div>
-                </div>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-2 overflow-x-auto">
+              {(['All', 'Active', 'Expiring Soon', 'Cancelled'] as TabFilter[]).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTabFilter(t)}
+                  className={`filter-pill flex-shrink-0 ${tabFilter === t ? 'active' : ''}`}
+                >
+                  {t}
+                  <span className="ml-1.5 text-[10px] opacity-60 tabular-nums">{tabCounts[t]}</span>
+                </button>
               ))}
             </div>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search by company..."
+                className="w-full sm:w-56 pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035] transition-colors"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 text-gray-400">
+                  <X size={12} />
+                </button>
+              )}
+            </div>
           </div>
-        )}
 
-        {/* Records Table */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {/* Status filter tabs */}
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 overflow-x-auto">
-            {(['All', 'Active', 'Onboarding', 'Pending Cancellation', 'Past', 'Cancelled'] as TabFilter[]).map(t => (
-              <button
-                key={t}
-                onClick={() => setTabFilter(t)}
-                className={`filter-pill flex-shrink-0 ${tabFilter === t ? 'active' : ''}`}
-              >
-                {t} <span className="ml-1 opacity-60">{tabCounts[t]}</span>
-              </button>
-            ))}
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px]">
-              <thead>
-                <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
-                  <th className="text-left py-2.5 px-4 font-semibold">Company</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Service</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Status</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Monthly Fee</th>
-                  <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Duration</th>
-                  <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Next Billing</th>
-                  <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Cancel Window</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr><td colSpan={7} className="py-12 text-center text-sm text-gray-400">No records in this category</td></tr>
-                ) : filtered.map(rec => (
-                  <tr key={rec.id} onClick={() => setSelected(rec)} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <Building2 size={14} className="text-gray-400 flex-shrink-0" />
-                        <p className="text-sm font-semibold text-gray-900">{rec.company}</p>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4"><StatusBadge label={rec.serviceType} colorClass={serviceTypeColors[rec.serviceType]} /></td>
-                    <td className="py-3 px-4"><StatusBadge label={rec.status} colorClass={statusColors[rec.status] ?? 'bg-gray-100 text-gray-500'} /></td>
-                    <td className="py-3 px-4">
-                      <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
-                        {formatCurrency(rec.monthlyFee)}
-                      </span>
-                      <span className="text-xs text-gray-400">/mo</span>
-                    </td>
-                    <td className="py-3 px-4 hidden md:table-cell"><span className="text-sm text-gray-600">{rec.contractDuration} months</span></td>
-                    <td className="py-3 px-4 hidden lg:table-cell">
-                      <div className="flex items-center gap-1.5">
-                        <Clock size={12} className="text-gray-400" />
-                        <span className="text-xs text-gray-600 font-medium">{formatDate(rec.nextBillingDate)}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 hidden lg:table-cell"><span className="text-xs text-gray-500">{rec.cancellationWindow} days</span></td>
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 px-4">
+              <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+                <RefreshCw size={28} className="text-gray-300" />
+              </div>
+              <p className="text-sm font-semibold text-gray-500 mb-1">
+                {searchQuery ? 'No matching records' : 'No maintenance records yet'}
+              </p>
+              <p className="text-xs text-gray-400 text-center max-w-xs mb-4">
+                {searchQuery
+                  ? `No records match "${searchQuery}". Try a different search term.`
+                  : 'Add your first maintenance record to start tracking recurring services and monthly retainers.'}
+              </p>
+              {!searchQuery && (
+                <button
+                  onClick={() => setAddingRecord(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                  style={{ background: '#015035' }}
+                >
+                  <Plus size={14} /> Add Record
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[600px]">
+                <thead>
+                  <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50/80">
+                    <th className="text-left py-2.5 px-4 font-semibold">Company</th>
+                    <th className="text-left py-2.5 px-4 font-semibold">Service</th>
+                    <th className="text-left py-2.5 px-4 font-semibold">Status</th>
+                    <th className="text-right py-2.5 px-4 font-semibold">Monthly Fee</th>
+                    <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Duration</th>
+                    <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Next Billing</th>
+                    <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Expiry</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filtered.map(rec => {
+                    const daysLeft = rec.endDate ? getDaysUntil(rec.endDate) : null
+                    const isExpiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 30
+                    return (
+                      <tr
+                        key={rec.id}
+                        onClick={() => setSelected(rec)}
+                        className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors ${isExpiringSoon ? 'bg-amber-50/30' : ''}`}
+                      >
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                              {rec.company[0]}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 truncate">{rec.company}</p>
+                              <p className="text-[10px] text-gray-400 hidden sm:block">{rec.paymentTerms ?? 'Net 30'}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4"><StatusBadge label={rec.serviceType} colorClass={serviceTypeColors[rec.serviceType]} /></td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <StatusBadge label={rec.status} colorClass={statusColors[rec.status] ?? 'bg-gray-100 text-gray-500'} />
+                            <ExpiringBadge endDate={rec.endDate} />
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
+                            {formatCurrency(rec.monthlyFee)}
+                          </span>
+                          <span className="text-[10px] text-gray-400">/mo</span>
+                        </td>
+                        <td className="py-3 px-4 hidden md:table-cell">
+                          <span className="text-sm text-gray-600">{rec.contractDuration} months</span>
+                        </td>
+                        <td className="py-3 px-4 hidden lg:table-cell">
+                          <div className="flex items-center gap-1.5">
+                            <Clock size={12} className="text-gray-400" />
+                            <span className="text-xs text-gray-600 font-medium">{formatDate(rec.nextBillingDate)}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 hidden lg:table-cell">
+                          {rec.endDate ? (
+                            <span className={`text-xs font-medium ${daysLeft !== null && daysLeft <= 30 ? 'text-amber-600' : 'text-gray-500'}`}>
+                              {formatDate(rec.endDate)}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">--</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 

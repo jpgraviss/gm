@@ -23,7 +23,8 @@ import {
   ChevronRight, ChevronLeft, Linkedin, StickyNote, CheckSquare,
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
-  PhoneCall, Video, Pencil, Trash2, Upload,
+  PhoneCall, Video, Pencil, Trash2, Upload, Eye, MessageSquare, MousePointerClick,
+  Flame, Thermometer, Snowflake,
 } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -43,6 +44,95 @@ const taskPriorityConfig: Record<ContactTask['priority'], { label: string; color
   high:   { label: 'High',   color: '#dc2626', bg: '#fef2f2' },
   medium: { label: 'Medium', color: '#d97706', bg: '#fffbeb' },
   low:    { label: 'Low',    color: '#6b7280', bg: '#f9fafb' },
+}
+
+const timelineTypeConfig: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
+  email_sent:       { icon: <Mail size={14} />,              label: 'Email Sent',        color: '#3b82f6' },
+  email_opened:     { icon: <Eye size={14} />,               label: 'Email Opened',      color: '#10b981' },
+  link_clicked:     { icon: <MousePointerClick size={14} />, label: 'Link Clicked',      color: '#8b5cf6' },
+  proposal_sent:    { icon: <FileText size={14} />,          label: 'Proposal Sent',     color: '#8b5cf6' },
+  proposal_viewed:  { icon: <Eye size={14} />,               label: 'Proposal Viewed',   color: '#6366f1' },
+  contract_signed:  { icon: <ScrollText size={14} />,        label: 'Contract Signed',   color: '#059669' },
+  contract_created: { icon: <ScrollText size={14} />,        label: 'Contract Created',  color: '#f97316' },
+  invoice_paid:     { icon: <DollarSign size={14} />,        label: 'Invoice Paid',      color: '#10b981' },
+  invoice_sent:     { icon: <DollarSign size={14} />,        label: 'Invoice Sent',      color: '#f59e0b' },
+  ticket_created:   { icon: <MessageSquare size={14} />,     label: 'Ticket Created',    color: '#f97316' },
+  deal_updated:     { icon: <TrendingUp size={14} />,        label: 'Deal Updated',      color: '#3b82f6' },
+  note_added:       { icon: <StickyNote size={14} />,        label: 'Note Added',        color: '#6b7280' },
+  task_completed:   { icon: <CheckSquare size={14} />,       label: 'Task Completed',    color: '#10b981' },
+  call:             { icon: <PhoneCall size={14} />,         label: 'Call',              color: '#3b82f6' },
+  meeting:          { icon: <Video size={14} />,             label: 'Meeting',           color: '#8b5cf6' },
+  activity:         { icon: <Clock size={14} />,             label: 'Activity',          color: '#6b7280' },
+}
+
+interface TimelineEntry {
+  id: string
+  type: string
+  title: string
+  description?: string
+  timestamp: string
+  metadata?: Record<string, unknown>
+}
+
+function formatRelativeTime(ts: string): string {
+  const diff = Date.now() - new Date(ts).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 30) return `${days}d ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo ago`
+  return `${Math.floor(months / 12)}y ago`
+}
+
+function getMonthKey(ts: string): string {
+  const d = new Date(ts)
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
+function EngagementScoreBar({ score, breakdown }: { score: number; breakdown: { emailsOpened: number; linksClicked: number; proposalsViewed: number; meetings: number } }) {
+  const maxScore = 200
+  const pct = Math.min(100, Math.round((score / maxScore) * 100))
+  const level = score >= 100 ? 'hot' : score >= 40 ? 'warm' : 'cold'
+  const cfg = {
+    hot:  { label: 'Hot',  color: '#ef4444', bg: '#fef2f2', icon: <Flame size={14} /> },
+    warm: { label: 'Warm', color: '#f59e0b', bg: '#fffbeb', icon: <Thermometer size={14} /> },
+    cold: { label: 'Cold', color: '#6b7280', bg: '#f9fafb', icon: <Snowflake size={14} /> },
+  }[level]
+
+  return (
+    <div className="px-5 py-4 border-b border-gray-100">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span style={{ color: cfg.color }}>{cfg.icon}</span>
+          <span className="text-sm font-bold text-gray-900">Engagement Score</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-lg font-bold" style={{ color: cfg.color }}>{score}</span>
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ color: cfg.color, background: cfg.bg }}>{cfg.label}</span>
+        </div>
+      </div>
+      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: cfg.color }} />
+      </div>
+      <div className="grid grid-cols-4 gap-2 text-center">
+        {[
+          { label: 'Opens', val: breakdown.emailsOpened, pts: 5 },
+          { label: 'Clicks', val: breakdown.linksClicked, pts: 10 },
+          { label: 'Proposals', val: breakdown.proposalsViewed, pts: 15 },
+          { label: 'Meetings', val: breakdown.meetings, pts: 20 },
+        ].map(s => (
+          <div key={s.label} className="text-center">
+            <p className="text-sm font-semibold text-gray-900">{s.val}</p>
+            <p className="text-[10px] text-gray-400">{s.label} ({s.pts}pt)</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 // ─── Edit Contact Panel ───────────────────────────────────────────────────────
@@ -290,6 +380,25 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   const [addingTag, setAddingTag] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(true)
   const [moreMenu, setMoreMenu] = useState(false)
+  const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([])
+  const [timelineLoading, setTimelineLoading] = useState(false)
+  const [engagementScore, setEngagementScore] = useState(0)
+  const [engagementBreakdown, setEngagementBreakdown] = useState({ emailsOpened: 0, linksClicked: 0, proposalsViewed: 0, meetings: 0 })
+
+  useEffect(() => {
+    setTimelineLoading(true)
+    fetch(`/api/crm/contacts/${contact.id}/timeline`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setTimelineEntries(data.timeline ?? [])
+          setEngagementScore(data.engagementScore ?? 0)
+          setEngagementBreakdown(data.engagementBreakdown ?? { emailsOpened: 0, linksClicked: 0, proposalsViewed: 0, meetings: 0 })
+        }
+      })
+      .catch(() => {})
+      .finally(() => setTimelineLoading(false))
+  }, [contact.id])
 
   function handleAddNote() {
     if (!newNoteBody.trim()) return
@@ -678,10 +787,93 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                   </div>
                 )}
 
-                {/* Activity timeline */}
+                {/* Unified Timeline */}
                 <div className="pb-6">
-                  <ActivityTimeline activities={localActivities} />
-                </div>
+                  {timelineLoading ? (
+                    <div className="flex justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
+                    </div>
+                  ) : (() => {
+                    const allEntries = [
+                      ...timelineEntries,
+                      ...localActivities
+                        .filter(a => !timelineEntries.some(t => t.id === a.id))
+                        .map(a => ({
+                          id: a.id,
+                          type: a.type === 'call' ? 'call' : a.type === 'meeting' ? 'meeting' : a.type === 'note' ? 'note_added' : a.type === 'deal' ? 'deal_updated' : a.type === 'email' ? 'email_sent' : 'activity',
+                          title: a.title,
+                          description: a.body,
+                          timestamp: a.timestamp,
+                          metadata: { user: a.user, outcome: a.outcome, duration: a.duration },
+                        } as TimelineEntry)),
+                    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+
+                    if (allEntries.length === 0) {
+                      return <p className="text-sm text-gray-400 text-center py-8">No activities logged.</p>
+                    }
+
+                    const grouped = new Map<string, TimelineEntry[]>()
+                    for (const entry of allEntries) {
+                      if (!entry.timestamp) continue
+                      const key = getMonthKey(entry.timestamp)
+                      if (!grouped.has(key)) grouped.set(key, [])
+                      grouped.get(key)!.push(entry)
+                    }
+
+                    return Array.from(grouped.entries()).map(([month, entries]) => (
+                      <div key={month}>
+                        <div className="sticky top-0 bg-gray-50/95 backdrop-blur-sm px-1 py-2 z-10">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{month}</p>
+                        </div>
+                        <div className="flex flex-col">
+                          {entries.map((entry, idx) => {
+                            const cfg = timelineTypeConfig[entry.type] ?? timelineTypeConfig.activity
+                            return (
+                              <div key={entry.id} className="flex gap-3">
+                                <div className="flex flex-col items-center">
+                                  <div
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-1"
+                                    style={{ background: `${cfg.color}15`, color: cfg.color }}
+                                  >
+                                    {cfg.icon}
+                                  </div>
+                                  {idx < entries.length - 1 && (
+                                    <div className="w-px flex-1 bg-gray-100 my-1" />
+                                  )}
+                                </div>
+                                <div className="flex-1 pb-4">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium text-gray-900">{entry.title}</p>
+                                      <span className="text-[10px] font-medium" style={{ color: cfg.color }}>{cfg.label}</span>
+                                    </div>
+                                    <span className="text-[11px] text-gray-400 flex-shrink-0 mt-0.5">
+                                      {formatRelativeTime(entry.timestamp)}
+                                    </span>
+                                  </div>
+                                  {entry.description && (
+                                    <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">{entry.description}</p>
+                                  )}
+                                  {entry.metadata && (
+                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                      {entry.metadata.outcome && (
+                                        <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">
+                                          {String(entry.metadata.outcome)}
+                                        </span>
+                                      )}
+                                      {entry.metadata.user && (
+                                        <span className="text-[10px] text-gray-400">by {String(entry.metadata.user)}</span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))
+                  })()}</div>
               </div>
             </div>
           )}

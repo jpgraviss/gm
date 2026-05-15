@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { fetchContracts, fetchCrmContacts, fetchProposals } from '@/lib/supabase'
 import { formatCurrency, serviceTypeColors, renewalStatusColors, formatDate } from '@/lib/utils'
@@ -12,27 +12,43 @@ import type { Renewal, Contract, CRMContact, Proposal } from '@/lib/types'
 import {
   X, AlertTriangle, Clock, CheckCircle, Calendar, DollarSign,
   ChevronRight, User, FileText, TrendingUp, Mail, Phone,
-  RefreshCw, AlertCircle, Plus, Minus, Bell,
+  RefreshCw, AlertCircle, Plus, Minus, Bell, Search, Inbox,
 } from 'lucide-react'
 import Link from 'next/link'
 
+type FilterTab = 'all' | 'upcoming30' | 'upcoming60' | 'overdue' | 'renewed'
+
 function UrgencyBar({ days }: { days: number }) {
   const pct = Math.max(0, Math.min(100, (days / 90) * 100))
-  const color = days <= 14 ? '#ef4444' : days <= 30 ? '#f97316' : days <= 60 ? '#f59e0b' : '#22c55e'
+  const color = days <= 0 ? '#dc2626' : days <= 14 ? '#ef4444' : days <= 30 ? '#f97316' : days <= 60 ? '#f59e0b' : '#22c55e'
   return (
     <div className="flex items-center gap-2">
       <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${100 - pct}%`, background: color }} />
       </div>
       <span className="text-xs font-semibold" style={{ color }}>
-        {days <= 0 ? 'Expired!' : `${days}d`}
+        {days <= 0 ? 'Overdue' : `${days}d`}
       </span>
     </div>
   )
 }
 
+function DaysIndicator({ days }: { days: number }) {
+  const color = days <= 0 ? '#dc2626' : days <= 14 ? '#ef4444' : days <= 30 ? '#f97316' : days <= 60 ? '#f59e0b' : '#22c55e'
+  const bg = days <= 0 ? '#fef2f2' : days <= 14 ? '#fef2f2' : days <= 30 ? '#fff7ed' : days <= 60 ? '#fffbeb' : '#f0fdf4'
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold"
+      style={{ color, background: bg }}
+    >
+      {days <= 0 ? `${Math.abs(days)}d overdue` : `${days}d`}
+    </span>
+  )
+}
+
 const urgencyBand = (days: number) =>
-  days <= 14 ? { label: 'Critical', bg: '#fef2f2', color: '#dc2626', border: '#fecaca' }
+  days <= 0 ? { label: 'Overdue', bg: '#fef2f2', color: '#dc2626', border: '#fecaca' }
+  : days <= 14 ? { label: 'Critical', bg: '#fef2f2', color: '#dc2626', border: '#fecaca' }
   : days <= 30 ? { label: 'High', bg: '#fff7ed', color: '#f97316', border: '#fed7aa' }
   : days <= 60 ? { label: 'Medium', bg: '#fffbeb', color: '#d97706', border: '#fde68a' }
   : { label: 'Low', bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' }
@@ -79,8 +95,6 @@ function RenewalProposalSidebar({
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
-
-          {/* Current contract summary */}
           <div className="p-4 bg-gray-50 rounded-xl">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Current Contract</p>
             <div className="grid grid-cols-2 gap-2">
@@ -98,7 +112,6 @@ function RenewalProposalSidebar({
             </div>
           </div>
 
-          {/* Price increase selector */}
           <div className="p-4 bg-gray-50 rounded-xl">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Price Adjustment</p>
             <div className="flex items-center gap-3 mb-4">
@@ -137,7 +150,6 @@ function RenewalProposalSidebar({
             </div>
           </div>
 
-          {/* Contract length */}
           <div className="p-4 bg-gray-50 rounded-xl">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-3">New Contract Length</p>
             <div className="flex gap-2">
@@ -158,7 +170,6 @@ function RenewalProposalSidebar({
             </div>
           </div>
 
-          {/* Setup fee toggle */}
           <div className="p-4 bg-gray-50 rounded-xl">
             <div className="flex items-center justify-between mb-3">
               <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">One-Time Setup / Onboarding</p>
@@ -184,7 +195,6 @@ function RenewalProposalSidebar({
             )}
           </div>
 
-          {/* Notes */}
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Internal Notes</label>
             <textarea
@@ -196,7 +206,6 @@ function RenewalProposalSidebar({
             />
           </div>
 
-          {/* New pricing summary */}
           <div className="p-4 rounded-xl" style={{ background: '#012b1e' }}>
             <p className="text-white/60 text-[10px] font-semibold uppercase tracking-wide mb-3">Renewal Summary</p>
             <div className="flex flex-col gap-2">
@@ -643,6 +652,8 @@ export default function RenewalsPage() {
   const [contracts, setContracts] = useState<Contract[]>([])
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
   const [proposals, setProposals] = useState<Proposal[]>([])
+  const [activeTab, setActiveTab] = useState<FilterTab>('all')
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     fetch('/api/renewals')
@@ -655,14 +666,55 @@ export default function RenewalsPage() {
     fetchProposals().then(setProposals)
   }, [])
 
-  const sorted = [...localRenewals].sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry)
+  const now = new Date()
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
 
-  const metrics = {
-    expiring30: localRenewals.filter(r => r.daysUntilExpiry <= 30 && r.status !== 'Renewed').length,
-    expiring60: localRenewals.filter(r => r.daysUntilExpiry <= 60 && r.status !== 'Renewed').length,
-    expiring90: localRenewals.filter(r => r.daysUntilExpiry <= 90 && r.status !== 'Renewed').length,
+  const metrics = useMemo(() => ({
+    total: localRenewals.length,
+    due30: localRenewals.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 30 && r.status !== 'Renewed').length,
+    due60: localRenewals.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 60 && r.status !== 'Renewed').length,
+    renewedThisMonth: localRenewals.filter(r => {
+      if (r.status !== 'Renewed') return false
+      const expDate = new Date(r.expirationDate)
+      return expDate >= thisMonthStart && expDate <= thisMonthEnd
+    }).length,
     renewalValue: localRenewals.filter(r => r.status !== 'Churned').reduce((s, r) => s + r.renewalValue, 0),
-  }
+  }), [localRenewals])
+
+  const filtered = useMemo(() => {
+    let list = [...localRenewals]
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      list = list.filter(r => r.company.toLowerCase().includes(q))
+    }
+
+    switch (activeTab) {
+      case 'upcoming30':
+        list = list.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 30 && r.status !== 'Renewed')
+        break
+      case 'upcoming60':
+        list = list.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 60 && r.status !== 'Renewed')
+        break
+      case 'overdue':
+        list = list.filter(r => r.daysUntilExpiry <= 0 && r.status !== 'Renewed')
+        break
+      case 'renewed':
+        list = list.filter(r => r.status === 'Renewed')
+        break
+    }
+
+    return list.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry)
+  }, [localRenewals, activeTab, searchQuery])
+
+  const tabCounts = useMemo(() => ({
+    all: localRenewals.length,
+    upcoming30: localRenewals.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 30 && r.status !== 'Renewed').length,
+    upcoming60: localRenewals.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 60 && r.status !== 'Renewed').length,
+    overdue: localRenewals.filter(r => r.daysUntilExpiry <= 0 && r.status !== 'Renewed').length,
+    renewed: localRenewals.filter(r => r.status === 'Renewed').length,
+  }), [localRenewals])
 
   function startRenewal(id: string) {
     setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: 'In Progress' as const } : r))
@@ -693,6 +745,14 @@ export default function RenewalsPage() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
+  const FILTER_TABS: { key: FilterTab; label: string; icon: React.ReactNode }[] = [
+    { key: 'all', label: 'All', icon: <RefreshCw size={13} /> },
+    { key: 'upcoming30', label: '30 Days', icon: <AlertTriangle size={13} /> },
+    { key: 'upcoming60', label: '60 Days', icon: <Clock size={13} /> },
+    { key: 'overdue', label: 'Overdue', icon: <AlertCircle size={13} /> },
+    { key: 'renewed', label: 'Renewed', icon: <CheckCircle size={13} /> },
+  ]
+
   return (
     <>
       <Header
@@ -704,10 +764,10 @@ export default function RenewalsPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {[
-            { label: 'Expiring in 30d', value: metrics.expiring30.toString(), icon: <AlertTriangle size={16} />, color: '#ef4444', sub: 'Immediate action' },
-            { label: 'Expiring in 60d', value: metrics.expiring60.toString(), icon: <Clock size={16} />, color: '#f97316', sub: 'Schedule calls' },
-            { label: 'Expiring in 90d', value: metrics.expiring90.toString(), icon: <Calendar size={16} />, color: '#f59e0b', sub: 'On radar' },
-            { label: 'Renewal Pipeline', value: formatCurrency(metrics.renewalValue), icon: <DollarSign size={16} />, color: '#015035', sub: 'At-risk ARR' },
+            { label: 'Total Renewals', value: metrics.total.toString(), icon: <RefreshCw size={16} />, color: '#015035', sub: 'All tracked renewals' },
+            { label: 'Due in 30 Days', value: metrics.due30.toString(), icon: <AlertTriangle size={16} />, color: '#ef4444', sub: 'Immediate action' },
+            { label: 'Due in 60 Days', value: metrics.due60.toString(), icon: <Clock size={16} />, color: '#f97316', sub: 'Schedule outreach' },
+            { label: 'Renewed This Month', value: metrics.renewedThisMonth.toString(), icon: <CheckCircle size={16} />, color: '#22c55e', sub: formatCurrency(metrics.renewalValue) + ' pipeline' },
           ].map(m => (
             <div key={m.label} className="metric-card">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ background: `${m.color}18` }}>
@@ -720,116 +780,176 @@ export default function RenewalsPage() {
           ))}
         </div>
 
-        <div className="metric-card mb-6">
-          <h3 className="text-sm font-semibold text-gray-800 mb-4">Renewal Forecast Timeline (Next 90 Days)</h3>
-          <div className="relative">
-            <div className="flex gap-0 h-8 rounded-xl overflow-hidden mb-4">
-              {['0-30d', '31-60d', '61-90d'].map((label, i) => (
-                <div key={label} className="flex-1 flex items-center justify-center text-xs font-semibold text-white"
-                  style={{ background: i === 0 ? '#ef4444' : i === 1 ? '#f97316' : '#f59e0b', opacity: 0.85 }}>
-                  {label}
-                </div>
-              ))}
-              <div className="flex-1 flex items-center justify-center text-xs font-semibold text-gray-500 bg-gray-100">90d+</div>
-            </div>
-            <div className="flex flex-col gap-2">
-              {sorted.filter(r => r.daysUntilExpiry <= 90).map(r => (
-                <button key={r.id} onClick={() => setSelected(r)}
-                  className="flex items-center gap-3 text-sm text-left hover:bg-gray-50 rounded-lg px-2 py-1 transition-colors w-full">
-                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                    style={{ background: r.daysUntilExpiry <= 30 ? '#ef4444' : r.daysUntilExpiry <= 60 ? '#f97316' : '#f59e0b' }} />
-                  <span className="font-medium text-gray-800 w-36 truncate">{r.company}</span>
-                  <StatusBadge label={r.serviceType} colorClass={serviceTypeColors[r.serviceType]} />
-                  <span className="font-bold text-gray-700">{formatCurrency(r.renewalValue)}</span>
-                  <span className="text-gray-400 text-xs ml-auto">{formatDate(r.expirationDate)}</span>
-                  <UrgencyBar days={r.daysUntilExpiry} />
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+          <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-1 overflow-x-auto flex-1">
+              {FILTER_TABS.map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                    activeTab === t.key
+                      ? 'text-white'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                  }`}
+                  style={activeTab === t.key ? { background: '#015035' } : {}}
+                >
+                  {t.icon}
+                  {t.label}
+                  <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    activeTab === t.key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {tabCounts[t.key]}
+                  </span>
                 </button>
               ))}
             </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
-          <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-            <h3 className="text-sm font-semibold text-gray-800">All Renewals</h3>
-            <div className="flex items-center gap-3 text-xs text-gray-500">
-              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500" /> 0–30 days</div>
-              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-orange-500" /> 31–60 days</div>
-              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-500" /> 61–90 days</div>
-              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500" /> 90+ days</div>
+            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 sm:w-64">
+              <Search size={13} className="text-gray-400 flex-shrink-0" />
+              <input
+                type="text"
+                placeholder="Search by company..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-full"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="flex-shrink-0">
+                  <X size={13} className="text-gray-400 hover:text-gray-600" />
+                </button>
+              )}
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px]">
-              <thead>
-                <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
-                  <th className="text-left py-2.5 px-4 font-semibold">Company</th>
-                  <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Service</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Status</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Value</th>
-                  <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Expiration</th>
-                  <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Urgency</th>
-                  <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Rep</th>
-                  <th className="text-left py-2.5 px-4 font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map(r => (
-                  <tr key={r.id} onClick={() => setSelected(r)}
-                    className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors">
-                    <td className="py-3 px-4"><p className="text-sm font-semibold text-gray-900">{r.company}</p></td>
-                    <td className="py-3 px-4 hidden sm:table-cell">
-                      <StatusBadge label={r.serviceType} colorClass={serviceTypeColors[r.serviceType]} />
-                    </td>
-                    <td className="py-3 px-4">
-                      <StatusBadge label={r.status} colorClass={renewalStatusColors[r.status]} />
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
-                        {formatCurrency(r.renewalValue)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 hidden md:table-cell">
-                      <span className="text-xs text-gray-500">{formatDate(r.expirationDate)}</span>
-                    </td>
-                    <td className="py-3 px-4 hidden lg:table-cell"><UrgencyBar days={r.daysUntilExpiry} /></td>
-                    <td className="py-3 px-4 hidden lg:table-cell">
-                      <div className="flex items-center gap-1.5">
-                        <User size={12} className="text-gray-400" />
-                        <span className="text-sm text-gray-600">{r.assignedRep.split(' ')[0]}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
-                      {r.status === 'Upcoming' && (
-                        <button
-                          onClick={() => startRenewal(r.id)}
-                          className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100"
-                        >
-                          Start Renewal
-                        </button>
-                      )}
-                      {r.status === 'In Progress' && (
-                        <button
-                          onClick={() => setRenewalProposalFor(r)}
-                          className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded-md hover:bg-orange-100"
-                        >
-                          Create Proposal
-                        </button>
-                      )}
-                      {r.status === 'Renewed' && (
-                        <span className="text-xs text-emerald-600 flex items-center gap-1">
-                          <CheckCircle size={11} /> Renewed
-                        </span>
-                      )}
-                    </td>
+
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#01503512' }}>
+                <Inbox size={28} style={{ color: '#015035' }} />
+              </div>
+              <p className="text-sm font-semibold text-gray-700 mb-1">No renewals found</p>
+              <p className="text-xs text-gray-400 text-center max-w-xs">
+                {searchQuery
+                  ? `No renewals match "${searchQuery}". Try a different search term.`
+                  : activeTab === 'overdue'
+                  ? 'No overdue renewals right now. Great job staying on top of things!'
+                  : activeTab === 'renewed'
+                  ? 'No renewals completed yet this period.'
+                  : 'No renewals match the selected filter.'}
+              </p>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="mt-3 text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                  style={{ color: '#015035' }}
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px]">
+                <thead>
+                  <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50/80">
+                    <th className="text-left py-2.5 px-4 font-semibold">Company</th>
+                    <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Service</th>
+                    <th className="text-left py-2.5 px-4 font-semibold">Status</th>
+                    <th className="text-left py-2.5 px-4 font-semibold">Value</th>
+                    <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Expiration</th>
+                    <th className="text-left py-2.5 px-4 font-semibold">Days Left</th>
+                    <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Urgency</th>
+                    <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Rep</th>
+                    <th className="text-left py-2.5 px-4 font-semibold">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filtered.map(r => (
+                    <tr key={r.id} onClick={() => setSelected(r)}
+                      className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors group">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="w-2 h-2 rounded-full flex-shrink-0"
+                            style={{
+                              background: r.daysUntilExpiry <= 0 ? '#dc2626'
+                                : r.daysUntilExpiry <= 30 ? '#ef4444'
+                                : r.daysUntilExpiry <= 60 ? '#f97316'
+                                : '#22c55e'
+                            }}
+                          />
+                          <p className="text-sm font-semibold text-gray-900">{r.company}</p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 hidden sm:table-cell">
+                        <StatusBadge label={r.serviceType} colorClass={serviceTypeColors[r.serviceType]} />
+                      </td>
+                      <td className="py-3 px-4">
+                        <StatusBadge label={r.status} colorClass={renewalStatusColors[r.status]} />
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
+                          {formatCurrency(r.renewalValue)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 hidden md:table-cell">
+                        <span className="text-xs text-gray-500">{formatDate(r.expirationDate)}</span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <DaysIndicator days={r.daysUntilExpiry} />
+                      </td>
+                      <td className="py-3 px-4 hidden lg:table-cell"><UrgencyBar days={r.daysUntilExpiry} /></td>
+                      <td className="py-3 px-4 hidden lg:table-cell">
+                        <div className="flex items-center gap-1.5">
+                          <User size={12} className="text-gray-400" />
+                          <span className="text-sm text-gray-600">{r.assignedRep.split(' ')[0]}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
+                        {r.status === 'Upcoming' && (
+                          <button
+                            onClick={() => startRenewal(r.id)}
+                            className="text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md hover:bg-blue-100 transition-colors"
+                          >
+                            Start
+                          </button>
+                        )}
+                        {r.status === 'In Progress' && (
+                          <button
+                            onClick={() => setRenewalProposalFor(r)}
+                            className="text-xs font-medium text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md hover:bg-orange-100 transition-colors"
+                          >
+                            Propose
+                          </button>
+                        )}
+                        {r.status === 'Renewed' && (
+                          <span className="text-xs text-emerald-600 flex items-center gap-1">
+                            <CheckCircle size={11} /> Done
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {filtered.length > 0 && (
+            <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/60 flex items-center justify-between">
+              <p className="text-xs text-gray-400">
+                {filtered.length} renewal{filtered.length !== 1 ? 's' : ''}
+                {activeTab !== 'all' || searchQuery ? ' matching filters' : ' total'}
+              </p>
+              <div className="flex items-center gap-3 text-xs text-gray-400">
+                <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-red-500" /> Overdue / Critical</div>
+                <div className="flex items-center gap-1 hidden sm:flex"><div className="w-1.5 h-1.5 rounded-full bg-orange-500" /> 31-60d</div>
+                <div className="flex items-center gap-1 hidden sm:flex"><div className="w-1.5 h-1.5 rounded-full bg-green-500" /> 60d+</div>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="metric-card mt-6">
+        <div className="metric-card">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#01503518' }}>
               <Bell size={16} style={{ color: '#015035' }} />

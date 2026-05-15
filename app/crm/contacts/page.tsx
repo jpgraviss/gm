@@ -384,6 +384,17 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [engagementScore, setEngagementScore] = useState(0)
   const [engagementBreakdown, setEngagementBreakdown] = useState({ emailsOpened: 0, linksClicked: 0, proposalsViewed: 0, meetings: 0 })
+  const [engagementPoints, setEngagementPoints] = useState({ emailOpened: 5, linkClicked: 10, proposalViewed: 15, meetingHeld: 20 })
+  const [engagementThresholds, setEngagementThresholds] = useState({ cold: 20, hot: 60 })
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.engagement?.thresholds) setEngagementThresholds(prev => ({ ...prev, ...d.engagement.thresholds }))
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     setTimelineLoading(true)
@@ -394,6 +405,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
           setTimelineEntries(data.timeline ?? [])
           setEngagementScore(data.engagementScore ?? 0)
           setEngagementBreakdown(data.engagementBreakdown ?? { emailsOpened: 0, linksClicked: 0, proposalsViewed: 0, meetings: 0 })
+          if (data.engagementPoints) setEngagementPoints(data.engagementPoints)
         }
       })
       .catch(() => {})

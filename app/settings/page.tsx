@@ -786,6 +786,59 @@ export default function SettingsPage() {
                   Montserrat — The unified internal operating system for Graviss Marketing
                 </div>
               </div>
+              <div className="pt-4 border-t border-gray-200">
+                <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-4">Accent Colors</h4>
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Success Color</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.successColor }} />
+                      <input
+                        className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                        value={branding.successColor}
+                        onChange={e => setBranding(p => ({ ...p, successColor: e.target.value }))}
+                      />
+                      <input type="color" value={branding.successColor} onChange={e => setBranding(p => ({ ...p, successColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Warning Color</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.warningColor }} />
+                      <input
+                        className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                        value={branding.warningColor}
+                        onChange={e => setBranding(p => ({ ...p, warningColor: e.target.value }))}
+                      />
+                      <input type="color" value={branding.warningColor} onChange={e => setBranding(p => ({ ...p, warningColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Danger Color</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.dangerColor }} />
+                      <input
+                        className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                        value={branding.dangerColor}
+                        onChange={e => setBranding(p => ({ ...p, dangerColor: e.target.value }))}
+                      />
+                      <input type="color" value={branding.dangerColor} onChange={e => setBranding(p => ({ ...p, dangerColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Info Color</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.infoColor }} />
+                      <input
+                        className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                        value={branding.infoColor}
+                        onChange={e => setBranding(p => ({ ...p, infoColor: e.target.value }))}
+                      />
+                      <input type="color" value={branding.infoColor} onChange={e => setBranding(p => ({ ...p, infoColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button onClick={saveBranding} className="w-fit flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
                 {saved === 'Branding' ? <><CheckCircle size={14} /> Saved!</> : 'Save Branding'}
               </button>

@@ -43,6 +43,7 @@ const PUBLIC_PREFIXES = [
   '/api/sequences/unsubscribe',
   '/api/unsubscribe/',
   '/api/portal/insights',
+  '/api/track/',
 ]
 
 function getClientIp(req: NextRequest): string {

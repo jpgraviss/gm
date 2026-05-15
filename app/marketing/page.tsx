@@ -11,7 +11,7 @@ import { type EmailBlock, renderEmailHTML } from '@/lib/email-builder'
 import {
   Mail, Send, Users, Trash2, Eye, Edit, X, Sparkles, CheckCircle,
   AlertCircle, Clock, BarChart3, ChevronLeft, Palette, Layout, FlaskConical,
-  ChevronDown, ChevronRight, Calendar, Building2, Ban,
+  ChevronDown, ChevronRight, Calendar, Building2, Ban, MousePointerClick, ExternalLink,
 } from 'lucide-react'
 
 interface AudienceFilter {
@@ -378,7 +378,21 @@ function BroadcastEditor({
   const [emailBlocks, setEmailBlocks] = useState<EmailBlock[]>([])
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
 
+  const [clickData, setClickData] = useState<Array<{ url: string; totalClicks: number; uniqueClickers: number }>>([])
+  const [clicksLoading, setClicksLoading] = useState(false)
+
   const isSent = broadcast.status === 'sent' || broadcast.status === 'sending'
+
+  useEffect(() => {
+    if (broadcast.status === 'sent') {
+      setClicksLoading(true)
+      fetch(`/api/broadcasts/${broadcast.id}/clicks`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => { if (Array.isArray(data)) setClickData(data) })
+        .catch(() => {})
+        .finally(() => setClicksLoading(false))
+    }
+  }, [broadcast.id, broadcast.status])
 
   async function save() {
     // Render blocks to HTML before saving
@@ -882,6 +896,42 @@ function BroadcastEditor({
                       <p className="text-lg font-bold text-emerald-700">{broadcast.totalClicked}</p>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {broadcast.status === 'sent' && (
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <MousePointerClick size={14} className="text-emerald-600" />
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Link Click Tracking</p>
+                  </div>
+                  {clicksLoading ? (
+                    <div className="flex items-center justify-center py-6">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-600" />
+                    </div>
+                  ) : clickData.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-4">No link clicks recorded yet</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {clickData.map((link, i) => (
+                        <div key={i} className="flex items-center gap-3 rounded-lg bg-gray-50 px-3 py-2.5">
+                          <ExternalLink size={12} className="text-gray-400 flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium text-gray-900 truncate" title={link.url}>
+                              {link.url.length > 60 ? link.url.slice(0, 60) + '...' : link.url}
+                            </p>
+                            <p className="text-[10px] text-gray-500">
+                              {link.uniqueClickers} unique {link.uniqueClickers === 1 ? 'clicker' : 'clickers'}
+                            </p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-sm font-bold text-emerald-700">{link.totalClicks}</p>
+                            <p className="text-[10px] text-gray-400">{link.totalClicks === 1 ? 'click' : 'clicks'}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </>

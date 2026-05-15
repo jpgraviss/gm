@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { formatCurrency, projectStatusColors, serviceTypeColors, invoiceStatusColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
@@ -8,7 +9,7 @@ import {
   Globe, Lock, Eye, CheckCircle, Calendar, RefreshCw, FolderKanban,
   ChevronDown, X, AlertTriangle, FileText, MessageSquare, Bell,
   ArrowLeft, Settings, LogOut, ChevronRight, Upload, Download, Trash2,
-  Check,
+  Check, BookOpen,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
@@ -1196,6 +1197,20 @@ export default function PortalPage() {
             </button>
           </div>
         </div>
+
+        <Link
+          href="/portal/help"
+          className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 shadow-sm mb-6 hover:border-[#015035]/30 hover:shadow-md transition-all group"
+        >
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e6f0ec' }}>
+            <BookOpen size={16} style={{ color: '#015035' }} />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-gray-800 group-hover:text-[#015035] transition-colors">Help Center</p>
+            <p className="text-xs text-gray-500">Client-facing knowledge base with published articles</p>
+          </div>
+          <ChevronRight size={16} className="text-gray-300 group-hover:text-[#015035] transition-colors" />
+        </Link>
 
         {/* Portal Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

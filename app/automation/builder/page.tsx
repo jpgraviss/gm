@@ -599,6 +599,165 @@ function Minimap({ nodes, zoom }: { nodes: WorkflowNode[]; zoom: number }) {
   )
 }
 
+// ─── Run Types & Helpers ────────────────────────────────────────────────────
+
+interface RunStep {
+  name: string
+  status: 'success' | 'failed' | 'running' | 'pending' | 'skipped'
+  duration_ms: number
+  error?: string
+}
+
+interface WorkflowRun {
+  id: string
+  automation_id: string
+  timestamp: string
+  trigger_contact: { name: string; email: string }
+  status: 'success' | 'failed' | 'running'
+  actions_completed: number
+  actions_total: number
+  steps: RunStep[]
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const seconds = Math.floor(diff / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+function StatusBadge({ status }: { status: WorkflowRun['status'] }) {
+  if (status === 'success') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700">
+        <Check size={10} /> Success
+      </span>
+    )
+  }
+  if (status === 'failed') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-700">
+        <AlertCircle size={10} /> Failed
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 animate-pulse">
+      <Loader2 size={10} className="animate-spin" /> Running
+    </span>
+  )
+}
+
+function StepStatusIcon({ status }: { status: RunStep['status'] }) {
+  if (status === 'success') return <Check size={14} className="text-emerald-600" />
+  if (status === 'failed') return <AlertCircle size={14} className="text-red-600" />
+  if (status === 'running') return <Loader2 size={14} className="text-blue-600 animate-spin" />
+  if (status === 'skipped') return <span className="w-3.5 h-3.5 rounded-full border-2 border-gray-300" />
+  return <span className="w-3.5 h-3.5 rounded-full border-2 border-gray-200" />
+}
+
+function RunsTab({ automationId }: { automationId: string }) {
+  const [runs, setRuns] = useState<WorkflowRun[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/automations/${automationId}/runs`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: WorkflowRun[]) => setRuns(data))
+      .catch(() => setRuns([]))
+      .finally(() => setLoading(false))
+  }, [automationId])
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Loader2 size={24} className="text-gray-400 animate-spin" />
+      </div>
+    )
+  }
+
+  if (runs.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center max-w-sm">
+          <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
+            <Activity size={20} className="text-gray-400" />
+          </div>
+          <p className="text-sm font-semibold text-gray-900 mb-1">No runs yet</p>
+          <p className="text-xs text-gray-500">Publish this workflow to start collecting execution data.</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 overflow-auto">
+      <div className="max-w-4xl mx-auto py-8 px-6">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="grid grid-cols-[1fr_120px_1fr_100px_100px] gap-4 px-5 py-3 border-b border-gray-100 bg-gray-50">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Run ID</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Time</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Triggered by</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Status</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">Actions</p>
+          </div>
+          {runs.map(run => (
+            <div key={run.id}>
+              <button
+                onClick={() => setExpandedRunId(expandedRunId === run.id ? null : run.id)}
+                className="w-full grid grid-cols-[1fr_120px_1fr_100px_100px] gap-4 px-5 py-3.5 items-center hover:bg-gray-50 transition-colors text-left border-b border-gray-100 last:border-b-0"
+              >
+                <div className="flex items-center gap-2">
+                  <ChevronRight
+                    size={14}
+                    className={`text-gray-400 transition-transform ${expandedRunId === run.id ? 'rotate-90' : ''}`}
+                  />
+                  <code className="text-xs font-mono text-gray-700">{run.id.slice(0, 10)}</code>
+                </div>
+                <p className="text-xs text-gray-500">{relativeTime(run.timestamp)}</p>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-gray-900 truncate">{run.trigger_contact.name}</p>
+                  <p className="text-[10px] text-gray-400 truncate">{run.trigger_contact.email}</p>
+                </div>
+                <StatusBadge status={run.status} />
+                <p className="text-xs text-gray-600 text-right font-medium">{run.actions_completed}/{run.actions_total} actions</p>
+              </button>
+              {expandedRunId === run.id && (
+                <div className="px-5 pb-4 pt-1 bg-gray-50/50 border-b border-gray-100">
+                  <div className="ml-6 space-y-1">
+                    {run.steps.map((step, i) => (
+                      <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-white border border-gray-100">
+                        <StepStatusIcon status={step.status} />
+                        <span className="text-sm text-gray-900 font-medium flex-1">{step.name}</span>
+                        {step.duration_ms > 0 && (
+                          <span className="text-[11px] text-gray-400 font-mono">{step.duration_ms}ms</span>
+                        )}
+                        {step.status === 'failed' && step.error && (
+                          <span className="text-[11px] text-red-600 max-w-xs truncate" title={step.error}>{step.error}</span>
+                        )}
+                        {step.status === 'skipped' && (
+                          <span className="text-[11px] text-gray-400">Skipped</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Builder Page ───────────────────────────────────────────────────────
 
 export default function AutomationBuilderPage() {
@@ -620,6 +779,7 @@ export default function AutomationBuilderPage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [showTriggerPicker, setShowTriggerPicker] = useState(false)
   const [showActionPicker, setShowActionPicker] = useState<number | null>(null)
+  const [activeTab, setActiveTab] = useState<'builder' | 'runs'>('builder')
 
   const nameInputRef = useRef<HTMLInputElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -808,6 +968,22 @@ export default function AutomationBuilderPage() {
             )}
           </div>
         </div>
+        {editId && (
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setActiveTab('builder')}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${activeTab === 'builder' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Builder
+            </button>
+            <button
+              onClick={() => setActiveTab('runs')}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${activeTab === 'runs' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Runs
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setStatus(s => s === 'Draft' ? 'Active' : 'Draft')}
@@ -835,75 +1011,79 @@ export default function AutomationBuilderPage() {
       </div>
 
       {/* ── Body ────────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* ── Left Sidebar ─────────────────────────────────────────────── */}
-        <div className="w-52 bg-white border-r border-gray-200 p-4 flex flex-col gap-4 flex-shrink-0">
-          <Minimap nodes={nodes} zoom={zoom} />
-          <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-2">Zoom</p>
-            <div className="flex items-center justify-between gap-1">
-              <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} className="p-1.5 rounded-lg hover:bg-gray-100">
-                <ZoomOut size={14} className="text-gray-500" />
-              </button>
-              <span className="text-xs font-semibold text-gray-600">{Math.round(zoom * 100)}%</span>
-              <button onClick={() => setZoom(z => Math.min(1.5, z + 0.1))} className="p-1.5 rounded-lg hover:bg-gray-100">
-                <ZoomIn size={14} className="text-gray-500" />
-              </button>
-              <button onClick={() => setZoom(1)} className="p-1.5 rounded-lg hover:bg-gray-100">
-                <Maximize2 size={14} className="text-gray-500" />
-              </button>
+      {activeTab === 'runs' && editId ? (
+        <RunsTab automationId={editId} />
+      ) : (
+        <div className="flex flex-1 overflow-hidden">
+          {/* ── Left Sidebar ─────────────────────────────────────────────── */}
+          <div className="w-52 bg-white border-r border-gray-200 p-4 flex flex-col gap-4 flex-shrink-0">
+            <Minimap nodes={nodes} zoom={zoom} />
+            <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-2">Zoom</p>
+              <div className="flex items-center justify-between gap-1">
+                <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} className="p-1.5 rounded-lg hover:bg-gray-100">
+                  <ZoomOut size={14} className="text-gray-500" />
+                </button>
+                <span className="text-xs font-semibold text-gray-600">{Math.round(zoom * 100)}%</span>
+                <button onClick={() => setZoom(z => Math.min(1.5, z + 0.1))} className="p-1.5 rounded-lg hover:bg-gray-100">
+                  <ZoomIn size={14} className="text-gray-500" />
+                </button>
+                <button onClick={() => setZoom(1)} className="p-1.5 rounded-lg hover:bg-gray-100">
+                  <Maximize2 size={14} className="text-gray-500" />
+                </button>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Nodes</p>
+              <p className="text-lg font-bold text-gray-900">{nodes.filter(n => n.type !== 'end').length}</p>
+              <p className="text-[10px] text-gray-400">{nodes.filter(n => n.type === 'action').length} actions</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Nodes</p>
-            <p className="text-lg font-bold text-gray-900">{nodes.filter(n => n.type !== 'end').length}</p>
-            <p className="text-[10px] text-gray-400">{nodes.filter(n => n.type === 'action').length} actions</p>
-          </div>
-        </div>
 
-        {/* ── Canvas ───────────────────────────────────────────────────── */}
-        <div ref={canvasRef} className="flex-1 overflow-auto">
-          <div
-            className="flex flex-col items-center py-12 px-4 min-h-full"
-            style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}
-          >
-            {nodes.map((node, idx) => {
-              const isLast = idx === nodes.length - 1
-              const isFirst = idx === 0
-              return (
-                <div key={node.id} className="flex flex-col items-center">
-                  {!isFirst && <StaticConnector />}
-                  <WorkflowNodeCard
-                    node={node}
-                    isSelected={selectedNodeId === node.id}
-                    onSelect={() => {
-                      if (node.type === 'trigger' && !node.subtype) {
-                        handleTriggerNodeClick()
-                      } else if (node.type !== 'end') {
-                        setSelectedNodeId(node.id)
-                      }
-                    }}
-                    onDelete={node.type === 'action' ? () => handleDeleteNode(node.id) : undefined}
-                    onDuplicate={node.type === 'action' ? () => handleDuplicateNode(node.id) : undefined}
-                  />
-                  {!isLast && node.type !== 'end' && (
-                    <Connector onAdd={() => setShowActionPicker(idx + 1)} />
-                  )}
-                </div>
-              )
-            })}
+          {/* ── Canvas ───────────────────────────────────────────────────── */}
+          <div ref={canvasRef} className="flex-1 overflow-auto">
+            <div
+              className="flex flex-col items-center py-12 px-4 min-h-full"
+              style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}
+            >
+              {nodes.map((node, idx) => {
+                const isLast = idx === nodes.length - 1
+                const isFirst = idx === 0
+                return (
+                  <div key={node.id} className="flex flex-col items-center">
+                    {!isFirst && <StaticConnector />}
+                    <WorkflowNodeCard
+                      node={node}
+                      isSelected={selectedNodeId === node.id}
+                      onSelect={() => {
+                        if (node.type === 'trigger' && !node.subtype) {
+                          handleTriggerNodeClick()
+                        } else if (node.type !== 'end') {
+                          setSelectedNodeId(node.id)
+                        }
+                      }}
+                      onDelete={node.type === 'action' ? () => handleDeleteNode(node.id) : undefined}
+                      onDuplicate={node.type === 'action' ? () => handleDuplicateNode(node.id) : undefined}
+                    />
+                    {!isLast && node.type !== 'end' && (
+                      <Connector onAdd={() => setShowActionPicker(idx + 1)} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        </div>
 
-        {/* ── Right Config Panel ───────────────────────────────────────── */}
-        {selectedNode && selectedNode.type !== 'end' && selectedNode.subtype && (
-          <NodeConfigPanel
-            node={selectedNode}
-            onChange={handleUpdateConfig}
-            onClose={() => setSelectedNodeId(null)}
-          />
-        )}
-      </div>
+          {/* ── Right Config Panel ───────────────────────────────────────── */}
+          {selectedNode && selectedNode.type !== 'end' && selectedNode.subtype && (
+            <NodeConfigPanel
+              node={selectedNode}
+              onChange={handleUpdateConfig}
+              onClose={() => setSelectedNodeId(null)}
+            />
+          )}
+        </div>
+      )}
 
       {/* ── Modals ──────────────────────────────────────────────────────── */}
       {showTriggerPicker && (

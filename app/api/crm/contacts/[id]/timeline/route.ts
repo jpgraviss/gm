@@ -197,15 +197,30 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return db - da
   })
 
+  const { data: settings } = await db
+    .from('app_settings')
+    .select('engagement')
+    .eq('id', 'global')
+    .maybeSingle()
+
+  const pts = {
+    emailOpened: 5,
+    linkClicked: 10,
+    proposalViewed: 15,
+    meetingHeld: 20,
+    ...((settings?.engagement as Record<string, unknown> | null)?.points as Record<string, number> | undefined),
+  }
+
   const emailsOpened = (broadcastRes.data ?? []).filter(r => r.opened_at).length
   const linksClicked = (broadcastRes.data ?? []).filter(r => r.clicked_at).length
   const proposalsViewed = (proposalsRes.data ?? []).filter(p => p.viewed_date).length
   const meetings = (activitiesRes.data ?? []).filter(a => a.type === 'meeting').length
-  const engagementScore = (emailsOpened * 5) + (linksClicked * 10) + (proposalsViewed * 15) + (meetings * 20)
+  const engagementScore = (emailsOpened * pts.emailOpened) + (linksClicked * pts.linkClicked) + (proposalsViewed * pts.proposalViewed) + (meetings * pts.meetingHeld)
 
   return NextResponse.json({
     timeline,
     engagementScore,
     engagementBreakdown: { emailsOpened, linksClicked, proposalsViewed, meetings },
+    engagementPoints: pts,
   })
 }

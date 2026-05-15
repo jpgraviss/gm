@@ -6,6 +6,7 @@ import { fetchContracts, fetchCrmContacts, fetchProposals } from '@/lib/supabase
 import { formatCurrency, serviceTypeColors, renewalStatusColors, formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
+import CompanySelect from '@/components/ui/CompanySelect'
 import StatusBadge from '@/components/ui/StatusBadge'
 import type { Renewal, Contract, CRMContact, Proposal } from '@/lib/types'
 import {
@@ -263,9 +264,6 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (pa
   const teamMembers = useTeamMembers()
 
   const [company, setCompany] = useState('')
-  const [companySuggestions, setCompanySuggestions] = useState<string[]>([])
-  const [allCompanies, setAllCompanies] = useState<string[]>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
   const [serviceType, setServiceType] = useState('Website')
   const [customServices, setCustomServices] = useState<string[]>([])
   const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0])
@@ -274,30 +272,6 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (pa
   const [contractMonths, setContractMonths] = useState('12')
   const [assignedRep, setAssignedRep] = useState('')
   const [notes, setNotes] = useState('')
-
-  // Fetch companies for autocomplete
-  useEffect(() => {
-    fetch('/api/crm/companies')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setAllCompanies(data.map((c: { name: string }) => c.name)) })
-      .catch(() => {})
-  }, [])
-
-  function handleCompanyInput(val: string) {
-    setCompany(val)
-    if (val.trim().length > 0) {
-      const filtered = allCompanies.filter(c => c.toLowerCase().includes(val.toLowerCase()))
-      setCompanySuggestions(filtered)
-      setShowSuggestions(filtered.length > 0)
-    } else {
-      setShowSuggestions(false)
-    }
-  }
-
-  function selectCompany(name: string) {
-    setCompany(name)
-    setShowSuggestions(false)
-  }
 
   const monthlyRate = parseFloat(costPerMonth) || 0
   const months = parseInt(contractMonths) || 12
@@ -316,29 +290,13 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (pa
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10"><X size={16} className="text-white/60" /></button>
         </div>
         <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1">
-          <div className="relative">
+          <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company Name *</label>
-            <input
+            <CompanySelect
               value={company}
-              onChange={e => handleCompanyInput(e.target.value)}
-              onFocus={() => { if (company.trim() && companySuggestions.length > 0) setShowSuggestions(true) }}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
-              placeholder="Start typing to search companies..."
+              onChange={(name) => setCompany(name)}
+              placeholder="Select a company..."
             />
-            {showSuggestions && (
-              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                {companySuggestions.map(c => (
-                  <button
-                    key={c}
-                    onMouseDown={() => selectCompany(c)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-green-50 transition-colors"
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>

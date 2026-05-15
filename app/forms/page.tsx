@@ -546,12 +546,230 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
   )
 }
 
+function EmbedTabContent({ draft, setDraft }: { draft: LeadForm; setDraft: React.Dispatch<React.SetStateAction<LeadForm>> }) {
+  const popup = draft.popupConfig ?? DEFAULT_POPUP
+  const [copied, setCopied] = useState('')
+  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.gravissmarketing.com'
+
+  function updatePopup(patch: Partial<PopupConfig>) {
+    setDraft(d => ({ ...d, popupConfig: { ...(d.popupConfig ?? DEFAULT_POPUP), ...patch } }))
+  }
+
+  function copy(text: string, label: string) {
+    navigator.clipboard.writeText(text)
+    setCopied(label)
+    setTimeout(() => setCopied(''), 2000)
+  }
+
+  const triggerOptions: Array<{ value: PopupConfig['trigger']; label: string; icon: React.ReactNode; desc: string }> = [
+    { value: 'button', label: 'Button click', icon: <MousePointerClick size={14} />, desc: 'Floating button on the page' },
+    { value: 'delay', label: 'Time delay', icon: <Clock size={14} />, desc: `Show after ${popup.delay}s` },
+    { value: 'exit-intent', label: 'Exit intent', icon: <ArrowUpFromDot size={14} />, desc: 'When cursor leaves viewport' },
+    { value: 'scroll', label: 'Scroll depth', icon: <ScrollText size={14} />, desc: `After ${popup.scrollPercent}% scroll` },
+  ]
+
+  const attrs: string[] = [
+    `data-form="${draft.slug}"`,
+    `data-trigger="${popup.trigger}"`,
+  ]
+  if (popup.trigger === 'delay') attrs.push(`data-delay="${popup.delay}"`)
+  if (popup.trigger === 'scroll') attrs.push(`data-scroll="${popup.scrollPercent}"`)
+  if (popup.position !== 'center') attrs.push(`data-position="${popup.position}"`)
+  if (popup.animation !== 'fade') attrs.push(`data-animation="${popup.animation}"`)
+  if (!popup.overlay) attrs.push('data-overlay="false"')
+  if (popup.color !== '#015035') attrs.push(`data-color="${popup.color}"`)
+  if (popup.trigger === 'button' && popup.buttonText !== 'Contact Us') attrs.push(`data-button-text="${popup.buttonText}"`)
+
+  const popupCode = `<script src="${appUrl}/embed.js"\n  ${attrs.join('\n  ')}>\n</script>`
+
+  return (
+    <>
+      <section>
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Popup Trigger</p>
+        <div className="grid grid-cols-2 gap-2">
+          {triggerOptions.map(t => (
+            <button
+              key={t.value}
+              onClick={() => updatePopup({ trigger: t.value })}
+              className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-colors ${
+                popup.trigger === t.value
+                  ? 'border-emerald-300 bg-emerald-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className={`p-1.5 rounded-lg ${popup.trigger === t.value ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                {t.icon}
+              </div>
+              <div>
+                <p className={`text-xs font-semibold ${popup.trigger === t.value ? 'text-emerald-700' : 'text-gray-700'}`}>{t.label}</p>
+                <p className="text-[10px] text-gray-400">{t.desc}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {popup.trigger === 'delay' && (
+        <section>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Delay (seconds)</label>
+          <input
+            type="number"
+            min={1}
+            max={120}
+            value={popup.delay}
+            onChange={e => updatePopup({ delay: Math.max(1, parseInt(e.target.value) || 5) })}
+            className="w-24 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </section>
+      )}
+
+      {popup.trigger === 'scroll' && (
+        <section>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Scroll percentage</label>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={10}
+              max={100}
+              step={5}
+              value={popup.scrollPercent}
+              onChange={e => updatePopup({ scrollPercent: parseInt(e.target.value) })}
+              className="flex-1 accent-emerald-600"
+            />
+            <span className="text-sm font-semibold text-gray-700 w-10 text-right">{popup.scrollPercent}%</span>
+          </div>
+        </section>
+      )}
+
+      {popup.trigger === 'button' && (
+        <section>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Button text</label>
+          <input
+            value={popup.buttonText}
+            onChange={e => updatePopup({ buttonText: e.target.value })}
+            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </section>
+      )}
+
+      <section>
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Appearance</p>
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Position</label>
+            <div className="flex gap-2">
+              {(['center', 'bottom-right', 'bottom-left'] as const).map(pos => (
+                <button
+                  key={pos}
+                  onClick={() => updatePopup({ position: pos })}
+                  className={`flex-1 py-2 px-3 rounded-xl border text-xs font-medium transition-colors ${
+                    popup.position === pos
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  {pos === 'center' ? 'Center' : pos === 'bottom-right' ? 'Bottom Right' : 'Bottom Left'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Animation</label>
+            <div className="flex gap-2">
+              {(['fade', 'slide-up'] as const).map(anim => (
+                <button
+                  key={anim}
+                  onClick={() => updatePopup({ animation: anim })}
+                  className={`flex-1 py-2 px-3 rounded-xl border text-xs font-medium transition-colors ${
+                    popup.animation === anim
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  {anim === 'fade' ? 'Fade in' : 'Slide up'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={popup.overlay}
+              onChange={e => updatePopup({ overlay: e.target.checked })}
+              className="w-4 h-4 rounded border-gray-300 text-emerald-600"
+            />
+            <label className="text-xs text-gray-600">Show dark overlay behind popup</label>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Brand color</label>
+            <div className="flex items-center gap-2">
+              <input type="color" value={popup.color} onChange={e => updatePopup({ color: e.target.value })} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+              <input value={popup.color} onChange={e => updatePopup({ color: e.target.value })} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center gap-2 mb-1.5">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Embed Code</p>
+          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">Popup</span>
+        </div>
+        <p className="text-[11px] text-gray-400 mb-2">Paste this into your website HTML. The popup will trigger automatically based on your settings.</p>
+        <textarea
+          readOnly
+          value={popupCode}
+          rows={Math.min(attrs.length + 2, 8)}
+          className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono"
+        />
+        <button
+          onClick={() => copy(popupCode, 'popup')}
+          className={`mt-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 ${
+            copied === 'popup'
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+              : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          {copied === 'popup' ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy embed code</>}
+        </button>
+      </section>
+
+      <section className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+        <p className="text-[11px] font-semibold text-gray-600 mb-2">How it works</p>
+        <ol className="text-[11px] text-gray-500 flex flex-col gap-1.5 pl-4 list-decimal">
+          <li>Paste the embed code into your website before the closing <code className="bg-gray-200 px-1 rounded text-[10px]">&lt;/body&gt;</code> tag</li>
+          <li>The script loads asynchronously and creates the popup based on your trigger settings</li>
+          <li>After a visitor dismisses the popup, it won&apos;t show again for 24 hours</li>
+          <li>Submissions appear in GravHub under this form&apos;s submissions</li>
+        </ol>
+      </section>
+    </>
+  )
+}
+
 function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) {
   const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.gravissmarketing.com'
   const iframeCode = `<iframe src="${appUrl}/f/${form.slug}" width="100%" height="600" style="border:none;border-radius:12px;" title="${form.name}"></iframe>`
   const scriptCode = `<div data-gravhub-form="${form.slug}"></div>\n<script src="${appUrl}/api/forms/public/${form.slug}/embed.js" async></script>`
   const directLink = `${appUrl}/f/${form.slug}`
   const wpShortcode = `<!-- GravHub Form: ${form.name} -->\n<div data-gravhub-form="${form.slug}"></div>\n<script src="${appUrl}/api/forms/public/${form.slug}/embed.js" async></script>\n<!-- End GravHub Form -->`
+  const popup = form.popupConfig ?? DEFAULT_POPUP
+  const popupAttrs: string[] = [
+    `data-form="${form.slug}"`,
+    `data-trigger="${popup.trigger}"`,
+  ]
+  if (popup.trigger === 'delay') popupAttrs.push(`data-delay="${popup.delay}"`)
+  if (popup.trigger === 'scroll') popupAttrs.push(`data-scroll="${popup.scrollPercent}"`)
+  if (popup.position !== 'center') popupAttrs.push(`data-position="${popup.position}"`)
+  if (popup.animation !== 'fade') popupAttrs.push(`data-animation="${popup.animation}"`)
+  if (!popup.overlay) popupAttrs.push('data-overlay="false"')
+  if (popup.color !== '#015035') popupAttrs.push(`data-color="${popup.color}"`)
+  if (popup.trigger === 'button' && popup.buttonText !== 'Contact Us') popupAttrs.push(`data-button-text="${popup.buttonText}"`)
+  const popupCode = `<script src="${appUrl}/embed.js"\n  ${popupAttrs.join('\n  ')}>\n</script>`
+
   const [copied, setCopied] = useState('')
 
   function copy(text: string, label: string) {
@@ -572,7 +790,6 @@ function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) 
         </div>
         <div className="p-5 flex flex-col gap-4 overflow-y-auto">
 
-          {/* Direct link */}
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Direct link</label>
             <div className="flex gap-2">
@@ -583,11 +800,22 @@ function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) 
             </div>
           </div>
 
-          {/* WordPress */}
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Popup embed</label>
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">New</span>
+            </div>
+            <p className="text-[11px] text-gray-400 mb-2">Shows as a popup on external websites. Configure trigger and appearance in the form editor Embed tab.</p>
+            <textarea readOnly value={popupCode} rows={Math.min(popupAttrs.length + 2, 8)} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
+            <button onClick={() => copy(popupCode, 'popup')} className={`mt-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium ${copied === 'popup' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              {copied === 'popup' ? 'Copied!' : 'Copy popup code'}
+            </button>
+          </div>
+
           <div>
             <div className="flex items-center gap-2 mb-1.5">
               <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">WordPress / HTML</label>
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">Recommended</span>
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">Inline</span>
             </div>
             <p className="text-[11px] text-gray-400 mb-2">Paste into a WordPress Custom HTML block, Elementor HTML widget, or any HTML page. Auto-resizes to fit content.</p>
             <textarea readOnly value={wpShortcode} rows={4} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
@@ -596,7 +824,6 @@ function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) 
             </button>
           </div>
 
-          {/* Iframe */}
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Iframe (simple embed)</label>
             <p className="text-[11px] text-gray-400 mb-2">Works everywhere. Fixed height — no auto-resize.</p>
@@ -606,7 +833,6 @@ function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) 
             </button>
           </div>
 
-          {/* Instructions */}
           <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
             <p className="text-[11px] font-semibold text-gray-600 mb-2">How to embed in WordPress</p>
             <ol className="text-[11px] text-gray-500 flex flex-col gap-1.5 pl-4 list-decimal">

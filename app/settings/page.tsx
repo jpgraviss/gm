@@ -97,7 +97,7 @@ const COMPANY_DEFAULTS = {
   zip: '78028',
 }
 
-type ChannelPref = 'in-app' | 'email+in-app' | 'muted'
+type ChannelPref = 'in-app' | 'email+in-app' | 'push' | 'push+email' | 'muted'
 type ActivityNotif = { label: string; enabled: boolean; channel: ChannelPref }
 
 const ACTIVITY_NOTIF_DEFAULTS: ActivityNotif[] = [
@@ -123,6 +123,8 @@ const QUIET_HOURS_DEFAULTS = {
 const CHANNEL_OPTIONS: { value: ChannelPref; label: string }[] = [
   { value: 'in-app', label: 'In-app only' },
   { value: 'email+in-app', label: 'Email + in-app' },
+  { value: 'push', label: 'Push only' },
+  { value: 'push+email', label: 'Push + email' },
   { value: 'muted', label: 'Muted' },
 ]
 

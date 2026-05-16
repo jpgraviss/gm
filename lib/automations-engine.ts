@@ -1,22 +1,20 @@
 import { createServiceClient } from '@/lib/supabase'
+import { sendEmail } from '@/lib/email'
+import { sendPushNotification } from '@/lib/push-notifications'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
-/**
- * Automation execution engine.
- * Call fireAutomations() from API routes after data mutations.
- * Execution is async and non-blocking — call without await.
- */
-
-// Map UI trigger names to the event strings we fire
 const TRIGGER_MAP: Record<string, string> = {
   'proposal_accepted':    'Proposal Accepted',
   'proposal_declined':    'Proposal Declined',
   'contract_executed':    'Contract Fully Executed',
+  'contract_signed':      'Contract Fully Executed',
   'contract_sent':        'Contract Sent',
   'invoice_paid':         'Invoice Paid',
   'invoice_overdue':      'Invoice Overdue',
   'project_launched':     'Project Status = Launched',
   'deal_stage_changed':   'Deal Stage Changed',
   'contact_created':      'Contact Created',
+  'form_submitted':       'Form Submitted',
   'renewal_90':           'Renewal Date Within 90 Days',
   'renewal_30':           'Renewal Date Within 30 Days',
   'sequence_reply':       'Sequence Contact Replied',
@@ -34,8 +32,30 @@ interface AutomationRow {
   runs: number
 }
 
+interface StepResult {
+  name: string
+  status: 'success' | 'failed' | 'skipped'
+  duration_ms: number
+  error?: string
+}
+
+interface RunRecord {
+  id: string
+  automation_id: string
+  trigger_type: string
+  trigger_data: Record<string, unknown>
+  status: 'running' | 'completed' | 'failed'
+  started_at: string
+  completed_at: string | null
+  steps: StepResult[]
+  error: string | null
+}
+
+function uid() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
 export function fireAutomations(event: string, context: Record<string, unknown>) {
-  // Fire and forget — don't block the API response
   executeAutomations(event, context).catch(err => {
     console.error(`[automations-engine] Error executing automations for ${event}:`, err)
   })
@@ -50,7 +70,6 @@ async function executeAutomations(event: string, context: Record<string, unknown
 
   const db = createServiceClient()
 
-  // Find active automations matching this trigger
   const { data: automations, error } = await db
     .from('automations')
     .select('*')
@@ -65,25 +84,95 @@ async function executeAutomations(event: string, context: Record<string, unknown
   if (!automations || automations.length === 0) return
 
   for (const auto of automations as AutomationRow[]) {
-    try {
-      for (const action of auto.actions) {
-        await executeAction(action, context, db)
-      }
-
-      // Update runs count and last_run
-      await db
-        .from('automations')
-        .update({
-          runs: (auto.runs ?? 0) + 1,
-          last_run: new Date().toISOString(),
-        })
-        .eq('id', auto.id)
-
-      console.log(`[automations-engine] Executed "${auto.name}" (${auto.id}) for ${triggerLabel}`)
-    } catch (err) {
+    executeWorkflow(auto, event, context, db).catch(err => {
       console.error(`[automations-engine] Failed to execute "${auto.name}":`, err)
-    }
+    })
   }
+}
+
+export async function executeWorkflow(
+  automation: AutomationRow,
+  triggerType: string,
+  triggerData: Record<string, unknown>,
+  db?: SupabaseClient,
+) {
+  const supabase = db ?? createServiceClient()
+  const runId = `run-${uid()}`
+  const startedAt = new Date().toISOString()
+  const steps: StepResult[] = []
+  let runStatus: RunRecord['status'] = 'running'
+  let runError: string | null = null
+
+  await supabase.from('automation_runs').insert({
+    id: runId,
+    automation_id: automation.id,
+    trigger_type: triggerType,
+    trigger_data: triggerData,
+    status: 'running',
+    started_at: startedAt,
+    completed_at: null,
+    steps: [],
+    error: null,
+  }).then(() => {}, () => {})
+
+  try {
+    for (const action of automation.actions) {
+      const stepStart = Date.now()
+      try {
+        await executeAction(action, triggerData, supabase)
+        steps.push({
+          name: action,
+          status: 'success',
+          duration_ms: Date.now() - stepStart,
+        })
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        steps.push({
+          name: action,
+          status: 'failed',
+          duration_ms: Date.now() - stepStart,
+          error: errorMsg,
+        })
+        runStatus = 'failed'
+        runError = `Step "${action}" failed: ${errorMsg}`
+
+        for (let i = steps.length; i < automation.actions.length; i++) {
+          steps.push({
+            name: automation.actions[i],
+            status: 'skipped',
+            duration_ms: 0,
+          })
+        }
+        break
+      }
+    }
+
+    if (runStatus !== 'failed') {
+      runStatus = 'completed'
+    }
+
+    await supabase
+      .from('automations')
+      .update({
+        runs: (automation.runs ?? 0) + 1,
+        last_run: new Date().toISOString(),
+      })
+      .eq('id', automation.id)
+
+    console.log(`[automations-engine] ${runStatus === 'completed' ? 'Executed' : 'Failed'} "${automation.name}" (${automation.id}) — ${steps.filter(s => s.status === 'success').length}/${automation.actions.length} steps`)
+  } catch (err) {
+    runStatus = 'failed'
+    runError = err instanceof Error ? err.message : String(err)
+  }
+
+  await supabase.from('automation_runs').update({
+    status: runStatus,
+    completed_at: new Date().toISOString(),
+    steps,
+    error: runError,
+  }).eq('id', runId).then(() => {}, () => {})
+
+  return { runId, status: runStatus, steps }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -92,9 +181,191 @@ async function executeAction(action: string, context: Record<string, unknown>, d
   const today = new Date().toISOString().split('T')[0]
 
   switch (action) {
+    case 'Send Email':
+    case 'Send Email Reminder':
+    case 'Send Follow-up Email': {
+      if (!company) break
+      const { data: contacts } = await db
+        .from('crm_contacts')
+        .select('emails, full_name')
+        .eq('company_name', company)
+        .order('is_primary', { ascending: false })
+        .limit(1)
+      const contact = contacts?.[0]
+      if (!contact?.emails?.[0]) break
+
+      const subject = (context.emailSubject as string) ?? `Update from GravHub — ${action}`
+      const html = (context.emailBody as string) ?? `<p>Hi ${contact.full_name ?? 'there'},</p><p>This is an automated message regarding ${company}.</p>`
+      await sendEmail({ to: contact.emails[0], subject, html })
+      break
+    }
+
+    case 'Create Task': {
+      const title = (context.taskTitle as string) ?? `Auto task: ${company}`
+      const assignee = (context.taskAssignee as string) ?? (context.assigned_rep as string) ?? ''
+      const dueDateOffset = (context.taskDueDateOffset as number) ?? 1
+      const dueDate = new Date(Date.now() + dueDateOffset * 86400000).toISOString().split('T')[0]
+      await db.from('app_tasks').insert({
+        id: `task-auto-${uid()}`,
+        title,
+        description: `Auto-created by automation for ${company}`,
+        category: 'Automation',
+        status: 'Pending',
+        priority: 'High',
+        assigned_to: assignee,
+        due_date: dueDate,
+        created_date: today,
+      })
+      break
+    }
+
+    case 'Add Tag': {
+      const tag = (context.tag as string) ?? ''
+      const contactId = (context.contactId as string) ?? (context.contact_id as string) ?? null
+      if (!tag || !contactId) break
+      const { data: existing } = await db
+        .from('crm_contacts')
+        .select('tags')
+        .eq('id', contactId)
+        .single()
+      const currentTags: string[] = existing?.tags ?? []
+      if (!currentTags.includes(tag)) {
+        await db.from('crm_contacts').update({ tags: [...currentTags, tag] }).eq('id', contactId)
+      }
+      break
+    }
+
+    case 'Remove Tag': {
+      const tag = (context.tag as string) ?? ''
+      const contactId = (context.contactId as string) ?? (context.contact_id as string) ?? null
+      if (!tag || !contactId) break
+      const { data: existing } = await db
+        .from('crm_contacts')
+        .select('tags')
+        .eq('id', contactId)
+        .single()
+      const currentTags: string[] = existing?.tags ?? []
+      await db.from('crm_contacts').update({ tags: currentTags.filter(t => t !== tag) }).eq('id', contactId)
+      break
+    }
+
+    case 'Update Contact': {
+      const contactId = (context.contactId as string) ?? (context.contact_id as string) ?? null
+      const field = (context.updateField as string) ?? ''
+      const value = (context.updateValue as string) ?? ''
+      if (!contactId || !field) break
+      const fieldMap: Record<string, string> = {
+        status: 'lead_status',
+        lifecycle_stage: 'lifecycle_stage',
+        owner: 'owner',
+        source: 'source',
+      }
+      const dbField = fieldMap[field] ?? field
+      await db.from('crm_contacts').update({ [dbField]: value }).eq('id', contactId)
+      break
+    }
+
+    case 'Create Deal': {
+      const dealName = (context.dealName as string) ?? `Deal for ${company}`
+      const stage = (context.dealStage as string) ?? 'Lead'
+      await db.from('deals').insert({
+        id: `deal-auto-${uid()}`,
+        company,
+        stage,
+        value: (context.value as number) ?? 0,
+        service_type: (context.service_type as string) ?? 'General',
+        assigned_rep: (context.assigned_rep as string) ?? '',
+        probability: 0,
+        notes: [{ text: dealName, date: today }],
+        last_activity: today,
+      })
+      break
+    }
+
+    case 'Log Activity': {
+      const note = (context.activityNote as string) ?? `[Auto] ${context.trigger ?? 'Automation'} for ${company}`
+      await db.from('crm_activities').insert({
+        id: `act-auto-${uid()}`,
+        type: 'Note',
+        description: note,
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
+        contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
+        timestamp: new Date().toISOString(),
+        logged_by: 'System',
+      })
+      break
+    }
+
+    case 'Send Notification': {
+      const target = (context.notifyTarget as string) ?? 'assigned_rep'
+      const message = (context.notifyMessage as string) ?? `Automation triggered for ${company}`
+
+      await db.from('crm_activities').insert({
+        id: `act-auto-${uid()}`,
+        type: 'Notification',
+        description: `[Auto] ${message}`,
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
+        contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
+        timestamp: new Date().toISOString(),
+        logged_by: 'System',
+      })
+
+      const userId = (context.assigned_rep_user_id as string) ?? ''
+      if (userId && target === 'assigned_rep') {
+        sendPushNotification({
+          userId,
+          title: 'Automation Notification',
+          body: message,
+          url: '/automation',
+        }).catch(() => {})
+      }
+      break
+    }
+
+    case 'Wait': {
+      const duration = (context.waitDuration as number) ?? 1
+      const unit = (context.waitUnit as string) ?? 'hours'
+      let ms = duration * 60_000
+      if (unit === 'hours') ms = duration * 3_600_000
+      else if (unit === 'days') ms = duration * 86_400_000
+
+      await db.from('automation_pending_steps').insert({
+        id: `pending-${uid()}`,
+        automation_id: (context._automationId as string) ?? '',
+        run_id: (context._runId as string) ?? '',
+        resume_at: new Date(Date.now() + ms).toISOString(),
+        remaining_actions: (context._remainingActions as string[]) ?? [],
+        context: context,
+        status: 'pending',
+      }).then(() => {}, () => {})
+      break
+    }
+
+    case 'If/Else': {
+      const field = (context.conditionField as string) ?? ''
+      const operator = (context.conditionOperator as string) ?? 'equals'
+      const compareValue = (context.conditionValue as string) ?? ''
+      const actual = String((context as Record<string, unknown>)[field] ?? '')
+
+      let matched = false
+      switch (operator) {
+        case 'equals':       matched = actual === compareValue; break
+        case 'not_equals':   matched = actual !== compareValue; break
+        case 'contains':     matched = actual.includes(compareValue); break
+        case 'greater_than': matched = parseFloat(actual) > parseFloat(compareValue); break
+        case 'less_than':    matched = parseFloat(actual) < parseFloat(compareValue); break
+      }
+
+      if (!matched) {
+        throw new Error(`Condition not met: ${field} ${operator} ${compareValue} (actual: ${actual})`)
+      }
+      break
+    }
+
+    // Legacy actions from the simple automation panel
     case 'Create Draft Contract': {
       await db.from('contracts').insert({
-        id: `c-auto-${Date.now()}`,
+        id: `c-auto-${uid()}`,
         proposal_id: (context.proposalId as string) ?? null,
         company,
         status: 'Draft',
@@ -112,7 +383,7 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     case 'Create Billing Task':
     case 'Create Renewal Task': {
       await db.from('app_tasks').insert({
-        id: `task-auto-${Date.now()}`,
+        id: `task-auto-${uid()}`,
         title: `${action}: ${company}`,
         description: `Auto-created by automation for ${company}`,
         category: action === 'Create Billing Task' ? 'Billing' : 'Renewal',
@@ -127,7 +398,7 @@ async function executeAction(action: string, context: Record<string, unknown>, d
 
     case 'Create Project Record': {
       await db.from('projects').insert({
-        id: `proj-auto-${Date.now()}`,
+        id: `proj-auto-${uid()}`,
         company,
         service_type: (context.service_type as string) ?? 'General',
         status: 'Not Started',
@@ -140,7 +411,7 @@ async function executeAction(action: string, context: Record<string, unknown>, d
 
     case 'Create Maintenance Record': {
       await db.from('maintenance_records').insert({
-        id: `maint-auto-${Date.now()}`,
+        id: `maint-auto-${uid()}`,
         company,
         service_type: (context.service_type as string) ?? 'General',
         status: 'Active',
@@ -153,9 +424,8 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     case 'Notify Finance Team':
     case 'Notify Delivery Team':
     case 'Notify Assigned Rep': {
-      // Log as an activity for now — email notifications can be added when team notification preferences exist
       await db.from('crm_activities').insert({
-        id: `act-auto-${Date.now()}`,
+        id: `act-auto-${uid()}`,
         type: 'Notification',
         description: `[Auto] ${action}: ${context.trigger ?? 'Automation triggered'} for ${company}`,
         company_id: (context.companyId as string) ?? null,
@@ -166,37 +436,10 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       break
     }
 
-    case 'Send Email Reminder':
-    case 'Send Follow-up Email': {
-      // These require a recipient — look up primary contact for the company
-      if (!company) break
-      const { data: contacts } = await db
-        .from('crm_contacts')
-        .select('emails, full_name')
-        .eq('company_name', company)
-        .order('is_primary', { ascending: false })
-        .limit(1)
-      const contact = contacts?.[0]
-      if (!contact?.emails?.[0]) break
-
-      // Use internal fetch to send via existing email infrastructure
-      try {
-        await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/email/send-proposal`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ proposalId: context.proposalId }),
-        })
-      } catch {
-        console.warn(`[automations-engine] Could not send ${action} email for ${company}`)
-      }
-      break
-    }
-
-    case 'Log Activity':
     case 'Log Touchpoint': {
       await db.from('crm_activities').insert({
-        id: `act-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        type: action === 'Log Touchpoint' ? 'Touchpoint' : 'Note',
+        id: `act-auto-${uid()}`,
+        type: 'Touchpoint',
         description: `[Auto] ${context.trigger ?? 'Automation'} for ${company}`,
         company_id: (context.companyId as string) ?? null,
         contact_id: (context.contactId as string) ?? null,
@@ -207,9 +450,8 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     }
 
     case 'Flag in Dashboard': {
-      // Log a FLAG activity type the dashboard can query for attention items.
       await db.from('crm_activities').insert({
-        id: `act-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: `act-auto-${uid()}`,
         type: 'FLAG',
         description: `[Auto] Flagged for attention — ${context.trigger ?? action}`,
         company_id: (context.companyId as string) ?? null,
@@ -220,9 +462,7 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     }
 
     case 'Update Revenue Metrics': {
-      // Revenue metrics are computed from contracts/invoices on the fly.
-      // Recompute the current month's rollup and persist.
-      const monthKey = new Date().toISOString().slice(0, 7) // YYYY-MM
+      const monthKey = new Date().toISOString().slice(0, 7)
       const { data: contracts } = await db
         .from('contracts')
         .select('value, billing_structure, status')
@@ -239,8 +479,6 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     }
 
     case 'Apply Service Template': {
-      // Spin up the matching document template on the linked deal/project.
-      // Looks up by trigger name → template name convention.
       const templateName = (context.templateName as string) ?? String(context.trigger ?? '')
       if (!templateName) break
       const { data: template } = await db
@@ -250,9 +488,8 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         .limit(1)
         .maybeSingle()
       if (!template) break
-      // Log the application so the document shows in the activity feed
       await db.from('crm_activities').insert({
-        id: `act-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: `act-auto-${uid()}`,
         type: 'Template',
         description: `[Auto] Applied service template "${template.name}" to ${company}`,
         company_id: (context.companyId as string) ?? null,
@@ -263,16 +500,14 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     }
 
     case 'Update Client Portal': {
-      // Create a portal notification for every portal client linked to this company.
-      const clientCompany = company
-      if (!clientCompany) break
+      if (!company) break
       const { data: portalClients } = await db
         .from('portal_clients')
         .select('id')
-        .eq('company', clientCompany)
+        .eq('company', company)
       for (const pc of (portalClients ?? []) as Array<{ id: string }>) {
         await db.from('portal_notifications').insert({
-          id: `pn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: `pn-${uid()}`,
           portal_client_id: pc.id,
           type: 'system',
           title: `Update: ${context.trigger ?? action}`,
@@ -286,8 +521,6 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     }
 
     case 'Escalate if 7+ Days': {
-      // Check how long the deal/ticket has been in its current stage. If >7d,
-      // create an escalation task assigned to leadership.
       const dealId = (context.dealId as string) ?? null
       const ticketId = (context.ticketId as string) ?? null
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -313,7 +546,7 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       }
       if (shouldEscalate) {
         await db.from('app_tasks').insert({
-          id: `task-esc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: `task-esc-${uid()}`,
           title: `Escalation: ${company} stuck 7+ days`,
           description: `[Auto] ${action} — review and advance or reassign`,
           category: 'Escalation',
@@ -322,15 +555,13 @@ async function executeAction(action: string, context: Record<string, unknown>, d
           company,
           assigned_to: 'Leadership',
           due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          created_date: new Date().toISOString().split('T')[0],
+          created_date: today,
         })
       }
       break
     }
 
     case 'Enroll in Sequence': {
-      // Look up the sequence by name from context.sequenceName
-      // Create enrollment via the enroll API pattern
       const seqName = (context.sequenceName as string) ?? ''
       if (!seqName) break
       const { data: targetSeq } = await db
@@ -345,7 +576,6 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       const contactName = (context.contactName as string) ?? ''
       if (!contactEmail) break
 
-      // Check suppression
       const { data: suppressed } = await db
         .from('sequence_suppression_list')
         .select('id')
@@ -353,7 +583,6 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         .single()
       if (suppressed) break
 
-      // Check not already enrolled
       const { data: existing } = await db
         .from('sequence_enrollments')
         .select('id')
@@ -362,12 +591,12 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         .single()
       if (existing) break
 
-      const steps = targetSeq.steps ?? []
-      const firstDay = steps[0]?.day ?? 0
+      const seqSteps = targetSeq.steps ?? []
+      const firstDay = seqSteps[0]?.day ?? 0
       const now = new Date()
 
       await db.from('sequence_enrollments').insert({
-        id: `enr-auto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: `enr-auto-${uid()}`,
         sequence_id: targetSeq.id,
         contact_id: (context.contactId as string) ?? null,
         contact_name: contactName,
@@ -388,7 +617,6 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     case 'Unenroll from Sequence': {
       const contactEmail = (context.contactEmail as string) ?? ''
       if (!contactEmail) break
-      // Unenroll from all active sequences
       const { data: activeEnrollments } = await db
         .from('sequence_enrollments')
         .select('id, sequence_id')
@@ -400,7 +628,6 @@ async function executeAction(action: string, context: Record<string, unknown>, d
           .update({ status: 'unenrolled', unenroll_reason: 'automation' })
           .eq('id', enr.id)
 
-        // Decrement active count
         const { data: seq } = await db.from('sequences')
           .select('active_count').eq('id', enr.sequence_id).single()
         if (seq) {

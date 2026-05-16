@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validateSubmission, submissionToContact } from '@/lib/forms'
 import { getResend } from '@/lib/resend'
+import { fireTrigger } from '@/lib/automation-triggers'
 
 // CORS — forms get embedded on external websites
 const corsHeaders = {
@@ -149,7 +150,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     .update({ submissions_count: (form.submissions_count ?? 0) + 1 })
     .eq('id', form.id)
 
-  // Fire notification emails (best-effort, don't block response)
+  fireTrigger('form_submitted', {
+    formId: form.id,
+    formName: form.name,
+    submissionId,
+    contactId,
+    data: body,
+  })
+
   if (Array.isArray(form.notify_emails) && form.notify_emails.length > 0) {
     const summary = Object.entries(body)
       .map(([k, v]) => `<strong>${k}:</strong> ${String(v)}`)

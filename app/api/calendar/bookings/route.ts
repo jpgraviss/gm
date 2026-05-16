@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { getValidAccessToken, createGoogleEvent, type CalendarSettings } from '@/lib/google-calendar'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -149,5 +150,39 @@ export async function POST(req: NextRequest) {
     console.error('[calendar/bookings POST]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  if (data) {
+    try {
+      const { data: allCals } = await db
+        .from('calendar_settings')
+        .select('*')
+        .not('google_refresh_token', 'is', null)
+        .limit(1)
+
+      const cal = allCals?.[0]
+      if (cal) {
+        const accessToken = await getValidAccessToken(cal as CalendarSettings)
+        if (accessToken) {
+          const btName = bt ? (await db.from('booking_types').select('name').eq('id', bt.id).single()).data?.name : null
+          const result = await createGoogleEvent(accessToken, {
+            summary: `${btName ?? 'Meeting'} — ${guest_name}`,
+            description: notes || 'Booked via GravHub',
+            dateTimeStart: `${date}T${start_time}`,
+            dateTimeEnd: `${date}T${end_time}`,
+            timezone: cal.timezone || 'America/Chicago',
+            attendeeEmail: guest_email,
+            attendeeName: guest_name,
+          })
+          await db.from('booking_type_bookings').update({
+            google_event_id: result.eventId,
+          }).eq('id', data.id)
+          data.google_event_id = result.eventId
+        }
+      }
+    } catch (e) {
+      console.error('[calendar/bookings POST] Google Calendar event creation failed:', e)
+    }
+  }
+
   return NextResponse.json(data, { status: 201 })
 }

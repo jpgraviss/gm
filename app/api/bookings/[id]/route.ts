@@ -180,3 +180,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   return NextResponse.json(data)
 }
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const db = createServiceClient()
+
+  const { error: e1 } = await db.from('bookings').delete().eq('id', id)
+  const { error: e2 } = await db.from('booking_type_bookings').delete().eq('id', id)
+
+  if (e1 && e2) {
+    return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+  }
+  return NextResponse.json({ ok: true })
+}

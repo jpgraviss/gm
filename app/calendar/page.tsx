@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, Link2, Copy, Check, Clock, User, Building2, Video, X, ChevronLeft, ChevronRight, ExternalLink, Mail, RefreshCw, CalendarCheck } from 'lucide-react'
+import { Calendar, Link2, Copy, Check, Clock, User, Building2, Video, X, ChevronLeft, ChevronRight, ExternalLink, Mail, RefreshCw, CalendarCheck, Trash2, Plus } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
@@ -81,6 +81,10 @@ export default function CalendarPage() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [copiedGcal, setCopiedGcal] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [showAddFromLink, setShowAddFromLink] = useState(false)
+  const [gcalLinkInput, setGcalLinkInput] = useState('')
+  const [addingFromLink, setAddingFromLink] = useState(false)
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [typeBookings, setTypeBookings] = useState<BookingTypeBooking[]>([])
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -177,6 +181,37 @@ export default function CalendarPage() {
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'cancelled' } : b))
     if (selected?.id === id) setSelected(null)
     setCancellingId(null)
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Permanently delete this event? This cannot be undone.')) return
+    setDeletingId(id)
+    try {
+      await fetch(`/api/bookings/${id}`, { method: 'DELETE' })
+      setBookings(prev => prev.filter(b => b.id !== id))
+      setTypeBookings(prev => prev.filter(b => b.id !== id))
+      if (selected?.id === id) setSelected(null)
+    } catch { /* ignore */ }
+    setDeletingId(null)
+  }
+
+  async function handleAddFromGcalLink() {
+    if (!gcalLinkInput.trim()) return
+    setAddingFromLink(true)
+    try {
+      const res = await fetch('/api/calendar/import-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ link: gcalLinkInput.trim() }),
+      })
+      if (res.ok) {
+        const booking = await res.json()
+        setBookings(prev => [booking, ...prev])
+        setGcalLinkInput('')
+        setShowAddFromLink(false)
+      }
+    } catch { /* ignore */ }
+    setAddingFromLink(false)
   }
 
   function copyLink() {
@@ -364,6 +399,14 @@ export default function CalendarPage() {
                 Last sync: {new Date(lastSync).toLocaleString()}
               </span>
             )}
+            <button
+              onClick={() => setShowAddFromLink(true)}
+              className="flex items-center gap-1.5 text-white px-3 py-2 rounded-lg text-xs font-medium hover:opacity-90 transition-colors"
+              style={{ background: '#015035' }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add from Link
+            </button>
             <button
               onClick={handleSync}
               disabled={syncing}
@@ -980,6 +1023,14 @@ export default function CalendarPage() {
                     {cancellingId === selected.id ? 'Cancelling…' : 'Cancel Booking'}
                   </button>
                 )}
+                <button
+                  onClick={() => handleDelete(selected.id)}
+                  disabled={deletingId === selected.id}
+                  className="w-full flex items-center justify-center gap-2 border border-red-200 text-red-500 rounded-lg py-2 text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {deletingId === selected.id ? 'Deleting…' : 'Delete Event'}
+                </button>
               </div>
 
               <div className="pt-2 border-t border-gray-100">
@@ -989,6 +1040,43 @@ export default function CalendarPage() {
           )}
         </div>
       </div>
+
+      {showAddFromLink && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-900">Add from Google Calendar</h3>
+              <button onClick={() => { setShowAddFromLink(false); setGcalLinkInput('') }} className="p-1 hover:bg-gray-100 rounded">
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">Paste a shareable Google Calendar event link to add it to your calendar.</p>
+            <input
+              value={gcalLinkInput}
+              onChange={e => setGcalLinkInput(e.target.value)}
+              placeholder="https://calendar.google.com/calendar/event?eid=..."
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-4"
+              onKeyDown={e => e.key === 'Enter' && handleAddFromGcalLink()}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleAddFromGcalLink}
+                disabled={!gcalLinkInput.trim() || addingFromLink}
+                className="flex-1 flex items-center justify-center gap-2 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
+                style={{ background: '#015035' }}
+              >
+                {addingFromLink ? 'Adding...' : 'Add Event'}
+              </button>
+              <button
+                onClick={() => { setShowAddFromLink(false); setGcalLinkInput('') }}
+                className="px-4 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

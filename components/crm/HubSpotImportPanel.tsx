@@ -1,14 +1,27 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import { X, Upload, FileText, CheckCircle, AlertCircle, Building2, Users, TrendingUp } from 'lucide-react'
+import { X, Upload, FileText, CheckCircle, AlertCircle, Building2, Users, TrendingUp, Cloud, FileUp, RefreshCw } from 'lucide-react'
 
 type ImportType = 'companies' | 'contacts' | 'deals'
+type ImportMode = 'csv' | 'api'
 
 interface ImportResult {
   inserted: number
+  updated?: number
   skipped: number
   errors: string[]
+}
+
+interface HubSpotContact {
+  hubspotId: string
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  companyName: string
+  title: string
+  leadStatus: string
 }
 
 interface Props {
@@ -17,15 +30,11 @@ interface Props {
   defaultType?: ImportType
 }
 
-// Simple CSV parser that handles quoted fields
 function parseCSV(text: string): Record<string, string>[] {
   const lines = text.split(/\r?\n/).filter(l => l.trim())
   if (lines.length < 2) return []
-
-  // Parse header
   const headers = parseLine(lines[0])
   const rows: Record<string, string>[] = []
-
   for (let i = 1; i < lines.length; i++) {
     const values = parseLine(lines[i])
     if (values.length === 0) continue
@@ -42,7 +51,6 @@ function parseLine(line: string): string[] {
   const result: string[] = []
   let current = ''
   let inQuotes = false
-
   for (let i = 0; i < line.length; i++) {
     const ch = line[i]
     if (ch === '"') {
@@ -86,6 +94,7 @@ const typeConfig: Record<ImportType, { icon: typeof Building2; label: string; de
 
 export default function HubSpotImportPanel({ onClose, onComplete, defaultType }: Props) {
   const [type, setType] = useState<ImportType>(defaultType ?? 'companies')
+  const [mode, setMode] = useState<ImportMode>('api')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<Record<string, string>[]>([])
   const [importing, setImporting] = useState(false)
@@ -93,6 +102,12 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const [apiContacts, setApiContacts] = useState<HubSpotContact[]>([])
+  const [apiFetching, setApiFetching] = useState(false)
+  const [apiNextAfter, setApiNextAfter] = useState<string | null>(null)
+  const [apiLoaded, setApiLoaded] = useState(false)
+  const [importProgress, setImportProgress] = useState('')
 
   const handleFile = useCallback((f: File) => {
     setFile(f)
@@ -126,10 +141,34 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
     }
   }, [handleFile])
 
-  const handleImport = async () => {
+  const fetchFromApi = async () => {
+    setApiFetching(true)
+    setError('')
+    try {
+      const url = apiNextAfter
+        ? `/api/integrations/hubspot/contacts?after=${apiNextAfter}`
+        : '/api/integrations/hubspot/contacts'
+      const res = await fetch(url)
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Failed to fetch contacts from HubSpot')
+        setApiFetching(false)
+        return
+      }
+      setApiContacts(prev => [...prev, ...data.contacts])
+      setApiNextAfter(data.nextAfter)
+      setApiLoaded(true)
+    } catch {
+      setError('Failed to connect to HubSpot. Check your API key in Settings.')
+    }
+    setApiFetching(false)
+  }
+
+  const handleCsvImport = async () => {
     if (!preview.length) return
     setImporting(true)
     setError('')
+    setImportProgress(`Importing ${preview.length} ${type}...`)
     try {
       const res = await fetch('/api/crm/import', {
         method: 'POST',
@@ -147,9 +186,51 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
       setError('Import failed. Please try again.')
     }
     setImporting(false)
+    setImportProgress('')
+  }
+
+  const handleApiImport = async () => {
+    if (!apiContacts.length) return
+    setImporting(true)
+    setError('')
+    setImportProgress(`Importing contacts from HubSpot...`)
+    try {
+      const res = await fetch('/api/integrations/hubspot/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Import failed')
+      } else {
+        setResult({
+          inserted: data.inserted,
+          updated: data.updated,
+          skipped: data.skipped,
+          errors: data.errors,
+        })
+        onComplete?.()
+      }
+    } catch {
+      setError('Import failed. Please try again.')
+    }
+    setImporting(false)
+    setImportProgress('')
   }
 
   const columns = preview.length > 0 ? Object.keys(preview[0]) : []
+
+  const resetState = () => {
+    setFile(null)
+    setPreview([])
+    setResult(null)
+    setError('')
+    setApiContacts([])
+    setApiLoaded(false)
+    setApiNextAfter(null)
+    setImportProgress('')
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
@@ -160,7 +241,7 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-white font-bold text-base">Import from HubSpot</h2>
-              <p className="text-white/50 text-xs mt-0.5">Upload a CSV export from HubSpot</p>
+              <p className="text-white/50 text-xs mt-0.5">Import via API or upload a CSV export</p>
             </div>
             <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10">
               <X size={16} className="text-white/70" />
@@ -169,39 +250,148 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
-          {/* Type selector */}
+          {/* Import mode toggle */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">What are you importing?</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(Object.entries(typeConfig) as [ImportType, typeof typeConfig[ImportType]][]).map(([key, config]) => {
-                const Icon = config.icon
-                return (
-                  <button
-                    key={key}
-                    onClick={() => { setType(key); setFile(null); setPreview([]); setResult(null); setError('') }}
-                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-colors ${
-                      type === key
-                        ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
-                        : 'border-gray-200 hover:border-gray-300 text-gray-500'
-                    }`}
-                  >
-                    <Icon size={18} />
-                    <span className="text-xs font-semibold">{config.label}</span>
-                  </button>
-                )
-              })}
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Import method</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { setMode('api'); resetState() }}
+                className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-colors ${
+                  mode === 'api'
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-500'
+                }`}
+              >
+                <Cloud size={16} />
+                <div className="text-left">
+                  <span className="text-xs font-semibold block">Direct API</span>
+                  <span className="text-[10px] opacity-70">Pull from HubSpot live</span>
+                </div>
+              </button>
+              <button
+                onClick={() => { setMode('csv'); resetState() }}
+                className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-colors ${
+                  mode === 'csv'
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-500'
+                }`}
+              >
+                <FileUp size={16} />
+                <div className="text-left">
+                  <span className="text-xs font-semibold block">CSV Upload</span>
+                  <span className="text-[10px] opacity-70">Upload an export file</span>
+                </div>
+              </button>
             </div>
           </div>
 
-          {/* Expected columns hint */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-            <p className="text-xs font-semibold text-blue-700 mb-1">Expected HubSpot columns for {typeConfig[type].label}:</p>
-            <p className="text-xs text-blue-600">{typeConfig[type].columns.join(', ')}</p>
-            <p className="text-[11px] text-blue-500 mt-1">Column names are matched flexibly — most HubSpot export formats will work automatically.</p>
-          </div>
+          {/* Type selector (CSV mode only) */}
+          {mode === 'csv' && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">What are you importing?</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(Object.entries(typeConfig) as [ImportType, typeof typeConfig[ImportType]][]).map(([key, config]) => {
+                  const Icon = config.icon
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => { setType(key); setFile(null); setPreview([]); setResult(null); setError('') }}
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-colors ${
+                        type === key
+                          ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                          : 'border-gray-200 hover:border-gray-300 text-gray-500'
+                      }`}
+                    >
+                      <Icon size={18} />
+                      <span className="text-xs font-semibold">{config.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
-          {/* File upload */}
-          {!result && (
+          {/* CSV mode: Expected columns hint */}
+          {mode === 'csv' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+              <p className="text-xs font-semibold text-blue-700 mb-1">Expected HubSpot columns for {typeConfig[type].label}:</p>
+              <p className="text-xs text-blue-600">{typeConfig[type].columns.join(', ')}</p>
+              <p className="text-[11px] text-blue-500 mt-1">Column names are matched flexibly — most HubSpot export formats will work automatically.</p>
+            </div>
+          )}
+
+          {/* API mode: Fetch contacts */}
+          {mode === 'api' && !result && (
+            <div>
+              {!apiLoaded ? (
+                <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
+                  <Cloud size={28} className="mx-auto mb-3 text-gray-400" />
+                  <p className="text-sm text-gray-600 font-medium mb-1">Pull contacts directly from HubSpot</p>
+                  <p className="text-xs text-gray-400 mb-4">Uses your configured API key to fetch all contacts</p>
+                  <button
+                    onClick={fetchFromApi}
+                    disabled={apiFetching}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-40"
+                    style={{ background: '#015035' }}
+                  >
+                    {apiFetching ? (
+                      <><RefreshCw size={14} className="animate-spin" /> Fetching...</>
+                    ) : (
+                      <><Cloud size={14} /> Fetch Contacts</>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      {apiContacts.length} contacts loaded from HubSpot
+                    </p>
+                    {apiNextAfter && (
+                      <button
+                        onClick={fetchFromApi}
+                        disabled={apiFetching}
+                        className="text-xs font-medium text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+                      >
+                        {apiFetching ? <RefreshCw size={12} className="animate-spin" /> : null}
+                        Load more
+                      </button>
+                    )}
+                  </div>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="px-3 py-2 text-left font-semibold text-gray-500">Name</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-500">Email</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-500">Company</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-500">Title</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {apiContacts.slice(0, 10).map(c => (
+                          <tr key={c.hubspotId} className="border-b border-gray-100 last:border-0">
+                            <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{c.firstName} {c.lastName}</td>
+                            <td className="px-3 py-2 text-gray-600 whitespace-nowrap truncate max-w-[160px]">{c.email}</td>
+                            <td className="px-3 py-2 text-gray-600 whitespace-nowrap truncate max-w-[120px]">{c.companyName}</td>
+                            <td className="px-3 py-2 text-gray-600 whitespace-nowrap truncate max-w-[120px]">{c.title}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {apiContacts.length > 10 && (
+                      <div className="px-3 py-2 text-xs text-gray-400 border-t border-gray-100">
+                        ...and {apiContacts.length - 10} more
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* CSV mode: File upload */}
+          {mode === 'csv' && !result && (
             <div
               onDragOver={e => { e.preventDefault(); setDragOver(true) }}
               onDragLeave={() => setDragOver(false)}
@@ -237,8 +427,8 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
             </div>
           )}
 
-          {/* Preview */}
-          {preview.length > 0 && !result && (
+          {/* CSV Preview */}
+          {mode === 'csv' && preview.length > 0 && !result && (
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Preview ({Math.min(preview.length, 5)} of {preview.length} rows)</p>
               <div className="border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
@@ -257,12 +447,20 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
                         {columns.slice(0, 6).map(col => (
                           <td key={col} className="px-3 py-2 text-gray-600 whitespace-nowrap max-w-[160px] truncate">{row[col]}</td>
                         ))}
-                        {columns.length > 6 && <td className="px-3 py-2 text-gray-400">…</td>}
+                        {columns.length > 6 && <td className="px-3 py-2 text-gray-400">...</td>}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* Progress */}
+          {importProgress && (
+            <div className="flex items-center gap-2.5 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl">
+              <RefreshCw size={14} className="text-blue-500 animate-spin flex-shrink-0" />
+              <p className="text-sm text-blue-700">{importProgress}</p>
             </div>
           )}
 
@@ -284,9 +482,15 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
                   <p className="text-2xl font-bold text-emerald-700">{result.inserted}</p>
                   <p className="text-xs text-gray-500">Imported</p>
                 </div>
+                {(result.updated ?? 0) > 0 && (
+                  <div>
+                    <p className="text-2xl font-bold text-blue-600">{result.updated}</p>
+                    <p className="text-xs text-gray-500">Updated</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-2xl font-bold text-amber-600">{result.skipped}</p>
-                  <p className="text-xs text-gray-500">Skipped (duplicates)</p>
+                  <p className="text-xs text-gray-500">Skipped</p>
                 </div>
                 {result.errors.length > 0 && (
                   <div>
@@ -319,18 +523,33 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
             </button>
           ) : (
             <>
-              <button
-                onClick={handleImport}
-                disabled={importing || preview.length === 0}
-                className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
-                style={{ background: '#015035' }}
-              >
-                {importing ? (
-                  <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Importing {preview.length} {type}...</>
-                ) : (
-                  <>Import {preview.length > 0 ? `${preview.length} ${type}` : typeConfig[type].label}</>
-                )}
-              </button>
+              {mode === 'csv' ? (
+                <button
+                  onClick={handleCsvImport}
+                  disabled={importing || preview.length === 0}
+                  className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
+                  style={{ background: '#015035' }}
+                >
+                  {importing ? (
+                    <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Importing {preview.length} {type}...</>
+                  ) : (
+                    <>Import {preview.length > 0 ? `${preview.length} ${type}` : typeConfig[type].label}</>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={handleApiImport}
+                  disabled={importing || !apiLoaded || apiContacts.length === 0}
+                  className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
+                  style={{ background: '#015035' }}
+                >
+                  {importing ? (
+                    <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Importing contacts...</>
+                  ) : (
+                    <>Import {apiContacts.length > 0 ? `${apiContacts.length} Contacts` : 'Contacts'} from HubSpot</>
+                  )}
+                </button>
+              )}
               <button onClick={onClose} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
                 Cancel
               </button>

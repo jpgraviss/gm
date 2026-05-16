@@ -411,6 +411,7 @@ export default function SettingsPage() {
             setRoleNavConfig({ global: d.navigation_config as NavConfig, roles: {} })
           }
         }
+        if (d.email_templates && typeof d.email_templates === 'object') setEmailTemplates(d.email_templates as Record<string, SystemEmailTemplate>)
       })
       .catch(() => {
         setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))

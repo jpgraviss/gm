@@ -8,6 +8,7 @@ import Sidebar from './Sidebar'
 import AssistantPanel from '@/components/ai/AssistantPanel'
 import CommandPalette from '@/components/ui/CommandPalette'
 import { ShieldAlert, X, Sparkles } from 'lucide-react'
+import PushNotificationBanner from '@/components/ui/PushNotificationBanner'
 
 const PUBLIC_ROUTES = ['/login', '/team-login']
 
@@ -148,7 +149,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         className="flex-1 flex flex-col min-w-0 overflow-x-hidden"
         style={{ background: '#f4f5f7' }}
       >
-        {/* Super Admin impersonation banner */}
+        <PushNotificationBanner />
         {impersonatedBy && (
           <div className="flex items-center justify-between gap-2 px-4 py-2 flex-shrink-0" style={{ background: '#7c3aed', color: '#fff' }}>
             <div className="flex items-center gap-2 text-sm font-semibold">

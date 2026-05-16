@@ -185,13 +185,13 @@ export async function POST(req: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from:    'GravHub Scheduling <noreply@app.gravissmarketing.com>',
+          from:    `${appSettings.branding.appName} Scheduling <${appSettings.email.fromEmail}>`,
           to:      clientEmail,
           subject: `Confirmed: ${settings.title} with ${settings.user_name}`,
           html: `
 <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px">
-  <div style="background:#012b1e;padding:24px;border-radius:8px;margin-bottom:24px">
-    <div style="font-size:14px;font-weight:700;color:#fff;letter-spacing:0.2em">GRAVISS MARKETING</div>
+  <div style="background:${appSettings.branding.darkBg};padding:24px;border-radius:8px;margin-bottom:24px">
+    <div style="font-size:14px;font-weight:700;color:#fff;letter-spacing:0.2em">${appSettings.company.name.toUpperCase()}</div>
     <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px">BOOKING CONFIRMED</div>
   </div>
   <h2 style="font-size:20px;font-weight:700;color:#1a1a1a;margin:0 0 8px">${settings.title}</h2>
@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
     <div style="margin-bottom:10px"><strong style="font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em">Time</strong><br><span style="font-size:14px;color:#1f2937">${timeLabel}</span></div>
     <div><strong style="font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em">Duration</strong><br><span style="font-size:14px;color:#1f2937">${settings.duration} minutes</span></div>
   </div>
-  ${meetLink ? `<a href="${meetLink}" style="display:block;background:#015035;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;text-align:center;margin-bottom:24px">Join Google Meet</a>` : ''}
+  ${meetLink ? `<a href="${meetLink}" style="display:block;background:${appSettings.branding.primaryColor};color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;text-align:center;margin-bottom:24px">Join Google Meet</a>` : ''}
   <p style="font-size:13px;color:#9ca3af">A calendar invite has been sent to your email. If you need to reschedule, please reply to this email.</p>
 </div>`,
         }),

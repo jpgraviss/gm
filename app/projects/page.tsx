@@ -2,19 +2,18 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import Header from '@/components/layout/Header'
-// data loaded from API
+import CompanySelect from '@/components/ui/CompanySelect'
 import { projectStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import type { Project, ProjectStatus } from '@/lib/types'
 import {
-  X, CheckCircle, Calendar, ChevronRight, LayoutList, KanbanSquare,
+  X, CheckCircle, Calendar, ChevronRight, LayoutList, LayoutGrid,
   AlertTriangle, TrendingUp, StickyNote, Plus, Globe, BarChart2,
   Share2, Mail, Palette, Wrench, ChevronDown, Pencil, Trash2,
+  Search, FolderKanban, Activity, PauseCircle, Briefcase,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
-
-// ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEPARTMENTS = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 
@@ -31,7 +30,18 @@ const statusColumnColors: Record<ProjectStatus, string> = {
   'In Maintenance': '#8b5cf6',
 }
 
-// ─── Progress Ring ────────────────────────────────────────────────────────────
+type FilterTab = 'All' | 'Active' | 'Completed' | 'On Hold'
+
+type ServiceTypeKey = 'Website' | 'SEO' | 'Social Media' | 'Branding' | 'Email Marketing' | 'Custom'
+
+const serviceTypeIcons: Record<ServiceTypeKey, React.ReactNode> = {
+  Website: <Globe size={14} />,
+  SEO: <BarChart2 size={14} />,
+  'Social Media': <Share2 size={14} />,
+  'Email Marketing': <Mail size={14} />,
+  Branding: <Palette size={14} />,
+  Custom: <Wrench size={14} />,
+}
 
 function ProgressRing({ pct, size = 44 }: { pct: number; size?: number }) {
   const r = (size - 8) / 2
@@ -61,51 +71,56 @@ function ProgressRing({ pct, size = 44 }: { pct: number; size?: number }) {
   )
 }
 
-// ─── Project Card (Kanban) ────────────────────────────────────────────────────
-
-function ProjectCard({ project, onClick }: { project: Project; onClick: () => void }) {
-  const completedMilestones = project.milestones.filter(m => m.completed).length
+function ProjectGridCard({ project, onClick }: { project: Project; onClick: () => void }) {
   const today = new Date().toISOString().split('T')[0]
   const overdueTasks = project.tasks.filter(t => !t.completed && t.dueDate < today).length
+
   return (
-    <div className="metric-card cursor-pointer hover:shadow-md transition-all" onClick={onClick}>
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1 min-w-0 pr-2">
-          <p className="text-sm font-bold text-gray-900 mb-1 leading-tight">{project.company}</p>
-          <StatusBadge label={project.serviceType} colorClass={serviceTypeColors[project.serviceType]} />
+    <div
+      className="bg-white rounded-xl border border-gray-200 p-5 cursor-pointer hover:shadow-lg hover:border-gray-300 transition-all group"
+      onClick={onClick}
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1 min-w-0 pr-3">
+          <p className="text-sm font-bold text-gray-900 leading-tight truncate">{project.company}</p>
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <span className="text-gray-400">{serviceTypeIcons[project.serviceType as ServiceTypeKey]}</span>
+            <span className="text-xs text-gray-500">{project.serviceType}</span>
+          </div>
         </div>
-        <ProgressRing pct={project.progress} />
+        <StatusBadge label={project.status} colorClass={projectStatusColors[project.status]} />
       </div>
 
-      <div className="mb-3">
-        <div className="flex justify-between text-xs mb-1.5">
-          <span className="text-gray-500 font-medium">Milestones</span>
-          <span className="text-gray-700 font-semibold">{completedMilestones}/{project.milestones.length}</span>
+      <div className="mb-4">
+        <div className="flex justify-between items-center mb-1.5">
+          <span className="text-xs text-gray-500">Progress</span>
+          <span className="text-xs font-bold text-gray-900">{project.progress}%</span>
         </div>
-        <div className="flex gap-1">
-          {project.milestones.map(m => (
-            <div
-              key={m.id}
-              className="flex-1 h-1.5 rounded-full"
-              style={{ background: m.completed ? '#015035' : '#e5e7eb' }}
-              title={m.name}
-            />
-          ))}
+        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${project.progress}%`, background: project.progress === 100 ? '#22c55e' : '#015035' }}
+          />
         </div>
       </div>
 
-      <div className="flex items-center justify-between pt-2.5 border-t border-gray-100">
-        <div className="flex -space-x-1.5">
-          {project.assignedTeam.map((name, i) => (
+      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+        <div className="flex -space-x-2">
+          {project.assignedTeam.slice(0, 4).map((name, i) => (
             <div
               key={i}
-              className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold text-white"
-              style={{ background: i === 0 ? '#015035' : '#6b7280' }}
+              className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[9px] font-bold text-white shadow-sm"
+              style={{ background: i === 0 ? '#015035' : i === 1 ? '#3b82f6' : i === 2 ? '#8b5cf6' : '#6b7280' }}
               title={name}
             >
               {name.split(' ').map(n => n[0]).join('')}
             </div>
           ))}
+          {project.assignedTeam.length > 4 && (
+            <div className="w-7 h-7 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[9px] font-semibold text-gray-500">
+              +{project.assignedTeam.length - 4}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {overdueTasks > 0 && (
@@ -122,8 +137,6 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
     </div>
   )
 }
-
-// ─── Project Detail Panel ─────────────────────────────────────────────────────
 
 function ProjectDetailPanel({
   project,
@@ -184,8 +197,6 @@ function ProjectDetailPanel({
     <div className="fixed inset-0 z-50 flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
       <div className="bg-white h-full shadow-2xl flex flex-col pointer-events-auto overflow-hidden border-l border-gray-200" style={{ width: 'min(520px, 100vw)' }}>
-
-        {/* Header */}
         <div className="p-6 flex-shrink-0" style={{ background: '#012b1e' }}>
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1 min-w-0 pr-3">
@@ -212,8 +223,6 @@ function ProjectDetailPanel({
               </button>
             </div>
           </div>
-
-          {/* Quick stats */}
           <div className="grid grid-cols-3 gap-2">
             {[
               { label: 'Milestones', value: `${project.milestones.filter(m => m.completed).length}/${project.milestones.length}` },
@@ -228,7 +237,6 @@ function ProjectDetailPanel({
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
           {(['overview', 'milestones', 'tasks', 'notes'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}>
@@ -237,10 +245,7 @@ function ProjectDetailPanel({
           ))}
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-5">
-
-          {/* ── Overview ── */}
           {tab === 'overview' && (
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-3 gap-2">
@@ -290,7 +295,6 @@ function ProjectDetailPanel({
                 </div>
               </div>
 
-              {/* Project Overview / description */}
               <div className="p-4 bg-gray-50 rounded-xl">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Overview</p>
@@ -307,7 +311,7 @@ function ProjectDetailPanel({
                       onChange={e => setOverview(e.target.value)}
                       rows={4}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 resize-none"
-                      placeholder="Add project overview or description…"
+                      placeholder="Add project overview or description..."
                     />
                     <div className="flex gap-2 justify-end">
                       <button onClick={() => setEditingOverview(false)} className="px-3 py-1.5 text-xs text-gray-500 rounded-lg border border-gray-200 hover:bg-gray-100">Cancel</button>
@@ -344,7 +348,6 @@ function ProjectDetailPanel({
             </div>
           )}
 
-          {/* ── Milestones ── */}
           {tab === 'milestones' && (
             <div className="flex flex-col gap-1">
               {(project.milestones ?? []).map((m, i) => {
@@ -452,7 +455,6 @@ function ProjectDetailPanel({
             </div>
           )}
 
-          {/* ── Tasks ── */}
           {tab === 'tasks' && (
             <div className="flex flex-col gap-4">
               {localTasks.length === 0 && (
@@ -574,7 +576,6 @@ function ProjectDetailPanel({
             </div>
           )}
 
-          {/* ── Notes ── */}
           {tab === 'notes' && (
             <div className="flex flex-col gap-3">
               {notes.length === 0 && !showNoteForm && (
@@ -638,7 +639,6 @@ function ProjectDetailPanel({
           )}
         </div>
 
-        {/* Confirm Delete Dialog */}
         {confirmDelete && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
             <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setConfirmDelete(false)} />
@@ -663,7 +663,6 @@ function ProjectDetailPanel({
           </div>
         )}
 
-        {/* Footer */}
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0 relative">
           {showStatusPicker && (
             <div className="absolute bottom-full left-4 mb-2 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-10 min-w-[180px]">
@@ -702,189 +701,16 @@ function ProjectDetailPanel({
   )
 }
 
-// ─── Service Type Config ──────────────────────────────────────────────────────
-
-type ServiceTypeKey = 'Website' | 'SEO' | 'Social Media' | 'Branding' | 'Email Marketing' | 'Custom'
-
-const serviceTypeIcons: Record<ServiceTypeKey, React.ReactNode> = {
-  Website: <Globe size={18} />,
-  SEO: <BarChart2 size={18} />,
-  'Social Media': <Share2 size={18} />,
-  'Email Marketing': <Mail size={18} />,
-  Branding: <Palette size={18} />,
-  Custom: <Wrench size={18} />,
-}
-
-const serviceTypeAccent: Record<ServiceTypeKey, string> = {
-  Website: '#3b82f6',
-  SEO: '#015035',
-  'Social Media': '#ec4899',
-  'Email Marketing': '#f59e0b',
-  Branding: '#8b5cf6',
-  Custom: '#6b7280',
-}
-
-// ─── Project Row (list view within a service type group) ──────────────────────
-
-function ProjectRow({ project, onClick }: { project: Project; onClick: () => void }) {
-  const completedMs = project.milestones.filter(m => m.completed).length
-  const today = new Date().toISOString().split('T')[0]
-  const overdueTasks = project.tasks.filter(t => !t.completed && t.dueDate < today).length
-
-  return (
-    <tr
-      className="hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors group"
-      onClick={onClick}
-    >
-      <td className="py-3 px-4">
-        <p className="text-sm font-semibold text-gray-900">{project.company}</p>
-        <p className="text-xs text-gray-400">{project.id.toUpperCase()}</p>
-      </td>
-      <td className="py-3 px-4">
-        <StatusBadge label={project.status} colorClass={projectStatusColors[project.status]} />
-      </td>
-      <td className="py-3 px-4">
-        <div className="flex items-center gap-2">
-          <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: `${project.progress}%`, background: '#015035' }} />
-          </div>
-          <span className="text-xs text-gray-600 font-semibold">{project.progress}%</span>
-        </div>
-      </td>
-      <td className="py-3 px-4">
-        <span className="text-xs text-gray-600 font-medium">{completedMs}/{project.milestones.length}</span>
-      </td>
-      <td className="py-3 px-4">
-        <span className="text-xs text-gray-500">{formatDate(project.launchDate)}</span>
-      </td>
-      <td className="py-3 px-4">
-        <div className="flex -space-x-1.5">
-          {project.assignedTeam.map((name, i) => (
-            <div
-              key={i}
-              className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold text-white"
-              style={{ background: i === 0 ? '#015035' : '#6b7280' }}
-              title={name}
-            >
-              {name.split(' ').map(n => n[0]).join('')}
-            </div>
-          ))}
-        </div>
-      </td>
-      <td className="py-3 px-4">
-        {overdueTasks > 0 ? (
-          <span className="text-[10px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full font-semibold">
-            {overdueTasks} overdue
-          </span>
-        ) : (
-          <span className="text-[10px] text-emerald-600">On track</span>
-        )}
-      </td>
-      <td className="py-3 px-4">
-        <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
-      </td>
-    </tr>
-  )
-}
-
-// ─── Service Type Group ───────────────────────────────────────────────────────
-
-function ServiceTypeGroup({
-  serviceType,
-  groupProjects,
-  onSelect,
-  defaultOpen = true,
-}: {
-  serviceType: ServiceTypeKey
-  groupProjects: Project[]
-  onSelect: (p: Project) => void
-  defaultOpen?: boolean
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-  const icon = serviceTypeIcons[serviceType]
-  const accent = serviceTypeAccent[serviceType]
-  const avgPct = groupProjects.length > 0
-    ? Math.round(groupProjects.reduce((s, p) => s + p.progress, 0) / groupProjects.length)
-    : 0
-  const inProgress = groupProjects.filter(p => p.status === 'In Progress').length
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {/* Group header */}
-      <button
-        className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors"
-        onClick={() => setOpen(v => !v)}
-      >
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${accent}18` }}>
-          <span style={{ color: accent }}>{icon}</span>
-        </div>
-        <div className="flex-1 text-left">
-          <span className="text-sm font-bold text-gray-800">{serviceType}</span>
-          <span className="ml-2 text-xs text-gray-400">{groupProjects.length} project{groupProjects.length !== 1 ? 's' : ''}</span>
-        </div>
-        <div className="flex items-center gap-4 text-xs text-gray-500">
-          {inProgress > 0 && (
-            <span className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-              {inProgress} active
-            </span>
-          )}
-          <span className="font-semibold text-gray-700">{avgPct}% avg</span>
-        </div>
-        <ChevronDown
-          size={15}
-          className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {/* Project table */}
-      {open && (
-        <div className="border-t border-gray-100">
-          <table className="w-full">
-            <thead>
-              <tr className="text-[11px] text-gray-400 uppercase tracking-wide bg-gray-50 border-b border-gray-100">
-                <th className="text-left py-2 px-4 font-semibold">Company</th>
-                <th className="text-left py-2 px-4 font-semibold">Status</th>
-                <th className="text-left py-2 px-4 font-semibold">Progress</th>
-                <th className="text-left py-2 px-4 font-semibold">Milestones</th>
-                <th className="text-left py-2 px-4 font-semibold">Launch</th>
-                <th className="text-left py-2 px-4 font-semibold">Team</th>
-                <th className="text-left py-2 px-4 font-semibold">Tasks</th>
-                <th className="py-2 px-4" />
-              </tr>
-            </thead>
-            <tbody>
-              {groupProjects.map(p => (
-                <ProjectRow key={p.id} project={p} onClick={() => onSelect(p)} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── New Project Modal ────────────────────────────────────────────────────────
-
 function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p: Project) => void }) {
   const { toast } = useToast()
   const OWNERS = useTeamMembers()
   const [company, setCompany] = useState('')
-  const [companies, setCompanies] = useState<string[]>([])
   const [serviceType, setServiceType] = useState<Project['serviceType']>('Website')
   const [startDate, setStartDate] = useState('')
   const [launchDate, setLaunchDate] = useState('')
   const [projectStatus, setProjectStatus] = useState<ProjectStatus>('Not Started')
   const [selectedTeam, setSelectedTeam] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    fetch('/api/crm/companies')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setCompanies(data.map((c: { name: string }) => c.name)) })
-      .catch(() => toast('Failed to load companies', 'error'))
-  }, [])
 
   const canSave = company.trim()
 
@@ -936,11 +762,7 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
         <div className="p-5 flex flex-col gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company Name *</label>
-            <select value={company} onChange={e => setCompany(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
-              <option value="">— Select a company —</option>
-              {companies.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <CompanySelect value={company} onChange={(name) => setCompany(name)} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
@@ -1002,7 +824,7 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
             className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
             style={{ background: '#015035' }}
           >
-            {saving ? 'Creating…' : 'Create Project'}
+            {saving ? 'Creating...' : 'Create Project'}
           </button>
           <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
         </div>
@@ -1011,17 +833,15 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
 export default function ProjectsPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [localProjects, setLocalProjects] = useState<Project[]>([])
   const [selected, setSelected] = useState<Project | null>(null)
   const [creatingProject, setCreatingProject] = useState(false)
-  const [serviceFilter, setServiceFilter] = useState<ServiceTypeKey | 'All'>('All')
-  const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'All'>('All')
-  const [view, setView] = useState<'grouped' | 'kanban'>('grouped')
+  const [view, setView] = useState<'grid' | 'list'>('grid')
+  const [filterTab, setFilterTab] = useState<FilterTab>('All')
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     fetch('/api/projects')
@@ -1059,24 +879,39 @@ export default function ProjectsPage() {
     }).catch(() => toast('Failed to update project', 'error'))
   }
 
-  // Metrics
-  const active = localProjects.filter(p => ['In Progress', 'Awaiting Client', 'Not Started'].includes(p.status))
-  const avgProgress = localProjects.length > 0 ? Math.round(localProjects.reduce((s, p) => s + p.progress, 0) / localProjects.length) : 0
-  const allOverdue = localProjects.flatMap(p => p.tasks.filter(t => !t.completed && t.dueDate < today))
-  const launched = localProjects.filter(p => ['Launched', 'In Maintenance', 'Completed'].includes(p.status))
+  const totalProjects = localProjects.length
+  const activeProjects = localProjects.filter(p => ['In Progress', 'Not Started'].includes(p.status))
+  const completedProjects = localProjects.filter(p => ['Completed', 'Launched'].includes(p.status))
+  const avgProgress = totalProjects > 0 ? Math.round(localProjects.reduce((s, p) => s + p.progress, 0) / totalProjects) : 0
 
-  // Active service types (ones with projects)
-  const activeServiceTypes = (Object.keys(serviceTypeIcons) as ServiceTypeKey[])
-    .filter(st => localProjects.some(p => p.serviceType === st))
+  const filtered = useMemo(() => {
+    let result = localProjects
 
-  // Apply filters
-  const filtered = localProjects.filter(p => {
-    if (serviceFilter !== 'All' && p.serviceType !== serviceFilter) return false
-    if (statusFilter !== 'All' && p.status !== statusFilter) return false
-    return true
-  })
+    if (filterTab === 'Active') {
+      result = result.filter(p => ['In Progress', 'Not Started'].includes(p.status))
+    } else if (filterTab === 'Completed') {
+      result = result.filter(p => ['Completed', 'Launched', 'In Maintenance'].includes(p.status))
+    } else if (filterTab === 'On Hold') {
+      result = result.filter(p => p.status === 'Awaiting Client')
+    }
 
-  const visibleStatuses = statusFilter === 'All' ? statusOrder : [statusFilter]
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter(p =>
+        p.company.toLowerCase().includes(q) ||
+        p.serviceType.toLowerCase().includes(q)
+      )
+    }
+
+    return result
+  }, [localProjects, filterTab, searchQuery])
+
+  const filterTabs: { key: FilterTab; label: string; count: number; icon: React.ReactNode }[] = [
+    { key: 'All', label: 'All', count: localProjects.length, icon: <FolderKanban size={14} /> },
+    { key: 'Active', label: 'Active', count: activeProjects.length, icon: <Activity size={14} /> },
+    { key: 'Completed', label: 'Completed', count: completedProjects.length, icon: <CheckCircle size={14} /> },
+    { key: 'On Hold', label: 'On Hold', count: localProjects.filter(p => p.status === 'Awaiting Client').length, icon: <PauseCircle size={14} /> },
+  ]
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
@@ -1085,147 +920,178 @@ export default function ProjectsPage() {
       <Header title="Projects" subtitle="Track delivery across all service lines" action={{ label: 'New Project', onClick: () => setCreatingProject(true) }} />
       <div className="page-content">
 
-        {/* Summary Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Active Projects', value: active.length.toString(), icon: <KanbanSquare size={16} />, color: '#015035', sub: 'In progress or queued' },
-            { label: 'Avg Completion',  value: `${avgProgress}%`,        icon: <TrendingUp size={16} />,  color: '#3b82f6', sub: 'Across all projects' },
-            { label: 'Overdue Tasks',   value: allOverdue.length.toString(), icon: <AlertTriangle size={16} />, color: allOverdue.length > 0 ? '#ef4444' : '#22c55e', sub: allOverdue.length > 0 ? 'Needs attention' : 'All on track' },
-            { label: 'Launched / Done', value: launched.length.toString(), icon: <CheckCircle size={16} />, color: '#10b981', sub: 'Completed projects' },
+            { label: 'Total Projects', value: totalProjects.toString(), icon: <Briefcase size={18} />, color: '#015035', change: `${totalProjects} total` },
+            { label: 'Active', value: activeProjects.length.toString(), icon: <Activity size={18} />, color: '#3b82f6', change: 'In progress' },
+            { label: 'Completed', value: completedProjects.length.toString(), icon: <CheckCircle size={18} />, color: '#22c55e', change: 'Delivered' },
+            { label: 'Avg Progress', value: `${avgProgress}%`, icon: <TrendingUp size={18} />, color: '#8b5cf6', change: 'Across all' },
           ].map(m => (
-            <div key={m.label} className="kpi-card" style={{ '--kpi-accent': m.color } as React.CSSProperties}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: `${m.color}15` }}>
-                <span style={{ color: m.color }}>{m.icon}</span>
+            <div key={m.label} className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${m.color}12` }}>
+                  <span style={{ color: m.color }}>{m.icon}</span>
+                </div>
+                <span className="text-[11px] text-gray-400 font-medium">{m.change}</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900 mb-0.5 tracking-tight">{m.value}</p>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">{m.label}</p>
-              <p className="text-[11px] text-gray-400 mt-1">{m.sub}</p>
+              <p className="text-2xl font-bold text-gray-900 tracking-tight">{m.value}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{m.label}</p>
             </div>
           ))}
         </div>
 
-        {/* Service Type Hub Tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-5">
-          <button
-            onClick={() => setServiceFilter('All')}
-            className={`metric-card text-left p-3 transition-all ${serviceFilter === 'All' ? 'ring-2 ring-green-800 ring-offset-1' : ''}`}
-          >
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: '#f3f4f6' }}>
-              <KanbanSquare size={15} className="text-gray-500" />
-            </div>
-            <p className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{localProjects.length}</p>
-            <p className="text-[10px] font-semibold text-gray-500 mt-0.5">All Types</p>
-          </button>
-
-          {activeServiceTypes.map(st => {
-            const count = localProjects.filter(p => p.serviceType === st).length
-            const accent = serviceTypeAccent[st]
-            const inProg = localProjects.filter(p => p.serviceType === st && p.status === 'In Progress').length
-            return (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-6 mb-5">
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            {filterTabs.map(t => (
               <button
-                key={st}
-                onClick={() => setServiceFilter(st)}
-                className={`metric-card text-left p-3 transition-all ${serviceFilter === st ? 'ring-2 ring-offset-1' : ''}`}
-                style={serviceFilter === st ? { outlineColor: accent } : {}}
+                key={t.key}
+                onClick={() => setFilterTab(t.key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                  filterTab === t.key
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
               >
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: `${accent}18` }}>
-                  <span style={{ color: accent }}>{serviceTypeIcons[st]}</span>
-                </div>
-                <p className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{count}</p>
-                <p className="text-[10px] font-semibold text-gray-500 mt-0.5">{st}</p>
-                {inProg > 0 && (
-                  <p className="text-[10px] text-blue-500 mt-0.5">{inProg} active</p>
-                )}
+                {t.icon}
+                <span className="hidden sm:inline">{t.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                  filterTab === t.key ? 'bg-gray-900 text-white' : 'bg-gray-200 text-gray-600'
+                }`}>
+                  {t.count}
+                </span>
               </button>
-            )
-          })}
-        </div>
-
-        {/* Filter bar */}
-        <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1">
-          <div className="flex gap-1">
-            <button onClick={() => setView('grouped')} className={`tab-btn ${view === 'grouped' ? 'active' : ''}`}>
-              <span className="flex items-center gap-1.5"><LayoutList size={13} /> Grouped</span>
-            </button>
-            <button onClick={() => setView('kanban')} className={`tab-btn ${view === 'kanban' ? 'active' : ''}`}>
-              <span className="flex items-center gap-1.5"><KanbanSquare size={13} /> Kanban</span>
-            </button>
+            ))}
           </div>
-          <div className="h-4 w-px bg-gray-200" />
-          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Status:</span>
-          <button onClick={() => setStatusFilter('All')} className={`tab-btn ${statusFilter === 'All' ? 'active' : ''}`}>All</button>
-          {statusOrder.map(s => {
-            const count = filtered.filter(p => p.status === s).length
-            return (
-              <button key={s} onClick={() => setStatusFilter(s)} className={`tab-btn ${statusFilter === s ? 'active' : ''}`}>
-                {s} {count > 0 && <span className="ml-1 opacity-60">({count})</span>}
-              </button>
-            )
-          })}
-          <span className="ml-auto text-sm text-gray-500">{filtered.length} projects</span>
-        </div>
 
-        {/* Grouped View — service type sections */}
-        {view === 'grouped' && (
-          <div className="flex flex-col gap-4">
-            {serviceFilter === 'All' ? (
-              activeServiceTypes
-                .filter(st => filtered.some(p => p.serviceType === st))
-                .map(st => (
-                  <ServiceTypeGroup
-                    key={st}
-                    serviceType={st}
-                    groupProjects={filtered.filter(p => p.serviceType === st)}
-                    onSelect={setSelected}
-                  />
-                ))
-            ) : (
-              <ServiceTypeGroup
-                serviceType={serviceFilter}
-                groupProjects={filtered}
-                onSelect={setSelected}
-                defaultOpen
+          <div className="flex items-center gap-2 sm:ml-auto">
+            <div className="relative flex-1 sm:flex-initial">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search projects..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full sm:w-56 pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 placeholder-gray-400"
               />
-            )}
-            {filtered.length === 0 && (
-              <div className="py-16 text-center text-gray-400">
-                <KanbanSquare size={32} className="mx-auto mb-3 text-gray-200" />
-                <p className="text-sm">No projects match this filter</p>
-              </div>
-            )}
-          </div>
-        )}
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
 
-        {/* Kanban View — status columns */}
-        {view === 'kanban' && (
-          <div className="flex gap-4 overflow-x-auto pb-4">
-            {visibleStatuses.map(status => {
-              const cols = filtered.filter(p => p.status === status)
-              return (
-                <div key={status} className="flex-shrink-0 w-[280px]">
-                  <div className="flex items-center gap-2 mb-3 px-1">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: statusColumnColors[status] }} />
-                    <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{status}</span>
-                    <span
-                      className="ml-auto text-xs font-bold text-white px-1.5 py-0.5 rounded-full min-w-5 text-center"
-                      style={{ background: statusColumnColors[status], fontSize: '10px' }}
+            <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setView('grid')}
+                className={`p-2 transition-colors ${view === 'grid' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                title="Grid view"
+              >
+                <LayoutGrid size={16} />
+              </button>
+              <button
+                onClick={() => setView('list')}
+                className={`p-2 transition-colors ${view === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                title="List view"
+              >
+                <LayoutList size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="py-20 text-center">
+            <FolderKanban size={40} className="mx-auto mb-3 text-gray-200" />
+            <p className="text-sm font-medium text-gray-500">No projects found</p>
+            <p className="text-xs text-gray-400 mt-1">
+              {searchQuery ? `No results for "${searchQuery}"` : 'Try changing the filter or create a new project'}
+            </p>
+          </div>
+        ) : view === 'grid' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map(p => (
+              <ProjectGridCard key={p.id} project={p} onClick={() => setSelected(p)} />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left py-3 px-4 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Company</th>
+                  <th className="text-left py-3 px-4 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Service</th>
+                  <th className="text-left py-3 px-4 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                  <th className="text-left py-3 px-4 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Progress</th>
+                  <th className="text-left py-3 px-4 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Team</th>
+                  <th className="text-left py-3 px-4 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Launch</th>
+                  <th className="py-3 px-4 w-8" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map(p => {
+                  const overdueTasks = p.tasks.filter(t => !t.completed && t.dueDate < today).length
+                  return (
+                    <tr
+                      key={p.id}
+                      className="hover:bg-gray-50 cursor-pointer transition-colors group"
+                      onClick={() => setSelected(p)}
                     >
-                      {cols.length}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {cols.map(p => (
-                      <ProjectCard key={p.id} project={p} onClick={() => setSelected(p)} />
-                    ))}
-                    {cols.length === 0 && (
-                      <div className="rounded-xl border-2 border-dashed border-gray-200 py-8 text-center text-xs text-gray-400">
-                        No projects
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+                      <td className="py-3.5 px-4">
+                        <p className="text-sm font-semibold text-gray-900">{p.company}</p>
+                        {overdueTasks > 0 && (
+                          <span className="text-[10px] text-red-600 font-medium">{overdueTasks} overdue</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-gray-400">{serviceTypeIcons[p.serviceType as ServiceTypeKey]}</span>
+                          <span className="text-sm text-gray-600">{p.serviceType}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <StatusBadge label={p.status} colorClass={projectStatusColors[p.status]} />
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full"
+                              style={{ width: `${p.progress}%`, background: p.progress === 100 ? '#22c55e' : '#015035' }}
+                            />
+                          </div>
+                          <span className="text-xs font-semibold text-gray-700 tabular-nums">{p.progress}%</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 hidden md:table-cell">
+                        <div className="flex -space-x-1.5">
+                          {p.assignedTeam.slice(0, 3).map((name, i) => (
+                            <div
+                              key={i}
+                              className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold text-white"
+                              style={{ background: i === 0 ? '#015035' : i === 1 ? '#3b82f6' : '#6b7280' }}
+                              title={name}
+                            >
+                              {name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                          ))}
+                          {p.assignedTeam.length > 3 && (
+                            <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[8px] font-semibold text-gray-500">
+                              +{p.assignedTeam.length - 3}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 hidden lg:table-cell">
+                        <span className="text-xs text-gray-500">{formatDate(p.launchDate)}</span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

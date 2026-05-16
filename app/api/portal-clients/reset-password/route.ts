@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getResend } from '@/lib/resend'
 import { logAudit } from '@/lib/audit'
+import { getSettings } from '@/lib/settings'
 
 export async function POST(req: NextRequest) {
+  const settings = await getSettings()
   const { email } = await req.json()
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
@@ -31,10 +33,10 @@ export async function POST(req: NextRequest) {
 
   // Send magic link email
   const { error: emailError } = await getResend().emails.send({
-    from: 'GravHub <noreply@app.gravissmarketing.com>',
-    replyTo: 'info@gravissmarketing.com',
+    from: `${settings.email.fromName} <${settings.email.fromEmail}>`,
+    replyTo: settings.email.replyTo,
     to: [email],
-    subject: 'Your Graviss Marketing sign-in link',
+    subject: `Your ${settings.company.name} sign-in link`,
     html: `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -44,8 +46,8 @@ export async function POST(req: NextRequest) {
     <tr><td align="center">
       <table width="580" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
         <tr>
-          <td style="background:#015035;padding:32px 40px;text-align:center;">
-            <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.08em;font-family:'Syncopate',sans-serif;">GRAVISS MARKETING</h1>
+          <td style="background:${settings.branding.primaryColor};padding:32px 40px;text-align:center;">
+            <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.08em;font-family:'Syncopate',sans-serif;">${settings.company.name.toUpperCase()}</h1>
             <p style="margin:6px 0 0;color:rgba(255,255,255,0.65);font-size:12px;letter-spacing:0.04em;font-family:'Syncopate',sans-serif;">CLIENT PORTAL</p>
           </td>
         </tr>
@@ -58,7 +60,7 @@ export async function POST(req: NextRequest) {
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
                 <td align="center">
-                  <a href="${magicLinkUrl}" style="display:inline-block;background:#015035;color:#ffffff;font-size:14px;font-weight:700;padding:14px 36px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
+                  <a href="${magicLinkUrl}" style="display:inline-block;background:${settings.branding.primaryColor};color:#ffffff;font-size:14px;font-weight:700;padding:14px 36px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
                     Sign In to Portal &rarr;
                   </a>
                 </td>
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
         <tr>
           <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 40px;text-align:center;">
             <p style="margin:0;font-size:12px;color:#9ca3af;">
-              &copy; ${new Date().getFullYear()} Graviss Marketing
+              &copy; ${new Date().getFullYear()} ${settings.company.name}
             </p>
           </td>
         </tr>

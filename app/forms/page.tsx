@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui/Toast'
 import {
   Plus, X, Trash2, Copy, ExternalLink, FileText, Eye, Pencil,
   Type, Mail, Phone, AlignLeft, ListChecks, CheckSquare, Hash, Link2,
-  GripVertical,
+  GripVertical, Code, MousePointerClick, Clock, ArrowUpFromDot, ScrollText, Check,
 } from 'lucide-react'
 
 interface FormField {
@@ -20,6 +20,17 @@ interface FormField {
   options?: string[]
   helpText?: string
   mapsTo?: string
+}
+
+interface PopupConfig {
+  trigger: 'button' | 'delay' | 'exit-intent' | 'scroll'
+  delay: number
+  scrollPercent: number
+  position: 'center' | 'bottom-right' | 'bottom-left'
+  animation: 'fade' | 'slide-up'
+  overlay: boolean
+  color: string
+  buttonText: string
 }
 
 interface LeadForm {
@@ -37,6 +48,7 @@ interface LeadForm {
   bgColor?: string
   bgTransparent?: boolean
   fontFamily?: string
+  popupConfig?: PopupConfig
   createdAt: string
 }
 
@@ -187,7 +199,7 @@ export default function FormsPage() {
                   <button onClick={() => setShowEmbed(f)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Embed">
                     <Copy size={14} />
                   </button>
-                  <a href={`/f/${f.slug}`} target="_blank" rel="noopener" className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Preview">
+                  <a href={`/go/form/${f.slug}`} target="_blank" rel="noopener" className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Preview">
                     <Eye size={14} />
                   </a>
                   <button onClick={() => setSelected(f)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Edit">
@@ -254,8 +266,20 @@ export default function FormsPage() {
   )
 }
 
+const DEFAULT_POPUP: PopupConfig = {
+  trigger: 'delay',
+  delay: 5,
+  scrollPercent: 50,
+  position: 'center',
+  animation: 'fade',
+  overlay: true,
+  color: '#015035',
+  buttonText: 'Contact Us',
+}
+
 function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => void; onSave: (f: LeadForm) => void }) {
   const [draft, setDraft] = useState<LeadForm>(form)
+  const [tab, setTab] = useState<'fields' | 'embed'>('fields')
 
   function addField(type: string, mapsTo?: string) {
     setDraft(d => ({ ...d, fields: [...d.fields, newField(type, mapsTo)] }))
@@ -291,194 +315,213 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10"><X size={16} className="text-white/70" /></button>
         </div>
 
+        <div className="flex border-b border-gray-100">
+          <button
+            onClick={() => setTab('fields')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${tab === 'fields' ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Fields & Settings
+          </button>
+          <button
+            onClick={() => setTab('embed')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${tab === 'embed' ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <Code size={12} /> Embed
+          </button>
+        </div>
+
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
-          {/* Basics */}
-          <section className="flex flex-col gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Form name</label>
-              <input
-                value={draft.name}
-                onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
-              <textarea
-                rows={2}
-                value={draft.description ?? ''}
-                onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
-                placeholder="Shown above the form on the public page"
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </section>
+          {tab === 'fields' && (
+            <>
+              <section className="flex flex-col gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Form name</label>
+                  <input
+                    value={draft.name}
+                    onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
+                  <textarea
+                    rows={2}
+                    value={draft.description ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
+                    placeholder="Shown above the form on the public page"
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </section>
 
-          {/* Fields */}
-          <section>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Fields</label>
-              <span className="text-[11px] text-gray-400">{draft.fields.length} field{draft.fields.length === 1 ? '' : 's'}</span>
-            </div>
-            <DragDropContext onDragEnd={handleDragEnd}>
-              <Droppable droppableId="form-fields">
-                {(provided) => (
-                  <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col gap-2">
-                    {draft.fields.map((f, index) => (
-                      <Draggable key={f.id} draggableId={f.id} index={index}>
-                        {(dragProvided, snapshot) => (
-                          <div
-                            ref={dragProvided.innerRef}
-                            {...dragProvided.draggableProps}
-                            className={`p-3 border rounded-xl flex flex-col gap-2 ${snapshot.isDragging ? 'border-emerald-300 bg-emerald-50 shadow-lg' : 'border-gray-200 bg-gray-50/50'}`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div {...dragProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-gray-200 touch-none">
-                                <GripVertical size={14} className="text-gray-400" />
+              <section>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Fields</label>
+                  <span className="text-[11px] text-gray-400">{draft.fields.length} field{draft.fields.length === 1 ? '' : 's'}</span>
+                </div>
+                <DragDropContext onDragEnd={handleDragEnd}>
+                  <Droppable droppableId="form-fields">
+                    {(provided) => (
+                      <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col gap-2">
+                        {draft.fields.map((f, index) => (
+                          <Draggable key={f.id} draggableId={f.id} index={index}>
+                            {(dragProvided, snapshot) => (
+                              <div
+                                ref={dragProvided.innerRef}
+                                {...dragProvided.draggableProps}
+                                className={`p-3 border rounded-xl flex flex-col gap-2 ${snapshot.isDragging ? 'border-emerald-300 bg-emerald-50 shadow-lg' : 'border-gray-200 bg-gray-50/50'}`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div {...dragProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-gray-200 touch-none">
+                                    <GripVertical size={14} className="text-gray-400" />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{f.type}</span>
+                                  <input
+                                    value={f.label}
+                                    onChange={e => updateField(f.id, { label: e.target.value })}
+                                    placeholder="Label"
+                                    className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                  />
+                                  <label className="flex items-center gap-1 text-[11px] text-gray-600">
+                                    <input
+                                      type="checkbox"
+                                      checked={f.required ?? false}
+                                      onChange={e => updateField(f.id, { required: e.target.checked })}
+                                      className="w-3.5 h-3.5 rounded border-gray-300"
+                                    /> Required
+                                  </label>
+                                  <button onClick={() => removeField(f.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    value={f.name}
+                                    onChange={e => updateField(f.id, { name: e.target.value.replace(/[^a-z0-9_]/gi, '_').toLowerCase() })}
+                                    placeholder="field_name"
+                                    className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none font-mono"
+                                  />
+                                  <input
+                                    value={f.placeholder ?? ''}
+                                    onChange={e => updateField(f.id, { placeholder: e.target.value })}
+                                    placeholder="Placeholder text"
+                                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                  />
+                                </div>
+                                {f.type === 'select' && (
+                                  <input
+                                    value={(f.options ?? []).join(', ')}
+                                    onChange={e => updateField(f.id, { options: e.target.value.split(',').map(o => o.trim()).filter(Boolean) })}
+                                    placeholder="Option 1, Option 2, Option 3"
+                                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                  />
+                                )}
                               </div>
-                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{f.type}</span>
-                              <input
-                                value={f.label}
-                                onChange={e => updateField(f.id, { label: e.target.value })}
-                                placeholder="Label"
-                                className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                              />
-                              <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                                <input
-                                  type="checkbox"
-                                  checked={f.required ?? false}
-                                  onChange={e => updateField(f.id, { required: e.target.checked })}
-                                  className="w-3.5 h-3.5 rounded border-gray-300"
-                                /> Required
-                              </label>
-                              <button onClick={() => removeField(f.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={f.name}
-                      onChange={e => updateField(f.id, { name: e.target.value.replace(/[^a-z0-9_]/gi, '_').toLowerCase() })}
-                      placeholder="field_name"
-                      className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none font-mono"
-                    />
-                    <input
-                      value={f.placeholder ?? ''}
-                      onChange={e => updateField(f.id, { placeholder: e.target.value })}
-                      placeholder="Placeholder text"
-                      className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
-                    />
-                  </div>
-                  {f.type === 'select' && (
-                    <input
-                      value={(f.options ?? []).join(', ')}
-                      onChange={e => updateField(f.id, { options: e.target.value.split(',').map(o => o.trim()).filter(Boolean) })}
-                      placeholder="Option 1, Option 2, Option 3"
-                      className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
-                    />
-                  )}
-                          </div>
-                        )}
-                      </Draggable>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                </DragDropContext>
+
+                <div className="mt-3">
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Add field</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {FIELD_TYPES.map(t => (
+                      <button
+                        key={t.type}
+                        onClick={() => addField(t.type, t.mapsTo)}
+                        className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-600 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
+                      >
+                        {t.icon} {t.label}
+                      </button>
                     ))}
-                    {provided.placeholder}
                   </div>
-                )}
-              </Droppable>
-            </DragDropContext>
+                </div>
+              </section>
 
-            <div className="mt-3">
-              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Add field</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                {FIELD_TYPES.map(t => (
-                  <button
-                    key={t.type}
-                    onClick={() => addField(t.type, t.mapsTo)}
-                    className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-600 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
+              <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Submit button label</label>
+                  <input
+                    value={draft.submitLabel}
+                    onChange={e => setDraft(d => ({ ...d, submitLabel: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</label>
+                  <select
+                    value={draft.status}
+                    onChange={e => setDraft(d => ({ ...d, status: e.target.value as LeadForm['status'] }))}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    {t.icon} {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
+                    <option>Active</option>
+                    <option>Paused</option>
+                    <option>Draft</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Success message</label>
+                  <input
+                    value={draft.successMessage}
+                    onChange={e => setDraft(d => ({ ...d, successMessage: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </section>
 
-          {/* Button + success */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Submit button label</label>
-              <input
-                value={draft.submitLabel}
-                onChange={e => setDraft(d => ({ ...d, submitLabel: e.target.value }))}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</label>
-              <select
-                value={draft.status}
-                onChange={e => setDraft(d => ({ ...d, status: e.target.value as LeadForm['status'] }))}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option>Active</option>
-                <option>Paused</option>
-                <option>Draft</option>
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Success message</label>
-              <input
-                value={draft.successMessage}
-                onChange={e => setDraft(d => ({ ...d, successMessage: e.target.value }))}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </section>
+              <section>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Appearance</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Button color</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                      <input value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Text color</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                      <input value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Background</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+                      <input value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Font</label>
+                    <select value={draft.fontFamily ?? 'system-ui'} onChange={e => setDraft(d => ({ ...d, fontFamily: e.target.value }))} className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2 bg-white">
+                      <option value="system-ui">System (default)</option>
+                      <option value="'Inter', sans-serif">Inter</option>
+                      <option value="'Montserrat', sans-serif">Montserrat</option>
+                      <option value="'Open Sans', sans-serif">Open Sans</option>
+                      <option value="'Roboto', sans-serif">Roboto</option>
+                      <option value="'Lato', sans-serif">Lato</option>
+                      <option value="'Poppins', sans-serif">Poppins</option>
+                      <option value="Georgia, serif">Georgia (serif)</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2 flex items-center gap-2 mt-1">
+                    <input type="checkbox" checked={draft.bgTransparent ?? false} onChange={e => setDraft(d => ({ ...d, bgTransparent: e.target.checked }))} className="w-4 h-4 rounded border-gray-300 text-emerald-600" />
+                    <label className="text-xs text-gray-600">Transparent background (for embedding on colored pages)</label>
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
 
-          {/* Styling */}
-          <section>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Appearance</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Button color</label>
-                <div className="flex items-center gap-2">
-                  <input type="color" value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
-                  <input value={draft.primaryColor ?? '#015035'} onChange={e => setDraft(d => ({ ...d, primaryColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Text color</label>
-                <div className="flex items-center gap-2">
-                  <input type="color" value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
-                  <input value={draft.textColor ?? '#111827'} onChange={e => setDraft(d => ({ ...d, textColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Background</label>
-                <div className="flex items-center gap-2">
-                  <input type="color" value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
-                  <input value={draft.bgColor ?? '#f9fafb'} onChange={e => setDraft(d => ({ ...d, bgColor: e.target.value }))} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Font</label>
-                <select value={draft.fontFamily ?? 'system-ui'} onChange={e => setDraft(d => ({ ...d, fontFamily: e.target.value }))} className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2 bg-white">
-                  <option value="system-ui">System (default)</option>
-                  <option value="'Inter', sans-serif">Inter</option>
-                  <option value="'Montserrat', sans-serif">Montserrat</option>
-                  <option value="'Open Sans', sans-serif">Open Sans</option>
-                  <option value="'Roboto', sans-serif">Roboto</option>
-                  <option value="'Lato', sans-serif">Lato</option>
-                  <option value="'Poppins', sans-serif">Poppins</option>
-                  <option value="Georgia, serif">Georgia (serif)</option>
-                </select>
-              </div>
-              <div className="sm:col-span-2 flex items-center gap-2 mt-1">
-                <input type="checkbox" checked={draft.bgTransparent ?? false} onChange={e => setDraft(d => ({ ...d, bgTransparent: e.target.checked }))} className="w-4 h-4 rounded border-gray-300 text-emerald-600" />
-                <label className="text-xs text-gray-600">Transparent background (for embedding on colored pages)</label>
-              </div>
-            </div>
-          </section>
+          {tab === 'embed' && (
+            <EmbedTabContent draft={draft} setDraft={setDraft} />
+          )}
         </div>
 
         <div className="p-4 border-t border-gray-100 flex gap-2">
@@ -490,7 +533,7 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
             Save Form
           </button>
           <a
-            href={`/f/${draft.slug}`}
+            href={`/go/form/${draft.slug}`}
             target="_blank"
             rel="noopener"
             className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 flex items-center gap-1.5"
@@ -503,12 +546,231 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
   )
 }
 
+function EmbedTabContent({ draft, setDraft }: { draft: LeadForm; setDraft: React.Dispatch<React.SetStateAction<LeadForm>> }) {
+  const popup = draft.popupConfig ?? DEFAULT_POPUP
+  const [copied, setCopied] = useState('')
+  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.gravissmarketing.com'
+
+  function updatePopup(patch: Partial<PopupConfig>) {
+    setDraft(d => ({ ...d, popupConfig: { ...(d.popupConfig ?? DEFAULT_POPUP), ...patch } }))
+  }
+
+  function copy(text: string, label: string) {
+    navigator.clipboard.writeText(text)
+    setCopied(label)
+    setTimeout(() => setCopied(''), 2000)
+  }
+
+  const triggerOptions: Array<{ value: PopupConfig['trigger']; label: string; icon: React.ReactNode; desc: string }> = [
+    { value: 'button', label: 'Button click', icon: <MousePointerClick size={14} />, desc: 'Floating button on the page' },
+    { value: 'delay', label: 'Time delay', icon: <Clock size={14} />, desc: `Show after ${popup.delay}s` },
+    { value: 'exit-intent', label: 'Exit intent', icon: <ArrowUpFromDot size={14} />, desc: 'When cursor leaves viewport' },
+    { value: 'scroll', label: 'Scroll depth', icon: <ScrollText size={14} />, desc: `After ${popup.scrollPercent}% scroll` },
+  ]
+
+  const attrs: string[] = [
+    `data-form="${draft.slug}"`,
+    `data-trigger="${popup.trigger}"`,
+  ]
+  if (popup.trigger === 'delay') attrs.push(`data-delay="${popup.delay}"`)
+  if (popup.trigger === 'scroll') attrs.push(`data-scroll="${popup.scrollPercent}"`)
+  if (popup.position !== 'center') attrs.push(`data-position="${popup.position}"`)
+  if (popup.animation !== 'fade') attrs.push(`data-animation="${popup.animation}"`)
+  if (!popup.overlay) attrs.push('data-overlay="false"')
+  if (popup.color !== '#015035') attrs.push(`data-color="${popup.color}"`)
+  if (popup.trigger === 'button' && popup.buttonText !== 'Contact Us') attrs.push(`data-button-text="${popup.buttonText}"`)
+
+  const popupCode = `<!-- GDPR: add data-require-consent="false" to skip cookie consent check -->\n<script src="${appUrl}/embed.js"\n  ${attrs.join('\n  ')}>\n</script>`
+
+  return (
+    <>
+      <section>
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Popup Trigger</p>
+        <div className="grid grid-cols-2 gap-2">
+          {triggerOptions.map(t => (
+            <button
+              key={t.value}
+              onClick={() => updatePopup({ trigger: t.value })}
+              className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-colors ${
+                popup.trigger === t.value
+                  ? 'border-emerald-300 bg-emerald-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className={`p-1.5 rounded-lg ${popup.trigger === t.value ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                {t.icon}
+              </div>
+              <div>
+                <p className={`text-xs font-semibold ${popup.trigger === t.value ? 'text-emerald-700' : 'text-gray-700'}`}>{t.label}</p>
+                <p className="text-[10px] text-gray-400">{t.desc}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {popup.trigger === 'delay' && (
+        <section>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Delay (seconds)</label>
+          <input
+            type="number"
+            min={1}
+            max={120}
+            value={popup.delay}
+            onChange={e => updatePopup({ delay: Math.max(1, parseInt(e.target.value) || 5) })}
+            className="w-24 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </section>
+      )}
+
+      {popup.trigger === 'scroll' && (
+        <section>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Scroll percentage</label>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={10}
+              max={100}
+              step={5}
+              value={popup.scrollPercent}
+              onChange={e => updatePopup({ scrollPercent: parseInt(e.target.value) })}
+              className="flex-1 accent-emerald-600"
+            />
+            <span className="text-sm font-semibold text-gray-700 w-10 text-right">{popup.scrollPercent}%</span>
+          </div>
+        </section>
+      )}
+
+      {popup.trigger === 'button' && (
+        <section>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Button text</label>
+          <input
+            value={popup.buttonText}
+            onChange={e => updatePopup({ buttonText: e.target.value })}
+            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </section>
+      )}
+
+      <section>
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Appearance</p>
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Position</label>
+            <div className="flex gap-2">
+              {(['center', 'bottom-right', 'bottom-left'] as const).map(pos => (
+                <button
+                  key={pos}
+                  onClick={() => updatePopup({ position: pos })}
+                  className={`flex-1 py-2 px-3 rounded-xl border text-xs font-medium transition-colors ${
+                    popup.position === pos
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  {pos === 'center' ? 'Center' : pos === 'bottom-right' ? 'Bottom Right' : 'Bottom Left'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Animation</label>
+            <div className="flex gap-2">
+              {(['fade', 'slide-up'] as const).map(anim => (
+                <button
+                  key={anim}
+                  onClick={() => updatePopup({ animation: anim })}
+                  className={`flex-1 py-2 px-3 rounded-xl border text-xs font-medium transition-colors ${
+                    popup.animation === anim
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  {anim === 'fade' ? 'Fade in' : 'Slide up'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={popup.overlay}
+              onChange={e => updatePopup({ overlay: e.target.checked })}
+              className="w-4 h-4 rounded border-gray-300 text-emerald-600"
+            />
+            <label className="text-xs text-gray-600">Show dark overlay behind popup</label>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Brand color</label>
+            <div className="flex items-center gap-2">
+              <input type="color" value={popup.color} onChange={e => updatePopup({ color: e.target.value })} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
+              <input value={popup.color} onChange={e => updatePopup({ color: e.target.value })} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center gap-2 mb-1.5">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Embed Code</p>
+          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">Popup</span>
+        </div>
+        <p className="text-[11px] text-gray-400 mb-2">Paste this into your website HTML. The popup will trigger automatically based on your settings.</p>
+        <textarea
+          readOnly
+          value={popupCode}
+          rows={Math.min(attrs.length + 2, 8)}
+          className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono"
+        />
+        <button
+          onClick={() => copy(popupCode, 'popup')}
+          className={`mt-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 ${
+            copied === 'popup'
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+              : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          {copied === 'popup' ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy embed code</>}
+        </button>
+      </section>
+
+      <section className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+        <p className="text-[11px] font-semibold text-gray-600 mb-2">How it works</p>
+        <ol className="text-[11px] text-gray-500 flex flex-col gap-1.5 pl-4 list-decimal">
+          <li>Paste the embed code into your website before the closing <code className="bg-gray-200 px-1 rounded text-[10px]">&lt;/body&gt;</code> tag</li>
+          <li>The script loads asynchronously and creates the popup based on your trigger settings</li>
+          <li>By default, the popup respects GDPR cookie consent — it only shows if a consent cookie is detected. Add <code className="bg-gray-200 px-1 rounded text-[10px]">data-require-consent=&quot;false&quot;</code> to disable this check</li>
+          <li>After a visitor dismisses the popup, it won&apos;t show again for 24 hours</li>
+          <li>Submissions appear in GravHub under this form&apos;s submissions</li>
+        </ol>
+      </section>
+    </>
+  )
+}
+
 function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) {
   const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.gravissmarketing.com'
-  const iframeCode = `<iframe src="${appUrl}/f/${form.slug}" width="100%" height="600" style="border:none;border-radius:12px;" title="${form.name}"></iframe>`
+  const iframeCode = `<iframe src="${appUrl}/go/form/${form.slug}" width="100%" height="600" style="border:none;border-radius:12px;" title="${form.name}"></iframe>`
   const scriptCode = `<div data-gravhub-form="${form.slug}"></div>\n<script src="${appUrl}/api/forms/public/${form.slug}/embed.js" async></script>`
-  const directLink = `${appUrl}/f/${form.slug}`
+  const directLink = `${appUrl}/go/form/${form.slug}`
   const wpShortcode = `<!-- GravHub Form: ${form.name} -->\n<div data-gravhub-form="${form.slug}"></div>\n<script src="${appUrl}/api/forms/public/${form.slug}/embed.js" async></script>\n<!-- End GravHub Form -->`
+  const popup = form.popupConfig ?? DEFAULT_POPUP
+  const popupAttrs: string[] = [
+    `data-form="${form.slug}"`,
+    `data-trigger="${popup.trigger}"`,
+  ]
+  if (popup.trigger === 'delay') popupAttrs.push(`data-delay="${popup.delay}"`)
+  if (popup.trigger === 'scroll') popupAttrs.push(`data-scroll="${popup.scrollPercent}"`)
+  if (popup.position !== 'center') popupAttrs.push(`data-position="${popup.position}"`)
+  if (popup.animation !== 'fade') popupAttrs.push(`data-animation="${popup.animation}"`)
+  if (!popup.overlay) popupAttrs.push('data-overlay="false"')
+  if (popup.color !== '#015035') popupAttrs.push(`data-color="${popup.color}"`)
+  if (popup.trigger === 'button' && popup.buttonText !== 'Contact Us') popupAttrs.push(`data-button-text="${popup.buttonText}"`)
+  const popupCode = `<!-- GDPR: add data-require-consent="false" to skip cookie consent check -->\n<script src="${appUrl}/embed.js"\n  ${popupAttrs.join('\n  ')}>\n</script>`
+
   const [copied, setCopied] = useState('')
 
   function copy(text: string, label: string) {
@@ -529,7 +791,6 @@ function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) 
         </div>
         <div className="p-5 flex flex-col gap-4 overflow-y-auto">
 
-          {/* Direct link */}
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Direct link</label>
             <div className="flex gap-2">
@@ -540,11 +801,22 @@ function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) 
             </div>
           </div>
 
-          {/* WordPress */}
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Popup embed</label>
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">New</span>
+            </div>
+            <p className="text-[11px] text-gray-400 mb-2">Shows as a popup on external websites. Configure trigger and appearance in the form editor Embed tab.</p>
+            <textarea readOnly value={popupCode} rows={Math.min(popupAttrs.length + 2, 8)} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
+            <button onClick={() => copy(popupCode, 'popup')} className={`mt-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium ${copied === 'popup' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              {copied === 'popup' ? 'Copied!' : 'Copy popup code'}
+            </button>
+          </div>
+
           <div>
             <div className="flex items-center gap-2 mb-1.5">
               <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">WordPress / HTML</label>
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">Recommended</span>
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">Inline</span>
             </div>
             <p className="text-[11px] text-gray-400 mb-2">Paste into a WordPress Custom HTML block, Elementor HTML widget, or any HTML page. Auto-resizes to fit content.</p>
             <textarea readOnly value={wpShortcode} rows={4} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-gray-50 font-mono" />
@@ -553,7 +825,6 @@ function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) 
             </button>
           </div>
 
-          {/* Iframe */}
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Iframe (simple embed)</label>
             <p className="text-[11px] text-gray-400 mb-2">Works everywhere. Fixed height — no auto-resize.</p>
@@ -563,7 +834,6 @@ function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) 
             </button>
           </div>
 
-          {/* Instructions */}
           <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
             <p className="text-[11px] font-semibold text-gray-600 mb-2">How to embed in WordPress</p>
             <ol className="text-[11px] text-gray-500 flex flex-col gap-1.5 pl-4 list-decimal">

@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, User, Tag, ChevronLeft } from 'lucide-react'
-import { fetchCrmCompanies } from '@/lib/supabase'
-import type { ServiceType, CRMCompany } from '@/lib/types'
+import CompanySelect from '@/components/ui/CompanySelect'
+import type { ServiceType } from '@/lib/types'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
@@ -61,11 +61,6 @@ export default function NewTicketPanel({ onSave, onClose }: Props) {
     assignedTo: '',
     body: '',
   })
-  const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
-
-  useEffect(() => { fetchCrmCompanies().then(setCrmCompanies) }, [])
-
-  const companyNames = crmCompanies.map(c => c.name)
 
   function set(field: keyof NewTicketFormData, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -106,15 +101,11 @@ export default function NewTicketPanel({ onSave, onClose }: Props) {
 
           <div>
             <FieldLabel>Company</FieldLabel>
-            <Input
-              list="ticket-company-list"
-              placeholder="Select or type company name..."
+            <CompanySelect
               value={form.company}
-              onChange={e => set('company', e.target.value)}
+              onChange={(name) => set('company', name)}
+              placeholder="Select a company..."
             />
-            <datalist id="ticket-company-list">
-              {companyNames.map(n => <option key={n} value={n} />)}
-            </datalist>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

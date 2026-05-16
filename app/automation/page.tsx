@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight } from 'lucide-react'
+import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight, GitBranch } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
 type AutoStatus = 'Active' | 'Triggered' | 'Paused'
@@ -229,6 +230,16 @@ export default function AutomationPage() {
         action={{ label: 'New Automation', onClick: () => setCreatingAutomation(true) }}
       />
       <div className="p-3 sm:p-6 flex-1">
+        <div className="flex items-center justify-end mb-4">
+          <Link
+            href="/automation/builder"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold transition-opacity hover:opacity-90"
+            style={{ background: '#015035' }}
+          >
+            <GitBranch size={15} />
+            Create Workflow
+          </Link>
+        </div>
 
         {/* Summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -295,6 +306,13 @@ export default function AutomationPage() {
                       <p className="text-xs text-gray-400">{auto.runs} runs</p>
                       <p className="text-[10px] text-gray-400">Last: {auto.lastRun}</p>
                     </div>
+                    <Link
+                      href={`/automation/builder?id=${auto.id}`}
+                      className="p-1.5 rounded-lg transition-colors hover:bg-emerald-50"
+                      title="Visual Editor"
+                    >
+                      <GitBranch size={14} style={{ color: '#015035' }} />
+                    </Link>
                     <button
                       onClick={() => toggleStatus(auto.id)}
                       className={`p-1.5 rounded-lg transition-colors ${auto.status === 'Paused' ? 'hover:bg-green-50' : 'hover:bg-gray-100'}`}

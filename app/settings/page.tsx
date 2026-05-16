@@ -10,7 +10,12 @@ import {
   CheckCircle, AlertCircle, RefreshCw, Plug, Globe, Tag,
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
   Trash2, X, Eye, EyeOff, AlertTriangle, Mail, LayoutDashboard,
+  TrendingUp, Smartphone, Menu, ChevronUp, ChevronDown, RotateCcw,
 } from 'lucide-react'
+import {
+  defaultNavigation, buildDefaultNavConfig,
+  type NavConfig, type NavConfigSection, type NavConfigItem,
+} from '@/components/layout/Sidebar'
 
 const membershipColors: Record<string, string> = {
   'Super Admin': 'bg-purple-100 text-purple-700',
@@ -21,7 +26,7 @@ const membershipColors: Record<string, string> = {
   Client: 'bg-green-100 text-green-700',
 }
 
-const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Dashboard', 'Notifications', 'Integrations', 'CRM Setup', 'Billing'] as const
+const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Dashboard', 'Navigation', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing'] as const
 type Tab = typeof tabs[number]
 
 const tabIcons: Record<Tab, React.ReactNode> = {
@@ -31,9 +36,11 @@ const tabIcons: Record<Tab, React.ReactNode> = {
   Branding: <Palette size={15} />,
   'Email Defaults': <Mail size={15} />,
   Dashboard: <LayoutDashboard size={15} />,
+  Navigation: <Menu size={15} />,
   Notifications: <Bell size={15} />,
   Integrations: <Plug size={15} />,
   'CRM Setup': <Tag size={15} />,
+  Engagement: <TrendingUp size={15} />,
   Billing: <DollarSign size={15} />,
 }
 
@@ -81,20 +88,33 @@ const COMPANY_DEFAULTS = {
   zip: '78028',
 }
 
-const NOTIF_DEFAULTS = [
-  { label: 'Contract requires signature', enabled: true, category: 'Contracts' },
-  { label: 'Contract fully executed', enabled: true, category: 'Contracts' },
-  { label: 'Invoice overdue by 3+ days', enabled: true, category: 'Billing' },
-  { label: 'Payment received', enabled: true, category: 'Billing' },
-  { label: 'Renewal within 90 days', enabled: true, category: 'Renewals' },
-  { label: 'Renewal within 30 days', enabled: true, category: 'Renewals' },
-  { label: 'New deal created', enabled: false, category: 'CRM' },
-  { label: 'Proposal viewed by client', enabled: true, category: 'Proposals' },
-  { label: 'Proposal accepted / declined', enabled: true, category: 'Proposals' },
-  { label: 'Project milestone completed', enabled: true, category: 'Projects' },
-  { label: 'New client ticket submitted', enabled: true, category: 'Tickets' },
-  { label: 'Ticket unresponded for 24h', enabled: true, category: 'Tickets' },
-  { label: 'Client portal login', enabled: false, category: 'Portal' },
+type ChannelPref = 'in-app' | 'email+in-app' | 'muted'
+type ActivityNotif = { label: string; enabled: boolean; channel: ChannelPref }
+
+const ACTIVITY_NOTIF_DEFAULTS: ActivityNotif[] = [
+  { label: 'New ticket assigned to me', enabled: true, channel: 'in-app' },
+  { label: 'Ticket status changed', enabled: true, channel: 'in-app' },
+  { label: 'New deal created', enabled: false, channel: 'in-app' },
+  { label: 'Deal stage changed', enabled: true, channel: 'in-app' },
+  { label: 'Contract signed', enabled: true, channel: 'email+in-app' },
+  { label: 'Invoice overdue', enabled: true, channel: 'email+in-app' },
+  { label: 'Task assigned to me', enabled: true, channel: 'in-app' },
+  { label: 'Task due today', enabled: true, channel: 'in-app' },
+  { label: 'New form submission', enabled: true, channel: 'in-app' },
+  { label: 'Proposal accepted/declined', enabled: true, channel: 'email+in-app' },
+  { label: 'New contact created', enabled: false, channel: 'in-app' },
+]
+
+const QUIET_HOURS_DEFAULTS = {
+  enabled: false,
+  start: '22:00',
+  end: '08:00',
+}
+
+const CHANNEL_OPTIONS: { value: ChannelPref; label: string }[] = [
+  { value: 'in-app', label: 'In-app only' },
+  { value: 'email+in-app', label: 'Email + in-app' },
+  { value: 'muted', label: 'Muted' },
 ]
 
 const BRANDING_DEFAULTS = {
@@ -103,6 +123,10 @@ const BRANDING_DEFAULTS = {
   appName: 'GravHub',
   darkBackground: '#012b1e',
   logoText: 'GravHub',
+  successColor: '#10b981',
+  warningColor: '#f59e0b',
+  dangerColor: '#dc2626',
+  infoColor: '#3b82f6',
 }
 
 const EMAIL_DEFAULTS = {
@@ -154,6 +178,11 @@ const PIPELINES_DEFAULT: PipelineConf[] = [{
 const SERVICE_TYPES_DEFAULT = ['Website', 'SEO', 'Social Media', 'Email Marketing', 'Branding', 'Custom']
 const CONTACT_TAGS_DEFAULT = ['Decision Maker', 'Executive', 'Signed Client', 'Warm Lead', 'Marketing', 'Healthcare', 'Partner']
 
+const ENGAGEMENT_DEFAULTS = {
+  points: { emailOpened: 5, linkClicked: 10, proposalViewed: 15, meetingHeld: 20 },
+  thresholds: { cold: 20, hot: 60 },
+}
+
 function loadLS<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback
   try {
@@ -164,12 +193,17 @@ function loadLS<T>(key: string, fallback: T): T {
 
 export default function SettingsPage() {
   const { toast } = useToast()
-  const { gmailToken, gmailEmail, connectGmail, disconnectGmail, addUser, members: authMembers } = useAuth()
+  const { user, gmailToken, gmailEmail, connectGmail, disconnectGmail, addUser, members: authMembers } = useAuth()
   const searchParams   = useSearchParams()
   const router         = useRouter()
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>(() => {
-    if (typeof window !== 'undefined' && searchParams.get('tab') === 'integrations') return 'Integrations'
+    if (typeof window !== 'undefined') {
+      const t = searchParams.get('tab')
+      if (t === 'integrations') return 'Integrations'
+      if (t === 'notifications') return 'Notifications'
+      if (t === 'navigation') return 'Navigation'
+    }
     return 'Company'
   })
   const [saved, setSaved] = useState<string | null>(null)
@@ -254,7 +288,8 @@ export default function SettingsPage() {
   const [inviteError, setInviteError] = useState('')
 
   // Notifications
-  const [notifications, setNotifications] = useState(NOTIF_DEFAULTS)
+  const [activityNotifs, setActivityNotifs] = useState<ActivityNotif[]>(ACTIVITY_NOTIF_DEFAULTS)
+  const [quietHours, setQuietHours] = useState(QUIET_HOURS_DEFAULTS)
 
   // Branding
   const [branding, setBranding] = useState(BRANDING_DEFAULTS)
@@ -281,6 +316,13 @@ export default function SettingsPage() {
   const [newService, setNewService] = useState('')
   const [newTag, setNewTag] = useState('')
 
+  // Engagement
+  const [engagement, setEngagement] = useState(ENGAGEMENT_DEFAULTS)
+
+  // Navigation config
+  const [navConfig, setNavConfig] = useState<NavConfig>(buildDefaultNavConfig)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
   // Load from API on mount (fall back to localStorage for backwards-compat, then defaults)
   useEffect(() => {
     fetch('/api/settings')
@@ -288,7 +330,8 @@ export default function SettingsPage() {
       .then(d => {
         if (!d || !d.id) {
           setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
-          setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
+          setActivityNotifs(loadLS('gravhub_activity_notifs', ACTIVITY_NOTIF_DEFAULTS))
+          setQuietHours(loadLS('gravhub_quiet_hours', QUIET_HOURS_DEFAULTS))
           setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
           setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
           setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
@@ -297,7 +340,8 @@ export default function SettingsPage() {
           return
         }
         if (d.company          && Object.keys(d.company).length)           setCompany(d.company)
-        if (Array.isArray(d.notifications)   && d.notifications.length)    setNotifications(d.notifications)
+        if (Array.isArray(d.notification_preferences?.activity) && d.notification_preferences.activity.length) setActivityNotifs(d.notification_preferences.activity)
+        if (d.notification_preferences?.quiet_hours) setQuietHours(prev => ({ ...prev, ...d.notification_preferences.quiet_hours }))
         if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(d.invoice_defaults)
         if (Array.isArray(d.pipelines) && d.pipelines.length) setPipelines(d.pipelines)
         else if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length) setPipelines([{ id: 'sales', name: 'Sales Pipeline', stages: d.pipeline_stages.map((name: string, i: number) => ({ id: `s${i}`, name, color: STAGE_COLORS_CYCLE[i % STAGE_COLORS_CYCLE.length] })) }])
@@ -307,10 +351,13 @@ export default function SettingsPage() {
         if (d.email_defaults   && Object.keys(d.email_defaults).length)    setEmailDefaults(prev => ({ ...prev, ...d.email_defaults }))
         if (d.dashboard_config && Object.keys(d.dashboard_config).length)  setDashboardConfig(prev => ({ ...prev, ...d.dashboard_config }))
         if (Array.isArray(d.qb_sync)         && d.qb_sync.length)          setQbSync(d.qb_sync)
+        if (d.engagement && Object.keys(d.engagement).length) setEngagement(prev => ({ points: { ...prev.points, ...d.engagement.points }, thresholds: { ...prev.thresholds, ...d.engagement.thresholds } }))
+        if (d.navigation_config?.sections?.length) setNavConfig(d.navigation_config)
       })
       .catch(() => {
         setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
-        setNotifications(loadLS('gravhub_notifications', NOTIF_DEFAULTS))
+        setActivityNotifs(loadLS('gravhub_activity_notifs', ACTIVITY_NOTIF_DEFAULTS))
+        setQuietHours(loadLS('gravhub_quiet_hours', QUIET_HOURS_DEFAULTS))
         setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
         setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
         setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
@@ -341,7 +388,7 @@ export default function SettingsPage() {
   }
 
   function saveNotifications() {
-    patchSettings({ notifications }, 'Notifications')
+    patchSettings({ notification_preferences: { activity: activityNotifs, quiet_hours: quietHours } }, 'Notifications')
   }
 
   function saveInvoiceDefaults() {
@@ -355,9 +402,12 @@ export default function SettingsPage() {
 
   function saveBranding() {
     patchSettings({ branding }, 'Branding')
-    // Apply immediately so the change reflects across the app without a reload
     document.documentElement.style.setProperty('--brand-primary', branding.primaryColor)
     document.documentElement.style.setProperty('--brand-secondary', branding.secondaryColor)
+    document.documentElement.style.setProperty('--brand-success', branding.successColor)
+    document.documentElement.style.setProperty('--brand-warning', branding.warningColor)
+    document.documentElement.style.setProperty('--brand-danger', branding.dangerColor)
+    document.documentElement.style.setProperty('--brand-info', branding.infoColor)
   }
 
   function saveEmailDefaults() {
@@ -370,6 +420,117 @@ export default function SettingsPage() {
 
   function saveQbSync() {
     patchSettings({ qbSync }, 'QB Sync')
+  }
+
+  function saveEngagement() {
+    patchSettings({ engagement }, 'Engagement')
+  }
+
+  function saveNavConfig() {
+    patchSettings({ navigationConfig: navConfig }, 'Navigation')
+  }
+
+  function resetNavConfig() {
+    const fresh = buildDefaultNavConfig()
+    setNavConfig(fresh)
+    patchSettings({ navigationConfig: fresh }, 'Navigation')
+  }
+
+  function moveSectionUp(idx: number) {
+    if (idx === 0) return
+    setNavConfig(prev => {
+      const sections = [...prev.sections]
+      const aOrder = sections[idx].order
+      sections[idx] = { ...sections[idx], order: sections[idx - 1].order }
+      sections[idx - 1] = { ...sections[idx - 1], order: aOrder }
+      sections.sort((a, b) => a.order - b.order)
+      return { sections }
+    })
+  }
+
+  function moveSectionDown(idx: number) {
+    setNavConfig(prev => {
+      if (idx >= prev.sections.length - 1) return prev
+      const sections = [...prev.sections]
+      const aOrder = sections[idx].order
+      sections[idx] = { ...sections[idx], order: sections[idx + 1].order }
+      sections[idx + 1] = { ...sections[idx + 1], order: aOrder }
+      sections.sort((a, b) => a.order - b.order)
+      return { sections }
+    })
+  }
+
+  function toggleSectionVisible(id: string) {
+    setNavConfig(prev => ({
+      sections: prev.sections.map(s => s.id === id ? { ...s, visible: !s.visible } : s),
+    }))
+  }
+
+  function renameSectionLabel(id: string, label: string) {
+    setNavConfig(prev => ({
+      sections: prev.sections.map(s => s.id === id ? { ...s, label } : s),
+    }))
+  }
+
+  function toggleItemVisible(sectionId: string, href: string) {
+    setNavConfig(prev => ({
+      sections: prev.sections.map(s =>
+        s.id === sectionId
+          ? { ...s, items: s.items.map(it => it.href === href ? { ...it, visible: !it.visible } : it) }
+          : s,
+      ),
+    }))
+  }
+
+  function moveItemUp(sectionId: string, itemIdx: number) {
+    if (itemIdx === 0) return
+    setNavConfig(prev => ({
+      sections: prev.sections.map(s => {
+        if (s.id !== sectionId) return s
+        const items = [...s.items]
+        const aOrder = items[itemIdx].order
+        items[itemIdx] = { ...items[itemIdx], order: items[itemIdx - 1].order }
+        items[itemIdx - 1] = { ...items[itemIdx - 1], order: aOrder }
+        items.sort((a, b) => a.order - b.order)
+        return { ...s, items }
+      }),
+    }))
+  }
+
+  function moveItemDown(sectionId: string, itemIdx: number) {
+    setNavConfig(prev => ({
+      sections: prev.sections.map(s => {
+        if (s.id !== sectionId) return s
+        if (itemIdx >= s.items.length - 1) return s
+        const items = [...s.items]
+        const aOrder = items[itemIdx].order
+        items[itemIdx] = { ...items[itemIdx], order: items[itemIdx + 1].order }
+        items[itemIdx + 1] = { ...items[itemIdx + 1], order: aOrder }
+        items.sort((a, b) => a.order - b.order)
+        return { ...s, items }
+      }),
+    }))
+  }
+
+  function moveItemToSection(fromSectionId: string, href: string, toSectionId: string) {
+    setNavConfig(prev => {
+      const fromSection = prev.sections.find(s => s.id === fromSectionId)
+      if (!fromSection) return prev
+      const item = fromSection.items.find(it => it.href === href)
+      if (!item) return prev
+      return {
+        sections: prev.sections.map(s => {
+          if (s.id === fromSectionId) {
+            return { ...s, items: s.items.filter(it => it.href !== href) }
+          }
+          if (s.id === toSectionId) {
+            const maxOrder = s.items.length > 0 ? Math.max(...s.items.map(it => it.order)) : -1
+            return { ...s, items: [...s.items, { ...item, order: maxOrder + 1 }] }
+          }
+          return s
+        }),
+      }
+    })
   }
 
   async function submitInvite() {
@@ -447,7 +608,7 @@ export default function SettingsPage() {
         {/* Top tab bar */}
         <div className="bg-white rounded-xl border border-gray-200 mb-5 overflow-x-auto">
           <div className="flex min-w-max">
-            {tabs.map(tab => (
+            {tabs.filter(tab => tab !== 'Navigation' || user?.isAdmin).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -764,6 +925,59 @@ export default function SettingsPage() {
                   Montserrat — The unified internal operating system for Graviss Marketing
                 </div>
               </div>
+              <div className="pt-4 border-t border-gray-200">
+                <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-4">Accent Colors</h4>
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Success Color</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.successColor }} />
+                      <input
+                        className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                        value={branding.successColor}
+                        onChange={e => setBranding(p => ({ ...p, successColor: e.target.value }))}
+                      />
+                      <input type="color" value={branding.successColor} onChange={e => setBranding(p => ({ ...p, successColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Warning Color</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.warningColor }} />
+                      <input
+                        className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                        value={branding.warningColor}
+                        onChange={e => setBranding(p => ({ ...p, warningColor: e.target.value }))}
+                      />
+                      <input type="color" value={branding.warningColor} onChange={e => setBranding(p => ({ ...p, warningColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Danger Color</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.dangerColor }} />
+                      <input
+                        className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                        value={branding.dangerColor}
+                        onChange={e => setBranding(p => ({ ...p, dangerColor: e.target.value }))}
+                      />
+                      <input type="color" value={branding.dangerColor} onChange={e => setBranding(p => ({ ...p, dangerColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Info Color</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0" style={{ background: branding.infoColor }} />
+                      <input
+                        className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700"
+                        value={branding.infoColor}
+                        onChange={e => setBranding(p => ({ ...p, infoColor: e.target.value }))}
+                      />
+                      <input type="color" value={branding.infoColor} onChange={e => setBranding(p => ({ ...p, infoColor: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button onClick={saveBranding} className="w-fit flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
                 {saved === 'Branding' ? <><CheckCircle size={14} /> Saved!</> : 'Save Branding'}
               </button>
@@ -863,23 +1077,73 @@ export default function SettingsPage() {
 
         {/* ── Notifications ── */}
         {activeTab === 'Notifications' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Notification Preferences</h3>
-              {saved === 'Notifications' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
-            </div>
-            <div className="flex flex-col gap-1">
-              {notifications.map(n => (
-                <div key={n.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0 gap-3">
-                  <div className="min-w-0">
+          <div className="space-y-5">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Activity Notifications</h3>
+                {saved === 'Notifications' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+              </div>
+              <div className="hidden sm:grid grid-cols-[1fr_80px_160px] gap-x-4 px-3 pb-2 border-b border-gray-100">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Event</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Enabled</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Channel</span>
+              </div>
+              <div className="flex flex-col">
+                {activityNotifs.map(n => (
+                  <div key={n.label} className="grid grid-cols-1 sm:grid-cols-[1fr_80px_160px] gap-x-4 gap-y-2 items-center py-3 px-3 border-b border-gray-50 last:border-0">
                     <span className="text-sm text-gray-700">{n.label}</span>
-                    <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{n.category}</span>
+                    <div className="flex sm:justify-center">
+                      <Toggle enabled={n.enabled} onChange={() => setActivityNotifs(prev => prev.map(x => x.label === n.label ? { ...x, enabled: !x.enabled } : x))} />
+                    </div>
+                    <select
+                      value={n.channel}
+                      onChange={e => setActivityNotifs(prev => prev.map(x => x.label === n.label ? { ...x, channel: e.target.value as ChannelPref } : x))}
+                      disabled={!n.enabled}
+                      className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-700 bg-gray-50 focus:outline-none focus:border-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {CHANNEL_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
                   </div>
-                  <Toggle enabled={n.enabled} onChange={() => setNotifications(prev => prev.map(x => x.label === n.label ? { ...x, enabled: !x.enabled } : x))} />
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-            <button onClick={saveNotifications} className="flex items-center gap-2 mt-5 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-5" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Quiet Hours</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm text-gray-700 font-medium">Enable quiet hours</p>
+                  <p className="text-xs text-gray-400 mt-0.5">During quiet hours, notifications are queued and delivered after</p>
+                </div>
+                <Toggle enabled={quietHours.enabled} onChange={() => setQuietHours(prev => ({ ...prev, enabled: !prev.enabled }))} />
+              </div>
+              {quietHours.enabled && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pl-0 sm:pl-1">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Start Time</label>
+                    <input
+                      type="time"
+                      value={quietHours.start}
+                      onChange={e => setQuietHours(prev => ({ ...prev, start: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">End Time</label>
+                    <input
+                      type="time"
+                      value={quietHours.end}
+                      onChange={e => setQuietHours(prev => ({ ...prev, end: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button onClick={saveNotifications} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
               {saved === 'Notifications' ? <><CheckCircle size={14} /> Saved!</> : 'Save Preferences'}
             </button>
           </div>
@@ -969,6 +1233,16 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
+              <h4 className="text-sm font-bold text-gray-900 mb-3">SMS / Twilio</h4>
+              <div className="space-y-3">
+                <input placeholder="Account SID" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <input placeholder="Auth Token" type="password" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <input placeholder="Phone Number (+1...)" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <button type="button" className="text-xs font-medium text-white px-4 py-2 rounded-lg" style={{ background: '#015035' }}>Test Connection</button>
+              </div>
             </div>
           </div>
         )}
@@ -1135,6 +1409,59 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* ── Engagement ── */}
+        {activeTab === 'Engagement' && (
+          <div className="flex flex-col gap-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Point Values</h3>
+                {saved === 'Engagement' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+              </div>
+              <p className="text-xs text-gray-500 mb-4">Points awarded per activity when calculating a contact&apos;s engagement score.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <EditableField label="Email Opened" value={String(engagement.points.emailOpened)} onChange={v => setEngagement(p => ({ ...p, points: { ...p.points, emailOpened: Number(v) || 0 } }))} type="number" />
+                <EditableField label="Link Clicked" value={String(engagement.points.linkClicked)} onChange={v => setEngagement(p => ({ ...p, points: { ...p.points, linkClicked: Number(v) || 0 } }))} type="number" />
+                <EditableField label="Proposal Viewed" value={String(engagement.points.proposalViewed)} onChange={v => setEngagement(p => ({ ...p, points: { ...p.points, proposalViewed: Number(v) || 0 } }))} type="number" />
+                <EditableField label="Meeting Held" value={String(engagement.points.meetingHeld)} onChange={v => setEngagement(p => ({ ...p, points: { ...p.points, meetingHeld: Number(v) || 0 } }))} type="number" />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+              <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Score Thresholds</h3>
+              <p className="text-xs text-gray-500 mb-4">Define the boundaries between Cold, Warm, and Hot engagement levels.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Cold Below</label>
+                  <input
+                    type="number"
+                    value={engagement.thresholds.cold}
+                    onChange={e => setEngagement(p => ({ ...p, thresholds: { ...p.thresholds, cold: Number(e.target.value) || 0 } }))}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Hot Above</label>
+                  <input
+                    type="number"
+                    value={engagement.thresholds.hot}
+                    onChange={e => setEngagement(p => ({ ...p, thresholds: { ...p.thresholds, hot: Number(e.target.value) || 0 } }))}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-4 px-4 py-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-400" /> Cold: below {engagement.thresholds.cold}</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400" /> Warm: {engagement.thresholds.cold} &ndash; {engagement.thresholds.hot}</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Hot: above {engagement.thresholds.hot}</span>
+              </div>
+            </div>
+
+            <button onClick={saveEngagement} className="w-fit flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+              {saved === 'Engagement' ? <><CheckCircle size={14} /> Saved!</> : 'Save Engagement Settings'}
+            </button>
+          </div>
+        )}
+
         {/* ── Billing ── */}
         {activeTab === 'Billing' && (
           <div className="flex flex-col gap-4">
@@ -1219,6 +1546,148 @@ export default function SettingsPage() {
               <button onClick={saveQbSync} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
                 {saved === 'QB Sync' ? <><CheckCircle size={14} /> Saved!</> : 'Save QB Sync Settings'}
               </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'Navigation' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="lg:col-span-2 flex flex-col gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Sidebar Navigation</h3>
+                  <div className="flex items-center gap-2">
+                    {saved === 'Navigation' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+                    <button onClick={resetNavConfig} className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                      <RotateCcw size={12} /> Reset to Default
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {[...navConfig.sections].sort((a, b) => a.order - b.order).map((section, sIdx) => {
+                    const isExpanded = expandedSections.has(section.id)
+                    const defaultSection = defaultNavigation.find(s => s.section.toLowerCase().replace(/\s+/g, '-') === section.id)
+                    return (
+                      <div key={section.id} className={`border rounded-xl overflow-hidden transition-colors ${section.visible ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50'}`}>
+                        <div className="flex items-center gap-2 px-4 py-3">
+                          <div className="flex flex-col gap-0.5 flex-shrink-0">
+                            <button
+                              onClick={() => moveSectionUp(sIdx)}
+                              disabled={sIdx === 0}
+                              className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                            >
+                              <ChevronUp size={12} />
+                            </button>
+                            <button
+                              onClick={() => moveSectionDown(sIdx)}
+                              disabled={sIdx === navConfig.sections.length - 1}
+                              className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                            >
+                              <ChevronDown size={12} />
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => setExpandedSections(prev => {
+                              const next = new Set(prev)
+                              if (next.has(section.id)) next.delete(section.id)
+                              else next.add(section.id)
+                              return next
+                            })}
+                            className="flex-1 flex items-center gap-2 text-left"
+                          >
+                            <ChevronRight size={14} className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                            <input
+                              type="text"
+                              value={section.label}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => renameSectionLabel(section.id, e.target.value)}
+                              className="text-sm font-semibold text-gray-800 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-green-700 focus:outline-none px-1 py-0.5 -ml-1 w-40"
+                            />
+                            <span className="text-[10px] text-gray-400">{section.items.length} items</span>
+                          </button>
+                          <Toggle enabled={section.visible} onChange={() => toggleSectionVisible(section.id)} />
+                        </div>
+                        {isExpanded && (
+                          <div className="border-t border-gray-100 px-4 py-2">
+                            {[...section.items].sort((a, b) => a.order - b.order).map((item, iIdx) => {
+                              const navItem = defaultSection?.items.find(ni => ni.href === item.href)
+                              const label = navItem?.label ?? item.href
+                              return (
+                                <div key={item.href} className="flex items-center gap-2 py-2 border-b border-gray-50 last:border-0">
+                                  <div className="flex flex-col gap-0.5 flex-shrink-0">
+                                    <button
+                                      onClick={() => moveItemUp(section.id, iIdx)}
+                                      disabled={iIdx === 0}
+                                      className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                                    >
+                                      <ChevronUp size={11} />
+                                    </button>
+                                    <button
+                                      onClick={() => moveItemDown(section.id, iIdx)}
+                                      disabled={iIdx === section.items.length - 1}
+                                      className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                                    >
+                                      <ChevronDown size={11} />
+                                    </button>
+                                  </div>
+                                  <span className={`text-sm flex-1 ${item.visible ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
+                                  <select
+                                    value={section.id}
+                                    onChange={e => moveItemToSection(section.id, item.href, e.target.value)}
+                                    className="text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-1.5 py-1 focus:outline-none focus:border-green-700"
+                                  >
+                                    {navConfig.sections.map(s => (
+                                      <option key={s.id} value={s.id}>{s.label}</option>
+                                    ))}
+                                  </select>
+                                  <Toggle enabled={item.visible} onChange={() => toggleItemVisible(section.id, item.href)} />
+                                </div>
+                              )
+                            })}
+                            {section.items.length === 0 && (
+                              <p className="text-xs text-gray-400 py-3 text-center">No items in this section</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <button onClick={saveNavConfig} className="mt-5 flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+                  {saved === 'Navigation' ? <><CheckCircle size={14} /> Saved!</> : 'Save Navigation'}
+                </button>
+              </div>
+            </div>
+            <div className="lg:col-span-1">
+              <div className="bg-white rounded-xl border border-gray-200 p-5 sticky top-4">
+                <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-4">Preview</h4>
+                <div className="rounded-xl overflow-hidden" style={{ background: '#012b1e' }}>
+                  <div className="px-3 py-3">
+                    {[...navConfig.sections]
+                      .filter(s => s.visible)
+                      .sort((a, b) => a.order - b.order)
+                      .map(section => {
+                        const defaultSection = defaultNavigation.find(s => s.section.toLowerCase().replace(/\s+/g, '-') === section.id)
+                        const visibleItems = [...section.items].filter(it => it.visible).sort((a, b) => a.order - b.order)
+                        if (visibleItems.length === 0) return null
+                        return (
+                          <div key={section.id} className="mb-2.5">
+                            <p className="text-white/30 text-[9px] font-semibold tracking-widest uppercase px-2 mb-1">{section.label}</p>
+                            {visibleItems.map(item => {
+                              const navItem = defaultSection?.items.find(ni => ni.href === item.href)
+                              return (
+                                <div key={item.href} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-white/50">
+                                  <div className="w-3.5 h-3.5 rounded bg-white/10 flex-shrink-0" />
+                                  <span className="text-[11px]">{navItem?.label ?? item.href}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -1450,6 +1919,101 @@ function MarketingIntegrationsSection() {
             Connect
           </a>
         )}
+      </div>
+    </div>
+  )
+}
+
+function SmsIntegrationSection() {
+  const [sid, setSid] = useState('')
+  const [token, setToken] = useState('')
+  const [phone, setPhone] = useState('')
+  const [showToken, setShowToken] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
+
+  function handleTest() {
+    if (!sid.trim() || !token.trim() || !phone.trim()) return
+    setStatus('testing')
+    setTimeout(() => {
+      setStatus('connected')
+    }, 1500)
+  }
+
+  return (
+    <div className="mt-6 pt-6 border-t border-gray-100">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
+          <Smartphone size={18} className="text-purple-600" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-800">SMS / Twilio</p>
+          <p className="text-xs text-gray-500">Send SMS messages to contacts via Twilio</p>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          {status === 'connected' && <CheckCircle size={13} className="text-emerald-600" />}
+          {status === 'error' && <AlertCircle size={13} className="text-red-500" />}
+          <span className={`text-[11px] font-semibold ${
+            status === 'connected' ? 'text-emerald-600' :
+            status === 'error' ? 'text-red-500' :
+            'text-gray-400'
+          }`}>
+            {status === 'connected' ? 'Connected' :
+             status === 'error' ? 'Connection Failed' :
+             status === 'testing' ? 'Testing...' :
+             'Not Connected'}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Account SID</label>
+          <input
+            type="text"
+            value={sid}
+            onChange={e => setSid(e.target.value)}
+            placeholder="AC..."
+            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Auth Token</label>
+          <div className="relative">
+            <input
+              type={showToken ? 'text' : 'password'}
+              value={token}
+              onChange={e => setToken(e.target.value)}
+              placeholder="Your Twilio auth token"
+              className="w-full px-3 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setShowToken(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Twilio Phone Number</label>
+          <input
+            type="text"
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="+1 (555) 000-0000"
+            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+          />
+        </div>
+        <button
+          onClick={handleTest}
+          disabled={!sid.trim() || !token.trim() || !phone.trim() || status === 'testing'}
+          className="self-start flex items-center gap-2 px-4 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+          style={{ background: '#015035' }}
+        >
+          {status === 'testing' && <RefreshCw size={13} className="animate-spin" />}
+          Test Connection
+        </button>
       </div>
     </div>
   )

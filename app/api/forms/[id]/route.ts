@@ -27,6 +27,7 @@ function mapForm(row: any) {
     bgColor:         row.bg_color ?? '#f9fafb',
     bgTransparent:   row.bg_transparent ?? false,
     fontFamily:      row.font_family ?? 'system-ui',
+    popupConfig:     row.popup_config ?? undefined,
     createdAt:       row.created_at,
     updatedAt:       row.updated_at,
   }
@@ -66,6 +67,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.bgColor !== undefined)        update.bg_color = body.bgColor
   if (body.bgTransparent !== undefined)  update.bg_transparent = body.bgTransparent
   if (body.fontFamily !== undefined)     update.font_family = body.fontFamily
+  if (body.popupConfig !== undefined)   update.popup_config = body.popupConfig
 
   const { data, error } = await db.from('forms').update(update).eq('id', id).select().single()
   if (error || !data) {

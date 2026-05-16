@@ -28,6 +28,7 @@ function mapForm(row: any) {
     bgColor:         row.bg_color ?? '#f9fafb',
     bgTransparent:   row.bg_transparent ?? false,
     fontFamily:      row.font_family ?? 'system-ui',
+    popupConfig:     row.popup_config ?? undefined,
     createdAt:       row.created_at,
     updatedAt:       row.updated_at,
   }
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
       bg_color:        body.bgColor ?? '#f9fafb',
       bg_transparent:  body.bgTransparent ?? false,
       font_family:     body.fontFamily ?? 'system-ui',
+      popup_config:    body.popupConfig ?? null,
     })
     .select()
     .single()

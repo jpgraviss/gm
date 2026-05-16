@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchDeals, fetchContracts } from '@/lib/supabase'
@@ -11,20 +11,13 @@ import type { Deal, Contract, Proposal, ProposalStatus } from '@/lib/types'
 import {
   Eye, Send, CheckCircle, XCircle, FileText, DollarSign, Calendar, User, X,
   Clock, ExternalLink, Mail, Phone, TrendingUp, AlertTriangle, Edit2, ShieldCheck,
+  Search, Copy, BarChart3, Percent, Inbox,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
 const statusOrder: ProposalStatus[] = ['Draft', 'Pending Approval', 'Approved', 'Sent', 'Viewed', 'Accepted', 'Declined']
 
-const statusIcons: Record<ProposalStatus, React.ReactNode> = {
-  Draft: <FileText size={13} />,
-  'Pending Approval': <Clock size={13} />,
-  Approved: <ShieldCheck size={13} />,
-  Sent: <Send size={13} />,
-  Viewed: <Eye size={13} />,
-  Accepted: <CheckCircle size={13} />,
-  Declined: <XCircle size={13} />,
-}
+const filterTabs: Array<ProposalStatus | 'All'> = ['All', 'Draft', 'Sent', 'Viewed', 'Accepted', 'Declined']
 
 function ProposalPanel({
   proposal,
@@ -71,7 +64,6 @@ function ProposalPanel({
         className="pointer-events-auto flex flex-col shadow-2xl border-l border-gray-200 bg-white"
         style={{ width: 'min(440px, 100vw)', height: '100vh' }}
       >
-        {/* Dark green header */}
         <div className="flex-shrink-0 p-5 border-b border-white/10" style={{ background: '#012b1e' }}>
           <button onClick={onClose} className="sm:hidden flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium mb-3">
             <X size={14} /> Back
@@ -112,7 +104,6 @@ function ProposalPanel({
             <span className="text-white/40 text-xs">·</span>
             <span className="text-white/60 text-xs font-semibold">{formatCurrency(proposal.value)}</span>
           </div>
-          {/* Status pipeline bar */}
           <div className="flex items-center gap-1">
             {statusOrder.map((s, i) => {
               const isCurrent = i === statusIdx
@@ -134,7 +125,6 @@ function ProposalPanel({
           </div>
         </div>
 
-        {/* Quick stats */}
         <div className="flex-shrink-0 grid grid-cols-3 border-b border-gray-100 divide-x divide-gray-100">
           {[
             { label: 'Total Value', value: formatCurrency(proposal.value) },
@@ -148,7 +138,6 @@ function ProposalPanel({
           ))}
         </div>
 
-        {/* Tabs */}
         <div className="flex-shrink-0 flex border-b border-gray-100 px-4 pt-3 gap-5 overflow-x-auto">
           {(['overview', 'scope', 'activity'] as const).map(tab => (
             <button
@@ -163,11 +152,9 @@ function ProposalPanel({
           ))}
         </div>
 
-        {/* Tab content */}
         <div className="flex-1 overflow-y-auto p-4">
           {activeTab === 'overview' && (
             <div className="flex flex-col gap-4">
-              {/* Approval workflow alert */}
               {proposal.status === 'Pending Approval' && (
                 <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                   <Clock size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
@@ -187,7 +174,6 @@ function ProposalPanel({
                 </div>
               )}
 
-              {/* Meta grid */}
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: 'Sales Rep', value: proposal.assignedRep, icon: <User size={11} /> },
@@ -205,7 +191,6 @@ function ProposalPanel({
                 ))}
               </div>
 
-              {/* Viewed alert */}
               {proposal.status === 'Viewed' && (
                 <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                   <AlertTriangle size={14} className="text-amber-500 flex-shrink-0" />
@@ -216,7 +201,6 @@ function ProposalPanel({
                 </div>
               )}
 
-              {/* Linked deal */}
               {deal && (
                 <div>
                   <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Linked Deal</p>
@@ -230,7 +214,6 @@ function ProposalPanel({
                 </div>
               )}
 
-              {/* Primary contact */}
               {deal?.contact && (
                 <div>
                   <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Primary Contact</p>
@@ -249,7 +232,6 @@ function ProposalPanel({
                 </div>
               )}
 
-              {/* Linked contract */}
               {linkedContract && (
                 <div>
                   <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Linked Contract</p>
@@ -331,7 +313,6 @@ function ProposalPanel({
                 </div>
               )}
 
-              {/* Grand total */}
               <div className="p-4 rounded-xl flex items-center justify-between" style={{ background: '#012b1e' }}>
                 <span className="text-white/70 text-xs font-semibold uppercase tracking-wide">Total Contract Value</span>
                 <span className="text-white font-bold text-lg" style={{ fontFamily: 'var(--font-heading)' }}>
@@ -376,7 +357,6 @@ function ProposalPanel({
           )}
         </div>
 
-        {/* Footer actions */}
         <div className="flex-shrink-0 p-4 border-t border-gray-100 flex gap-2">
           {proposal.status === 'Draft' && (
             <>
@@ -471,11 +451,36 @@ function ProposalPanel({
   )
 }
 
+function WinProbabilityIndicator({ status }: { status: ProposalStatus }) {
+  const config: Record<ProposalStatus, { pct: number; color: string; label: string }> = {
+    Draft: { pct: 10, color: '#9ca3af', label: '10%' },
+    'Pending Approval': { pct: 20, color: '#f59e0b', label: '20%' },
+    Approved: { pct: 35, color: '#3b82f6', label: '35%' },
+    Sent: { pct: 50, color: '#3b82f6', label: '50%' },
+    Viewed: { pct: 70, color: '#8b5cf6', label: '70%' },
+    Accepted: { pct: 100, color: '#22c55e', label: 'Won' },
+    Declined: { pct: 0, color: '#ef4444', label: 'Lost' },
+  }
+  const c = config[status]
+  return (
+    <div className="flex items-center gap-2 min-w-[80px]">
+      <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-300"
+          style={{ width: `${c.pct}%`, background: c.color }}
+        />
+      </div>
+      <span className="text-[11px] font-semibold tabular-nums" style={{ color: c.color }}>{c.label}</span>
+    </div>
+  )
+}
+
 export default function ProposalsPage() {
   const { toast } = useToast()
   const [localProposals, setLocalProposals] = useState<Proposal[]>([])
   const [selected, setSelected] = useState<Proposal | null>(null)
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'All'>('All')
+  const [searchQuery, setSearchQuery] = useState('')
   const [creatingProposal, setCreatingProposal] = useState(false)
   const [editingProposal, setEditingProposal] = useState<Proposal | null>(null)
   const [deals, setDeals] = useState<Deal[]>([])
@@ -495,7 +500,6 @@ export default function ProposalsPage() {
   async function updateProposalStatus(id: string, status: ProposalStatus) {
     const today = new Date().toISOString().split('T')[0]
 
-    // If sending to client, send the email first
     if (status === 'Sent') {
       try {
         const emailRes = await fetch('/api/email/send-proposal', {
@@ -541,7 +545,6 @@ export default function ProposalsPage() {
       if (!patchRes.ok) {
         const err = await patchRes.json().catch(() => ({}))
         toast(err.error || 'Failed to update proposal status', 'error')
-        // Revert optimistic update
         setLocalProposals(prev => prev.map(p => {
           if (p.id !== id) return p
           const original = localProposals.find(op => op.id === id)
@@ -669,28 +672,61 @@ export default function ProposalsPage() {
     }
   }
 
-  const filtered = statusFilter === 'All' ? localProposals : localProposals.filter(p => p.status === statusFilter)
+  function handleDuplicate(proposal: Proposal) {
+    const duplicate: Omit<Proposal, 'id' | 'dealId' | 'createdDate'> = {
+      company: proposal.company,
+      status: 'Draft',
+      value: proposal.value,
+      serviceType: proposal.serviceType,
+      assignedRep: proposal.assignedRep,
+      items: proposal.items.map(item => ({ ...item, id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` })),
+    }
+    handleNewProposal(duplicate)
+    toast('Proposal duplicated as draft', 'success')
+  }
 
-  const counts = statusOrder.reduce((acc, s) => {
-    acc[s] = localProposals.filter(p => p.status === s).length
-    return acc
-  }, {} as Record<ProposalStatus, number>)
+  const filtered = useMemo(() => {
+    let list = statusFilter === 'All' ? localProposals : localProposals.filter(p => p.status === statusFilter)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      list = list.filter(p =>
+        p.company.toLowerCase().includes(q) ||
+        p.serviceType.toLowerCase().includes(q) ||
+        p.assignedRep.toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [localProposals, statusFilter, searchQuery])
 
+  const tabCounts = useMemo(() => {
+    const base = searchQuery.trim()
+      ? localProposals.filter(p => {
+          const q = searchQuery.toLowerCase()
+          return p.company.toLowerCase().includes(q) || p.serviceType.toLowerCase().includes(q) || p.assignedRep.toLowerCase().includes(q)
+        })
+      : localProposals
+    const counts: Record<string, number> = { All: base.length }
+    for (const s of filterTabs) {
+      if (s !== 'All') counts[s] = base.filter(p => p.status === s).length
+    }
+    return counts
+  }, [localProposals, searchQuery])
+
+  const totalProposals = localProposals.length
+  const acceptedCount = localProposals.filter(p => p.status === 'Accepted').length
+  const declinedCount = localProposals.filter(p => p.status === 'Declined').length
+  const decidedCount = acceptedCount + declinedCount
+  const acceptanceRate = decidedCount > 0 ? Math.round((acceptedCount / decidedCount) * 100) : 0
+  const avgValue = totalProposals > 0 ? localProposals.reduce((s, p) => s + p.value, 0) / totalProposals : 0
   const pipelineValue = localProposals
     .filter(p => !['Accepted', 'Declined'].includes(p.status))
     .reduce((s, p) => s + p.value, 0)
 
-  const acceptedValue = localProposals
-    .filter(p => p.status === 'Accepted')
-    .reduce((s, p) => s + p.value, 0)
-
-  const pendingApprovalCount = counts['Pending Approval'] || 0
-
-  const metrics = [
-    { label: 'Total Proposals', value: localProposals.length.toString(), icon: <FileText size={16} />, color: '#6b7280', sub: 'All time' },
-    { label: 'Open Pipeline', value: formatCurrency(pipelineValue), icon: <TrendingUp size={16} />, color: '#3b82f6', sub: 'Draft + Active' },
-    { label: 'Accepted Value', value: formatCurrency(acceptedValue), icon: <CheckCircle size={16} />, color: '#22c55e', sub: 'Ready for contract' },
-    { label: 'Needs Approval', value: pendingApprovalCount.toString(), icon: <ShieldCheck size={16} />, color: '#f59e0b', sub: 'Awaiting review' },
+  const kpis = [
+    { label: 'Total Proposals', value: totalProposals.toString(), icon: <FileText size={18} />, color: '#015035', sub: `${acceptedCount} won, ${declinedCount} lost` },
+    { label: 'Acceptance Rate', value: `${acceptanceRate}%`, icon: <Percent size={18} />, color: '#22c55e', sub: `${decidedCount} decided` },
+    { label: 'Avg Value', value: formatCurrency(avgValue), icon: <BarChart3 size={18} />, color: '#3b82f6', sub: 'Per proposal' },
+    { label: 'Pipeline Value', value: formatCurrency(pipelineValue), icon: <TrendingUp size={18} />, color: '#8b5cf6', sub: 'Open proposals' },
   ]
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
@@ -700,128 +736,191 @@ export default function ProposalsPage() {
       <Header title="Proposals" subtitle="Manage quotes and scope of work" action={{ label: 'New Proposal', onClick: () => setCreatingProposal(true) }} />
       <div className="page-content">
 
-        {/* Metric cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {metrics.map(m => (
-            <div key={m.label} className="kpi-card" style={{ '--kpi-accent': m.color } as React.CSSProperties}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: `${m.color}15` }}>
-                <span style={{ color: m.color }}>{m.icon}</span>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {kpis.map(k => (
+            <div key={k.label} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${k.color}12` }}>
+                  <span style={{ color: k.color }}>{k.icon}</span>
+                </div>
               </div>
-              <p className="text-2xl font-bold text-gray-900 mb-0.5 tracking-tight">{m.value}</p>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">{m.label}</p>
-              <p className="text-[11px] text-gray-400 mt-1">{m.sub}</p>
+              <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>{k.value}</p>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mt-1">{k.label}</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">{k.sub}</p>
             </div>
           ))}
         </div>
 
-        {/* Table */}
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 gap-3 bg-white">
-            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
-              <button onClick={() => setStatusFilter('All')} className={`filter-pill flex-shrink-0 ${statusFilter === 'All' ? 'active' : ''}`}>All <span className="ml-1 opacity-60">{localProposals.length}</span></button>
-              {statusOrder.map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)} className={`filter-pill flex-shrink-0 ${statusFilter === s ? 'active' : ''}`}>{s} <span className="ml-1 opacity-60">{counts[s]}</span></button>
-              ))}
+          <div className="px-4 pt-4 pb-0">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
+              <div className="relative flex-1 max-w-md">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by company, service, or rep..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-700 placeholder-gray-400 outline-none focus:border-[#015035] focus:ring-1 focus:ring-[#015035]/20 transition-colors"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 transition-colors"
+                  >
+                    <X size={13} className="text-gray-400" />
+                  </button>
+                )}
+              </div>
+              <span className="text-xs text-gray-400 font-semibold tabular-nums flex-shrink-0">
+                {filtered.length} proposal{filtered.length !== 1 ? 's' : ''} · {formatCurrency(filtered.reduce((s, p) => s + p.value, 0))}
+              </span>
             </div>
-            <span className="text-xs text-gray-400 font-semibold flex-shrink-0">
-              {formatCurrency(filtered.reduce((s, p) => s + p.value, 0))}
-            </span>
+            <div className="flex items-center gap-1 overflow-x-auto pb-0 -mb-px">
+              {filterTabs.map(tab => {
+                const isActive = statusFilter === tab
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setStatusFilter(tab)}
+                    className={`px-3 py-2 text-xs font-semibold border-b-2 transition-colors flex-shrink-0 whitespace-nowrap ${
+                      isActive
+                        ? 'border-[#015035] text-[#015035]'
+                        : 'border-transparent text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    {tab}
+                    <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${
+                      isActive ? 'bg-[#015035]/10 text-[#015035]' : 'bg-gray-100 text-gray-400'
+                    }`}>
+                      {tabCounts[tab] ?? 0}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
-          <div className="overflow-x-auto table-scroll">
-            <table className="data-table min-w-[520px]">
-              <thead>
-                <tr>
-                  <th>Company</th>
-                  <th>Status</th>
-                  <th className="hidden sm:table-cell">Service</th>
-                  <th>Value</th>
-                  <th className="hidden md:table-cell">Rep</th>
-                  <th className="hidden lg:table-cell">Created</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(p => (
-                  <tr key={p.id} onClick={() => setSelected(p)} className="cursor-pointer">
-                    <td>
-                      <p className="font-semibold text-gray-900">{p.company}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{p.id.toUpperCase()}</p>
-                    </td>
-                    <td><StatusBadge label={p.status} colorClass={proposalStatusColors[p.status]} /></td>
-                    <td className="hidden sm:table-cell"><StatusBadge label={p.serviceType} colorClass={serviceTypeColors[p.serviceType]} /></td>
-                    <td><span className="font-bold text-gray-900">{formatCurrency(p.value)}</span></td>
-                    <td className="hidden md:table-cell"><span className="text-gray-600">{p.assignedRep}</span></td>
-                    <td className="hidden lg:table-cell">
-                      <span className="text-gray-400">{new Date(p.createdDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center gap-1.5">
-                        {p.status === 'Draft' && (
-                          <>
-                            <button
-                              onClick={() => updateProposalStatus(p.id, 'Pending Approval')}
-                              className="text-xs font-medium text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
-                            >
-                              Submit
-                            </button>
+
+          {filtered.length > 0 ? (
+            <div className="overflow-x-auto table-scroll">
+              <table className="data-table min-w-[700px]">
+                <thead>
+                  <tr>
+                    <th>Company</th>
+                    <th>Status</th>
+                    <th className="hidden sm:table-cell">Value</th>
+                    <th className="hidden md:table-cell">Rep</th>
+                    <th className="hidden lg:table-cell">Date</th>
+                    <th className="hidden xl:table-cell">Win Probability</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(p => (
+                    <tr key={p.id} onClick={() => setSelected(p)} className="cursor-pointer group">
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold"
+                            style={{ background: '#01503512', color: '#015035' }}
+                          >
+                            {p.company.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">{p.company}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <StatusBadge label={p.serviceType} colorClass={serviceTypeColors[p.serviceType]} />
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <StatusBadge label={p.status} colorClass={proposalStatusColors[p.status]} />
+                      </td>
+                      <td className="hidden sm:table-cell">
+                        <span className="font-bold text-gray-900 tabular-nums">{formatCurrency(p.value)}</span>
+                      </td>
+                      <td className="hidden md:table-cell">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                            {p.assignedRep.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                          </div>
+                          <span className="text-gray-600 text-xs">{p.assignedRep}</span>
+                        </div>
+                      </td>
+                      <td className="hidden lg:table-cell">
+                        <div>
+                          <p className="text-xs text-gray-600">{new Date(p.sentDate || p.createdDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                          <p className="text-[10px] text-gray-400">{p.sentDate ? 'Sent' : 'Created'}</p>
+                        </div>
+                      </td>
+                      <td className="hidden xl:table-cell">
+                        <WinProbabilityIndicator status={p.status} />
+                      </td>
+                      <td onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => setSelected(p)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-[#015035] hover:bg-[#015035]/5 transition-colors"
+                            title="View"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          {['Draft', 'Pending Approval', 'Approved'].includes(p.status) && (
                             <button
                               onClick={() => setEditingProposal(p)}
-                              className="text-xs font-medium text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md hover:bg-gray-50 transition-colors"
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                              title="Edit"
                             >
-                              Edit
+                              <Edit2 size={14} />
                             </button>
+                          )}
+                          {p.status === 'Approved' && (
                             <button
-                              onClick={() => handleDeleteProposal(p.id)}
-                              className="text-xs font-medium text-red-500 hover:text-red-700 px-2 py-1 rounded-md hover:bg-red-50 transition-colors"
+                              onClick={() => updateProposalStatus(p.id, 'Sent')}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-[#015035] hover:bg-[#015035]/5 transition-colors"
+                              title="Send"
                             >
-                              Delete
+                              <Send size={14} />
                             </button>
-                          </>
-                        )}
-                        {p.status === 'Pending Approval' && (
+                          )}
                           <button
-                            onClick={() => updateProposalStatus(p.id, 'Approved')}
-                            className="text-xs font-medium text-amber-600 hover:text-amber-700 px-2 py-1 rounded-md hover:bg-amber-50 transition-colors"
+                            onClick={() => handleDuplicate(p)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                            title="Duplicate"
                           >
-                            Approve
+                            <Copy size={14} />
                           </button>
-                        )}
-                        {p.status === 'Approved' && (
-                          <button
-                            onClick={() => updateProposalStatus(p.id, 'Sent')}
-                            className="text-xs font-medium text-teal-600 hover:text-teal-700 px-2 py-1 rounded-md hover:bg-teal-50 transition-colors"
-                          >
-                            Send
-                          </button>
-                        )}
-                        {p.status === 'Sent' && (
-                          <span className="text-xs text-gray-400">Awaiting view</span>
-                        )}
-                        {p.status === 'Viewed' && (
-                          <button
-                            onClick={() => updateProposalStatus(p.id, 'Accepted')}
-                            className="text-xs font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-md hover:bg-emerald-50 transition-colors"
-                          >
-                            Accept
-                          </button>
-                        )}
-                        {p.status === 'Accepted' && (
-                          <Link href="/contracts" className="text-xs font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-md hover:bg-emerald-50 transition-colors">
-                            Contract →
-                          </Link>
-                        )}
-                        {p.status === 'Declined' && (
-                          <span className="text-xs text-gray-400">Closed</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {filtered.length === 0 && (
-            <div className="py-12 text-center text-gray-400 text-sm">No proposals in this status</div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="py-20 flex flex-col items-center justify-center text-center px-4">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#01503510' }}>
+                <Inbox size={28} style={{ color: '#015035' }} className="opacity-60" />
+              </div>
+              <p className="text-sm font-semibold text-gray-700 mb-1">No proposals found</p>
+              <p className="text-xs text-gray-400 max-w-xs">
+                {searchQuery
+                  ? `No results for "${searchQuery}". Try adjusting your search or filters.`
+                  : statusFilter !== 'All'
+                    ? `No proposals with status "${statusFilter}". Try switching to a different tab.`
+                    : 'Create your first proposal to get started.'}
+              </p>
+              {!searchQuery && statusFilter === 'All' && (
+                <button
+                  onClick={() => setCreatingProposal(true)}
+                  className="mt-4 px-4 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+                  style={{ background: '#015035' }}
+                >
+                  Create Proposal
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

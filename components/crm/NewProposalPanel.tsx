@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, DollarSign, User, FileText, ChevronLeft } from 'lucide-react'
-import { fetchCrmCompanies } from '@/lib/supabase'
 import { useTeamMembers } from '@/lib/useTeamMembers'
-import type { ServiceType, CRMCompany } from '@/lib/types'
+import CompanySelect from '@/components/ui/CompanySelect'
+import type { ServiceType } from '@/lib/types'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 export interface NewProposalFormData {
@@ -54,9 +54,6 @@ export default function NewProposalPanel({ onSave, onClose }: Props) {
     notes: '',
   })
 
-  const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
-  useEffect(() => { fetchCrmCompanies().then(setCrmCompanies) }, [])
-  const companyNames = crmCompanies.map(c => c.name)
 
   function set(field: keyof NewProposalFormData, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -88,15 +85,11 @@ export default function NewProposalPanel({ onSave, onClose }: Props) {
 
           <div>
             <FieldLabel>Company</FieldLabel>
-            <Input
-              list="proposal-company-list"
-              placeholder="Select or type company name..."
+            <CompanySelect
               value={form.company}
-              onChange={e => set('company', e.target.value)}
+              onChange={(name) => set('company', name)}
+              placeholder="Select a company..."
             />
-            <datalist id="proposal-company-list">
-              {companyNames.map(n => <option key={n} value={n} />)}
-            </datalist>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

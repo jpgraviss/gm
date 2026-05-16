@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, DollarSign, User, Calendar, TrendingUp, ChevronLeft } from 'lucide-react'
-import { fetchCrmCompanies } from '@/lib/supabase'
 import { useTeamMembers } from '@/lib/useTeamMembers'
-import type { ServiceType, DealStage, CRMCompany } from '@/lib/types'
+import CompanySelect from '@/components/ui/CompanySelect'
+import type { ServiceType, DealStage } from '@/lib/types'
 
 export interface NewDealData {
   company: string
@@ -78,9 +78,6 @@ export default function NewDealPanel({ onSave, onClose }: Props) {
     notes: '',
   })
 
-  const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
-  useEffect(() => { fetchCrmCompanies().then(setCrmCompanies) }, [])
-  const companyNames = crmCompanies.map(c => c.name)
 
   function set(field: keyof NewDealData, value: string) {
     setForm(prev => ({
@@ -117,15 +114,11 @@ export default function NewDealPanel({ onSave, onClose }: Props) {
           {/* Company */}
           <div>
             <FieldLabel>Company</FieldLabel>
-            <Input
-              list="company-list"
-              placeholder="Select or type company name..."
+            <CompanySelect
               value={form.company}
-              onChange={e => set('company', e.target.value)}
+              onChange={(name) => set('company', name)}
+              placeholder="Select a company..."
             />
-            <datalist id="company-list">
-              {companyNames.map(n => <option key={n} value={n} />)}
-            </datalist>
           </div>
 
           {/* Contact info */}

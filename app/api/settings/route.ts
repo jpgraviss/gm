@@ -77,6 +77,7 @@ export async function PATCH(req: NextRequest) {
   if (body.dashboardConfig  !== undefined) updates.dashboard_config = body.dashboardConfig
   if (body.engagement       !== undefined) updates.engagement       = body.engagement
   if (body.navigationConfig !== undefined) updates.navigation_config = body.navigationConfig
+  if (body.notification_preferences !== undefined) updates.notification_preferences = body.notification_preferences
 
   const { data, error } = await db
     .from('app_settings')

@@ -384,14 +384,14 @@ function BroadcastEditor({
   const isSent = broadcast.status === 'sent' || broadcast.status === 'sending'
 
   useEffect(() => {
-    if (broadcast.status === 'sent') {
-      setClicksLoading(true)
-      fetch(`/api/broadcasts/${broadcast.id}/clicks`)
-        .then(r => r.ok ? r.json() : [])
-        .then(data => { if (Array.isArray(data)) setClickData(data) })
-        .catch(() => {})
-        .finally(() => setClicksLoading(false))
-    }
+    if (broadcast.status !== 'sent') return
+    let cancelled = false
+    fetch(`/api/broadcasts/${broadcast.id}/clicks`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (!cancelled && Array.isArray(data)) setClickData(data) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setClicksLoading(false) })
+    return () => { cancelled = true }
   }, [broadcast.id, broadcast.status])
 
   async function save() {

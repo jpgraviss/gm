@@ -39,7 +39,10 @@ export default function PortalProjectsPage() {
   const [selected, setSelected] = useState<Project | null>(null)
 
   useEffect(() => {
-    if (!company) { setLoading(false); return }
+    if (!company) {
+      requestAnimationFrame(() => setLoading(false))
+      return
+    }
     fetch(`/api/projects?company=${encodeURIComponent(company)}`)
       .then(r => r.ok ? r.json() : [])
       .then((d: Project[]) => setProjects(Array.isArray(d) ? d : []))

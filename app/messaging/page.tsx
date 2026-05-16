@@ -77,20 +77,32 @@ function groupMessagesByDate(messages: Message[]): { date: string; messages: Mes
   return groups
 }
 
-const MOCK_CONTACTS: Contact[] = [
-  { id: 'c1', name: 'Sarah Mitchell', phone: '+1 (512) 555-0142', company: 'Summit Capital' },
-  { id: 'c2', name: 'James Rodriguez', phone: '+1 (830) 555-0198', company: 'BlueStar Logistics' },
-  { id: 'c3', name: 'Emily Chen', phone: '+1 (210) 555-0267', company: 'Coastal Realty' },
-  { id: 'c4', name: 'Marcus Thompson', phone: '+1 (713) 555-0331', company: 'ProVenture LLC' },
-  { id: 'c5', name: 'Lisa Park', phone: '+1 (469) 555-0412', company: 'Harvest Foods' },
-  { id: 'c6', name: 'David Nguyen', phone: '+1 (956) 555-0589', company: 'Metro Health Group' },
-  { id: 'c7', name: 'Rachel Green', phone: '+1 (512) 555-0733', company: 'Apex Marketing' },
-  { id: 'c8', name: 'Tom Bradley', phone: '+1 (713) 555-0821', company: 'TechCore Solutions' },
-]
+function useContacts() {
+  const [contacts, setContacts] = useState<Contact[]>([])
+  useEffect(() => {
+    fetch('/api/crm/contacts')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: Array<{ id: string; fullName?: string; firstName?: string; lastName?: string; phones?: string[]; companyName?: string }>) => {
+        setContacts(
+          data
+            .filter((c) => c.phones && c.phones.length > 0)
+            .map((c) => ({
+              id: c.id,
+              name: c.fullName || `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim(),
+              phone: c.phones![0],
+              company: c.companyName ?? '',
+            }))
+        )
+      })
+      .catch(() => {})
+  }, [])
+  return contacts
+}
 
 export default function MessagingPage() {
   const { toast } = useToast()
   const searchParams = useSearchParams()
+  const crmContacts = useContacts()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -146,9 +158,9 @@ export default function MessagingPage() {
   }, [conversations, search])
 
   const filteredContacts = useMemo(() => {
-    if (!contactSearch.trim()) return MOCK_CONTACTS
+    if (!contactSearch.trim()) return crmContacts
     const q = contactSearch.toLowerCase()
-    return MOCK_CONTACTS.filter(c =>
+    return crmContacts.filter(c =>
       c.name.toLowerCase().includes(q) ||
       c.company.toLowerCase().includes(q) ||
       c.phone.includes(q)

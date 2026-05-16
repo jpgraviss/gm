@@ -124,7 +124,7 @@ export default function BookingManagementPage() {
       <Header title="Booking Types" />
 
       <div className="px-4 py-4 md:px-8 md:py-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <Link href="/calendar" className="hover:text-gray-800 transition-colors">Calendar</Link>
             <ChevronRight className="w-3.5 h-3.5" />
@@ -132,7 +132,7 @@ export default function BookingManagementPage() {
           </div>
           <button
             onClick={() => setEditing({ ...DEFAULT_TYPE })}
-            className="flex items-center gap-1.5 bg-[#012b1e] text-white px-4 py-2 rounded-lg text-xs font-medium hover:bg-[#015035] transition-colors"
+            className="flex items-center gap-1.5 bg-[#012b1e] text-white px-4 py-2 rounded-lg text-xs font-medium hover:bg-[#015035] transition-colors w-full sm:w-auto justify-center min-h-[44px]"
           >
             <Plus className="w-3.5 h-3.5" />
             New Booking Type
@@ -160,8 +160,8 @@ export default function BookingManagementPage() {
         ) : (
           <div className="grid gap-4">
             {types.map(bt => (
-              <div key={bt.id} className="bg-white rounded-xl border border-gray-100 p-5">
-                <div className="flex items-start gap-4">
+              <div key={bt.id} className="bg-white rounded-xl border border-gray-100 p-4 md:p-5">
+                <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
                   <div
                     className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
                     style={{ background: bt.color + '18' }}
@@ -178,7 +178,7 @@ export default function BookingManagementPage() {
                     {bt.description && (
                       <p className="text-xs text-gray-500 mb-2">{bt.description}</p>
                     )}
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-gray-400">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         {bt.duration_minutes} min
@@ -189,13 +189,13 @@ export default function BookingManagementPage() {
                         {bt.location === 'in-person' && <MapPin className="w-3 h-3" />}
                         {LOCATIONS.find(l => l.value === bt.location)?.label}
                       </span>
-                      <span>
+                      <span className="hidden sm:inline">
                         {bt.availability.days.map(d => DAY_LABELS[d]).join(', ')} | {formatTime12(bt.availability.start)} - {formatTime12(bt.availability.end)}
                       </span>
-                      <span>{bt.buffer_minutes}min buffer</span>
+                      <span className="hidden sm:inline">{bt.buffer_minutes}min buffer</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 flex-shrink-0 self-end sm:self-auto">
                     <button
                       onClick={() => copyLink(bt.slug)}
                       className="p-2 rounded-lg hover:bg-gray-50 border border-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
@@ -241,7 +241,7 @@ export default function BookingManagementPage() {
       {editing && (
         <>
           <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setEditing(null)} />
-          <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-white z-50 shadow-2xl overflow-y-auto">
+          <div className="fixed inset-y-0 right-0 w-full sm:max-w-lg bg-white z-50 shadow-2xl overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-sm font-bold text-gray-900">

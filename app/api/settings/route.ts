@@ -79,6 +79,8 @@ export async function PATCH(req: NextRequest) {
   if (body.navigationConfig !== undefined) updates.navigation_config = body.navigationConfig
   if (body.notification_preferences !== undefined) updates.notification_preferences = body.notification_preferences
   if (body.hubspot              !== undefined) updates.hubspot              = body.hubspot
+  if (body.resend               !== undefined) updates.resend               = body.resend
+  if (body.google_reviews       !== undefined) updates.google_reviews       = body.google_reviews
 
   const { data, error } = await db
     .from('app_settings')

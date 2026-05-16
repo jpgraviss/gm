@@ -179,7 +179,7 @@ interface GBPReviewsResponse {
   nextPageToken?:    string
 }
 
-const STAR_TO_NUMBER: Record<GBPStarRating, number> = {
+export const STAR_TO_NUMBER: Record<GBPStarRating, number> = {
   STAR_RATING_UNSPECIFIED: 0,
   ONE:   1,
   TWO:   2,

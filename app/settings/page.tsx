@@ -13,8 +13,10 @@ import {
   TrendingUp, Smartphone, Menu, ChevronUp, ChevronDown, RotateCcw,
 } from 'lucide-react'
 import {
-  defaultNavigation, buildDefaultNavConfig,
+  defaultNavigation, buildDefaultNavConfig, buildDefaultRoleNavConfig,
+  NAV_ROLES,
   type NavConfig, type NavConfigSection, type NavConfigItem,
+  type RoleNavConfig, type NavRoleKey,
 } from '@/components/layout/Sidebar'
 
 const membershipColors: Record<string, string> = {
@@ -320,8 +322,44 @@ export default function SettingsPage() {
   const [engagement, setEngagement] = useState(ENGAGEMENT_DEFAULTS)
 
   // Navigation config
-  const [navConfig, setNavConfig] = useState<NavConfig>(buildDefaultNavConfig)
+  const [roleNavConfig, setRoleNavConfig] = useState<RoleNavConfig>(buildDefaultRoleNavConfig)
+  const [navEditingRole, setNavEditingRole] = useState<'global' | NavRoleKey>('global')
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
+  const navConfig: NavConfig = navEditingRole === 'global'
+    ? roleNavConfig.global
+    : (roleNavConfig.roles[navEditingRole] ?? roleNavConfig.global)
+  const navConfigIsInherited = navEditingRole !== 'global' && !roleNavConfig.roles[navEditingRole]
+
+  function setNavConfig(updater: NavConfig | ((prev: NavConfig) => NavConfig)) {
+    setRoleNavConfig(prev => {
+      const current = navEditingRole === 'global'
+        ? prev.global
+        : (prev.roles[navEditingRole] ?? prev.global)
+      const next = typeof updater === 'function' ? updater(current) : updater
+      if (navEditingRole === 'global') {
+        return { ...prev, global: next }
+      }
+      return { ...prev, roles: { ...prev.roles, [navEditingRole]: next } }
+    })
+  }
+
+  function enableRoleOverride() {
+    if (navEditingRole === 'global') return
+    setRoleNavConfig(prev => {
+      if (prev.roles[navEditingRole]) return prev
+      const cloned: NavConfig = JSON.parse(JSON.stringify(prev.global))
+      return { ...prev, roles: { ...prev.roles, [navEditingRole]: cloned } }
+    })
+  }
+
+  function removeRoleOverride() {
+    if (navEditingRole === 'global') return
+    setRoleNavConfig(prev => {
+      const { [navEditingRole]: _, ...rest } = prev.roles
+      return { ...prev, roles: rest }
+    })
+  }
 
   // Load from API on mount (fall back to localStorage for backwards-compat, then defaults)
   useEffect(() => {
@@ -352,7 +390,13 @@ export default function SettingsPage() {
         if (d.dashboard_config && Object.keys(d.dashboard_config).length)  setDashboardConfig(prev => ({ ...prev, ...d.dashboard_config }))
         if (Array.isArray(d.qb_sync)         && d.qb_sync.length)          setQbSync(d.qb_sync)
         if (d.engagement && Object.keys(d.engagement).length) setEngagement(prev => ({ points: { ...prev.points, ...d.engagement.points }, thresholds: { ...prev.thresholds, ...d.engagement.thresholds } }))
-        if (d.navigation_config?.sections?.length) setNavConfig(d.navigation_config)
+        if (d.navigation_config) {
+          if (d.navigation_config.global?.sections?.length) {
+            setRoleNavConfig(d.navigation_config as RoleNavConfig)
+          } else if (d.navigation_config.sections?.length) {
+            setRoleNavConfig({ global: d.navigation_config as NavConfig, roles: {} })
+          }
+        }
       })
       .catch(() => {
         setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
@@ -427,12 +471,13 @@ export default function SettingsPage() {
   }
 
   function saveNavConfig() {
-    patchSettings({ navigationConfig: navConfig }, 'Navigation')
+    patchSettings({ navigationConfig: roleNavConfig }, 'Navigation')
   }
 
   function resetNavConfig() {
-    const fresh = buildDefaultNavConfig()
-    setNavConfig(fresh)
+    const fresh = buildDefaultRoleNavConfig()
+    setRoleNavConfig(fresh)
+    setNavEditingRole('global')
     patchSettings({ navigationConfig: fresh }, 'Navigation')
   }
 
@@ -1237,7 +1282,22 @@ export default function SettingsPage() {
 
             <HubSpotIntegrationSection />
 
+            <ResendIntegrationSection />
+
             <SmsIntegrationSection />
+
+            <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
+              <h4 className="text-sm font-bold text-gray-900 mb-3">Google Reviews</h4>
+              <p className="text-xs text-gray-500 mb-3">Connect your Google Business Profile to sync reviews automatically.</p>
+              <div className="space-y-3">
+                <input placeholder="Google Place ID" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <input placeholder="Google API Key" type="password" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <div className="flex gap-2">
+                  <button type="button" className="text-xs font-medium text-white px-4 py-2 rounded-lg" style={{ background: '#015035' }}>Test Connection</button>
+                  <button type="button" className="text-xs font-medium text-gray-600 bg-gray-100 px-4 py-2 rounded-lg hover:bg-gray-200">Sync Reviews</button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1548,7 +1608,7 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <div className="lg:col-span-2 flex flex-col gap-4">
               <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Sidebar Navigation</h3>
                   <div className="flex items-center gap-2">
                     {saved === 'Navigation' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
@@ -1557,7 +1617,58 @@ export default function SettingsPage() {
                     </button>
                   </div>
                 </div>
-                <div className="flex flex-col gap-2">
+
+                <div className="mb-5">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Configuring navigation for</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(['global', ...NAV_ROLES] as const).map(role => {
+                      const label = role === 'global' ? 'All Users' : role === 'contractor' ? 'Contractors' : role
+                      const isActive = navEditingRole === role
+                      const hasOverride = role !== 'global' && !!roleNavConfig.roles[role]
+                      return (
+                        <button
+                          key={role}
+                          onClick={() => setNavEditingRole(role)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isActive ? 'text-white' : hasOverride ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100' : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'}`}
+                          style={isActive ? { background: '#015035' } : undefined}
+                        >
+                          {label}
+                          {hasOverride && !isActive && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {navConfigIsInherited && (
+                  <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-between gap-3">
+                    <p className="text-xs text-amber-800">
+                      This role uses the global config. Customize it to create a role-specific override.
+                    </p>
+                    <button
+                      onClick={enableRoleOverride}
+                      className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: '#015035' }}
+                    >
+                      Customize
+                    </button>
+                  </div>
+                )}
+
+                {!navConfigIsInherited && navEditingRole !== 'global' && (
+                  <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3">
+                    <p className="text-xs text-emerald-800">
+                      Custom config active for {navEditingRole === 'contractor' ? 'Contractors' : navEditingRole}.
+                    </p>
+                    <button
+                      onClick={removeRoleOverride}
+                      className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50 transition-colors"
+                    >
+                      Remove Override
+                    </button>
+                  </div>
+                )}
+
+                <div className={`flex flex-col gap-2 ${navConfigIsInherited ? 'opacity-60 pointer-events-none' : ''}`}>
                   {[...navConfig.sections].sort((a, b) => a.order - b.order).map((section, sIdx) => {
                     const isExpanded = expandedSections.has(section.id)
                     const defaultSection = defaultNavigation.find(s => s.section.toLowerCase().replace(/\s+/g, '-') === section.id)
@@ -1652,36 +1763,49 @@ export default function SettingsPage() {
                 </button>
               </div>
             </div>
-            <div className="lg:col-span-1">
-              <div className="bg-white rounded-xl border border-gray-200 p-5 sticky top-4">
-                <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-4">Preview</h4>
-                <div className="rounded-xl overflow-hidden" style={{ background: '#012b1e' }}>
-                  <div className="px-3 py-3">
-                    {[...navConfig.sections]
-                      .filter(s => s.visible)
-                      .sort((a, b) => a.order - b.order)
-                      .map(section => {
-                        const defaultSection = defaultNavigation.find(s => s.section.toLowerCase().replace(/\s+/g, '-') === section.id)
-                        const visibleItems = [...section.items].filter(it => it.visible).sort((a, b) => a.order - b.order)
-                        if (visibleItems.length === 0) return null
-                        return (
-                          <div key={section.id} className="mb-2.5">
-                            <p className="text-white/30 text-[9px] font-semibold tracking-widest uppercase px-2 mb-1">{section.label}</p>
-                            {visibleItems.map(item => {
-                              const navItem = defaultSection?.items.find(ni => ni.href === item.href)
-                              return (
-                                <div key={item.href} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-white/50">
-                                  <div className="w-3.5 h-3.5 rounded bg-white/10 flex-shrink-0" />
-                                  <span className="text-[11px]">{navItem?.label ?? item.href}</span>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )
-                      })}
+            <div className="lg:col-span-1 flex flex-col gap-4">
+              {(['global', ...NAV_ROLES] as const).map(previewRole => {
+                const previewConfig = previewRole === 'global'
+                  ? roleNavConfig.global
+                  : (roleNavConfig.roles[previewRole] ?? roleNavConfig.global)
+                const isInherited = previewRole !== 'global' && !roleNavConfig.roles[previewRole]
+                const roleLabel = previewRole === 'global' ? 'All Users (Global)' : previewRole === 'contractor' ? 'Contractors' : previewRole
+                const isSelectedRole = previewRole === navEditingRole
+                return (
+                  <div key={previewRole} className={`bg-white rounded-xl border p-4 sticky top-4 transition-colors ${isSelectedRole ? 'border-emerald-300 ring-1 ring-emerald-200' : 'border-gray-200'}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">{roleLabel}</h4>
+                      {isInherited && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">Inherits global</span>}
+                    </div>
+                    <div className="rounded-xl overflow-hidden" style={{ background: '#012b1e' }}>
+                      <div className="px-2.5 py-2.5 max-h-[280px] overflow-y-auto">
+                        {[...previewConfig.sections]
+                          .filter(s => s.visible)
+                          .sort((a, b) => a.order - b.order)
+                          .map(section => {
+                            const defaultSection = defaultNavigation.find(s => s.section.toLowerCase().replace(/\s+/g, '-') === section.id)
+                            const visibleItems = [...section.items].filter(it => it.visible).sort((a, b) => a.order - b.order)
+                            if (visibleItems.length === 0) return null
+                            return (
+                              <div key={section.id} className="mb-2">
+                                <p className="text-white/30 text-[8px] font-semibold tracking-widest uppercase px-1.5 mb-0.5">{section.label}</p>
+                                {visibleItems.map(item => {
+                                  const navItem = defaultSection?.items.find(ni => ni.href === item.href)
+                                  return (
+                                    <div key={item.href} className="flex items-center gap-1.5 px-1.5 py-1 rounded-md text-white/50">
+                                      <div className="w-3 h-3 rounded bg-white/10 flex-shrink-0" />
+                                      <span className="text-[10px]">{navItem?.label ?? item.href}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )
+                          })}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -2040,6 +2164,204 @@ function HubSpotIntegrationSection() {
             className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
           >
             {saving ? 'Saving...' : 'Save Key'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ResendIntegrationSection() {
+  const [apiKey, setApiKey] = useState('')
+  const [fromName, setFromName] = useState('')
+  const [fromEmail, setFromEmail] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [sendingTest, setSendingTest] = useState(false)
+  const [testResult, setTestResult] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const cfg = d?.resend
+        if (cfg?.apiKey) {
+          setApiKey(cfg.apiKey)
+          setStatus('connected')
+        }
+        if (cfg?.fromName) setFromName(cfg.fromName)
+        if (cfg?.fromEmail) setFromEmail(cfg.fromEmail)
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleTest() {
+    if (!apiKey.trim()) return
+    setStatus('testing')
+    setErrorMsg('')
+    try {
+      const res = await fetch('/api/integrations/resend/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
+      })
+      const data = await res.json()
+      if (data.connected) {
+        setStatus('connected')
+      } else {
+        setStatus('error')
+        setErrorMsg(data.error || 'Connection failed')
+      }
+    } catch {
+      setStatus('error')
+      setErrorMsg('Failed to test connection')
+    }
+  }
+
+  async function handleSendTestEmail() {
+    if (!apiKey.trim()) return
+    setSendingTest(true)
+    setTestResult(null)
+    try {
+      const res = await fetch('/api/integrations/resend/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
+      })
+      const data = await res.json()
+      if (data.connected) {
+        setTestResult(`Test email sent to ${data.sentTo}`)
+      } else {
+        setTestResult(`Failed: ${data.error}`)
+      }
+    } catch {
+      setTestResult('Failed to send test email')
+    }
+    setSendingTest(false)
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resend: {
+            apiKey: apiKey.trim(),
+            fromName: fromName.trim() || undefined,
+            fromEmail: fromEmail.trim() || undefined,
+          },
+        }),
+      })
+    } catch { /* ignore */ }
+    setSaving(false)
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+          <Mail size={18} className="text-blue-600" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-800">Resend (Email)</p>
+          <p className="text-xs text-gray-500">Transactional and marketing email delivery via Resend</p>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          {status === 'connected' && <CheckCircle size={13} className="text-emerald-600" />}
+          {status === 'error' && <AlertCircle size={13} className="text-red-500" />}
+          <span className={`text-[11px] font-semibold ${
+            status === 'connected' ? 'text-emerald-600' :
+            status === 'error' ? 'text-red-500' :
+            'text-gray-400'
+          }`}>
+            {status === 'connected' ? 'Connected' :
+             status === 'error' ? 'Connection Failed' :
+             status === 'testing' ? 'Testing...' :
+             'Not Connected'}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">API Key</label>
+          <div className="relative">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={e => { setApiKey(e.target.value); if (status === 'connected' || status === 'error') setStatus('idle') }}
+              placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              className="w-full px-3 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Default From Name</label>
+            <input
+              type="text"
+              value={fromName}
+              onChange={e => setFromName(e.target.value)}
+              placeholder="GravHub"
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Default From Email</label>
+            <input
+              type="email"
+              value={fromEmail}
+              onChange={e => setFromEmail(e.target.value)}
+              placeholder="notifications@gravissmarketing.com"
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+            />
+          </div>
+        </div>
+
+        {errorMsg && (
+          <p className="text-xs text-red-500">{errorMsg}</p>
+        )}
+
+        {testResult && (
+          <p className={`text-xs ${testResult.startsWith('Failed') ? 'text-red-500' : 'text-emerald-600'}`}>{testResult}</p>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={handleTest}
+            disabled={!apiKey.trim() || status === 'testing'}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+            style={{ background: '#015035' }}
+          >
+            {status === 'testing' && <RefreshCw size={13} className="animate-spin" />}
+            Test Connection
+          </button>
+          <button
+            onClick={handleSendTestEmail}
+            disabled={!apiKey.trim() || sendingTest}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+          >
+            {sendingTest && <RefreshCw size={13} className="animate-spin" />}
+            Send Test Email
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!apiKey.trim() || saving}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+          >
+            {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>

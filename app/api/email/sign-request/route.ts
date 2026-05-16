@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getResend } from '@/lib/resend'
+import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 
 export async function POST(req: NextRequest) {
@@ -16,20 +16,19 @@ export async function POST(req: NextRequest) {
     const formattedValue = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value || 0)
     const contactName = signerName || 'there'
 
-    const { data, error } = await getResend().emails.send({
+    const result = await sendEmail({
+      to: signerEmail,
       from: `${settings.company.name} <${settings.email.signatureRequestFrom}>`,
-      replyTo: settings.email.replyTo,
-      to: [signerEmail],
       subject: `Signature Requested — ${company} | ${settings.company.name}`,
       html: signRequestEmailHtml({ contactName, company, formattedValue, signUrl, settings }),
     })
 
-    if (error) {
-      console.error('[email/sign-request POST]', error)
-      return NextResponse.json({ error: error?.message || 'Failed to send email' }, { status: 500 })
+    if (!result.success) {
+      console.error('[email/sign-request POST]', result.error)
+      return NextResponse.json({ error: result.error || 'Failed to send email' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, id: data?.id })
+    return NextResponse.json({ success: true, id: result.id })
   } catch (err) {
     console.error('Sign-request email error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

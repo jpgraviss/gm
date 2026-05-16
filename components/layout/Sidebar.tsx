@@ -47,6 +47,14 @@ export interface NavConfig {
   sections: NavConfigSection[]
 }
 
+export const NAV_ROLES = ['Leadership/Admin', 'Sales', 'Delivery/Operations', 'Billing/Finance', 'contractor'] as const
+export type NavRoleKey = typeof NAV_ROLES[number]
+
+export interface RoleNavConfig {
+  global: NavConfig
+  roles: Partial<Record<NavRoleKey, NavConfig>>
+}
+
 export const defaultNavigation: NavSection[] = [
   {
     section: 'Home',
@@ -147,6 +155,31 @@ export function buildDefaultNavConfig(): NavConfig {
   }
 }
 
+export function buildDefaultRoleNavConfig(): RoleNavConfig {
+  return { global: buildDefaultNavConfig(), roles: {} }
+}
+
+function normalizeNavConfig(raw: unknown): RoleNavConfig | null {
+  if (!raw || typeof raw !== 'object') return null
+  const obj = raw as Record<string, unknown>
+  if (obj.global && typeof obj.global === 'object' && (obj.global as NavConfig).sections?.length) {
+    return obj as unknown as RoleNavConfig
+  }
+  if (Array.isArray((obj as unknown as NavConfig).sections) && (obj as unknown as NavConfig).sections.length) {
+    return { global: obj as unknown as NavConfig, roles: {} }
+  }
+  return null
+}
+
+function resolveConfigForUser(config: RoleNavConfig, user: { unit: string; role: string } | null): NavConfig {
+  if (!user) return config.global
+  const isContractor = user.role === 'Contractor' || user.unit === 'Contractors'
+  if (isContractor && config.roles.contractor) return config.roles.contractor
+  const roleKey = user.unit as NavRoleKey
+  if (config.roles[roleKey]) return config.roles[roleKey]!
+  return config.global
+}
+
 function applyNavConfig(config: NavConfig): NavSection[] {
   const sectionMap = new Map(defaultNavigation.map(s => [s.section.toLowerCase().replace(/\s+/g, '-'), s]))
   return [...config.sections]
@@ -172,15 +205,14 @@ export default function Sidebar() {
   const { user, logout } = useAuth()
   const { closeSidebar } = useUI()
   const settings = useSettings()
-  const [navConfig, setNavConfig] = useState<NavConfig | null>(null)
+  const [roleNavConfig, setRoleNavConfig] = useState<RoleNavConfig | null>(null)
 
   useEffect(() => {
     fetch('/api/settings')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d?.navigation_config?.sections?.length) {
-          setNavConfig(d.navigation_config)
-        }
+        const parsed = normalizeNavConfig(d?.navigation_config)
+        if (parsed) setRoleNavConfig(parsed)
       })
       .catch(() => {})
   }, [])
@@ -190,7 +222,8 @@ export default function Sidebar() {
   const appName = settings?.branding.appName ?? 'GravHub'
   const companyName = settings?.company.name ?? 'Graviss Marketing'
 
-  const resolvedNavigation = navConfig ? applyNavConfig(navConfig) : defaultNavigation
+  const activeConfig = roleNavConfig ? resolveConfigForUser(roleNavConfig, user ?? null) : null
+  const resolvedNavigation = activeConfig ? applyNavConfig(activeConfig) : defaultNavigation
 
   const handleLogout = () => {
     logout()

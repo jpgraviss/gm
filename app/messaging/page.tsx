@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import {
-  Search, Send, MessageCircle, Plus, Phone, Building2, X, User,
+  Search, Send, MessageCircle, Plus, Phone, Building2, X, User, ChevronLeft,
 } from 'lucide-react'
 
 interface Contact {
@@ -113,6 +113,7 @@ export default function MessagingPage() {
   const [sending, setSending] = useState(false)
   const [showNewMessage, setShowNewMessage] = useState(false)
   const [contactSearch, setContactSearch] = useState('')
+  const [mobileShowThread, setMobileShowThread] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -212,6 +213,7 @@ export default function MessagingPage() {
     }
     setShowNewMessage(false)
     setContactSearch('')
+    setMobileShowThread(true)
   }
 
   const charCount = draft.length
@@ -223,7 +225,7 @@ export default function MessagingPage() {
       <Header title="Messaging" subtitle="SMS conversations" />
       <div className="flex-1 flex overflow-hidden" style={{ height: 'calc(100vh - 57px)' }}>
         {/* Left: Conversation List */}
-        <div className="w-80 xl:w-96 border-r border-gray-200 flex flex-col bg-white flex-shrink-0">
+        <div className={`w-full md:w-80 xl:w-96 border-r border-gray-200 flex flex-col bg-white flex-shrink-0 ${mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
           <div className="p-3 border-b border-gray-100 flex items-center gap-2">
             <div className="flex-1 relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -259,7 +261,7 @@ export default function MessagingPage() {
               filtered.map(conv => (
                 <button
                   key={conv.id}
-                  onClick={() => { setActiveId(conv.id); setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unreadCount: 0 } : c)) }}
+                  onClick={() => { setActiveId(conv.id); setMobileShowThread(true); setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unreadCount: 0 } : c)) }}
                   className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors flex items-start gap-3 ${activeId === conv.id ? 'bg-green-50/60' : ''}`}
                 >
                   <div
@@ -290,11 +292,17 @@ export default function MessagingPage() {
         </div>
 
         {/* Right: Active Conversation */}
-        <div className="flex-1 flex flex-col bg-gray-50 min-w-0">
+        <div className={`flex-1 flex flex-col bg-gray-50 min-w-0 ${mobileShowThread ? 'flex' : 'hidden md:flex'}`}>
           {active ? (
             <>
               {/* Conversation Header */}
-              <div className="px-5 py-3 bg-white border-b border-gray-200 flex items-center gap-3">
+              <div className="px-3 md:px-5 py-3 bg-white border-b border-gray-200 flex items-center gap-3">
+                <button
+                  onClick={() => { setMobileShowThread(false); setActiveId(null) }}
+                  className="md:hidden p-2 -ml-1 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                >
+                  <ChevronLeft size={20} className="text-gray-500" />
+                </button>
                 <div
                   className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
                   style={{ background: '#015035' }}
@@ -311,7 +319,7 @@ export default function MessagingPage() {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto px-5 py-4">
+              <div className="flex-1 overflow-y-auto px-3 md:px-5 py-4">
                 {messagesLoading ? (
                   <div className="flex items-center justify-center py-12">
                     <div className="w-5 h-5 border-2 border-gray-300 border-t-green-700 rounded-full animate-spin" />
@@ -356,7 +364,7 @@ export default function MessagingPage() {
               </div>
 
               {/* Input */}
-              <div className="px-5 py-3 bg-white border-t border-gray-200">
+              <div className="px-3 md:px-5 py-3 bg-white border-t border-gray-200 sticky bottom-0">
                 <div className="flex items-end gap-3">
                   <div className="flex-1 relative">
                     <textarea

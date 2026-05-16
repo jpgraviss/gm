@@ -401,7 +401,7 @@ function NodeConfigPanel({ node, onChange, onClose }: {
     : getActionMeta(node.subtype as ActionType)
 
   return (
-    <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full flex-shrink-0">
+    <div className="fixed inset-y-0 right-0 w-full sm:w-80 bg-white border-l border-gray-200 flex flex-col h-full z-30 shadow-xl md:shadow-none md:static md:z-auto">
       <div className="p-4 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: node.type === 'trigger' ? '#01503512' : '#3b82f612' }}>
@@ -701,7 +701,7 @@ function RunsTab({ automationId }: { automationId: string }) {
     <div className="flex-1 overflow-auto">
       <div className="max-w-4xl mx-auto py-8 px-6">
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="grid grid-cols-[1fr_120px_1fr_100px_100px] gap-4 px-5 py-3 border-b border-gray-100 bg-gray-50">
+          <div className="hidden md:grid grid-cols-[1fr_120px_1fr_100px_100px] gap-4 px-5 py-3 border-b border-gray-100 bg-gray-50">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Run ID</p>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Time</p>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Triggered by</p>
@@ -712,22 +712,37 @@ function RunsTab({ automationId }: { automationId: string }) {
             <div key={run.id}>
               <button
                 onClick={() => setExpandedRunId(expandedRunId === run.id ? null : run.id)}
-                className="w-full grid grid-cols-[1fr_120px_1fr_100px_100px] gap-4 px-5 py-3.5 items-center hover:bg-gray-50 transition-colors text-left border-b border-gray-100 last:border-b-0"
+                className="w-full px-4 md:px-5 py-3.5 hover:bg-gray-50 transition-colors text-left border-b border-gray-100 last:border-b-0"
               >
-                <div className="flex items-center gap-2">
+                <div className="hidden md:grid grid-cols-[1fr_120px_1fr_100px_100px] gap-4 items-center">
+                  <div className="flex items-center gap-2">
+                    <ChevronRight
+                      size={14}
+                      className={`text-gray-400 transition-transform ${expandedRunId === run.id ? 'rotate-90' : ''}`}
+                    />
+                    <code className="text-xs font-mono text-gray-700">{run.id.slice(0, 10)}</code>
+                  </div>
+                  <p className="text-xs text-gray-500">{relativeTime(run.timestamp)}</p>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-gray-900 truncate">{run.trigger_contact.name}</p>
+                    <p className="text-[10px] text-gray-400 truncate">{run.trigger_contact.email}</p>
+                  </div>
+                  <StatusBadge status={run.status} />
+                  <p className="text-xs text-gray-600 text-right font-medium">{run.actions_completed}/{run.actions_total} actions</p>
+                </div>
+                <div className="md:hidden flex items-start gap-3">
                   <ChevronRight
                     size={14}
-                    className={`text-gray-400 transition-transform ${expandedRunId === run.id ? 'rotate-90' : ''}`}
+                    className={`text-gray-400 transition-transform mt-1 flex-shrink-0 ${expandedRunId === run.id ? 'rotate-90' : ''}`}
                   />
-                  <code className="text-xs font-mono text-gray-700">{run.id.slice(0, 10)}</code>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-xs font-medium text-gray-900 truncate">{run.trigger_contact.name}</p>
+                      <StatusBadge status={run.status} />
+                    </div>
+                    <p className="text-[10px] text-gray-400">{relativeTime(run.timestamp)} &middot; {run.actions_completed}/{run.actions_total} actions</p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-500">{relativeTime(run.timestamp)}</p>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-gray-900 truncate">{run.trigger_contact.name}</p>
-                  <p className="text-[10px] text-gray-400 truncate">{run.trigger_contact.email}</p>
-                </div>
-                <StatusBadge status={run.status} />
-                <p className="text-xs text-gray-600 text-right font-medium">{run.actions_completed}/{run.actions_total} actions</p>
               </button>
               {expandedRunId === run.id && (
                 <div className="px-5 pb-4 pt-1 bg-gray-50/50 border-b border-gray-100">
@@ -936,17 +951,17 @@ export default function AutomationBuilderPage() {
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#f8f9fb' }}>
       {/* ── Top Bar ─────────────────────────────────────────────────────── */}
-      <div className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0 z-20">
-        <div className="flex items-center gap-3">
+      <div className="bg-white border-b border-gray-200 flex flex-wrap items-center justify-between px-3 md:px-4 py-2 gap-2 flex-shrink-0 z-20">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
           <button
             onClick={() => router.push('/automation')}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
             <ArrowLeft size={18} className="text-gray-600" />
           </button>
-          <div className="w-px h-6 bg-gray-200" />
-          <div className="flex items-center gap-2">
-            <Zap size={18} style={{ color: '#015035' }} />
+          <div className="w-px h-6 bg-gray-200 hidden sm:block" />
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <Zap size={18} className="flex-shrink-0" style={{ color: '#015035' }} />
             {editingName ? (
               <input
                 ref={nameInputRef}
@@ -954,40 +969,39 @@ export default function AutomationBuilderPage() {
                 onChange={e => setWorkflowName(e.target.value)}
                 onBlur={() => setEditingName(false)}
                 onKeyDown={e => { if (e.key === 'Enter') setEditingName(false) }}
-                className="text-sm font-semibold text-gray-900 border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                style={{ width: Math.max(180, workflowName.length * 8 + 40) }}
+                className="text-sm font-semibold text-gray-900 border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-w-0 w-full max-w-[200px] sm:max-w-none"
               />
             ) : (
               <button
                 onClick={() => setEditingName(true)}
-                className="text-sm font-semibold text-gray-900 hover:text-gray-600 flex items-center gap-1.5"
+                className="text-sm font-semibold text-gray-900 hover:text-gray-600 flex items-center gap-1.5 truncate min-w-0"
               >
-                {workflowName}
-                <Edit3 size={12} className="text-gray-400" />
+                <span className="truncate">{workflowName}</span>
+                <Edit3 size={12} className="text-gray-400 flex-shrink-0" />
               </button>
             )}
           </div>
         </div>
-        {editId && (
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-            <button
-              onClick={() => setActiveTab('builder')}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${activeTab === 'builder' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              Builder
-            </button>
-            <button
-              onClick={() => setActiveTab('runs')}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${activeTab === 'runs' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              Runs
-            </button>
-          </div>
-        )}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {editId && (
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setActiveTab('builder')}
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${activeTab === 'builder' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Builder
+              </button>
+              <button
+                onClick={() => setActiveTab('runs')}
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${activeTab === 'runs' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Runs
+              </button>
+            </div>
+          )}
           <button
             onClick={() => setStatus(s => s === 'Draft' ? 'Active' : 'Draft')}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors"
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors"
             style={{
               borderColor: status === 'Active' ? '#015035' : '#d1d5db',
               color: status === 'Active' ? '#015035' : '#6b7280',
@@ -1001,11 +1015,11 @@ export default function AutomationBuilderPage() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-white text-sm font-semibold transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-3 md:px-4 py-1.5 rounded-lg text-white text-sm font-semibold transition-colors disabled:opacity-50"
             style={{ background: '#015035' }}
           >
             <Save size={14} />
-            {saving ? 'Saving...' : 'Save'}
+            <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save'}</span>
           </button>
         </div>
       </div>
@@ -1016,7 +1030,7 @@ export default function AutomationBuilderPage() {
       ) : (
         <div className="flex flex-1 overflow-hidden">
           {/* ── Left Sidebar ─────────────────────────────────────────────── */}
-          <div className="w-52 bg-white border-r border-gray-200 p-4 flex flex-col gap-4 flex-shrink-0">
+          <div className="hidden md:flex w-52 bg-white border-r border-gray-200 p-4 flex-col gap-4 flex-shrink-0">
             <Minimap nodes={nodes} zoom={zoom} />
             <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
               <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-2">Zoom</p>
@@ -1041,7 +1055,7 @@ export default function AutomationBuilderPage() {
           </div>
 
           {/* ── Canvas ───────────────────────────────────────────────────── */}
-          <div ref={canvasRef} className="flex-1 overflow-auto">
+          <div ref={canvasRef} className="flex-1 overflow-auto min-w-0">
             <div
               className="flex flex-col items-center py-12 px-4 min-h-full"
               style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}

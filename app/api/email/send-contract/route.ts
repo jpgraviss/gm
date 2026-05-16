@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getResend } from '@/lib/resend'
+import { sendEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase'
 import { getSettings } from '@/lib/settings'
 
@@ -14,7 +14,6 @@ export async function POST(req: NextRequest) {
     const settings = await getSettings()
     const db = createServiceClient()
 
-    // Fetch the contract
     const { data: contract, error: cErr } = await db
       .from('contracts')
       .select('*')
@@ -24,7 +23,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
     }
 
-    // Find the primary contact for this company
     const { data: contacts } = await db
       .from('crm_contacts')
       .select('*')
@@ -42,10 +40,8 @@ export async function POST(req: NextRequest) {
     const contactName = contact.full_name || `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim() || 'there'
     const portalUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
 
-    const { data, error } = await getResend().emails.send({
-      from: `${settings.email.fromName} <${settings.email.fromEmail}>`,
-      replyTo: settings.email.replyTo,
-      to: [recipientEmail],
+    const result = await sendEmail({
+      to: recipientEmail,
       subject: `Contract for Review — ${contract.service_type} | ${settings.company.name}`,
       html: contractEmailHtml({
         contactName,
@@ -60,12 +56,12 @@ export async function POST(req: NextRequest) {
       }),
     })
 
-    if (error) {
-      console.error('[email/send-contract POST]', error)
-      return NextResponse.json({ error: error?.message || 'Failed to send contract email' }, { status: 500 })
+    if (!result.success) {
+      console.error('[email/send-contract POST]', result.error)
+      return NextResponse.json({ error: result.error || 'Failed to send contract email' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, id: data?.id, sentTo: recipientEmail })
+    return NextResponse.json({ success: true, id: result.id, sentTo: recipientEmail })
   } catch (err) {
     console.error('Send contract email error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

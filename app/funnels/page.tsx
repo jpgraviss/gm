@@ -227,8 +227,8 @@ export default function FunnelsPage() {
   return (
     <>
       <Header title="Funnels" subtitle="Build and manage landing page funnels" />
-      <main className="p-6 max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+      <main className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Funnels</h1>
             <p className="text-sm text-gray-500 dark:text-white/50 mt-1">
@@ -237,7 +237,7 @@ export default function FunnelsPage() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-5 py-2.5 rounded-lg text-white text-sm font-semibold flex items-center gap-2 shadow-lg hover:shadow-xl transition-all hover:brightness-110"
+            className="px-5 py-2.5 rounded-lg text-white text-sm font-semibold flex items-center gap-2 shadow-lg hover:shadow-xl transition-all hover:brightness-110 w-full sm:w-auto justify-center"
             style={{ background: '#015035' }}
           >
             <Plus size={16} /> Create Funnel
@@ -342,7 +342,7 @@ export default function FunnelsPage() {
             <p className="text-gray-500 dark:text-white/40 text-sm">No funnels match your filters.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5">
             {filteredFunnels.map((f) => (
               <div
                 key={f.id}
@@ -580,7 +580,7 @@ export default function FunnelsPage() {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setShowCreateModal(false); setNewName('') }} />
-          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 w-full max-w-md p-6">
+          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 w-full max-w-md mx-4 sm:mx-auto p-5 sm:p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Create new funnel</h2>
               <button

@@ -24,7 +24,7 @@ import {
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
   PhoneCall, Video, Pencil, Trash2, Upload, Eye, MessageSquare, MousePointerClick,
-  Flame, Thermometer, Snowflake,
+  Flame, Thermometer, Snowflake, MessageCircle,
 } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -1,12 +1,34 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, Link2, Copy, Check, Clock, User, Building2, Video, X, ChevronLeft, ChevronRight, ExternalLink, Mail, RefreshCw } from 'lucide-react'
+import { Calendar, Link2, Copy, Check, Clock, User, Building2, Video, X, ChevronLeft, ChevronRight, ExternalLink, Mail, RefreshCw, CalendarCheck } from 'lucide-react'
 import Header from '@/components/layout/Header'
+import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchTeamMembers } from '@/lib/supabase'
 import type { TeamMember } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
+
+interface BookingTypeBooking {
+  id: string
+  booking_type_id: string
+  date: string
+  start_time: string
+  end_time: string
+  guest_name: string
+  guest_email: string
+  guest_company: string | null
+  notes: string | null
+  status: string
+  created_at: string
+  booking_types: {
+    name: string
+    slug: string
+    color: string
+    location: string
+    duration_minutes: number
+  } | null
+}
 
 interface Booking {
   id: string
@@ -60,6 +82,7 @@ export default function CalendarPage() {
   const [copiedGcal, setCopiedGcal] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState<string | null>(null)
+  const [typeBookings, setTypeBookings] = useState<BookingTypeBooking[]>([])
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
@@ -94,6 +117,10 @@ export default function CalendarPage() {
       })
       .catch(() => toast('Failed to load calendar settings', 'error'))
     fetchTeamMembers().then(d => { if (Array.isArray(d)) setTeamMembers(d) }).catch(() => toast('Failed to load team members', 'error'))
+    fetch('/api/calendar/bookings')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { if (Array.isArray(d)) setTypeBookings(d) })
+      .catch(() => {})
   }, [])
 
   const filteredByTab = bookings.filter(b => {
@@ -108,7 +135,10 @@ export default function CalendarPage() {
     : filteredByTab
 
   // Build a set of dates that have bookings (for calendar dots)
-  const bookingDatesSet = new Set(bookings.map(b => b.date))
+  const bookingDatesSet = new Set([
+    ...bookings.map(b => b.date),
+    ...typeBookings.filter(tb => tb.status !== 'cancelled').map(tb => tb.date),
+  ])
 
   // Calendar helper functions
   function getCalendarDays(monthDate: Date) {
@@ -230,7 +260,26 @@ export default function CalendarPage() {
 
   // Get bookings for a specific date string
   function getBookingsForDate(dateStr: string): Booking[] {
-    return bookings.filter(b => b.date === dateStr && b.status !== 'cancelled')
+    const base = bookings.filter(b => b.date === dateStr && b.status !== 'cancelled')
+    const fromTypes: Booking[] = typeBookings
+      .filter(tb => tb.date === dateStr && tb.status !== 'cancelled')
+      .map(tb => ({
+        id: tb.id,
+        calendar_slug: tb.booking_types?.slug ?? '',
+        client_name: tb.guest_name,
+        client_email: tb.guest_email,
+        client_company: tb.guest_company,
+        client_phone: null,
+        notes: tb.notes,
+        date: tb.date,
+        start_time: tb.start_time,
+        end_time: tb.end_time,
+        timezone: 'America/Chicago',
+        status: tb.status,
+        meet_link: null,
+        created_at: tb.created_at,
+      }))
+    return [...base, ...fromTypes]
   }
 
   // Navigation handlers for week/day
@@ -299,6 +348,13 @@ export default function CalendarPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/calendar/booking"
+              className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
+            >
+              <CalendarCheck className="w-3.5 h-3.5" />
+              Manage Booking Types
+            </Link>
             {lastSync && (
               <span className="text-xs text-gray-400 hidden sm:inline">
                 Last sync: {new Date(lastSync).toLocaleString()}

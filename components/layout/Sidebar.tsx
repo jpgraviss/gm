@@ -9,8 +9,8 @@ import {
   LayoutDashboard, Users, FileText, ScrollText, CreditCard,
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
   Settings, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare, CheckSquare, Inbox,
-  CalendarDays, Clock, Activity, Plug, BookOpen, GraduationCap,
-  Share2, ClipboardList, Search, FileBarChart,
+  CalendarDays, CalendarCheck, Clock, Activity, Plug, BookOpen, GraduationCap,
+  Share2, ClipboardList, Search, FileBarChart, MessageCircle, Smartphone, Star,
 } from 'lucide-react'
 
 interface NavItem {
@@ -66,12 +66,20 @@ const navigation: NavSection[] = [
     ],
   },
   {
+    section: 'Communication',
+    items: [
+      { label: 'Messaging',      href: '/messaging',            icon: <MessageCircle size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'SMS Templates',  href: '/messaging/templates',  icon: <Smartphone size={16} />,    allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+    ],
+  },
+  {
     section: 'Operations',
     items: [
       { label: 'Projects',      href: '/projects',      icon: <FolderKanban size={16} />, contractorVisible: true },
       { label: 'Tasks',         href: '/tasks',         icon: <CheckSquare size={16} />,  contractorVisible: true, billingVisible: true },
       { label: 'Time Tracking', href: '/time-tracking', icon: <Clock size={16} />,        contractorVisible: true, billingVisible: true },
       { label: 'Calendar',      href: '/calendar',      icon: <CalendarDays size={16} /> },
+      { label: 'Booking',       href: '/calendar/booking', icon: <CalendarCheck size={16} /> },
       { label: 'Maintenance',   href: '/maintenance',   icon: <Wrench size={16} />,       contractorVisible: true },
       { label: 'Renewals',      href: '/renewals',      icon: <RefreshCw size={16} /> },
     ],
@@ -82,6 +90,7 @@ const navigation: NavSection[] = [
       { label: 'Portal',         href: '/portal',          icon: <Globe size={16} />,          billingVisible: true },
       { label: 'Tickets',        href: '/tickets',         icon: <MessageSquare size={16} />,  contractorVisible: true, billingVisible: true },
       { label: 'Client Reports', href: '/reports/client',  icon: <FileBarChart size={16} />,   allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Reputation',    href: '/reputation',      icon: <Star size={16} />,          allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
     ],
   },
   {

@@ -30,7 +30,10 @@ export default function PortalBillingPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!company) { setLoading(false); return }
+    if (!company) {
+      requestAnimationFrame(() => setLoading(false))
+      return
+    }
     fetch(`/api/invoices?company=${encodeURIComponent(company)}`)
       .then(r => r.ok ? r.json() : [])
       .then((d: Invoice[]) => setInvoices(Array.isArray(d) ? d : []))

@@ -614,14 +614,14 @@ export default function MaintenancePage() {
     fetchInvoices().then(setInvoices)
   }, [])
 
-  const activeRecords = records.filter(m => m.status === 'Active')
+  const activeRecords = useMemo(() => records.filter(m => m.status === 'Active'), [records])
   const totalMRR = activeRecords.reduce((s, m) => s + m.monthlyFee, 0)
-  const expiringIn30 = records.filter(r => {
+  const expiringIn30 = useMemo(() => records.filter(r => {
     if (!r.endDate || r.status === 'Cancelled' || r.status === 'Past') return false
     const days = getDaysUntil(r.endDate)
     return days >= 0 && days <= 30
-  })
-  const cancelledRecords = records.filter(r => r.status === 'Cancelled' || r.status === 'Past')
+  }), [records])
+  const cancelledRecords = useMemo(() => records.filter(r => r.status === 'Cancelled' || r.status === 'Past'), [records])
 
   const tabCounts: Record<TabFilter, number> = {
     All: records.length,

@@ -12,7 +12,8 @@ export default function PushNotificationBanner() {
     if (Notification.permission !== 'default') return
     const dismissed = localStorage.getItem('gravhub_push_dismissed')
     if (dismissed) return
-    setVisible(true)
+    const id = requestAnimationFrame(() => setVisible(true))
+    return () => cancelAnimationFrame(id)
   }, [])
 
   async function enable() {

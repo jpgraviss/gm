@@ -667,12 +667,13 @@ function RunsTab({ automationId }: { automationId: string }) {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
 
   useEffect(() => {
-    setLoading(true)
+    let cancelled = false
     fetch(`/api/automations/${automationId}/runs`)
       .then(r => r.ok ? r.json() : [])
-      .then((data: WorkflowRun[]) => setRuns(data))
-      .catch(() => setRuns([]))
-      .finally(() => setLoading(false))
+      .then((data: WorkflowRun[]) => { if (!cancelled) setRuns(data) })
+      .catch(() => { if (!cancelled) setRuns([]) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [automationId])
 
   if (loading) {

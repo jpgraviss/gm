@@ -13,6 +13,10 @@ import {
   Clock, ExternalLink, Mail, Phone, TrendingUp, AlertTriangle, Edit2, ShieldCheck,
   Search, Copy, BarChart3, Percent, Inbox,
 } from 'lucide-react'
+
+function generateId(prefix: string) {
+  return `${prefix}-${Date.now()}`
+}
 import { useToast } from '@/components/ui/Toast'
 
 const statusOrder: ProposalStatus[] = ['Draft', 'Pending Approval', 'Approved', 'Sent', 'Viewed', 'Accepted', 'Declined']
@@ -621,7 +625,7 @@ export default function ProposalsPage() {
       }
     } else {
       const localProposal: Proposal = {
-        id: `prop-${Date.now()}`,
+        id: generateId('prop'),
         dealId: '',
         createdDate: new Date().toISOString().split('T')[0],
         ...data,

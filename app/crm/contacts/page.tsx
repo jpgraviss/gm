@@ -402,10 +402,11 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   }, [])
 
   useEffect(() => {
-    setTimelineLoading(true)
+    let cancelled = false
     fetch(`/api/crm/contacts/${contact.id}/timeline`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
+        if (cancelled) return
         if (data) {
           setTimelineEntries(data.timeline ?? [])
           setEngagementScore(data.engagementScore ?? 0)
@@ -414,7 +415,8 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
         }
       })
       .catch(() => {})
-      .finally(() => setTimelineLoading(false))
+      .finally(() => { if (!cancelled) setTimelineLoading(false) })
+    return () => { cancelled = true }
   }, [contact.id])
 
   function handleAddNote() {

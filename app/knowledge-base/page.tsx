@@ -106,7 +106,7 @@ function EditorPanel({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
-      <div className="relative w-full max-w-2xl bg-white shadow-xl flex flex-col animate-in slide-in-from-right">
+      <div className="relative w-full sm:max-w-2xl bg-white shadow-xl flex flex-col animate-in slide-in-from-right">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-sm font-bold text-gray-900 tracking-wide uppercase" style={{ fontFamily: 'var(--font-heading)' }}>
             {article ? 'Edit Article' : 'New Article'}

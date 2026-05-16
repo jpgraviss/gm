@@ -10,7 +10,7 @@ import {
   CheckCircle, AlertCircle, RefreshCw, Plug, Globe, Tag,
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
   Trash2, X, Eye, EyeOff, AlertTriangle, Mail, LayoutDashboard,
-  TrendingUp, Smartphone, Menu, ChevronUp, ChevronDown, RotateCcw,
+  TrendingUp, Smartphone, Menu, ChevronUp, ChevronDown, RotateCcw, Star,
 } from 'lucide-react'
 import {
   defaultNavigation, buildDefaultNavConfig, buildDefaultRoleNavConfig,
@@ -410,8 +410,17 @@ export default function SettingsPage() {
       })
   }, [])
 
-  // Keep members in sync with auth
-  useEffect(() => { setMembers(authMembers) }, [authMembers])
+  // Load all members (including inactive) for admin-level team access controls
+  useEffect(() => {
+    if (user?.isAdmin) {
+      fetch('/api/team-members?include_inactive=true')
+        .then(r => r.ok ? r.json() : [])
+        .then(data => { if (Array.isArray(data)) setMembers(data) })
+        .catch(() => {})
+    } else {
+      setMembers(authMembers)
+    }
+  }, [authMembers, user?.isAdmin])
 
   function flash(label: string) {
     setSaved(label)
@@ -862,6 +871,75 @@ export default function SettingsPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            {/* Team Access section */}
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Team Access</h3>
+                <p className="text-xs text-gray-400 mt-1">Quick suspend/reinstate toggles and scheduled access windows</p>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {members.map(member => {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const memberAny = member as any
+                  const status = (typeof memberAny.status === 'string' ? memberAny.status : 'active').toLowerCase()
+                  const schedule = memberAny.accessSchedule as { removeAccessOn?: string; reinstateOn?: string } | undefined
+                  const isActive = status === 'active'
+                  return (
+                    <div key={member.id} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: isActive ? '#015035' : '#9ca3af' }}>
+                          {member.initials}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{member.name}</p>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-medium ${isActive ? 'text-green-600' : 'text-amber-600'}`}>
+                              {isActive ? 'Active' : status === 'suspended' ? 'Suspended' : 'Inactive'}
+                            </span>
+                            {schedule?.removeAccessOn && (
+                              <span className="text-[10px] text-gray-400">
+                                Scheduled: {new Date(schedule.removeAccessOn).toLocaleDateString()}
+                                {schedule.reinstateOn && ` - ${new Date(schedule.reinstateOn).toLocaleDateString()}`}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          const action = isActive ? 'suspend' : 'reinstate'
+                          try {
+                            const res = await fetch('/api/team-members', {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ id: member.id, action }),
+                            })
+                            if (res.ok) {
+                              toast(`User ${action === 'suspend' ? 'suspended' : 'reinstated'}`, 'success')
+                              const updated = await fetch('/api/team-members?include_inactive=true').then(r => r.json())
+                              if (Array.isArray(updated)) setMembers(updated)
+                            }
+                          } catch {
+                            toast('Failed to update user', 'error')
+                          }
+                        }}
+                        className="rounded-full relative flex items-center px-0.5 transition-colors flex-shrink-0"
+                        style={{ background: isActive ? '#015035' : '#d1d5db', width: '40px', height: '22px' }}
+                      >
+                        <div
+                          className="w-4 h-4 bg-white rounded-full shadow-sm transition-transform"
+                          style={{ transform: isActive ? 'translateX(18px)' : 'translateX(0px)' }}
+                        />
+                      </button>
+                    </div>
+                  )
+                })}
+                {members.length === 0 && (
+                  <div className="px-5 py-6 text-center text-sm text-gray-400">No team members found</div>
+                )}
               </div>
             </div>
           </div>
@@ -2459,6 +2537,167 @@ function SmsIntegrationSection() {
           {status === 'testing' && <RefreshCw size={13} className="animate-spin" />}
           Test Connection
         </button>
+      </div>
+    </div>
+  )
+}
+
+function GoogleReviewsIntegrationSection() {
+  const [locationName, setLocationName] = useState('')
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
+  const [gbpStatus, setGbpStatus] = useState<'idle' | 'testing' | 'connected' | 'syncing' | 'error'>('idle')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [syncResult, setSyncResult] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const cfg = d?.google_reviews
+        if (cfg?.locationName) {
+          setLocationName(cfg.locationName)
+          setGbpStatus('connected')
+        }
+        if (cfg?.lastSyncAt) setLastSyncAt(cfg.lastSyncAt)
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleTest() {
+    if (!locationName.trim()) return
+    setGbpStatus('testing')
+    setErrorMsg('')
+    try {
+      const res = await fetch(`/api/integrations/google-reviews?location=${encodeURIComponent(locationName.trim())}`)
+      const data = await res.json()
+      if (res.ok && Array.isArray(data)) {
+        setGbpStatus('connected')
+      } else {
+        setGbpStatus('error')
+        setErrorMsg(data.error || 'Connection failed')
+      }
+    } catch {
+      setGbpStatus('error')
+      setErrorMsg('Failed to test connection')
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ google_reviews: { locationName: locationName.trim(), lastSyncAt } }),
+      })
+    } catch {}
+    setSaving(false)
+  }
+
+  async function handleSyncNow() {
+    setGbpStatus('syncing')
+    setSyncResult(null)
+    try {
+      const res = await fetch('/api/reputation/sync', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setSyncResult(`Synced ${data.total} reviews (${data.new} new, ${data.updated} updated)`)
+        setLastSyncAt(data.lastSyncAt)
+        setGbpStatus('connected')
+      } else {
+        setGbpStatus('error')
+        setErrorMsg(data.error || 'Sync failed')
+      }
+    } catch {
+      setGbpStatus('error')
+      setErrorMsg('Sync failed')
+    }
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+          <Star size={18} className="text-blue-600" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-800">Google Business Reviews</p>
+          <p className="text-xs text-gray-500">Pull and sync reviews from Google Business Profile into Reputation</p>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          {gbpStatus === 'connected' && <CheckCircle size={13} className="text-emerald-600" />}
+          {gbpStatus === 'error' && <AlertCircle size={13} className="text-red-500" />}
+          <span className={`text-[11px] font-semibold ${
+            gbpStatus === 'connected' ? 'text-emerald-600' :
+            gbpStatus === 'error' ? 'text-red-500' :
+            gbpStatus === 'testing' || gbpStatus === 'syncing' ? 'text-gray-500' :
+            'text-gray-400'
+          }`}>
+            {gbpStatus === 'connected' ? 'Connected' :
+             gbpStatus === 'error' ? 'Error' :
+             gbpStatus === 'testing' ? 'Testing...' :
+             gbpStatus === 'syncing' ? 'Syncing...' :
+             'Not Connected'}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">GBP Location Name</label>
+          <input
+            type="text"
+            value={locationName}
+            onChange={e => { setLocationName(e.target.value); if (gbpStatus === 'connected' || gbpStatus === 'error') setGbpStatus('idle') }}
+            placeholder="accounts/123456/locations/789012"
+            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            {'Find this in your Google Business Profile dashboard or use the GBP Locations API. Format: accounts/{id}/locations/{id}'}
+          </p>
+        </div>
+
+        {errorMsg && (
+          <p className="text-xs text-red-500">{errorMsg}</p>
+        )}
+
+        {syncResult && (
+          <p className="text-xs text-emerald-600 font-medium">{syncResult}</p>
+        )}
+
+        {lastSyncAt && (
+          <p className="text-[11px] text-gray-400">
+            Last synced: {new Date(lastSyncAt).toLocaleString()}
+          </p>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={handleTest}
+            disabled={!locationName.trim() || gbpStatus === 'testing' || gbpStatus === 'syncing'}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+            style={{ background: '#015035' }}
+          >
+            {gbpStatus === 'testing' && <RefreshCw size={13} className="animate-spin" />}
+            Test Connection
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!locationName.trim() || saving}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            onClick={handleSyncNow}
+            disabled={!locationName.trim() || gbpStatus === 'syncing' || gbpStatus === 'testing'}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+          >
+            {gbpStatus === 'syncing' && <RefreshCw size={13} className="animate-spin" />}
+            Sync Now
+          </button>
+        </div>
       </div>
     </div>
   )

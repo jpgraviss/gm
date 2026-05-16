@@ -127,11 +127,11 @@ export default function HelpCenterPage() {
           </Link>
           <Link
             href="/tickets"
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white rounded-lg transition-opacity hover:opacity-90"
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white rounded-lg transition-opacity hover:opacity-90 min-h-[44px]"
             style={{ background: '#015035' }}
           >
             <MessageSquare size={14} />
-            Contact Support
+            <span className="hidden sm:inline">Contact </span>Support
           </Link>
         </div>
       </header>
@@ -150,11 +150,11 @@ export default function HelpCenterPage() {
         />
       ) : (
         <>
-          <div className="py-12 sm:py-16 text-center" style={{ background: 'linear-gradient(135deg, #015035 0%, #01804f 100%)' }}>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2" style={{ fontFamily: 'var(--font-heading)' }}>
+          <div className="py-8 sm:py-16 text-center px-4" style={{ background: 'linear-gradient(135deg, #015035 0%, #01804f 100%)' }}>
+            <h1 className="text-xl sm:text-3xl font-bold text-white mb-2" style={{ fontFamily: 'var(--font-heading)' }}>
               How can we help?
             </h1>
-            <p className="text-white/70 text-sm mb-6">Search our knowledge base or browse by category</p>
+            <p className="text-white/70 text-sm mb-4 sm:mb-6">Search our knowledge base or browse by category</p>
             <div className="max-w-xl mx-auto px-4">
               <div className="relative">
                 <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -190,7 +190,7 @@ export default function HelpCenterPage() {
                     <button
                       key={cat.name}
                       onClick={() => setView({ kind: 'category', category: cat.name })}
-                      className="flex flex-col items-center gap-2.5 p-5 rounded-xl border border-gray-200 bg-white hover:border-[#015035]/30 hover:shadow-sm transition-all text-center"
+                      className="flex flex-col items-center gap-2 sm:gap-2.5 p-4 sm:p-5 rounded-xl border border-gray-200 bg-white hover:border-[#015035]/30 hover:shadow-sm transition-all text-center min-h-[44px]"
                     >
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${cat.color}`}>
                         <Icon size={20} />

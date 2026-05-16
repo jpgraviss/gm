@@ -542,19 +542,18 @@ export default function AdminPage() {
   async function deactivateUser(id: string) {
     const target = users.find(u => u.id === id)
     if (!target) return
-    const newStatus = target.status === 'Active' ? 'Inactive' : 'Active'
-    // Optimistic update
+    const isActive = target.status.toLowerCase() === 'active'
+    const newStatus = isActive ? 'suspended' : 'active'
     setUsers(prev => prev.map(u => u.id === id ? { ...u, status: newStatus } : u))
     try {
-      const res = await fetch(`/api/admin/users/${id}`, {
-        method: 'PUT',
+      const res = await fetch('/api/team-members', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ id, action: isActive ? 'suspend' : 'reinstate' }),
       })
       if (!res.ok) throw new Error()
-      toast(`User ${newStatus === 'Active' ? 'reactivated' : 'deactivated'}`, 'success')
+      toast(`User ${isActive ? 'suspended' : 'reinstated'}`, 'success')
     } catch {
-      // Rollback
       setUsers(prev => prev.map(u => u.id === id ? { ...u, status: target.status } : u))
       toast('Failed to update user status', 'error')
     }
@@ -576,7 +575,6 @@ export default function AdminPage() {
       const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error()
 
-      // Reassign deals if a target rep was selected
       if (reassignTo) {
         const targetUser = users.find(u => u.id === id)
         if (targetUser) {
@@ -584,11 +582,11 @@ export default function AdminPage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fromRep: targetUser.name, toRep: reassignTo }),
-          }).catch(() => {/* best effort */})
+          }).catch(() => {})
         }
       }
 
-      setUsers(prev => prev.filter(u => u.id !== id))
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, status: 'deleted', deletedAt: new Date().toISOString() } : u))
       setRemoveConfirm(null)
       setReassignTo('')
       toast('User removed and deals reassigned', 'success')

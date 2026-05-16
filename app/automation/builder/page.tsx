@@ -1090,11 +1090,14 @@ export default function AutomationBuilderPage() {
 
           {/* ── Right Config Panel ───────────────────────────────────────── */}
           {selectedNode && selectedNode.type !== 'end' && selectedNode.subtype && (
-            <NodeConfigPanel
-              node={selectedNode}
-              onChange={handleUpdateConfig}
-              onClose={() => setSelectedNodeId(null)}
-            />
+            <>
+              <div className="md:hidden fixed inset-0 bg-black/30 z-20" onClick={() => setSelectedNodeId(null)} />
+              <NodeConfigPanel
+                node={selectedNode}
+                onChange={handleUpdateConfig}
+                onClose={() => setSelectedNodeId(null)}
+              />
+            </>
           )}
         </div>
       )}

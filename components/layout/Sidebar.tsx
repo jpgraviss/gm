@@ -63,6 +63,7 @@ const navigation: NavSection[] = [
       { label: 'Social Media', href: '/social',    icon: <Share2 size={16} />,        allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
       { label: 'Broadcasts',   href: '/marketing', icon: <Mail size={16} />,          allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
       { label: 'Forms',        href: '/forms',      icon: <ClipboardList size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Funnels',      href: '/funnels',    icon: <Layers size={16} />,        allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
     ],
   },
   {

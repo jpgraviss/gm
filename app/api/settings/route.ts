@@ -82,6 +82,7 @@ export async function PATCH(req: NextRequest) {
   if (body.hubspot              !== undefined) updates.hubspot              = body.hubspot
   if (body.resend               !== undefined) updates.resend               = body.resend
   if (body.google_reviews       !== undefined) updates.google_reviews       = body.google_reviews
+  if (body.onboarding_completed !== undefined) updates.onboarding_completed = body.onboarding_completed
 
   const { data, error } = await db
     .from('app_settings')

@@ -1,18 +1,29 @@
 'use client'
 
 import { useState } from 'react'
-import { X, DollarSign, User, FileText, ChevronLeft } from 'lucide-react'
+import { X, DollarSign, User, FileText, ChevronLeft, Paperclip } from 'lucide-react'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import CompanySelect from '@/components/ui/CompanySelect'
+import FileUpload from '@/components/ui/FileUpload'
 import type { ServiceType } from '@/lib/types'
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
+
+interface UploadedFile {
+  name: string
+  size: number
+  url: string
+  path: string
+  type: string
+}
+
 export interface NewProposalFormData {
   company: string
   serviceType: ServiceType
   assignedRep: string
   value: string
   notes: string
+  attachments: UploadedFile[]
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {

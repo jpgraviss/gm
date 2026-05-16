@@ -1235,16 +1235,9 @@ export default function SettingsPage() {
               ))}
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
-              <h4 className="text-sm font-bold text-gray-900 mb-3">HubSpot CRM</h4>
-              <div className="space-y-3">
-                <input placeholder="API Key (Private App Token)" type="password" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                <div className="flex gap-2">
-                  <button type="button" className="text-xs font-medium text-white px-4 py-2 rounded-lg" style={{ background: '#015035' }}>Test Connection</button>
-                  <button type="button" className="text-xs font-medium text-gray-600 bg-gray-100 px-4 py-2 rounded-lg hover:bg-gray-200">Import Contacts</button>
-                </div>
-              </div>
-            </div>
+            <HubSpotIntegrationSection />
+
+            <SmsIntegrationSection />
           </div>
         )}
 

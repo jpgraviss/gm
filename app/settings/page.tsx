@@ -193,7 +193,7 @@ function loadLS<T>(key: string, fallback: T): T {
 
 export default function SettingsPage() {
   const { toast } = useToast()
-  const { gmailToken, gmailEmail, connectGmail, disconnectGmail, addUser, members: authMembers } = useAuth()
+  const { user, gmailToken, gmailEmail, connectGmail, disconnectGmail, addUser, members: authMembers } = useAuth()
   const searchParams   = useSearchParams()
   const router         = useRouter()
   const [loading, setLoading] = useState(true)
@@ -608,7 +608,7 @@ export default function SettingsPage() {
         {/* Top tab bar */}
         <div className="bg-white rounded-xl border border-gray-200 mb-5 overflow-x-auto">
           <div className="flex min-w-max">
-            {tabs.map(tab => (
+            {tabs.filter(tab => tab !== 'Navigation' || user?.isAdmin).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1546,6 +1546,148 @@ export default function SettingsPage() {
               <button onClick={saveQbSync} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
                 {saved === 'QB Sync' ? <><CheckCircle size={14} /> Saved!</> : 'Save QB Sync Settings'}
               </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'Navigation' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="lg:col-span-2 flex flex-col gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Sidebar Navigation</h3>
+                  <div className="flex items-center gap-2">
+                    {saved === 'Navigation' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+                    <button onClick={resetNavConfig} className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                      <RotateCcw size={12} /> Reset to Default
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {[...navConfig.sections].sort((a, b) => a.order - b.order).map((section, sIdx) => {
+                    const isExpanded = expandedSections.has(section.id)
+                    const defaultSection = defaultNavigation.find(s => s.section.toLowerCase().replace(/\s+/g, '-') === section.id)
+                    return (
+                      <div key={section.id} className={`border rounded-xl overflow-hidden transition-colors ${section.visible ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50'}`}>
+                        <div className="flex items-center gap-2 px-4 py-3">
+                          <div className="flex flex-col gap-0.5 flex-shrink-0">
+                            <button
+                              onClick={() => moveSectionUp(sIdx)}
+                              disabled={sIdx === 0}
+                              className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                            >
+                              <ChevronUp size={12} />
+                            </button>
+                            <button
+                              onClick={() => moveSectionDown(sIdx)}
+                              disabled={sIdx === navConfig.sections.length - 1}
+                              className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                            >
+                              <ChevronDown size={12} />
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => setExpandedSections(prev => {
+                              const next = new Set(prev)
+                              if (next.has(section.id)) next.delete(section.id)
+                              else next.add(section.id)
+                              return next
+                            })}
+                            className="flex-1 flex items-center gap-2 text-left"
+                          >
+                            <ChevronRight size={14} className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                            <input
+                              type="text"
+                              value={section.label}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => renameSectionLabel(section.id, e.target.value)}
+                              className="text-sm font-semibold text-gray-800 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-green-700 focus:outline-none px-1 py-0.5 -ml-1 w-40"
+                            />
+                            <span className="text-[10px] text-gray-400">{section.items.length} items</span>
+                          </button>
+                          <Toggle enabled={section.visible} onChange={() => toggleSectionVisible(section.id)} />
+                        </div>
+                        {isExpanded && (
+                          <div className="border-t border-gray-100 px-4 py-2">
+                            {[...section.items].sort((a, b) => a.order - b.order).map((item, iIdx) => {
+                              const navItem = defaultSection?.items.find(ni => ni.href === item.href)
+                              const label = navItem?.label ?? item.href
+                              return (
+                                <div key={item.href} className="flex items-center gap-2 py-2 border-b border-gray-50 last:border-0">
+                                  <div className="flex flex-col gap-0.5 flex-shrink-0">
+                                    <button
+                                      onClick={() => moveItemUp(section.id, iIdx)}
+                                      disabled={iIdx === 0}
+                                      className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                                    >
+                                      <ChevronUp size={11} />
+                                    </button>
+                                    <button
+                                      onClick={() => moveItemDown(section.id, iIdx)}
+                                      disabled={iIdx === section.items.length - 1}
+                                      className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                                    >
+                                      <ChevronDown size={11} />
+                                    </button>
+                                  </div>
+                                  <span className={`text-sm flex-1 ${item.visible ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
+                                  <select
+                                    value={section.id}
+                                    onChange={e => moveItemToSection(section.id, item.href, e.target.value)}
+                                    className="text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-1.5 py-1 focus:outline-none focus:border-green-700"
+                                  >
+                                    {navConfig.sections.map(s => (
+                                      <option key={s.id} value={s.id}>{s.label}</option>
+                                    ))}
+                                  </select>
+                                  <Toggle enabled={item.visible} onChange={() => toggleItemVisible(section.id, item.href)} />
+                                </div>
+                              )
+                            })}
+                            {section.items.length === 0 && (
+                              <p className="text-xs text-gray-400 py-3 text-center">No items in this section</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <button onClick={saveNavConfig} className="mt-5 flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+                  {saved === 'Navigation' ? <><CheckCircle size={14} /> Saved!</> : 'Save Navigation'}
+                </button>
+              </div>
+            </div>
+            <div className="lg:col-span-1">
+              <div className="bg-white rounded-xl border border-gray-200 p-5 sticky top-4">
+                <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-4">Preview</h4>
+                <div className="rounded-xl overflow-hidden" style={{ background: '#012b1e' }}>
+                  <div className="px-3 py-3">
+                    {[...navConfig.sections]
+                      .filter(s => s.visible)
+                      .sort((a, b) => a.order - b.order)
+                      .map(section => {
+                        const defaultSection = defaultNavigation.find(s => s.section.toLowerCase().replace(/\s+/g, '-') === section.id)
+                        const visibleItems = [...section.items].filter(it => it.visible).sort((a, b) => a.order - b.order)
+                        if (visibleItems.length === 0) return null
+                        return (
+                          <div key={section.id} className="mb-2.5">
+                            <p className="text-white/30 text-[9px] font-semibold tracking-widest uppercase px-2 mb-1">{section.label}</p>
+                            {visibleItems.map(item => {
+                              const navItem = defaultSection?.items.find(ni => ni.href === item.href)
+                              return (
+                                <div key={item.href} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-white/50">
+                                  <div className="w-3.5 h-3.5 rounded bg-white/10 flex-shrink-0" />
+                                  <span className="text-[11px]">{navItem?.label ?? item.href}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

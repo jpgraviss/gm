@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 /**
- * Returns a JS snippet that creates an iframe pointing at /f/[slug].
+ * Returns a JS snippet that creates an iframe pointing at /go/form/[slug].
  * Usage on a client website:
  *   <div data-gravhub-form="my-contact-form"></div>
  *   <script src="https://app.gravissmarketing.com/api/forms/public/my-contact-form/embed.js" async></script>
@@ -13,7 +13,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
   const js = `
 (function () {
   var slug = ${JSON.stringify(slug)};
-  var src = ${JSON.stringify(appUrl)} + '/f/' + slug;
+  var src = ${JSON.stringify(appUrl)} + '/go/form/' + slug;
   var targets = document.querySelectorAll('[data-gravhub-form="' + slug + '"]');
   targets.forEach(function (el) {
     if (el.dataset.gravhubLoaded) return;

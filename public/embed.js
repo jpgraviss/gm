@@ -81,7 +81,7 @@
   container.appendChild(closeBtn);
 
   var iframe = document.createElement('iframe');
-  iframe.src = origin + '/f/' + slug + '?embed=1';
+  iframe.src = origin + '/go/form/' + slug + '?embed=1';
   iframe.style.cssText = 'width:100%;border:none;flex:1;min-height:400px;border-radius:0 0 16px 16px;';
   iframe.setAttribute('title', 'Form');
   container.appendChild(iframe);

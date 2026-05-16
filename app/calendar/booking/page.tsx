@@ -111,7 +111,7 @@ export default function BookingManagementPage() {
   }
 
   function copyLink(slug: string) {
-    const url = `${window.location.origin}/b/${slug}`
+    const url = `${window.location.origin}/go/book/${slug}`
     navigator.clipboard.writeText(url)
     setCopiedSlug(slug)
     setTimeout(() => setCopiedSlug(null), 2000)
@@ -204,7 +204,7 @@ export default function BookingManagementPage() {
                       {copiedSlug === bt.slug ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                     <a
-                      href={`/b/${bt.slug}`}
+                      href={`/go/book/${bt.slug}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-2 rounded-lg hover:bg-gray-50 border border-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
@@ -428,7 +428,7 @@ export default function BookingManagementPage() {
                   <div className="p-3 bg-gray-50 rounded-xl">
                     <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Public Link</div>
                     <div className="flex items-center gap-2">
-                      <code className="text-xs text-gray-600 font-mono flex-1 truncate">/b/{editing.slug}</code>
+                      <code className="text-xs text-gray-600 font-mono flex-1 truncate">/go/book/{editing.slug}</code>
                       <button
                         onClick={() => copyLink(editing.slug!)}
                         className="p-1 hover:bg-gray-200 rounded transition-colors"

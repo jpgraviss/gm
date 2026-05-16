@@ -199,7 +199,7 @@ export default function FormsPage() {
                   <button onClick={() => setShowEmbed(f)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Embed">
                     <Copy size={14} />
                   </button>
-                  <a href={`/f/${f.slug}`} target="_blank" rel="noopener" className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Preview">
+                  <a href={`/go/form/${f.slug}`} target="_blank" rel="noopener" className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Preview">
                     <Eye size={14} />
                   </a>
                   <button onClick={() => setSelected(f)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Edit">
@@ -533,7 +533,7 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
             Save Form
           </button>
           <a
-            href={`/f/${draft.slug}`}
+            href={`/go/form/${draft.slug}`}
             target="_blank"
             rel="noopener"
             className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 flex items-center gap-1.5"
@@ -753,9 +753,9 @@ function EmbedTabContent({ draft, setDraft }: { draft: LeadForm; setDraft: React
 
 function EmbedModal({ form, onClose }: { form: LeadForm; onClose: () => void }) {
   const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.gravissmarketing.com'
-  const iframeCode = `<iframe src="${appUrl}/f/${form.slug}" width="100%" height="600" style="border:none;border-radius:12px;" title="${form.name}"></iframe>`
+  const iframeCode = `<iframe src="${appUrl}/go/form/${form.slug}" width="100%" height="600" style="border:none;border-radius:12px;" title="${form.name}"></iframe>`
   const scriptCode = `<div data-gravhub-form="${form.slug}"></div>\n<script src="${appUrl}/api/forms/public/${form.slug}/embed.js" async></script>`
-  const directLink = `${appUrl}/f/${form.slug}`
+  const directLink = `${appUrl}/go/form/${form.slug}`
   const wpShortcode = `<!-- GravHub Form: ${form.name} -->\n<div data-gravhub-form="${form.slug}"></div>\n<script src="${appUrl}/api/forms/public/${form.slug}/embed.js" async></script>\n<!-- End GravHub Form -->`
   const popup = form.popupConfig ?? DEFAULT_POPUP
   const popupAttrs: string[] = [

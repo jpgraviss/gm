@@ -156,7 +156,23 @@ const DASHBOARD_DEFAULTS = {
     evening: 'Good Evening',
     night: 'Burning the midnight oil',
   },
-  rotatingMessages: [] as { message: string; emoji: string }[],
+  rotatingMessages: [
+    { message: 'Revenue doesn\'t sleep. Neither does GravHub.', emoji: '🔥' },
+    { message: 'Every deal in your pipeline is a future payday.', emoji: '💰' },
+    { message: 'Outwork yesterday. Outclose tomorrow.', emoji: '🚀' },
+    { message: 'Your pipeline is your paycheck — keep it full.', emoji: '📈' },
+    { message: 'Closed is the only stage that pays.', emoji: '🎯' },
+    { message: 'Speed to lead. Speed to close. Speed to invoice.', emoji: '⚡' },
+    { message: 'The follow-up you skip is the deal you lose.', emoji: '📞' },
+    { message: 'A stale pipeline is a broke pipeline.', emoji: '💀' },
+    { message: 'Renewals are revenue you already earned. Go collect.', emoji: '💎' },
+    { message: 'You\'re not just selling — you\'re building an empire.', emoji: '👑' },
+    { message: 'The difference between good and great? One more follow-up.', emoji: '💪' },
+    { message: 'Opportunities don\'t expire — but your competitors don\'t wait.', emoji: '⏳' },
+    { message: 'Today\'s proposal is next month\'s revenue.', emoji: '📝' },
+    { message: 'Track everything. Miss nothing. Close more.', emoji: '🔒' },
+    { message: 'Your CRM is only as strong as the reps using it.', emoji: '🏋️' },
+  ] as { message: string; emoji: string }[],
 }
 
 const QB_SYNC_DEFAULTS = [

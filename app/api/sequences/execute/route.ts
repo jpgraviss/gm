@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { Resend } from 'resend'
-import { getResend } from '@/lib/resend'
+import { sendEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase'
 import { sendViaGmail } from '@/lib/gmail-send'
 import { fireAutomations } from '@/lib/automations-engine'
@@ -542,31 +541,29 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Send via Resend if Gmail wasn't used or failed
       if (!gmailSent) {
-        const resendPayload: Parameters<Resend['emails']['send']>[0] = {
-          from: `${fromName} <${fromEmail}>`,
-          replyTo,
-          to: [enrollment.contact_email],
-          subject,
-          html,
-          headers: {
-            'X-Sequence-Id': seq.id,
-            'X-Enrollment-Id': enrollment.id,
-          },
+        const resendHeaders: Record<string, string> = {
+          'X-Sequence-Id': seq.id,
+          'X-Enrollment-Id': enrollment.id,
         }
-        if (cc) resendPayload.cc = cc
-        if (bcc) resendPayload.bcc = bcc
-        // Add threading headers for Resend
-        if (inReplyTo && resendPayload.headers) {
-          resendPayload.headers['In-Reply-To'] = inReplyTo
-          resendPayload.headers['References'] = references!
+        if (inReplyTo) {
+          resendHeaders['In-Reply-To'] = inReplyTo
+          resendHeaders['References'] = references!
         }
 
-        const { data: resendData, error: resendErr } = await getResend().emails.send(resendPayload)
-        emailErr = resendErr ? (resendErr as Error).message ?? 'Resend error' : null
-        if (!emailErr && resendData) {
-          messageId = resendData.id ?? null
+        const resendResult = await sendEmail({
+          from: `${fromName} <${fromEmail}>`,
+          replyTo,
+          to: enrollment.contact_email,
+          subject,
+          html,
+          headers: resendHeaders,
+          cc,
+          bcc,
+        })
+        emailErr = resendResult.success ? null : (resendResult.error ?? 'Resend error')
+        if (resendResult.success) {
+          messageId = resendResult.id ?? null
         }
       }
 

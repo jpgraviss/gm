@@ -18,6 +18,7 @@ create table if not exists calendar_settings (
   google_refresh_token  text,
   google_access_token   text,
   google_token_expiry   timestamptz,
+  google_sync_token     text,
   active                boolean not null default true,
   created_at            timestamptz default now(),
   updated_at            timestamptz default now()

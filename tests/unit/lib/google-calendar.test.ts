@@ -43,6 +43,7 @@ function makeSettings(overrides: Partial<CalendarSettings> = {}): CalendarSettin
     google_refresh_token: null,
     google_access_token: null,
     google_token_expiry: null,
+    google_sync_token: null,
     active: true,
     ...overrides,
   }

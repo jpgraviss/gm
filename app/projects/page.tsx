@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
+import FileUpload from '@/components/ui/FileUpload'
 
 const DEPARTMENTS = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 
@@ -138,6 +139,48 @@ function ProjectGridCard({ project, onClick }: { project: Project; onClick: () =
   )
 }
 
+interface ProjectFile {
+  name: string
+  size: number
+  url: string
+  path: string
+  type: string
+  createdAt?: string
+}
+
+function ProjectFilesTab({ company }: { company: string }) {
+  const [files, setFiles] = useState<ProjectFile[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`/api/files?company=${encodeURIComponent(company)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setFiles(data.map((f: ProjectFile) => ({ ...f, type: f.type ?? '' }))) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [company])
+
+  if (loading) return <div className="py-12 text-center text-sm text-gray-400">Loading files...</div>
+
+  return (
+    <div className="flex flex-col gap-4">
+      <FileUpload
+        company={company}
+        files={files}
+        onUpload={file => setFiles(prev => [file, ...prev])}
+        onRemove={file => {
+          fetch('/api/files', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: file.path }),
+          })
+          setFiles(prev => prev.filter(f => f.path !== file.path))
+        }}
+      />
+    </div>
+  )
+}
+
 function ProjectDetailPanel({
   project,
   onClose,
@@ -151,7 +194,7 @@ function ProjectDetailPanel({
   onDelete?: (id: string) => void
   onUpdate?: (id: string, updates: Partial<Project>) => void
 }) {
-  const [tab, setTab] = useState<'overview' | 'milestones' | 'tasks' | 'notes'>('overview')
+  const [tab, setTab] = useState<'overview' | 'milestones' | 'tasks' | 'notes' | 'files'>('overview')
   const [showStatusPicker, setShowStatusPicker] = useState(false)
   const [localTasks, setLocalTasks] = useState(project.tasks)
   const [notes, setNotes] = useState<Array<{ id: string; text: string; date: string; author: string }>>(project.notes ?? [])
@@ -238,7 +281,7 @@ function ProjectDetailPanel({
         </div>
 
         <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
-          {(['overview', 'milestones', 'tasks', 'notes'] as const).map(t => (
+          {(['overview', 'milestones', 'tasks', 'notes', 'files'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}>
               {t}
             </button>
@@ -636,6 +679,10 @@ function ProjectDetailPanel({
                 </button>
               )}
             </div>
+          )}
+
+          {tab === 'files' && (
+            <ProjectFilesTab company={project.company} />
           )}
         </div>
 

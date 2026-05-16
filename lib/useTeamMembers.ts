@@ -20,12 +20,13 @@ export function useTeamMembers() {
     fetch('/api/team-members')
       .then(r => r.json())
       .then((data: TeamMember[]) => {
-        const names = data.filter(m => m.status === 'Active').map(m => m.name)
+        const names = data
+          .filter(m => m.status === 'active' || m.status === 'Active')
+          .map(m => m.name)
         cachedMembers = names
         setMembers(names)
       })
       .catch(() => {
-        // Fallback if fetch fails
         setMembers([])
       })
   }, [])

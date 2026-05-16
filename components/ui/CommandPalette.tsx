@@ -7,7 +7,7 @@ import {
   ScrollText, FolderKanban, CheckSquare, Clock, CalendarDays, Wrench,
   RefreshCw, Mail, MessageSquare, CreditCard, Settings, Zap,
   Globe, BarChart3, Plug, Share2, ClipboardList, Inbox, ArrowRight,
-  BookOpen, ShieldCheck,
+  BookOpen, ShieldCheck, UserCircle, Briefcase,
 } from 'lucide-react'
 
 interface CommandItem {
@@ -17,6 +17,25 @@ interface CommandItem {
   href: string
   icon: React.ReactNode
   keywords?: string[]
+}
+
+interface SearchResult {
+  id: string
+  type: 'contact' | 'company' | 'deal' | 'project' | 'ticket' | 'task' | 'proposal' | 'contract'
+  name: string
+  subtitle: string
+  href: string
+}
+
+const TYPE_META: Record<string, { icon: React.ReactNode; badge: string; badgeClass: string }> = {
+  contact:  { icon: <UserCircle size={15} />,   badge: 'Contact',  badgeClass: 'bg-blue-100 text-blue-700' },
+  company:  { icon: <Building2 size={15} />,    badge: 'Company',  badgeClass: 'bg-indigo-100 text-indigo-700' },
+  deal:     { icon: <TrendingUp size={15} />,   badge: 'Deal',     badgeClass: 'bg-amber-100 text-amber-700' },
+  project:  { icon: <FolderKanban size={15} />, badge: 'Project',  badgeClass: 'bg-purple-100 text-purple-700' },
+  ticket:   { icon: <MessageSquare size={15} />,badge: 'Ticket',   badgeClass: 'bg-pink-100 text-pink-700' },
+  task:     { icon: <CheckSquare size={15} />,  badge: 'Task',     badgeClass: 'bg-cyan-100 text-cyan-700' },
+  proposal: { icon: <FileText size={15} />,     badge: 'Proposal', badgeClass: 'bg-teal-100 text-teal-700' },
+  contract: { icon: <ScrollText size={15} />,   badge: 'Contract', badgeClass: 'bg-orange-100 text-orange-700' },
 }
 
 const COMMANDS: CommandItem[] = [
@@ -46,15 +65,40 @@ const COMMANDS: CommandItem[] = [
   { id: 'automation',     label: 'Automation',       section: 'System',     href: '/automation',      icon: <Zap size={15} />,              keywords: ['workflows', 'triggers'] },
   { id: 'settings',       label: 'Settings',         section: 'System',     href: '/settings',        icon: <Settings size={15} /> },
   { id: 'admin',          label: 'Admin',            section: 'System',     href: '/admin',           icon: <ShieldCheck size={15} />,      keywords: ['users', 'team'] },
+  { id: 'audit-log',      label: 'Audit Log',        section: 'System',     href: '/admin/audit-log', icon: <Briefcase size={15} />,        keywords: ['activity', 'history'] },
 ]
+
+const RECENT_KEY = 'gravhub_recent_searches'
+const MAX_RECENT = 5
+
+function getRecentSearches(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function addRecentSearch(term: string) {
+  try {
+    const recent = getRecentSearches().filter(r => r !== term)
+    recent.unshift(term)
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
+  } catch { /* noop */ }
+}
 
 export default function CommandPalette() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [selectedIdx, setSelectedIdx] = useState(0)
+  const [entityResults, setEntityResults] = useState<SearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -72,9 +116,31 @@ export default function CommandPalette() {
     if (open) {
       setQuery('')
       setSelectedIdx(0)
+      setEntityResults([])
+      setRecentSearches(getRecentSearches())
       setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [open])
+
+  useEffect(() => {
+    setSelectedIdx(0)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    const q = query.trim()
+    if (q.length < 2) {
+      setEntityResults([])
+      setSearching(false)
+      return
+    }
+    setSearching(true)
+    debounceRef.current = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        .then(r => r.ok ? r.json() : [])
+        .then((data: SearchResult[]) => setEntityResults(data))
+        .catch(() => setEntityResults([]))
+        .finally(() => setSearching(false))
+    }, 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [query])
 
   const filtered = query.trim()
     ? COMMANDS.filter(c => {
@@ -87,23 +153,37 @@ export default function CommandPalette() {
 
   const sections = [...new Set(filtered.map(c => c.section))]
 
-  const handleSelect = useCallback((item: CommandItem) => {
+  const totalItems = filtered.length + entityResults.length
+
+  const handleSelectPage = useCallback((item: CommandItem) => {
     setOpen(false)
     router.push(item.href)
   }, [router])
 
-  const flatFiltered = filtered
-  useEffect(() => { setSelectedIdx(0) }, [query])
+  const handleSelectEntity = useCallback((item: SearchResult) => {
+    if (query.trim()) addRecentSearch(query.trim())
+    setOpen(false)
+    router.push(item.href)
+  }, [router, query])
+
+  const handleSelectRecent = useCallback((term: string) => {
+    setQuery(term)
+  }, [])
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setSelectedIdx(i => Math.min(i + 1, flatFiltered.length - 1))
+      setSelectedIdx(i => Math.min(i + 1, totalItems - 1))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       setSelectedIdx(i => Math.max(i - 1, 0))
-    } else if (e.key === 'Enter' && flatFiltered[selectedIdx]) {
-      handleSelect(flatFiltered[selectedIdx])
+    } else if (e.key === 'Enter') {
+      if (selectedIdx < filtered.length) {
+        handleSelectPage(filtered[selectedIdx])
+      } else {
+        const entityIdx = selectedIdx - filtered.length
+        if (entityResults[entityIdx]) handleSelectEntity(entityResults[entityIdx])
+      }
     }
   }
 
@@ -122,14 +202,65 @@ export default function CommandPalette() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search pages, tools, and settings..."
+            placeholder="Search pages, contacts, deals, projects..."
             className="flex-1 text-sm text-gray-800 placeholder-gray-400 outline-none bg-transparent"
           />
+          {searching && (
+            <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+          )}
           <kbd className="text-[10px] font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">ESC</kbd>
         </div>
 
         <div ref={listRef} className="max-h-[50vh] overflow-y-auto">
-          {filtered.length === 0 ? (
+          {!query.trim() && recentSearches.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-4 pt-3 pb-1">Recent Searches</p>
+              {recentSearches.map(term => (
+                <button
+                  key={term}
+                  onClick={() => handleSelectRecent(term)}
+                  className="flex items-center gap-3 w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <Clock size={13} className="text-gray-300" />
+                  <span className="text-sm text-gray-600">{term}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {entityResults.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-4 pt-3 pb-1">Results</p>
+              {entityResults.map((result, rIdx) => {
+                const globalIdx = filtered.length + rIdx
+                const meta = TYPE_META[result.type]
+                return (
+                  <button
+                    key={`${result.type}-${result.id}`}
+                    onClick={() => handleSelectEntity(result)}
+                    onMouseEnter={() => setSelectedIdx(globalIdx)}
+                    className={`flex items-center gap-3 w-full px-4 py-2.5 text-left transition-colors ${
+                      selectedIdx === globalIdx ? 'bg-emerald-50' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className={selectedIdx === globalIdx ? 'text-emerald-600' : 'text-gray-400'}>{meta?.icon}</span>
+                    <span className={`text-sm font-medium flex-1 truncate ${selectedIdx === globalIdx ? 'text-emerald-800' : 'text-gray-700'}`}>
+                      {result.name}
+                    </span>
+                    {result.subtitle && (
+                      <span className="text-xs text-gray-400 truncate max-w-[120px]">{result.subtitle}</span>
+                    )}
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${meta?.badgeClass ?? 'bg-gray-100 text-gray-600'}`}>
+                      {meta?.badge}
+                    </span>
+                    {selectedIdx === globalIdx && <ArrowRight size={13} className="text-emerald-400 flex-shrink-0" />}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {filtered.length === 0 && entityResults.length === 0 && query.trim() ? (
             <div className="py-8 text-center">
               <p className="text-sm text-gray-400">No results for &ldquo;{query}&rdquo;</p>
             </div>
@@ -145,7 +276,7 @@ export default function CommandPalette() {
                     return (
                       <button
                         key={item.id}
-                        onClick={() => handleSelect(item)}
+                        onClick={() => handleSelectPage(item)}
                         onMouseEnter={() => setSelectedIdx(idx)}
                         className={`flex items-center gap-3 w-full px-4 py-2.5 text-left transition-colors ${
                           selectedIdx === idx ? 'bg-emerald-50' : 'hover:bg-gray-50'
@@ -165,13 +296,13 @@ export default function CommandPalette() {
 
         <div className="px-4 py-2.5 border-t border-gray-100 flex items-center gap-4">
           <div className="flex items-center gap-1 text-[10px] text-gray-400">
-            <kbd className="font-mono bg-gray-100 px-1 py-0.5 rounded border border-gray-200">↑↓</kbd> navigate
+            <kbd className="font-mono bg-gray-100 px-1 py-0.5 rounded border border-gray-200">&#8593;&#8595;</kbd> navigate
           </div>
           <div className="flex items-center gap-1 text-[10px] text-gray-400">
-            <kbd className="font-mono bg-gray-100 px-1 py-0.5 rounded border border-gray-200">↵</kbd> open
+            <kbd className="font-mono bg-gray-100 px-1 py-0.5 rounded border border-gray-200">&#8629;</kbd> open
           </div>
           <div className="flex items-center gap-1 text-[10px] text-gray-400 ml-auto">
-            <kbd className="font-mono bg-gray-100 px-1 py-0.5 rounded border border-gray-200">⌘K</kbd> toggle
+            <kbd className="font-mono bg-gray-100 px-1 py-0.5 rounded border border-gray-200">&#8984;K</kbd> toggle
           </div>
         </div>
       </div>

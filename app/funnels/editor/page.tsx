@@ -520,6 +520,7 @@ function EditorInner() {
   const [pageName, setPageName] = useState('')
   const [loading, setLoading] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobilePanel, setMobilePanel] = useState<'blocks' | 'settings' | null>(null)
 
   const selectedBlock = blocks.find((b) => b.id === selectedBlockId) ?? null
 
@@ -646,121 +647,170 @@ function EditorInner() {
   }
 
   return (
-    <div className="h-screen grid" style={{ gridTemplateRows: 'auto 1fr', gridTemplateColumns: sidebarCollapsed ? '0px 1fr 0px' : '240px 1fr 300px' }}>
+    <div className="h-screen flex flex-col">
       {/* Top bar */}
-      <div className="col-span-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-white/10 px-4 py-2.5 flex items-center gap-3 z-10">
-        <button onClick={() => router.push('/funnels')} className="text-gray-400 hover:text-gray-600 text-xs">
-          &larr; Funnels
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-white/10 px-3 md:px-4 py-2.5 flex items-center gap-2 md:gap-3 z-10 flex-shrink-0">
+        <button onClick={() => router.push('/funnels')} className="text-gray-400 hover:text-gray-600 text-xs flex-shrink-0">
+          &larr; <span className="hidden sm:inline">Funnels</span>
         </button>
-        <div className="h-4 w-px bg-gray-200 dark:bg-white/10" />
+        <div className="h-4 w-px bg-gray-200 dark:bg-white/10 hidden sm:block" />
         <input
           value={pageName}
           onChange={(e) => setPageName(e.target.value)}
-          className="text-sm font-medium bg-transparent border-0 outline-none flex-1 text-gray-900 dark:text-white"
+          className="text-sm font-medium bg-transparent border-0 outline-none flex-1 min-w-0 text-gray-900 dark:text-white"
         />
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 rounded"
+          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 rounded hidden md:block"
         >
           {sidebarCollapsed ? 'Show panels' : 'Hide panels'}
         </button>
-        <button onClick={() => setPreview(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-white/10 text-gray-600 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5">
-          <Eye size={13} /> Preview
+        <button onClick={() => setPreview(true)} className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-white/10 text-gray-600 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5">
+          <Eye size={13} /> <span className="hidden sm:inline">Preview</span>
         </button>
-        <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-white/10 text-gray-600 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50">
-          <Save size={13} /> {saving ? 'Saving...' : 'Save'}
+        <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-white/10 text-gray-600 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50">
+          <Save size={13} /> <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save'}</span>
         </button>
-        <button onClick={publish} disabled={publishing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-white font-medium disabled:opacity-50" style={{ background: '#015035' }}>
-          <Upload size={13} /> {publishing ? 'Publishing...' : 'Publish'}
+        <button onClick={publish} disabled={publishing} className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 text-xs rounded-lg text-white font-medium disabled:opacity-50" style={{ background: '#015035' }}>
+          <Upload size={13} /> <span className="hidden sm:inline">{publishing ? 'Publishing...' : 'Publish'}</span>
         </button>
       </div>
 
-      {/* Left sidebar - block palette */}
-      {!sidebarCollapsed && (
-        <div className="bg-gray-50 dark:bg-gray-900/50 border-r border-gray-200 dark:border-white/10 overflow-y-auto p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3 px-1">Add Blocks</p>
-          <div className="space-y-1.5">
-            {BLOCK_TYPES.map((bt) => (
-              <button
-                key={bt.type}
-                onClick={() => addBlock(bt.type)}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left hover:bg-white dark:hover:bg-white/5 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-500 group-hover:text-[#015035] transition-colors">
-                  {bt.icon}
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-700 dark:text-white/80">{bt.label}</p>
-                  <p className="text-[10px] text-gray-400 dark:text-white/30">{bt.description}</p>
-                </div>
-              </button>
-            ))}
-          </div>
+      {/* Mobile block palette bar */}
+      <div className="md:hidden flex items-center gap-1.5 px-3 py-2 bg-white border-b border-gray-200 overflow-x-auto flex-shrink-0">
+        {BLOCK_TYPES.map((bt) => (
+          <button
+            key={bt.type}
+            onClick={() => addBlock(bt.type)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 flex-shrink-0 min-h-[44px]"
+          >
+            {bt.icon}
+            {bt.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Mobile action buttons */}
+      {selectedBlock && (
+        <div className="md:hidden flex items-center justify-end gap-2 px-3 py-2 bg-white border-b border-gray-200 flex-shrink-0">
+          <button
+            onClick={() => setMobilePanel('settings')}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600"
+          >
+            Settings
+          </button>
         </div>
       )}
 
-      {/* Center canvas */}
-      <div className="overflow-y-auto bg-gray-100 dark:bg-gray-950">
-        <div className="max-w-4xl mx-auto my-6">
-          {blocks.length === 0 ? (
-            <div className="border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl py-20 text-center">
-              <Layers size={32} className="mx-auto text-gray-300 dark:text-white/20 mb-3" />
-              <p className="text-sm text-gray-400">Click a block from the left panel to add it to your page.</p>
-            </div>
-          ) : (
-            <div className="space-y-0 rounded-xl overflow-hidden shadow-sm border border-gray-200 dark:border-white/10">
-              {blocks.map((block, i) => (
-                <div
-                  key={block.id}
-                  className={`relative group cursor-pointer ${selectedBlockId === block.id ? 'ring-2 ring-[#015035] ring-offset-1' : ''}`}
-                  onClick={() => setSelectedBlockId(block.id)}
+      <div className="flex flex-1 overflow-hidden min-h-0">
+        {/* Left sidebar - block palette (desktop) */}
+        {!sidebarCollapsed && (
+          <div className="hidden md:block w-60 bg-gray-50 dark:bg-gray-900/50 border-r border-gray-200 dark:border-white/10 overflow-y-auto p-3 flex-shrink-0">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3 px-1">Add Blocks</p>
+            <div className="space-y-1.5">
+              {BLOCK_TYPES.map((bt) => (
+                <button
+                  key={bt.type}
+                  onClick={() => addBlock(bt.type)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left hover:bg-white dark:hover:bg-white/5 transition-colors group"
                 >
-                  <BlockPreview block={block} />
-                  {/* Block controls overlay */}
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-1 border border-gray-200 dark:border-white/10">
-                    <span className="text-[10px] text-gray-400 px-1.5 font-medium">{block.type}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); moveBlock(block.id, 'up') }}
-                      disabled={i === 0}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                    >
-                      <ArrowUp size={12} />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); moveBlock(block.id, 'down') }}
-                      disabled={i === blocks.length - 1}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                    >
-                      <ArrowDown size={12} />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); deleteBlock(block.id) }}
-                      className="p-1 text-gray-400 hover:text-red-500"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                  <div className="w-8 h-8 rounded-lg bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-500 group-hover:text-[#015035] transition-colors">
+                    {bt.icon}
                   </div>
-                </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-700 dark:text-white/80">{bt.label}</p>
+                    <p className="text-[10px] text-gray-400 dark:text-white/30">{bt.description}</p>
+                  </div>
+                </button>
               ))}
             </div>
-          )}
+          </div>
+        )}
+
+        {/* Center canvas */}
+        <div className="flex-1 overflow-y-auto bg-gray-100 dark:bg-gray-950">
+          <div className="max-w-4xl mx-auto my-4 md:my-6 px-3 md:px-0">
+            {blocks.length === 0 ? (
+              <div className="border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl py-12 md:py-20 text-center">
+                <Layers size={32} className="mx-auto text-gray-300 dark:text-white/20 mb-3" />
+                <p className="text-sm text-gray-400 px-4">
+                  <span className="hidden md:inline">Click a block from the left panel to add it to your page.</span>
+                  <span className="md:hidden">Tap a block above to add it to your page.</span>
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-0 rounded-xl overflow-hidden shadow-sm border border-gray-200 dark:border-white/10">
+                {blocks.map((block, i) => (
+                  <div
+                    key={block.id}
+                    className={`relative group cursor-pointer ${selectedBlockId === block.id ? 'ring-2 ring-[#015035] ring-offset-1' : ''}`}
+                    onClick={() => setSelectedBlockId(block.id)}
+                  >
+                    <BlockPreview block={block} />
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-1 border border-gray-200 dark:border-white/10">
+                      <span className="text-[10px] text-gray-400 px-1.5 font-medium">{block.type}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); moveBlock(block.id, 'up') }}
+                        disabled={i === 0}
+                        className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                      >
+                        <ArrowUp size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); moveBlock(block.id, 'down') }}
+                        disabled={i === blocks.length - 1}
+                        className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                      >
+                        <ArrowDown size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteBlock(block.id) }}
+                        className="p-1 text-gray-400 hover:text-red-500"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Right panel - block settings (desktop) */}
+        {!sidebarCollapsed && (
+          <div className="hidden md:block w-[300px] bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-white/10 overflow-y-auto p-4 flex-shrink-0">
+            {selectedBlock ? (
+              <BlockSettings
+                block={selectedBlock}
+                onChange={(data) => updateBlockData(selectedBlock.id, data)}
+              />
+            ) : (
+              <div className="text-center py-12">
+                <GripVertical size={24} className="mx-auto text-gray-300 dark:text-white/20 mb-2" />
+                <p className="text-xs text-gray-400">Select a block to edit its settings</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Right panel - block settings */}
-      {!sidebarCollapsed && (
-        <div className="bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-white/10 overflow-y-auto p-4">
-          {selectedBlock ? (
+      {/* Mobile settings overlay */}
+      {mobilePanel === 'settings' && selectedBlock && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setMobilePanel(null)} />
+          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl max-h-[70vh] overflow-y-auto p-4">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-semibold text-gray-900">Block Settings</p>
+              <button onClick={() => setMobilePanel(null)} className="p-2 rounded-lg hover:bg-gray-100">
+                <X size={16} className="text-gray-400" />
+              </button>
+            </div>
             <BlockSettings
               block={selectedBlock}
               onChange={(data) => updateBlockData(selectedBlock.id, data)}
             />
-          ) : (
-            <div className="text-center py-12">
-              <GripVertical size={24} className="mx-auto text-gray-300 dark:text-white/20 mb-2" />
-              <p className="text-xs text-gray-400">Select a block to edit its settings</p>
-            </div>
-          )}
+          </div>
         </div>
       )}
     </div>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getResend } from '@/lib/resend'
+import { sendEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase'
 import { getSettings } from '@/lib/settings'
 
@@ -14,7 +14,6 @@ export async function POST(req: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
 
-    // Generate a magic link for the client
     const db = createServiceClient()
     const { data: linkData, error: linkError } = await db.auth.admin.generateLink({
       type: 'magiclink',
@@ -29,22 +28,20 @@ export async function POST(req: NextRequest) {
       magicLinkUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=magiclink&redirect_to=${encodeURIComponent(`${appUrl}/auth/confirm`)}`
     }
 
-    const { data, error } = await getResend().emails.send({
-      from: `${settings.email.fromName} <${settings.email.fromEmail}>`,
-      replyTo: settings.email.replyTo,
-      to: [email],
+    const result = await sendEmail({
+      to: email,
       subject: isResendInvite
         ? `Reminder: Your ${company} client portal is ready`
         : `Your ${settings.company.name} client portal is ready`,
       html: portalInviteHtml({ company, contactName, email, service, signInUrl: magicLinkUrl, isResend: isResendInvite, settings }),
     })
 
-    if (error) {
-      console.error('[email/portal-invite POST]', error)
-      return NextResponse.json({ error: error?.message || 'Failed to send portal invite email' }, { status: 500 })
+    if (!result.success) {
+      console.error('[email/portal-invite POST]', result.error)
+      return NextResponse.json({ error: result.error || 'Failed to send portal invite email' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, id: data?.id })
+    return NextResponse.json({ success: true, id: result.id })
   } catch (err) {
     console.error('Portal invite error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

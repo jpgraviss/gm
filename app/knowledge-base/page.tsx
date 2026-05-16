@@ -106,7 +106,7 @@ function EditorPanel({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
-      <div className="relative w-full max-w-2xl bg-white shadow-xl flex flex-col animate-in slide-in-from-right">
+      <div className="relative w-full sm:max-w-2xl bg-white shadow-xl flex flex-col animate-in slide-in-from-right">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-sm font-bold text-gray-900 tracking-wide uppercase" style={{ fontFamily: 'var(--font-heading)' }}>
             {article ? 'Edit Article' : 'New Article'}
@@ -413,7 +413,7 @@ export default function KnowledgeBasePage() {
         </div>
 
         {/* Category Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
           {CATEGORIES.map((cat) => {
             const isActive = activeCategory === cat.name
             return (
@@ -439,7 +439,7 @@ export default function KnowledgeBasePage() {
         </div>
 
         {/* Filter Bar */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             {activeCategory && (
               <button

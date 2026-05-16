@@ -6,9 +6,10 @@ import Link from 'next/link'
 import {
   Star, Search, MessageSquare, Send, X, ChevronDown,
   TrendingUp, BarChart3, Clock, CheckCircle2, ExternalLink,
+  RefreshCw, Plus, Settings,
 } from 'lucide-react'
 
-type ReviewSource = 'Google' | 'Yelp' | 'Facebook'
+type ReviewSource = 'Google' | 'Yelp' | 'Facebook' | 'Manual'
 type ReviewStatus = 'pending' | 'responded'
 type FilterTab = 'all' | 'positive' | 'neutral' | 'negative' | 'needs_response'
 
@@ -23,12 +24,15 @@ interface Review {
   response: string | null
   response_date: string | null
   status: ReviewStatus
+  google_review_id?: string | null
+  location_name?: string | null
 }
 
 const SOURCE_COLORS: Record<ReviewSource, { bg: string; text: string }> = {
   Google: { bg: '#eef7ff', text: '#1a73e8' },
   Yelp: { bg: '#fff1f0', text: '#d32323' },
   Facebook: { bg: '#eef2ff', text: '#1877f2' },
+  Manual: { bg: '#f3f4f6', text: '#6b7280' },
 }
 
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
@@ -39,15 +43,21 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'needs_response', label: 'Needs Response' },
 ]
 
-function StarRating({ rating, size = 14 }: { rating: number; size?: number }) {
+function StarRating({ rating, size = 14, interactive, onSelect }: {
+  rating: number
+  size?: number
+  interactive?: boolean
+  onSelect?: (r: number) => void
+}) {
   return (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
           size={size}
-          className={i <= rating ? 'text-amber-400' : 'text-gray-200'}
+          className={`${i <= rating ? 'text-amber-400' : 'text-gray-200'} ${interactive ? 'cursor-pointer' : ''}`}
           fill={i <= rating ? '#fbbf24' : 'none'}
+          onClick={interactive ? () => onSelect?.(i) : undefined}
         />
       ))}
     </div>
@@ -86,12 +96,85 @@ export default function ReputationPage() {
   const [requestEmail, setRequestEmail] = useState('')
   const [requestName, setRequestName] = useState('')
 
+  const [syncing, setSyncing] = useState(false)
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+
+  const [addModalOpen, setAddModalOpen] = useState(false)
+  const [addSource, setAddSource] = useState<ReviewSource>('Google')
+  const [addName, setAddName] = useState('')
+  const [addRating, setAddRating] = useState(5)
+  const [addText, setAddText] = useState('')
+  const [addDate, setAddDate] = useState(new Date().toISOString().slice(0, 10))
+  const [addSubmitting, setAddSubmitting] = useState(false)
+
   useEffect(() => {
     fetch('/api/reputation/reviews')
       .then((r) => r.json())
-      .then((data) => setReviews(data))
+      .then((data) => { if (Array.isArray(data)) setReviews(data) })
       .finally(() => setLoading(false))
+
+    fetch('/api/settings')
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        const syncTime = d?.google_reviews?.lastSyncAt
+        if (syncTime) setLastSyncAt(syncTime)
+      })
+      .catch(() => {})
   }, [])
+
+  async function handleSync() {
+    setSyncing(true)
+    setSyncMessage(null)
+    try {
+      const res = await fetch('/api/reputation/sync', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        setSyncMessage(data.error || 'Sync failed')
+        return
+      }
+      setSyncMessage(`Synced ${data.total} reviews (${data.new} new, ${data.updated} updated)`)
+      setLastSyncAt(data.lastSyncAt)
+      const reviewsRes = await fetch('/api/reputation/reviews')
+      const reviewsData = await reviewsRes.json()
+      if (Array.isArray(reviewsData)) setReviews(reviewsData)
+    } catch {
+      setSyncMessage('Failed to sync reviews')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  async function handleAddReview() {
+    if (!addName.trim() || !addRating) return
+    setAddSubmitting(true)
+    try {
+      const res = await fetch('/api/reputation/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_review',
+          source: addSource,
+          reviewer_name: addName.trim(),
+          rating: addRating,
+          text: addText.trim(),
+          date: new Date(addDate).toISOString(),
+        }),
+      })
+      if (res.ok) {
+        const review = await res.json()
+        setReviews((prev) => [review, ...prev])
+        setAddModalOpen(false)
+        setAddName('')
+        setAddRating(5)
+        setAddText('')
+        setAddDate(new Date().toISOString().slice(0, 10))
+        setAddSource('Google')
+      }
+    } finally {
+      setAddSubmitting(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     let result = [...reviews]
@@ -142,10 +225,15 @@ export default function ReputationPage() {
     if (!responseText.trim()) return
     setSubmitting(true)
     try {
+      const review = reviews.find((r) => r.id === reviewId)
       const res = await fetch('/api/reputation/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reviewId, response: responseText.trim() }),
+        body: JSON.stringify({
+          reviewId,
+          response: responseText.trim(),
+          postToGoogle: review?.source === 'Google' && !!review?.google_review_id,
+        }),
       })
       if (res.ok) {
         const updated = await res.json()
@@ -176,6 +264,51 @@ export default function ReputationPage() {
       />
 
       <div className="p-4 md:p-6 space-y-6">
+        {/* Sync Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#01503514', color: '#015035' }}>
+              <RefreshCw size={16} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-800">Google Business Profile Sync</p>
+              <p className="text-[11px] text-gray-400">
+                {lastSyncAt ? `Last synced ${formatRelative(lastSyncAt)}` : 'Never synced'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {syncMessage && (
+              <p className={`text-xs font-medium ${syncMessage.startsWith('Synced') ? 'text-emerald-600' : 'text-red-500'}`}>
+                {syncMessage}
+              </p>
+            )}
+            <button
+              onClick={() => setAddModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <Plus size={13} />
+              Add Review
+            </button>
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ background: '#015035' }}
+            >
+              <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
+              {syncing ? 'Syncing...' : 'Sync Reviews'}
+            </button>
+            <Link
+              href="/settings?tab=integrations"
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              title="Integration Settings"
+            >
+              <Settings size={14} className="text-gray-400" />
+            </Link>
+          </div>
+        </div>
+
         {/* KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {kpis.map((kpi) => (
@@ -230,9 +363,10 @@ export default function ReputationPage() {
               <div className="flex items-center justify-between text-xs text-gray-400">
                 <span>Sources</span>
               </div>
-              <div className="flex items-center gap-2 mt-2">
-                {(['Google', 'Yelp', 'Facebook'] as ReviewSource[]).map((src) => {
-                  const count = reviews.filter((r) => r.source === src).length
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                {(['Google', 'Yelp', 'Facebook', 'Manual'] as ReviewSource[]).map((src) => {
+                  const srcCount = reviews.filter((r) => r.source === src).length
+                  if (srcCount === 0) return null
                   const c = SOURCE_COLORS[src]
                   return (
                     <div
@@ -241,7 +375,7 @@ export default function ReputationPage() {
                       style={{ background: c.bg, color: c.text }}
                     >
                       {src}
-                      <span className="font-bold">{count}</span>
+                      <span className="font-bold">{srcCount}</span>
                     </div>
                   )
                 })}
@@ -293,7 +427,7 @@ export default function ReputationPage() {
               ) : (
                 filtered.map((review) => {
                   const isExpanded = expandedId === review.id
-                  const srcColor = SOURCE_COLORS[review.source]
+                  const srcColor = SOURCE_COLORS[review.source] ?? SOURCE_COLORS.Manual
                   return (
                     <div key={review.id} className="group">
                       <button
@@ -304,7 +438,6 @@ export default function ReputationPage() {
                         className="w-full text-left p-4 hover:bg-gray-50/50 transition-colors"
                       >
                         <div className="flex items-start gap-3">
-                          {/* Avatar */}
                           <div
                             className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
                             style={{ background: '#015035' }}
@@ -343,7 +476,6 @@ export default function ReputationPage() {
                         </div>
                       </button>
 
-                      {/* Expanded: full review + response */}
                       {isExpanded && (
                         <div className="px-4 pb-4 border-t border-gray-50 bg-gray-50/30">
                           <div className="pt-3">
@@ -481,6 +613,90 @@ export default function ReputationPage() {
               >
                 <Send size={13} />
                 Send Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Review Modal */}
+      {addModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setAddModalOpen(false)} />
+          <div className="relative bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-gray-900 uppercase tracking-widest" style={{ fontFamily: 'var(--font-heading)' }}>
+                  Add Review
+                </h2>
+                <button onClick={() => setAddModalOpen(false)} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
+                  <X size={16} className="text-gray-400" />
+                </button>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Source</label>
+                <select
+                  value={addSource}
+                  onChange={(e) => setAddSource(e.target.value as ReviewSource)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035] bg-white"
+                >
+                  <option value="Google">Google</option>
+                  <option value="Yelp">Yelp</option>
+                  <option value="Facebook">Facebook</option>
+                  <option value="Manual">Manual</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Reviewer Name</label>
+                <input
+                  type="text"
+                  value={addName}
+                  onChange={(e) => setAddName(e.target.value)}
+                  placeholder="Jane Doe"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Rating</label>
+                <StarRating rating={addRating} size={24} interactive onSelect={setAddRating} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Review Text</label>
+                <textarea
+                  value={addText}
+                  onChange={(e) => setAddText(e.target.value)}
+                  placeholder="Write the review text..."
+                  rows={3}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035] resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Date</label>
+                <input
+                  type="date"
+                  value={addDate}
+                  onChange={(e) => setAddDate(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
+                />
+              </div>
+            </div>
+            <div className="p-5 border-t border-gray-100 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setAddModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddReview}
+                disabled={addSubmitting || !addName.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={{ background: '#015035' }}
+              >
+                <Plus size={13} />
+                {addSubmitting ? 'Adding...' : 'Add Review'}
               </button>
             </div>
           </div>

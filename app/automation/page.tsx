@@ -16,6 +16,8 @@ interface Automation {
   status: AutoStatus
   runs: number
   lastRun: string
+  successRate: number | null
+  failedRuns: number
 }
 
 
@@ -41,6 +43,19 @@ const ACTION_OPTIONS = [
   'Apply Service Template', 'Update Client Portal', 'Escalate if 7+ Days',
 ]
 
+function formatRelative(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  if (diff < 0) return 'just now'
+  const seconds = Math.floor(diff / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
 // ─── New Automation Panel ─────────────────────────────────────────────────────
 
 function NewAutomationPanel({ onSave, onClose }: { onSave: (a: Automation) => void; onClose: () => void }) {
@@ -64,6 +79,8 @@ function NewAutomationPanel({ onSave, onClose }: { onSave: (a: Automation) => vo
       status: 'Active',
       runs: 0,
       lastRun: 'Never',
+      successRate: null,
+      failedRuns: 0,
     })
   }
 
@@ -216,8 +233,9 @@ export default function AutomationPage() {
   }
 
   const active = automations.filter(a => a.status === 'Active').length
-  const triggered = automations.filter(a => a.status === 'Triggered').length
-  const totalRuns = automations.reduce((s, a) => s + a.runs, 0)
+  const totalRuns = automations.reduce((s, a) => s + (a.runs ?? 0), 0)
+  const totalFailed = automations.reduce((s, a) => s + (a.failedRuns ?? 0), 0)
+  const overallSuccessRate = totalRuns > 0 ? Math.round(((totalRuns - totalFailed) / totalRuns) * 100) : 100
   const paused = automations.filter(a => a.status === 'Paused').length
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
@@ -245,7 +263,7 @@ export default function AutomationPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {[
             { label: 'Active Automations', value: active.toString(), icon: <Play size={16} />, color: '#015035' },
-            { label: 'Triggered Today', value: triggered.toString(), icon: <Zap size={16} />, color: '#f59e0b' },
+            { label: 'Success Rate', value: `${overallSuccessRate}%`, icon: <Zap size={16} />, color: '#f59e0b' },
             { label: 'Total Runs', value: totalRuns.toString(), icon: <CheckCircle size={16} />, color: '#3b82f6' },
             { label: 'Paused', value: paused.toString(), icon: <Pause size={16} />, color: '#9ca3af' },
           ].map(m => (
@@ -303,8 +321,22 @@ export default function AutomationPage() {
 
                   <div className="flex items-center gap-3 ml-4 flex-shrink-0">
                     <div className="text-right">
-                      <p className="text-xs text-gray-400">{auto.runs} runs</p>
-                      <p className="text-[10px] text-gray-400">Last: {auto.lastRun}</p>
+                      <div className="flex items-center gap-1.5 justify-end">
+                        <p className="text-xs text-gray-500 font-medium">{auto.runs ?? 0} runs</p>
+                        {auto.successRate != null && (
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${auto.successRate >= 90 ? 'bg-green-50 text-green-700' : auto.successRate >= 50 ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'}`}>
+                            {auto.successRate}%
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-gray-400">
+                        {auto.lastRun && auto.lastRun !== 'Never'
+                          ? `Last: ${formatRelative(auto.lastRun)}`
+                          : 'No runs yet'}
+                      </p>
+                      {(auto.failedRuns ?? 0) > 0 && (
+                        <p className="text-[10px] text-red-500">{auto.failedRuns} failed</p>
+                      )}
                     </div>
                     <Link
                       href={`/automation/builder?id=${auto.id}`}

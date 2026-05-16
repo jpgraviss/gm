@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   Calendar, Check, Link2, Copy, ExternalLink, AlertCircle,
-  ChevronDown, Clock, Globe, Zap,
+  ChevronDown, Clock, Globe, Zap, RefreshCw,
 } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
@@ -52,6 +52,8 @@ export default function CalendarSettingsPage() {
   const [allGcalLinks, setAllGcalLinks] = useState<Record<string, string>>({})
   const [fetching, setFetching]   = useState(true)
   const [copied, setCopied]       = useState(false)
+  const [syncing, setSyncing]     = useState(false)
+  const [syncResult, setSyncResult] = useState<string | null>(null)
 
   // Form state
   const [slug, setSlug]                   = useState(defaultSlug)
@@ -160,6 +162,27 @@ export default function CalendarSettingsPage() {
     }
   }
 
+  async function handleSyncNow() {
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const res = await fetch('/api/calendar/sync', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Sync failed')
+      const parts: string[] = []
+      if (data.synced) parts.push(`${data.synced} pulled`)
+      if (data.pushed) parts.push(`${data.pushed} pushed`)
+      if (data.errors) parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`)
+      setSyncResult(parts.length ? parts.join(', ') : 'Up to date')
+      setTimeout(() => setSyncResult(null), 5000)
+    } catch {
+      setSyncResult('Sync failed')
+      setTimeout(() => setSyncResult(null), 5000)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   function toggleDay(day: number) {
     setAvailableDays(prev =>
       prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort()
@@ -230,17 +253,30 @@ export default function CalendarSettingsPage() {
               {connecting ? 'Redirecting to Google…' : 'Connect Google Calendar'}
             </button>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <p className="text-xs text-gray-500">
                 Your Google Calendar is connected. New bookings will automatically appear in your calendar and attendees will receive Google Meet links.
               </p>
-              <button
-                onClick={handleConnectGoogle}
-                disabled={connecting}
-                className="text-xs text-gray-500 hover:text-gray-700 underline"
-              >
-                Reconnect / change account
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSyncNow}
+                  disabled={syncing}
+                  className="flex items-center gap-1.5 bg-[#012b1e] text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-[#015035] disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                  {syncing ? 'Syncing...' : 'Sync Now'}
+                </button>
+                <button
+                  onClick={handleConnectGoogle}
+                  disabled={connecting}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline"
+                >
+                  Reconnect / change account
+                </button>
+                {syncResult && (
+                  <span className="text-xs text-gray-500">{syncResult}</span>
+                )}
+              </div>
             </div>
           )}
         </div>

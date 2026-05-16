@@ -238,7 +238,7 @@ export default function ReviewRequestsPage() {
                 const openRate = campaign.sent_count > 0 ? Math.round((campaign.opened_count / campaign.sent_count) * 100) : 0
                 return (
                   <div key={campaign.id} className="p-4 hover:bg-gray-50/50 transition-colors">
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-semibold text-gray-900">{campaign.name}</span>
@@ -250,7 +250,7 @@ export default function ReviewRequestsPage() {
                             {cfg.label}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-400">
+                        <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-400 flex-wrap">
                           <span className="flex items-center gap-1">
                             <FileText size={10} />
                             {campaign.template}
@@ -267,7 +267,7 @@ export default function ReviewRequestsPage() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-4 flex-shrink-0">
+                      <div className="flex items-center gap-4 flex-shrink-0 overflow-x-auto">
                         <div className="text-center">
                           <p className="text-lg font-bold text-gray-900">{campaign.sent_count}</p>
                           <p className="text-[10px] text-gray-400 uppercase tracking-wider">Sent</p>
@@ -312,7 +312,7 @@ export default function ReviewRequestsPage() {
       {createOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => { setCreateOpen(false); resetForm() }} />
-          <div className="relative bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+          <div className="relative bg-white rounded-2xl w-full max-w-lg mx-4 sm:mx-auto shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-gray-900 uppercase tracking-widest" style={{ fontFamily: 'var(--font-heading)' }}>

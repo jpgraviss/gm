@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getResend } from '@/lib/resend'
+import { sendEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase'
 import { getSettings } from '@/lib/settings'
 
@@ -12,7 +12,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'name and email are required' }, { status: 400 })
     }
 
-    // Generate a magic link for the user
     const db = createServiceClient()
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
     const { data: linkData, error: linkError } = await db.auth.admin.generateLink({
@@ -21,7 +20,6 @@ export async function POST(req: NextRequest) {
       options: { redirectTo: `${appUrl}/auth/confirm` },
     })
 
-    // Build the magic link URL from the token
     let magicLinkUrl = `${appUrl}/team-login`
     if (!linkError && linkData?.properties?.hashed_token) {
       const token = linkData.properties.hashed_token
@@ -29,20 +27,18 @@ export async function POST(req: NextRequest) {
       magicLinkUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=magiclink&redirect_to=${encodeURIComponent(`${appUrl}/auth/confirm`)}`
     }
 
-    const { data, error } = await getResend().emails.send({
-      from: `${settings.email.fromName} <${settings.email.fromEmail}>`,
-      replyTo: settings.email.replyTo,
-      to: [email],
+    const result = await sendEmail({
+      to: email,
       subject: `You've been invited to ${settings.branding.appName}`,
       html: inviteEmailHtml({ name, role, unit, invitedBy: invitedBy ?? `the ${settings.branding.appName} admin`, signInUrl: magicLinkUrl, settings }),
     })
 
-    if (error) {
-      console.error('[email/invite POST]', error)
-      return NextResponse.json({ error: error?.message || 'Failed to send invite email' }, { status: 500 })
+    if (!result.success) {
+      console.error('[email/invite POST]', result.error)
+      return NextResponse.json({ error: result.error || 'Failed to send invite email' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, id: data?.id })
+    return NextResponse.json({ success: true, id: result.id })
   } catch (err) {
     console.error('Invite email error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
-import { getResend } from '@/lib/resend'
+import { sendEmail } from '@/lib/email'
 import { applyAudienceFilter, renderMergeFields, wrapWithFooter } from '@/lib/broadcasts'
 import { logAudit } from '@/lib/audit'
 
@@ -87,10 +87,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const recipientId = `br-${id}-${contact.id}`
 
         try {
-          const { data: sendResult, error: sendErr } = await getResend().emails.send({
+          const sendResult = await sendEmail({
+            to: email,
             from: `${broadcast.from_name} <${broadcast.from_email}>`,
             replyTo: broadcast.reply_to ?? undefined,
-            to: [email],
             subject: broadcast.subject,
             html: finalHtml,
             headers: {
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             },
           })
 
-          if (sendErr) {
+          if (!sendResult.success) {
             failed++
             await db.from('broadcast_recipients').insert({
               id: recipientId,
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               email,
               status: 'sent',
               sent_at: new Date().toISOString(),
-              resend_message_id: sendResult?.id ?? null,
+              resend_message_id: sendResult.id ?? null,
             })
           }
         } catch (err) {

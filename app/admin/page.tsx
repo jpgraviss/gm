@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Header from '@/components/layout/Header'
@@ -9,7 +9,8 @@ import {
   CheckCircle, AlertTriangle, XCircle, RefreshCw, Plus, Pencil,
   Trash2, Eye, EyeOff, Lock, Globe, Zap, CreditCard, Database,
   Activity, Bell, Building, Download, Upload, Key, ToggleLeft,
-  ToggleRight, Server, Wifi, Clock, X, Mail,
+  ToggleRight, Server, Wifi, Clock, X, Mail, Ban, RotateCcw,
+  Calendar, UserX,
 } from 'lucide-react'
 // data loaded from API
 import { useToast } from '@/components/ui/Toast'
@@ -45,8 +46,22 @@ const auditColors: Record<string, string> = {
   error: 'bg-red-100 text-red-600',
 }
 
-// User type for admin panel
-type AdminUser = { id: string; name: string; email: string; role: string; unit: string; status: string; lastLogin: string | null; initials: string; isAdmin: boolean }
+type AdminUser = {
+  id: string; name: string; email: string; role: string; unit: string; status: string
+  lastLogin: string | null; initials: string; isAdmin: boolean
+  suspendedAt?: string | null; suspendedUntil?: string | null; suspendedReason?: string | null
+  accessSchedule?: { removeAccessOn?: string; reinstateOn?: string } | null; deletedAt?: string | null
+}
+
+type UserSubTab = 'active' | 'inactive'
+
+function StatusBadge({ status }: { status: string }) {
+  const s = status.toLowerCase()
+  if (s === 'active') return <span className="status-badge bg-green-100 text-green-700">Active</span>
+  if (s === 'suspended') return <span className="status-badge bg-amber-100 text-amber-700">Suspended</span>
+  if (s === 'deleted') return <span className="status-badge bg-red-100 text-red-600">Deleted</span>
+  return <span className="status-badge bg-gray-100 text-gray-500">{status}</span>
+}
 
 function SystemHealthRow({ label, status, detail }: { label: string; status: 'ok' | 'warn' | 'error'; detail: string }) {
   return (
@@ -172,12 +187,14 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
 
   // Load users from database on mount
-  useEffect(() => {
-    fetch('/api/admin/users')
+  const fetchUsers = () => {
+    return fetch('/api/team-members?include_inactive=true')
       .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setUsers(data as AdminUser[]) })
       .catch(() => toast('Failed to load users', 'error'))
-      .finally(() => setLoading(false))
+  }
+  useEffect(() => {
+    fetchUsers().finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [tab, setTab] = useState<AdminTab>('overview')
@@ -193,6 +210,11 @@ export default function AdminPage() {
   const [showClearCacheModal, setShowClearCacheModal] = useState(false)
   const [showBackupModal, setShowBackupModal] = useState(false)
   const [exportModule, setExportModule] = useState('All')
+  const [exportEntities, setExportEntities] = useState<Record<string, boolean>>({
+    contacts: true, companies: true, deals: true, projects: true,
+    contracts: true, invoices: true, tasks: true, time_entries: true,
+  })
+  const [exporting, setExporting] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importType, setImportType] = useState<'contacts' | 'companies' | 'pipeline'>('contacts')
   const [importProgress, setImportProgress] = useState<{ done: number; total: number; error: string } | null>(null)
@@ -525,19 +547,18 @@ export default function AdminPage() {
   async function deactivateUser(id: string) {
     const target = users.find(u => u.id === id)
     if (!target) return
-    const newStatus = target.status === 'Active' ? 'Inactive' : 'Active'
-    // Optimistic update
+    const isActive = target.status.toLowerCase() === 'active'
+    const newStatus = isActive ? 'suspended' : 'active'
     setUsers(prev => prev.map(u => u.id === id ? { ...u, status: newStatus } : u))
     try {
-      const res = await fetch(`/api/admin/users/${id}`, {
-        method: 'PUT',
+      const res = await fetch('/api/team-members', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ id, action: isActive ? 'suspend' : 'reinstate' }),
       })
       if (!res.ok) throw new Error()
-      toast(`User ${newStatus === 'Active' ? 'reactivated' : 'deactivated'}`, 'success')
+      toast(`User ${isActive ? 'suspended' : 'reinstated'}`, 'success')
     } catch {
-      // Rollback
       setUsers(prev => prev.map(u => u.id === id ? { ...u, status: target.status } : u))
       toast('Failed to update user status', 'error')
     }
@@ -545,13 +566,20 @@ export default function AdminPage() {
 
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null)
   const [reassignTo, setReassignTo] = useState('')
+  const [userSubTab, setUserSubTab] = useState<UserSubTab>('active')
+  const [suspendModal, setSuspendModal] = useState<string | null>(null)
+  const [suspendReason, setSuspendReason] = useState('')
+  const [suspendUntil, setSuspendUntil] = useState('')
+  const [scheduleModal, setScheduleModal] = useState<string | null>(null)
+  const [scheduleRemoveOn, setScheduleRemoveOn] = useState('')
+  const [scheduleReinstateOn, setScheduleReinstateOn] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
   async function removeUser(id: string) {
     try {
       const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error()
 
-      // Reassign deals if a target rep was selected
       if (reassignTo) {
         const targetUser = users.find(u => u.id === id)
         if (targetUser) {
@@ -559,16 +587,99 @@ export default function AdminPage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fromRep: targetUser.name, toRep: reassignTo }),
-          }).catch(() => {/* best effort */})
+          }).catch(() => {})
         }
       }
 
-      setUsers(prev => prev.filter(u => u.id !== id))
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, status: 'deleted', deletedAt: new Date().toISOString() } : u))
       setRemoveConfirm(null)
       setReassignTo('')
       toast('User removed and deals reassigned', 'success')
     } catch {
       toast('Failed to remove user', 'error')
+    }
+  }
+
+  async function suspendUser(id: string) {
+    try {
+      const res = await fetch('/api/team-members', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          action: 'suspend',
+          reason: suspendReason || undefined,
+          suspendUntil: suspendUntil || undefined,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      const updated = await res.json()
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updated } : u))
+      setSuspendModal(null)
+      setSuspendReason('')
+      setSuspendUntil('')
+      toast('User suspended', 'success')
+    } catch {
+      toast('Failed to suspend user', 'error')
+    }
+  }
+
+  async function reinstateUser(id: string) {
+    try {
+      const res = await fetch('/api/team-members', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'reinstate' }),
+      })
+      if (!res.ok) throw new Error()
+      const updated = await res.json()
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updated } : u))
+      toast('User reinstated', 'success')
+    } catch {
+      toast('Failed to reinstate user', 'error')
+    }
+  }
+
+  async function softDeleteUser(id: string) {
+    try {
+      const res = await fetch('/api/team-members', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'delete' }),
+      })
+      if (!res.ok) throw new Error()
+      const updated = await res.json()
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updated } : u))
+      setDeleteConfirm(null)
+      toast('User deleted', 'success')
+    } catch {
+      toast('Failed to delete user', 'error')
+    }
+  }
+
+  async function scheduleAccess(id: string) {
+    try {
+      const res = await fetch('/api/team-members', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          action: 'schedule_access',
+          accessSchedule: {
+            removeAccessOn: scheduleRemoveOn || undefined,
+            reinstateOn: scheduleReinstateOn || undefined,
+          },
+        }),
+      })
+      if (!res.ok) throw new Error()
+      const updated = await res.json()
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updated } : u))
+      setScheduleModal(null)
+      setScheduleRemoveOn('')
+      setScheduleReinstateOn('')
+      toast('Access schedule saved', 'success')
+    } catch {
+      toast('Failed to schedule access', 'error')
     }
   }
 
@@ -731,14 +842,17 @@ export default function AdminPage() {
         )}
 
         {/* ── USERS ── */}
-        {tab === 'users' && (
+        {tab === 'users' && (() => {
+          const activeUsers = users.filter(u => u.status.toLowerCase() === 'active')
+          const inactiveUsers = users.filter(u => u.status.toLowerCase() !== 'active')
+          const displayUsers = userSubTab === 'active' ? activeUsers : inactiveUsers
+          return (
           <div>
-            {/* Add user form */}
             {showAddUser && (
               <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-bold text-gray-800">Invite New User</h3>
-                  <button onClick={() => setShowAddUser(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                  <button onClick={() => setShowAddUser(false)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -790,7 +904,25 @@ export default function AdminPage() {
 
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <h3 className="text-sm font-bold text-gray-800">All Platform Users ({users.length})</h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-sm font-bold text-gray-800">Platform Users ({users.length})</h3>
+                  <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                    <button
+                      onClick={() => setUserSubTab('active')}
+                      className={`px-3 py-1.5 text-xs font-semibold transition-colors ${userSubTab === 'active' ? 'text-white' : 'text-gray-500 bg-white hover:bg-gray-50'}`}
+                      style={userSubTab === 'active' ? { background: '#015035' } : undefined}
+                    >
+                      Active ({activeUsers.length})
+                    </button>
+                    <button
+                      onClick={() => setUserSubTab('inactive')}
+                      className={`px-3 py-1.5 text-xs font-semibold transition-colors ${userSubTab === 'inactive' ? 'text-white' : 'text-gray-500 bg-white hover:bg-gray-50'}`}
+                      style={userSubTab === 'inactive' ? { background: '#015035' } : undefined}
+                    >
+                      Inactive ({inactiveUsers.length})
+                    </button>
+                  </div>
+                </div>
                 <button
                   onClick={() => setShowAddUser(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-medium rounded-lg"
@@ -800,26 +932,33 @@ export default function AdminPage() {
                 </button>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px]">
+                <table className="w-full min-w-[740px]">
                   <thead>
                     <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
                       <th className="text-left py-2.5 px-5 font-semibold">User</th>
                       <th className="text-left py-2.5 px-4 font-semibold">Role</th>
                       <th className="text-left py-2.5 px-4 font-semibold">Unit</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Status</th>
+                      <th className="text-left py-2.5 px-4 font-semibold">Access</th>
                       <th className="text-left py-2.5 px-4 font-semibold">Last Login</th>
                       <th className="text-left py-2.5 px-4 font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map(u => (
-                      <>
-                        <tr key={u.id} className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors ${u.status === 'Inactive' ? 'opacity-50' : ''}`}>
+                    {displayUsers.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-sm text-gray-400">
+                          {userSubTab === 'inactive' ? 'No inactive users' : 'No active users'}
+                        </td>
+                      </tr>
+                    )}
+                    {displayUsers.map(u => (
+                      <React.Fragment key={u.id}>
+                        <tr className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors ${u.status.toLowerCase() !== 'active' ? 'opacity-60' : ''}`}>
                           <td className="py-3 px-5">
                             <div className="flex items-center gap-3">
                               <div
                                 className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                                style={{ background: u.isAdmin ? '#f59e0b' : '#015035' }}
+                                style={{ background: u.isAdmin ? '#f59e0b' : u.status.toLowerCase() !== 'active' ? '#9ca3af' : '#015035' }}
                               >
                                 {u.initials}
                               </div>
@@ -836,28 +975,31 @@ export default function AdminPage() {
                             <span className="text-sm text-gray-600">{u.unit}</span>
                           </td>
                           <td className="py-3 px-4">
-                            <span className={`status-badge ${u.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{u.status}</span>
+                            <div className="flex flex-col gap-1">
+                              <StatusBadge status={u.status} />
+                              {u.suspendedUntil && u.status.toLowerCase() === 'suspended' && (
+                                <span className="text-[10px] text-gray-400">Until {new Date(u.suspendedUntil).toLocaleDateString()}</span>
+                              )}
+                              {u.accessSchedule?.removeAccessOn && (
+                                <span className="text-[10px] text-amber-600 flex items-center gap-1">
+                                  <Calendar size={9} /> Scheduled
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-1.5 text-xs text-gray-500">
                               <Clock size={11} />
-                              {u.lastLogin}
+                              {u.lastLogin ? new Date(u.lastLogin).toLocaleDateString() : 'Never'}
                             </div>
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-1.5">
-                              {/* Super Admin: login as this user */}
-                              {user?.role === 'Super Admin' && u.id !== user?.id && u.status === 'Active' && (
+                              {user?.role === 'Super Admin' && u.id !== user?.id && u.status.toLowerCase() === 'active' && (
                                 <button
                                   onClick={() => loginAs({
-                                    id: u.id,
-                                    email: u.email,
-                                    name: u.name,
-                                    role: u.role,
-                                    initials: u.initials,
-                                    unit: u.unit,
-                                    isAdmin: u.isAdmin,
-                                    userType: 'staff',
+                                    id: u.id, email: u.email, name: u.name, role: u.role,
+                                    initials: u.initials, unit: u.unit, isAdmin: u.isAdmin, userType: 'staff',
                                   })}
                                   className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold hover:opacity-90 transition-opacity"
                                   style={{ background: '#7c3aed', color: '#fff' }}
@@ -882,30 +1024,41 @@ export default function AdminPage() {
                                   >
                                     <Key size={13} />
                                   </button>
-                                  {u.status === 'Active' ? (
+                                  {u.status.toLowerCase() === 'active' && (
+                                    <>
+                                      <button
+                                        onClick={() => setSuspendModal(u.id)}
+                                        className="p-1.5 rounded-lg hover:bg-orange-50 text-orange-400 transition-colors"
+                                        title="Suspend user"
+                                      >
+                                        <Ban size={13} />
+                                      </button>
+                                      <button
+                                        onClick={() => setScheduleModal(u.id)}
+                                        className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-400 transition-colors"
+                                        title="Schedule access"
+                                      >
+                                        <Calendar size={13} />
+                                      </button>
+                                      <button
+                                        onClick={() => setDeleteConfirm(u.id)}
+                                        className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 transition-colors"
+                                        title="Delete user"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </>
+                                  )}
+                                  {(u.status.toLowerCase() === 'suspended' || u.status.toLowerCase() === 'deleted') && (
                                     <button
-                                      onClick={() => deactivateUser(u.id)}
-                                      className="p-1.5 rounded-lg hover:bg-orange-50 text-orange-400 transition-colors"
-                                      title="Deactivate user"
+                                      onClick={() => reinstateUser(u.id)}
+                                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-white hover:opacity-90 transition-opacity"
+                                      style={{ background: '#015035' }}
+                                      title="Reinstate user"
                                     >
-                                      <EyeOff size={13} />
-                                    </button>
-                                  ) : (
-                                    <button
-                                      onClick={() => deactivateUser(u.id)}
-                                      className="p-1.5 rounded-lg hover:bg-green-50 text-green-500 transition-colors"
-                                      title="Reactivate user"
-                                    >
-                                      <CheckCircle size={13} />
+                                      <RotateCcw size={11} /> Reinstate
                                     </button>
                                   )}
-                                  <button
-                                    onClick={() => setRemoveConfirm(removeConfirm === u.id ? null : u.id)}
-                                    className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 transition-colors"
-                                    title="Remove user (30-day archive)"
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
                                 </>
                               )}
                               {u.id === user?.id && (
@@ -918,7 +1071,6 @@ export default function AdminPage() {
                           <tr key={`edit-${u.id}`} className="bg-blue-50/40 border-b border-blue-100">
                             <td colSpan={6} className="px-5 py-3">
                               {(() => {
-                                // Use a closure to hold local edit state
                                 const [editRole, setEditRole] = [u.role, (v: string) => setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: v, isAdmin: v === 'Super Admin' } : x))]
                                 const [editUnit, setEditUnit] = [u.unit, (v: string) => setUsers(prev => prev.map(x => x.id === u.id ? { ...x, unit: v } : x))]
                                 return (
@@ -980,7 +1132,7 @@ export default function AdminPage() {
                                   className="px-3 py-1.5 text-xs font-medium text-white rounded-lg disabled:opacity-60"
                                   style={{ background: '#f59e0b' }}
                                 >
-                                  {emailStatus[u.id] === 'sending' ? 'Sending…' : 'Send Sign-In Link'}
+                                  {emailStatus[u.id] === 'sending' ? 'Sending...' : 'Send Sign-In Link'}
                                 </button>
                                 <button onClick={() => setResetConfirm(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
                               </div>
@@ -1000,20 +1152,20 @@ export default function AdminPage() {
                           <tr key={`err-${u.id}`} className="bg-red-50/40 border-b border-red-100">
                             <td colSpan={6} className="px-5 py-2">
                               <span className="flex items-center gap-2 text-xs text-red-600 font-medium">
-                                <AlertTriangle size={12} /> Failed to send email — check RESEND_API_KEY in .env.local
+                                <AlertTriangle size={12} /> Failed to send email
                               </span>
                             </td>
                           </tr>
                         )}
-                        {/* remove-confirm modal rendered outside the table */}
-                      </>
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* ── INTEGRATIONS ── */}
         {tab === 'integrations' && (
@@ -1385,29 +1537,63 @@ export default function AdminPage() {
             </div>
             <div className="p-5 flex flex-col gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Select Module</label>
-                <select value={exportModule} onChange={e => setExportModule(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700">
-                  {['All', 'Contacts', 'Companies', 'Proposals', 'Contracts', 'Invoices', 'Projects'].map(m => <option key={m}>{m}</option>)}
-                </select>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Select Entities</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'contacts', label: 'Contacts' },
+                    { key: 'companies', label: 'Companies' },
+                    { key: 'deals', label: 'Deals' },
+                    { key: 'projects', label: 'Projects' },
+                    { key: 'contracts', label: 'Contracts' },
+                    { key: 'invoices', label: 'Invoices' },
+                    { key: 'tasks', label: 'Tasks' },
+                    { key: 'time_entries', label: 'Time Entries' },
+                  ].map(e => (
+                    <label key={e.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={exportEntities[e.key] ?? false}
+                        onChange={() => setExportEntities(prev => ({ ...prev, [e.key]: !prev[e.key] }))}
+                        className="rounded border-gray-300 text-green-700 focus:ring-green-700"
+                      />
+                      {e.label}
+                    </label>
+                  ))}
+                </div>
               </div>
               <p className="text-xs text-gray-400">Exports as CSV format. All data visible to your role will be included.</p>
             </div>
             <div className="px-5 pb-5 flex gap-2">
               <button
-                onClick={() => {
-                  const csv = `Module,Exported At\n${exportModule},${new Date().toISOString()}\n`
-                  const blob = new Blob([csv], { type: 'text/csv' })
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url; a.download = `gravhub-export-${exportModule.toLowerCase()}-${Date.now()}.csv`
-                  a.click(); URL.revokeObjectURL(url)
-                  setShowExportModal(false)
+                disabled={exporting}
+                onClick={async () => {
+                  const selected = Object.entries(exportEntities).filter(([, v]) => v).map(([k]) => k)
+                  if (selected.length === 0) return
+                  setExporting(true)
+                  try {
+                    const res = await fetch('/api/admin/export', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ entities: selected }),
+                    })
+                    if (!res.ok) throw new Error('Export failed')
+                    const blob = await res.blob()
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url; a.download = `gravhub-export-${Date.now()}.csv`
+                    a.click(); URL.revokeObjectURL(url)
+                    setShowExportModal(false)
+                    toast('Data exported', 'success')
+                  } catch {
+                    toast('Export failed', 'error')
+                  } finally {
+                    setExporting(false)
+                  }
                 }}
-                className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl"
+                className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-50"
                 style={{ background: '#015035' }}
               >
-                Download CSV
+                {exporting ? 'Exporting...' : 'Download CSV'}
               </button>
               <button onClick={() => setShowExportModal(false)} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
             </div>
@@ -1675,7 +1861,7 @@ export default function AdminPage() {
       {removeConfirm && (() => {
         const target = users.find(u => u.id === removeConfirm)
         if (!target) return null
-        const otherReps = users.filter(u => u.id !== removeConfirm).map(u => u.name)
+        const otherReps = users.filter(u => u.id !== removeConfirm && u.status.toLowerCase() === 'active').map(u => u.name)
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
@@ -1690,27 +1876,20 @@ export default function AdminPage() {
                   This will remove their account and reassign all of their deals to the rep you choose below.
                 </p>
               </div>
-
               <div className="p-5 flex flex-col gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                    Reassign deals to
-                  </label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Reassign deals to</label>
                   <select
                     value={reassignTo}
                     onChange={e => setReassignTo(e.target.value)}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
                   >
                     <option value="">Select a team member...</option>
-                    {otherReps.map(name => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
+                    {otherReps.map(name => <option key={name} value={name}>{name}</option>)}
                   </select>
                 </div>
-
                 <p className="text-xs font-semibold text-red-600">This change cannot be undone.</p>
               </div>
-
               <div className="p-4 border-t border-gray-100 flex gap-2">
                 <button
                   onClick={() => removeUser(removeConfirm)}
@@ -1721,6 +1900,171 @@ export default function AdminPage() {
                 </button>
                 <button
                   onClick={() => { setRemoveConfirm(null); setReassignTo('') }}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Suspend user modal */}
+      {suspendModal && (() => {
+        const target = users.find(u => u.id === suspendModal)
+        if (!target) return null
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+              <div className="p-5 border-b" style={{ background: '#012b1e' }}>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white text-sm font-bold">Suspend {target.name}</h3>
+                  <button onClick={() => { setSuspendModal(null); setSuspendReason(''); setSuspendUntil('') }} className="p-1 rounded hover:bg-white/10"><X size={15} className="text-white/60" /></button>
+                </div>
+              </div>
+              <div className="p-5 flex flex-col gap-4">
+                <p className="text-xs text-gray-500">
+                  This user will immediately lose access to GravHub and be hidden from all dropdowns and assignee lists.
+                </p>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Reason (optional)</label>
+                  <input
+                    value={suspendReason}
+                    onChange={e => setSuspendReason(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+                    placeholder="e.g., Leave of absence"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Suspend until (optional)</label>
+                  <input
+                    type="datetime-local"
+                    value={suspendUntil}
+                    onChange={e => setSuspendUntil(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Leave blank for indefinite suspension. User will be auto-reinstated when this date passes.</p>
+                </div>
+              </div>
+              <div className="px-5 pb-5 flex gap-2">
+                <button
+                  onClick={() => suspendUser(suspendModal)}
+                  className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl bg-amber-600 hover:bg-amber-700 transition-colors"
+                >
+                  Suspend User
+                </button>
+                <button onClick={() => { setSuspendModal(null); setSuspendReason(''); setSuspendUntil('') }} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Schedule access modal */}
+      {scheduleModal && (() => {
+        const target = users.find(u => u.id === scheduleModal)
+        if (!target) return null
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+              <div className="p-5 border-b" style={{ background: '#012b1e' }}>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white text-sm font-bold">Schedule Access for {target.name}</h3>
+                  <button onClick={() => { setScheduleModal(null); setScheduleRemoveOn(''); setScheduleReinstateOn('') }} className="p-1 rounded hover:bg-white/10"><X size={15} className="text-white/60" /></button>
+                </div>
+              </div>
+              <div className="p-5 flex flex-col gap-4">
+                <p className="text-xs text-gray-500">
+                  Schedule when this user should lose and regain access. The system will automatically enforce these windows.
+                </p>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Remove access on</label>
+                  <input
+                    type="datetime-local"
+                    value={scheduleRemoveOn}
+                    onChange={e => setScheduleRemoveOn(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Reinstate access on (optional)</label>
+                  <input
+                    type="datetime-local"
+                    value={scheduleReinstateOn}
+                    onChange={e => setScheduleReinstateOn(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Leave blank if access should not be automatically reinstated.</p>
+                </div>
+                {target.accessSchedule?.removeAccessOn && (
+                  <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <Calendar size={13} className="text-amber-500 flex-shrink-0" />
+                    <div className="text-xs text-amber-700">
+                      <p>Current schedule: Remove on {new Date(target.accessSchedule.removeAccessOn).toLocaleString()}</p>
+                      {target.accessSchedule.reinstateOn && <p>Reinstate on {new Date(target.accessSchedule.reinstateOn).toLocaleString()}</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="px-5 pb-5 flex gap-2">
+                <button
+                  onClick={() => scheduleAccess(scheduleModal)}
+                  disabled={!scheduleRemoveOn}
+                  className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-40 transition-colors"
+                  style={{ background: '#015035' }}
+                >
+                  Save Schedule
+                </button>
+                <button onClick={() => { setScheduleModal(null); setScheduleRemoveOn(''); setScheduleReinstateOn('') }} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Delete confirmation modal */}
+      {deleteConfirm && (() => {
+        const target = users.find(u => u.id === deleteConfirm)
+        if (!target) return null
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+              <div className="p-5 border-b border-gray-100">
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
+                    <UserX size={18} className="text-red-500" />
+                  </div>
+                  <h3 className="text-base font-bold text-gray-900">Delete {target.name}</h3>
+                </div>
+              </div>
+              <div className="p-5 flex flex-col gap-3">
+                <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg border border-red-200">
+                  <AlertTriangle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs text-red-700">
+                    <p className="font-semibold mb-1">This user will be:</p>
+                    <ul className="list-disc ml-4 space-y-0.5">
+                      <li>Hidden from all dropdowns and assignee lists</li>
+                      <li>Unable to log in or access GravHub</li>
+                      <li>Marked as deleted (can be reinstated by an admin)</li>
+                    </ul>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">Their existing assignments and history will be preserved for audit purposes.</p>
+              </div>
+              <div className="p-4 border-t border-gray-100 flex gap-2">
+                <button
+                  onClick={() => softDeleteUser(deleteConfirm)}
+                  className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold bg-red-600 hover:bg-red-700 transition-colors"
+                >
+                  Delete User
+                </button>
+                <button
+                  onClick={() => setDeleteConfirm(null)}
                   className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
                 >
                   Cancel

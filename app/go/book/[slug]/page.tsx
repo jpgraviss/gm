@@ -111,7 +111,7 @@ function MiniCalendar({
               onClick={() => !disabled && onChange(iso)}
               disabled={disabled}
               className={`
-                w-9 h-9 mx-auto flex items-center justify-center rounded-full text-sm font-medium transition-all
+                w-10 h-10 mx-auto flex items-center justify-center rounded-full text-sm font-medium transition-all
                 ${disabled ? 'text-gray-200 cursor-not-allowed' : 'cursor-pointer'}
                 ${isSelected ? 'bg-[#012b1e] text-white' : ''}
                 ${!isSelected && !disabled ? 'text-gray-800 hover:bg-[#012b1e]/10' : ''}
@@ -289,7 +289,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 w-full max-w-4xl overflow-hidden flex flex-col lg:flex-row">
 
-        <div className="bg-[#012b1e] lg:w-72 flex-shrink-0 p-8 flex flex-col">
+        <div className="bg-[#012b1e] lg:w-72 flex-shrink-0 p-6 sm:p-8 flex flex-col">
           <div className="mb-8">
             <div className="text-xs font-bold text-white tracking-widest">GRAVISS</div>
             <div className="text-[9px] text-white/40 tracking-widest">MARKETING</div>
@@ -332,7 +332,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           </div>
         </div>
 
-        <div className="flex-1 p-8">
+        <div className="flex-1 p-5 sm:p-8">
           {step === 'date' && (
             <div>
               <h3 className="text-base font-bold text-gray-900 mb-6">Select a Date</h3>
@@ -382,7 +382,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                     <button
                       key={slot.start}
                       onClick={() => { setSelectedSlot(slot); setStep('form') }}
-                      className="border border-[#015035] text-[#015035] rounded-xl py-2.5 text-sm font-semibold hover:bg-[#012b1e] hover:text-white hover:border-[#012b1e] transition-all"
+                      className="border border-[#015035] text-[#015035] rounded-xl py-2.5 text-sm font-semibold hover:bg-[#012b1e] hover:text-white hover:border-[#012b1e] transition-all min-h-[44px]"
                     >
                       {slot.label}
                     </button>

@@ -21,6 +21,7 @@ export interface CalendarSettings {
   google_refresh_token: string | null
   google_access_token: string | null
   google_token_expiry: string | null
+  google_sync_token: string | null
   active: boolean
 }
 
@@ -221,18 +222,9 @@ export async function createGoogleEvent(
 
 export async function listGoogleEvents(
   token: string,
-  timeMin: string, // ISO date
-  timeMax: string, // ISO date
-): Promise<Array<{
-  id: string
-  summary: string
-  description?: string
-  start: { dateTime?: string; date?: string }
-  end: { dateTime?: string; date?: string }
-  attendees?: Array<{ email: string; displayName?: string }>
-  hangoutLink?: string
-  status: string
-}>> {
+  timeMin: string,
+  timeMax: string,
+): Promise<GoogleEventItem[]> {
   const params = new URLSearchParams({
     timeMin: new Date(timeMin).toISOString(),
     timeMax: new Date(timeMax).toISOString(),
@@ -247,6 +239,61 @@ export async function listGoogleEvents(
   if (!res.ok) throw new Error(`Google Calendar list failed: ${res.status}`)
   const data = await res.json()
   return data.items ?? []
+}
+
+export interface GoogleEventItem {
+  id: string
+  summary?: string
+  description?: string
+  start?: { dateTime?: string; date?: string }
+  end?: { dateTime?: string; date?: string }
+  attendees?: Array<{ email: string; displayName?: string }>
+  hangoutLink?: string
+  status: string
+}
+
+export async function listGoogleEventsIncremental(
+  token: string,
+  syncToken?: string | null,
+  timeMin?: string,
+  timeMax?: string,
+): Promise<{ events: GoogleEventItem[]; nextSyncToken: string | null }> {
+  const allEvents: GoogleEventItem[] = []
+  let pageToken: string | undefined
+  let nextSyncToken: string | null = null
+
+  do {
+    const params = new URLSearchParams()
+    if (syncToken && !pageToken) {
+      params.set('syncToken', syncToken)
+    } else {
+      if (timeMin) params.set('timeMin', new Date(timeMin).toISOString())
+      if (timeMax) params.set('timeMax', new Date(timeMax).toISOString())
+      params.set('singleEvents', 'true')
+      params.set('orderBy', 'startTime')
+    }
+    params.set('maxResults', '250')
+    if (pageToken) params.set('pageToken', pageToken)
+
+    const res = await fetch(
+      `${GOOGLE_CALENDAR}/calendars/primary/events?${params}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+
+    if (res.status === 410) {
+      return listGoogleEventsIncremental(token, null, timeMin, timeMax)
+    }
+
+    if (!res.ok) throw new Error(`Google Calendar list failed: ${res.status}`)
+    const data = await res.json()
+    allEvents.push(...(data.items ?? []))
+    pageToken = data.nextPageToken
+    if (!pageToken && data.nextSyncToken) {
+      nextSyncToken = data.nextSyncToken
+    }
+  } while (pageToken)
+
+  return { events: allEvents, nextSyncToken }
 }
 
 export async function updateGoogleEvent(

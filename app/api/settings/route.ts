@@ -77,6 +77,12 @@ export async function PATCH(req: NextRequest) {
   if (body.dashboardConfig  !== undefined) updates.dashboard_config = body.dashboardConfig
   if (body.engagement       !== undefined) updates.engagement       = body.engagement
   if (body.navigationConfig !== undefined) updates.navigation_config = body.navigationConfig
+  if (body.notification_preferences !== undefined) updates.notification_preferences = body.notification_preferences
+  if (body.emailTemplates       !== undefined) updates.email_templates      = body.emailTemplates
+  if (body.hubspot              !== undefined) updates.hubspot              = body.hubspot
+  if (body.resend               !== undefined) updates.resend               = body.resend
+  if (body.google_reviews       !== undefined) updates.google_reviews       = body.google_reviews
+  if (body.onboarding_completed !== undefined) updates.onboarding_completed = body.onboarding_completed
 
   const { data, error } = await db
     .from('app_settings')

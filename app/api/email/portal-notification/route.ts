@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getResend } from '@/lib/resend'
+import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 
 export async function POST(req: NextRequest) {
@@ -14,20 +14,18 @@ export async function POST(req: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
     const portalLink = link || `${appUrl}/portal`
 
-    const { data, error } = await getResend().emails.send({
-      from: `${settings.email.fromName} <${settings.email.fromEmail}>`,
-      replyTo: settings.email.replyTo,
-      to: [to],
+    const result = await sendEmail({
+      to,
       subject: title,
       html: notificationEmailHtml({ clientName, title, message, portalLink, appUrl, settings }),
     })
 
-    if (error) {
-      console.error('[email/portal-notification POST]', error)
-      return NextResponse.json({ error: error?.message || 'Failed to send notification email' }, { status: 500 })
+    if (!result.success) {
+      console.error('[email/portal-notification POST]', result.error)
+      return NextResponse.json({ error: result.error || 'Failed to send notification email' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, id: data?.id })
+    return NextResponse.json({ success: true, id: result.id })
   } catch (err) {
     console.error('Portal notification email error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

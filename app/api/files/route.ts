@@ -103,6 +103,25 @@ export async function POST(req: NextRequest) {
   }, { status: 201 })
 }
 
+export async function DELETE(req: NextRequest) {
+  const body = await req.json()
+  const { path } = body
+
+  if (!path) {
+    return NextResponse.json({ error: 'path is required' }, { status: 400 })
+  }
+
+  const db = createServiceClient()
+  const { error } = await db.storage.from(BUCKET).remove([path])
+
+  if (error) {
+    console.error('[files DELETE]', error)
+    return NextResponse.json({ error: error?.message || 'Failed to delete file' }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true })
+}
+
 function sanitizePath(input: string): string {
   return input.replace(/[^a-zA-Z0-9-_ ]/g, '').trim().replace(/\s+/g, '-')
 }

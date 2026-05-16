@@ -8,15 +8,20 @@ import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapUser(row: any) {
   return {
-    id:        row.id,
-    name:      row.name,
-    email:     row.email,
-    role:      row.role,
-    unit:      row.unit,
-    initials:  row.initials ?? '',
-    status:    row.status ?? 'Active',
-    isAdmin:   row.is_admin ?? false,
-    lastLogin: row.last_login ?? null,
+    id:              row.id,
+    name:            row.name,
+    email:           row.email,
+    role:            row.role,
+    unit:            row.unit,
+    initials:        row.initials ?? '',
+    status:          row.status ?? 'active',
+    isAdmin:         row.is_admin ?? false,
+    lastLogin:       row.last_login ?? null,
+    suspendedAt:     row.suspended_at ?? null,
+    suspendedUntil:  row.suspended_until ?? null,
+    suspendedReason: row.suspended_reason ?? null,
+    accessSchedule:  row.access_schedule ?? null,
+    deletedAt:       row.deleted_at ?? null,
   }
 }
 
@@ -81,7 +86,7 @@ export async function POST(req: NextRequest) {
       role:     body.role ?? 'Team Member',
       unit:     body.unit ?? 'Leadership/Admin',
       initials: initials,
-      status:   'Active',
+      status:   'active',
       is_admin: body.isAdmin ?? false,
     })
     .select()

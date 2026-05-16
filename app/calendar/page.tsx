@@ -199,7 +199,11 @@ export default function CalendarPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Sync failed')
       setLastSync(data.timestamp)
-      toast(`Synced ${data.synced} event${data.synced !== 1 ? 's' : ''} from Google Calendar${data.errors ? ` (${data.errors} error${data.errors !== 1 ? 's' : ''})` : ''}`, data.errors ? 'error' : 'success')
+      const parts: string[] = []
+      if (data.synced) parts.push(`${data.synced} pulled from Google`)
+      if (data.pushed) parts.push(`${data.pushed} pushed to Google`)
+      if (data.errors) parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`)
+      toast(parts.length ? parts.join(', ') : 'Calendar is up to date', data.errors ? 'error' : 'success')
       // Refresh bookings
       const params = userSlug ? `?slug=${userSlug}` : ''
       const bookingsRes = await fetch(`/api/bookings${params}`)

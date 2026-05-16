@@ -4,6 +4,11 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { getSupabaseClient } from '@/lib/supabase'
 import type { TeamMember } from '@/lib/types'
 
+export interface AccessSchedule {
+  removeAccessOn?: string
+  reinstateOn?: string
+}
+
 export interface AuthUser {
   id: string
   email: string
@@ -15,6 +20,12 @@ export interface AuthUser {
   avatar?: string
   userType: 'staff' | 'client'
   company?: string
+  status?: string
+  suspendedAt?: string | null
+  suspendedUntil?: string | null
+  suspendedReason?: string | null
+  accessSchedule?: AccessSchedule | null
+  deletedAt?: string | null
 }
 
 interface AuthContextType {
@@ -34,6 +45,8 @@ interface AuthContextType {
   disconnectGmail: () => void
   // Team members
   members: TeamMember[]
+  // Access control
+  accessBlocked: { blocked: boolean; reason: string } | null
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -41,15 +54,77 @@ const AuthContext = createContext<AuthContextType | null>(null)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToAuthUser(row: any, avatar?: string): AuthUser {
   return {
-    id:       row.id,
-    email:    row.email,
-    name:     row.name,
-    role:     row.role,
-    initials: row.initials ?? '',
-    unit:     row.unit ?? 'Delivery/Operations',
-    isAdmin:  row.is_admin ?? false,
+    id:              row.id,
+    email:           row.email,
+    name:            row.name,
+    role:            row.role,
+    initials:        row.initials ?? '',
+    unit:            row.unit ?? 'Delivery/Operations',
+    isAdmin:         row.is_admin ?? false,
     avatar,
-    userType: 'staff',
+    userType:        'staff',
+    status:          row.status ?? 'active',
+    suspendedAt:     row.suspended_at ?? null,
+    suspendedUntil:  row.suspended_until ?? null,
+    suspendedReason: row.suspended_reason ?? null,
+    accessSchedule:  row.access_schedule ?? null,
+    deletedAt:       row.deleted_at ?? null,
+  }
+}
+
+function checkAccessBlocked(profile: AuthUser): { blocked: boolean; reason: string } | null {
+  const status = profile.status?.toLowerCase()
+
+  if (status === 'deleted') {
+    return { blocked: true, reason: 'Your account has been deleted. Contact your administrator for assistance.' }
+  }
+
+  if (status === 'suspended') {
+    if (profile.suspendedUntil) {
+      const until = new Date(profile.suspendedUntil)
+      if (until <= new Date()) {
+        return null
+      }
+      return {
+        blocked: true,
+        reason: `Your account is suspended until ${until.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}. ${profile.suspendedReason ? `Reason: ${profile.suspendedReason}` : ''}`.trim(),
+      }
+    }
+    return {
+      blocked: true,
+      reason: `Your account has been suspended. ${profile.suspendedReason ? `Reason: ${profile.suspendedReason}` : 'Contact your administrator for assistance.'}`.trim(),
+    }
+  }
+
+  if (profile.accessSchedule) {
+    const schedule = profile.accessSchedule as AccessSchedule
+    const now = new Date()
+    if (schedule.removeAccessOn && new Date(schedule.removeAccessOn) <= now) {
+      if (!schedule.reinstateOn || new Date(schedule.reinstateOn) > now) {
+        return { blocked: true, reason: 'Your access has been temporarily removed per a scheduled access window. Contact your administrator for assistance.' }
+      }
+    }
+  }
+
+  return null
+}
+
+async function autoReinstateIfExpired(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  profile: AuthUser,
+): Promise<boolean> {
+  if (profile.status?.toLowerCase() !== 'suspended' || !profile.suspendedUntil) return false
+  if (new Date(profile.suspendedUntil) > new Date()) return false
+  try {
+    await supabase.from('team_members').update({
+      status: 'active',
+      suspended_at: null,
+      suspended_until: null,
+      suspended_reason: null,
+    }).eq('id', profile.id)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -93,7 +168,7 @@ async function autoProvisionTeamMember(
       role:     'Team Member',
       unit:     'Leadership/Admin',
       initials,
-      status:   'Active',
+      status:   'active',
       is_admin: false,
     })
     if (error) return { __diagError: `insert: ${error.message} (${error.code})` }
@@ -123,6 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [gmailEmail, setGmailEmail]       = useState<string | null>(null)
   const [members, setMembers]             = useState<TeamMember[]>([])
   const [impersonatedBy, setImpersonatedBy] = useState<AuthUser | null>(null)
+  const [accessBlocked, setAccessBlocked] = useState<{ blocked: boolean; reason: string } | null>(null)
 
   const fetchMembers = useCallback(async () => {
     try {
@@ -164,11 +240,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (result && !('__diagError' in result)) profile = result
       }
       if (profile) {
+        if (profile.userType === 'staff') {
+          const reinstated = await autoReinstateIfExpired(supabase, profile)
+          if (reinstated) {
+            profile = { ...profile, status: 'active', suspendedAt: null, suspendedUntil: null, suspendedReason: null }
+          }
+          const blocked = checkAccessBlocked(profile)
+          setAccessBlocked(blocked)
+        }
         setUser(profile)
         setAuthCookie()
         try { localStorage.setItem('gravhub_user', JSON.stringify(profile)) } catch {/* ignore */}
         if (profile.userType === 'staff') fetchMembers()
-        // Record last login for portal clients
         if (profile.userType === 'client' && profile.id) {
           const today = new Date().toISOString().split('T')[0]
           fetch(`/api/portal-clients/${profile.id}`, {
@@ -423,6 +506,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       impersonatedBy, loginAs, exitImpersonation,
       gmailToken, gmailEmail, connectGmail, disconnectGmail,
       members,
+      accessBlocked,
     }}>
       {children}
     </AuthContext.Provider>

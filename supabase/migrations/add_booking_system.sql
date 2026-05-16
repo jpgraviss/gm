@@ -30,6 +30,7 @@ create table if not exists public.booking_type_bookings (
   guest_phone text,
   guest_company text,
   notes text,
+  google_event_id text,
   status text not null default 'confirmed' check (status in ('confirmed', 'cancelled', 'completed')),
   created_at timestamptz not null default now()
 );

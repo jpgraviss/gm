@@ -63,6 +63,7 @@ export default function NewProposalPanel({ onSave, onClose }: Props) {
     assignedRep: 'Graviss Marketing',
     value: '',
     notes: '',
+    attachments: [],
   })
 
 
@@ -140,6 +141,18 @@ export default function NewProposalPanel({ onSave, onClose }: Props) {
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
             />
           </div>
+
+          {form.company && (
+            <div>
+              <FieldLabel><span className="flex items-center gap-1"><Paperclip size={11} />Attachments</span></FieldLabel>
+              <FileUpload
+                company={form.company}
+                files={form.attachments}
+                onUpload={file => setForm(prev => ({ ...prev, attachments: [...prev.attachments, file] }))}
+                onRemove={file => setForm(prev => ({ ...prev, attachments: prev.attachments.filter(f => f.path !== file.path) }))}
+              />
+            </div>
+          )}
         </div>
 
         {/* Footer */}

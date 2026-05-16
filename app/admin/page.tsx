@@ -210,6 +210,11 @@ export default function AdminPage() {
   const [showClearCacheModal, setShowClearCacheModal] = useState(false)
   const [showBackupModal, setShowBackupModal] = useState(false)
   const [exportModule, setExportModule] = useState('All')
+  const [exportEntities, setExportEntities] = useState<Record<string, boolean>>({
+    contacts: true, companies: true, deals: true, projects: true,
+    contracts: true, invoices: true, tasks: true, time_entries: true,
+  })
+  const [exporting, setExporting] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importType, setImportType] = useState<'contacts' | 'companies' | 'pipeline'>('contacts')
   const [importProgress, setImportProgress] = useState<{ done: number; total: number; error: string } | null>(null)

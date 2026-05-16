@@ -151,7 +151,7 @@ function ProjectDetailPanel({
   onDelete?: (id: string) => void
   onUpdate?: (id: string, updates: Partial<Project>) => void
 }) {
-  const [tab, setTab] = useState<'overview' | 'milestones' | 'tasks' | 'notes'>('overview')
+  const [tab, setTab] = useState<'overview' | 'milestones' | 'tasks' | 'notes' | 'files'>('overview')
   const [showStatusPicker, setShowStatusPicker] = useState(false)
   const [localTasks, setLocalTasks] = useState(project.tasks)
   const [notes, setNotes] = useState<Array<{ id: string; text: string; date: string; author: string }>>(project.notes ?? [])
@@ -238,7 +238,7 @@ function ProjectDetailPanel({
         </div>
 
         <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
-          {(['overview', 'milestones', 'tasks', 'notes'] as const).map(t => (
+          {(['overview', 'milestones', 'tasks', 'notes', 'files'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}>
               {t}
             </button>

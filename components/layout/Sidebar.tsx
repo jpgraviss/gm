@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
@@ -13,25 +14,40 @@ import {
   Share2, ClipboardList, Search, FileBarChart, MessageCircle, Smartphone, Star, Layers,
 } from 'lucide-react'
 
-interface NavItem {
+export interface NavItem {
   label: string
   href: string
   icon: React.ReactNode
   adminOnly?: boolean
-  /** If set, only users whose unit is in this list (or admins) can see/access this item */
   allowedUnits?: string[]
-  /** If true, this item is visible to contractors */
   contractorVisible?: boolean
-  /** If true, this item is visible to Billing/Finance */
   billingVisible?: boolean
 }
 
-interface NavSection {
+export interface NavSection {
   section: string
   items: NavItem[]
 }
 
-const navigation: NavSection[] = [
+export interface NavConfigItem {
+  href: string
+  visible: boolean
+  order: number
+}
+
+export interface NavConfigSection {
+  id: string
+  label: string
+  visible: boolean
+  order: number
+  items: NavConfigItem[]
+}
+
+export interface NavConfig {
+  sections: NavConfigSection[]
+}
+
+export const defaultNavigation: NavSection[] = [
   {
     section: 'Home',
     items: [
@@ -115,16 +131,66 @@ const navigation: NavSection[] = [
   },
 ]
 
+export function buildDefaultNavConfig(): NavConfig {
+  return {
+    sections: defaultNavigation.map((s, si) => ({
+      id: s.section.toLowerCase().replace(/\s+/g, '-'),
+      label: s.section,
+      visible: true,
+      order: si,
+      items: s.items.map((item, ii) => ({
+        href: item.href,
+        visible: true,
+        order: ii,
+      })),
+    })),
+  }
+}
+
+function applyNavConfig(config: NavConfig): NavSection[] {
+  const sectionMap = new Map(defaultNavigation.map(s => [s.section.toLowerCase().replace(/\s+/g, '-'), s]))
+  return [...config.sections]
+    .filter(cs => cs.visible)
+    .sort((a, b) => a.order - b.order)
+    .map(cs => {
+      const original = sectionMap.get(cs.id)
+      if (!original) return null
+      const itemMap = new Map(original.items.map(it => [it.href, it]))
+      const sortedItems = [...cs.items]
+        .filter(ci => ci.visible)
+        .sort((a, b) => a.order - b.order)
+        .map(ci => itemMap.get(ci.href))
+        .filter((it): it is NavItem => !!it)
+      if (sortedItems.length === 0) return null
+      return { section: cs.label, items: sortedItems }
+    })
+    .filter((s): s is NavSection => !!s)
+}
+
 export default function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const { closeSidebar } = useUI()
   const settings = useSettings()
+  const [navConfig, setNavConfig] = useState<NavConfig | null>(null)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.navigation_config?.sections?.length) {
+          setNavConfig(d.navigation_config)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const brandPrimary = settings?.branding.primaryColor ?? '#015035'
   const brandDarkBg = settings?.branding.darkBg ?? '#012b1e'
   const appName = settings?.branding.appName ?? 'GravHub'
   const companyName = settings?.company.name ?? 'Graviss Marketing'
+
+  const resolvedNavigation = navConfig ? applyNavConfig(navConfig) : defaultNavigation
 
   const handleLogout = () => {
     logout()
@@ -151,7 +217,6 @@ export default function Sidebar() {
           </span>
           <p className="text-white/40 text-[10px] tracking-wider">{companyName}</p>
         </div>
-        {/* Mobile close button */}
         <button
           onClick={closeSidebar}
           className="p-1.5 rounded-lg hover:bg-white/10 transition-colors lg:hidden flex-shrink-0"
@@ -160,9 +225,8 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 px-2 py-3 overflow-y-auto overflow-x-hidden">
-        {navigation.map((group) => {
+        {resolvedNavigation.map((group) => {
           const isContractor = user?.role === 'Contractor' || user?.unit === 'Contractors'
           const isBilling = user?.unit === 'Billing/Finance'
           const visibleItems = group.items.filter((item) => {
@@ -176,11 +240,9 @@ export default function Sidebar() {
 
           return (
             <div key={group.section} className="mb-3">
-              {/* Section label: visible on mobile, visible on desktop hover */}
               <p className="block lg:hidden lg:group-hover:block text-white/30 text-[10px] font-semibold tracking-widest uppercase px-3 mb-1.5 whitespace-nowrap overflow-hidden">
                 {group.section}
               </p>
-              {/* Divider shown only in collapsed desktop mode */}
               <div className="hidden lg:block lg:group-hover:hidden h-px bg-white/[0.06] mx-2 mb-2" />
 
               <div className="flex flex-col gap-0.5">
@@ -199,12 +261,10 @@ export default function Sidebar() {
                       <span className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-white/50'}`}>
                         {item.icon}
                       </span>
-                      {/* Label */}
                       <span className="flex-1 text-[13px] whitespace-nowrap overflow-hidden
                                        lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
                         {item.label}
                       </span>
-                      {/* Admin badge */}
                       {item.adminOnly && (
                         <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap
                                          lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">

@@ -76,6 +76,7 @@ export async function PATCH(req: NextRequest) {
   if (body.emailDefaults    !== undefined) updates.email_defaults   = body.emailDefaults
   if (body.dashboardConfig  !== undefined) updates.dashboard_config = body.dashboardConfig
   if (body.engagement       !== undefined) updates.engagement       = body.engagement
+  if (body.navigationConfig !== undefined) updates.navigation_config = body.navigationConfig
 
   const { data, error } = await db
     .from('app_settings')

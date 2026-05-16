@@ -10,8 +10,12 @@ import {
   CheckCircle, AlertCircle, RefreshCw, Plug, Globe, Tag,
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
   Trash2, X, Eye, EyeOff, AlertTriangle, Mail, LayoutDashboard,
-  TrendingUp, Smartphone,
+  TrendingUp, Smartphone, Menu, ChevronUp, ChevronDown, RotateCcw,
 } from 'lucide-react'
+import {
+  defaultNavigation, buildDefaultNavConfig,
+  type NavConfig, type NavConfigSection, type NavConfigItem,
+} from '@/components/layout/Sidebar'
 
 const membershipColors: Record<string, string> = {
   'Super Admin': 'bg-purple-100 text-purple-700',
@@ -22,7 +26,7 @@ const membershipColors: Record<string, string> = {
   Client: 'bg-green-100 text-green-700',
 }
 
-const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Dashboard', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing'] as const
+const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Dashboard', 'Navigation', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing'] as const
 type Tab = typeof tabs[number]
 
 const tabIcons: Record<Tab, React.ReactNode> = {
@@ -32,6 +36,7 @@ const tabIcons: Record<Tab, React.ReactNode> = {
   Branding: <Palette size={15} />,
   'Email Defaults': <Mail size={15} />,
   Dashboard: <LayoutDashboard size={15} />,
+  Navigation: <Menu size={15} />,
   Notifications: <Bell size={15} />,
   Integrations: <Plug size={15} />,
   'CRM Setup': <Tag size={15} />,
@@ -197,6 +202,7 @@ export default function SettingsPage() {
       const t = searchParams.get('tab')
       if (t === 'integrations') return 'Integrations'
       if (t === 'notifications') return 'Notifications'
+      if (t === 'navigation') return 'Navigation'
     }
     return 'Company'
   })
@@ -313,6 +319,10 @@ export default function SettingsPage() {
   // Engagement
   const [engagement, setEngagement] = useState(ENGAGEMENT_DEFAULTS)
 
+  // Navigation config
+  const [navConfig, setNavConfig] = useState<NavConfig>(buildDefaultNavConfig)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
   // Load from API on mount (fall back to localStorage for backwards-compat, then defaults)
   useEffect(() => {
     fetch('/api/settings')
@@ -342,6 +352,7 @@ export default function SettingsPage() {
         if (d.dashboard_config && Object.keys(d.dashboard_config).length)  setDashboardConfig(prev => ({ ...prev, ...d.dashboard_config }))
         if (Array.isArray(d.qb_sync)         && d.qb_sync.length)          setQbSync(d.qb_sync)
         if (d.engagement && Object.keys(d.engagement).length) setEngagement(prev => ({ points: { ...prev.points, ...d.engagement.points }, thresholds: { ...prev.thresholds, ...d.engagement.thresholds } }))
+        if (d.navigation_config?.sections?.length) setNavConfig(d.navigation_config)
       })
       .catch(() => {
         setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
@@ -413,6 +424,113 @@ export default function SettingsPage() {
 
   function saveEngagement() {
     patchSettings({ engagement }, 'Engagement')
+  }
+
+  function saveNavConfig() {
+    patchSettings({ navigationConfig: navConfig }, 'Navigation')
+  }
+
+  function resetNavConfig() {
+    const fresh = buildDefaultNavConfig()
+    setNavConfig(fresh)
+    patchSettings({ navigationConfig: fresh }, 'Navigation')
+  }
+
+  function moveSectionUp(idx: number) {
+    if (idx === 0) return
+    setNavConfig(prev => {
+      const sections = [...prev.sections]
+      const aOrder = sections[idx].order
+      sections[idx] = { ...sections[idx], order: sections[idx - 1].order }
+      sections[idx - 1] = { ...sections[idx - 1], order: aOrder }
+      sections.sort((a, b) => a.order - b.order)
+      return { sections }
+    })
+  }
+
+  function moveSectionDown(idx: number) {
+    setNavConfig(prev => {
+      if (idx >= prev.sections.length - 1) return prev
+      const sections = [...prev.sections]
+      const aOrder = sections[idx].order
+      sections[idx] = { ...sections[idx], order: sections[idx + 1].order }
+      sections[idx + 1] = { ...sections[idx + 1], order: aOrder }
+      sections.sort((a, b) => a.order - b.order)
+      return { sections }
+    })
+  }
+
+  function toggleSectionVisible(id: string) {
+    setNavConfig(prev => ({
+      sections: prev.sections.map(s => s.id === id ? { ...s, visible: !s.visible } : s),
+    }))
+  }
+
+  function renameSectionLabel(id: string, label: string) {
+    setNavConfig(prev => ({
+      sections: prev.sections.map(s => s.id === id ? { ...s, label } : s),
+    }))
+  }
+
+  function toggleItemVisible(sectionId: string, href: string) {
+    setNavConfig(prev => ({
+      sections: prev.sections.map(s =>
+        s.id === sectionId
+          ? { ...s, items: s.items.map(it => it.href === href ? { ...it, visible: !it.visible } : it) }
+          : s,
+      ),
+    }))
+  }
+
+  function moveItemUp(sectionId: string, itemIdx: number) {
+    if (itemIdx === 0) return
+    setNavConfig(prev => ({
+      sections: prev.sections.map(s => {
+        if (s.id !== sectionId) return s
+        const items = [...s.items]
+        const aOrder = items[itemIdx].order
+        items[itemIdx] = { ...items[itemIdx], order: items[itemIdx - 1].order }
+        items[itemIdx - 1] = { ...items[itemIdx - 1], order: aOrder }
+        items.sort((a, b) => a.order - b.order)
+        return { ...s, items }
+      }),
+    }))
+  }
+
+  function moveItemDown(sectionId: string, itemIdx: number) {
+    setNavConfig(prev => ({
+      sections: prev.sections.map(s => {
+        if (s.id !== sectionId) return s
+        if (itemIdx >= s.items.length - 1) return s
+        const items = [...s.items]
+        const aOrder = items[itemIdx].order
+        items[itemIdx] = { ...items[itemIdx], order: items[itemIdx + 1].order }
+        items[itemIdx + 1] = { ...items[itemIdx + 1], order: aOrder }
+        items.sort((a, b) => a.order - b.order)
+        return { ...s, items }
+      }),
+    }))
+  }
+
+  function moveItemToSection(fromSectionId: string, href: string, toSectionId: string) {
+    setNavConfig(prev => {
+      const fromSection = prev.sections.find(s => s.id === fromSectionId)
+      if (!fromSection) return prev
+      const item = fromSection.items.find(it => it.href === href)
+      if (!item) return prev
+      return {
+        sections: prev.sections.map(s => {
+          if (s.id === fromSectionId) {
+            return { ...s, items: s.items.filter(it => it.href !== href) }
+          }
+          if (s.id === toSectionId) {
+            const maxOrder = s.items.length > 0 ? Math.max(...s.items.map(it => it.order)) : -1
+            return { ...s, items: [...s.items, { ...item, order: maxOrder + 1 }] }
+          }
+          return s
+        }),
+      }
+    })
   }
 
   async function submitInvite() {

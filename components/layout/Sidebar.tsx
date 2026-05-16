@@ -10,7 +10,7 @@ import {
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
   Settings, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare, CheckSquare, Inbox,
   CalendarDays, CalendarCheck, Clock, Activity, Plug, BookOpen, GraduationCap,
-  Share2, ClipboardList, Search, FileBarChart, MessageCircle, Smartphone, Star,
+  Share2, ClipboardList, Search, FileBarChart, MessageCircle, Smartphone, Star, Layers,
 } from 'lucide-react'
 
 interface NavItem {

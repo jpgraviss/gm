@@ -558,6 +558,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
             {[
               { icon: <Phone size={16} />, label: 'Call', href: `tel:${contact.phones[0] ?? ''}`, type: 'link' as const },
               { icon: <Mail size={16} />, label: 'Email', href: `mailto:${contact.emails[0] ?? ''}`, type: 'link' as const },
+              { icon: <MessageCircle size={16} />, label: 'SMS', href: `/messaging?contact=${contact.id}`, type: 'link' as const },
               { icon: <Linkedin size={16} />, label: 'LinkedIn', href: contact.linkedIn ?? '', type: 'link' as const },
               { icon: <Plus size={16} />, label: 'More', type: 'button' as const },
             ].map(action => (
@@ -1373,6 +1374,9 @@ export default function ContactsPage() {
                         <a href={`tel:${contact.phones[0] ?? ''}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors">
                           <Phone size={13} />
                         </a>
+                        <Link href={`/messaging?contact=${contact.id}`} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors" title="Send SMS">
+                          <MessageCircle size={13} />
+                        </Link>
                         {contact.linkedIn && (
                           <a href={contact.linkedIn} target="_blank" rel="noopener noreferrer"
                             className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors">

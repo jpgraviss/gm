@@ -494,6 +494,18 @@ export default function SettingsPage() {
     patchSettings({ engagement }, 'Engagement')
   }
 
+  function saveEmailTemplate(name: SystemTemplateName, template: SystemEmailTemplate) {
+    const updated = { ...emailTemplates, [name]: { ...template, lastEdited: new Date().toISOString() } }
+    setEmailTemplates(updated)
+    patchSettings({ emailTemplates: updated }, 'Email Templates')
+  }
+
+  function openTemplateEditor(name: SystemTemplateName) {
+    const existing = emailTemplates[name]
+    setEditingTemplate(name)
+    setEditingTemplateData(existing ?? getDefaultTemplate(name))
+  }
+
   function saveNavConfig() {
     patchSettings({ navigationConfig: roleNavConfig }, 'Navigation')
   }

@@ -1168,6 +1168,225 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* ── Email Templates ── */}
+        {activeTab === 'Email Templates' && !editingTemplate && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>System Email Templates</h3>
+                {saved === 'Email Templates' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+              </div>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {ALL_TEMPLATE_NAMES.map(name => {
+                const tpl = emailTemplates[name]
+                const label = TEMPLATE_LABELS[name]
+                const subject = tpl?.subject ?? getDefaultTemplate(name).subject
+                const lastEdited = tpl?.lastEdited ? new Date(tpl.lastEdited).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Default'
+                return (
+                  <button key={name} onClick={() => openTemplateEditor(name)} className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors text-left">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-800">{label}</p>
+                      <p className="text-xs text-gray-400 truncate mt-0.5">{subject}</p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="text-[10px] text-gray-400">{lastEdited}</span>
+                      <ChevronRight size={14} className="text-gray-300" />
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'Email Templates' && editingTemplate && editingTemplateData && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <button onClick={() => { setEditingTemplate(null); setEditingTemplateData(null) }} className="text-xs text-gray-500 hover:text-gray-700 font-medium">
+                &larr; Back to templates
+              </button>
+              <h3 className="text-sm font-bold text-gray-800">{TEMPLATE_LABELS[editingTemplate]}</h3>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2 flex flex-col gap-4">
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Subject Line</label>
+                  <input
+                    value={editingTemplateData.subject}
+                    onChange={e => setEditingTemplateData(p => p ? { ...p, subject: e.target.value } : p)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                  />
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wide">Template Blocks</h4>
+                    <div className="flex gap-1">
+                      {(['logo', 'text', 'button', 'divider', 'footer'] as const).map(type => (
+                        <button
+                          key={type}
+                          onClick={() => setEditingTemplateData(p => p ? { ...p, blocks: [...p.blocks, newTemplateBlock(type)] } : p)}
+                          className="px-2 py-1 text-[10px] font-semibold border border-gray-200 rounded-md text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors capitalize"
+                        >
+                          + {type}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {editingTemplateData.blocks.map((block, idx) => (
+                      <div key={block.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{block.type}</span>
+                          <div className="flex items-center gap-1">
+                            <button disabled={idx === 0} onClick={() => setEditingTemplateData(p => {
+                              if (!p) return p
+                              const blocks = [...p.blocks]
+                              ;[blocks[idx - 1], blocks[idx]] = [blocks[idx], blocks[idx - 1]]
+                              return { ...p, blocks }
+                            })} className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"><ArrowUp size={12} /></button>
+                            <button disabled={idx === editingTemplateData.blocks.length - 1} onClick={() => setEditingTemplateData(p => {
+                              if (!p) return p
+                              const blocks = [...p.blocks]
+                              ;[blocks[idx], blocks[idx + 1]] = [blocks[idx + 1], blocks[idx]]
+                              return { ...p, blocks }
+                            })} className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"><ArrowDown size={12} /></button>
+                            <button onClick={() => setEditingTemplateData(p => p ? { ...p, blocks: p.blocks.filter((_, i) => i !== idx) } : p)} className="p-0.5 text-gray-400 hover:text-red-500"><Trash2 size={12} /></button>
+                          </div>
+                        </div>
+                        {block.type === 'text' && (
+                          <textarea
+                            value={String(block.content.html ?? '')}
+                            onChange={e => setEditingTemplateData(p => {
+                              if (!p) return p
+                              const blocks = p.blocks.map((b, i) => i === idx ? { ...b, content: { ...b.content, html: e.target.value } } : b)
+                              return { ...p, blocks }
+                            })}
+                            rows={3}
+                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-gray-700 bg-white focus:outline-none focus:border-green-700 resize-none"
+                            placeholder="HTML content (supports <b>, <i>, <a> tags)"
+                          />
+                        )}
+                        {block.type === 'button' && (
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              value={String(block.content.text ?? '')}
+                              onChange={e => setEditingTemplateData(p => {
+                                if (!p) return p
+                                const blocks = p.blocks.map((b, i) => i === idx ? { ...b, content: { ...b.content, text: e.target.value } } : b)
+                                return { ...p, blocks }
+                              })}
+                              placeholder="Button text"
+                              className="px-2 py-1.5 border border-gray-200 rounded text-xs text-gray-700 bg-white focus:outline-none focus:border-green-700"
+                            />
+                            <input
+                              value={String(block.content.url ?? '')}
+                              onChange={e => setEditingTemplateData(p => {
+                                if (!p) return p
+                                const blocks = p.blocks.map((b, i) => i === idx ? { ...b, content: { ...b.content, url: e.target.value } } : b)
+                                return { ...p, blocks }
+                              })}
+                              placeholder="URL (or {action_url})"
+                              className="px-2 py-1.5 border border-gray-200 rounded text-xs text-gray-700 bg-white focus:outline-none focus:border-green-700"
+                            />
+                            <input
+                              value={String(block.content.bgColor ?? '#015035')}
+                              onChange={e => setEditingTemplateData(p => {
+                                if (!p) return p
+                                const blocks = p.blocks.map((b, i) => i === idx ? { ...b, content: { ...b.content, bgColor: e.target.value } } : b)
+                                return { ...p, blocks }
+                              })}
+                              placeholder="Background color"
+                              className="px-2 py-1.5 border border-gray-200 rounded text-xs text-gray-700 bg-white focus:outline-none focus:border-green-700"
+                            />
+                            <input
+                              value={String(block.content.textColor ?? '#ffffff')}
+                              onChange={e => setEditingTemplateData(p => {
+                                if (!p) return p
+                                const blocks = p.blocks.map((b, i) => i === idx ? { ...b, content: { ...b.content, textColor: e.target.value } } : b)
+                                return { ...p, blocks }
+                              })}
+                              placeholder="Text color"
+                              className="px-2 py-1.5 border border-gray-200 rounded text-xs text-gray-700 bg-white focus:outline-none focus:border-green-700"
+                            />
+                          </div>
+                        )}
+                        {block.type === 'footer' && (
+                          <input
+                            value={String(block.content.text ?? '')}
+                            onChange={e => setEditingTemplateData(p => {
+                              if (!p) return p
+                              const blocks = p.blocks.map((b, i) => i === idx ? { ...b, content: { ...b.content, text: e.target.value } } : b)
+                              return { ...p, blocks }
+                            })}
+                            placeholder="Footer text (auto-includes unsubscribe link)"
+                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-gray-700 bg-white focus:outline-none focus:border-green-700"
+                          />
+                        )}
+                        {(block.type === 'logo' || block.type === 'divider') && (
+                          <p className="text-[10px] text-gray-400">{block.type === 'logo' ? 'Uses company logo from branding settings' : 'Horizontal divider line'}</p>
+                        )}
+                      </div>
+                    ))}
+                    {editingTemplateData.blocks.length === 0 && (
+                      <p className="text-xs text-gray-400 text-center py-4">No blocks yet. Add blocks using the buttons above.</p>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => { saveEmailTemplate(editingTemplate, editingTemplateData); setEditingTemplate(null); setEditingTemplateData(null) }}
+                  className="w-fit flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium"
+                  style={{ background: '#015035' }}
+                >
+                  Save Template
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Merge Fields</h4>
+                  <div className="flex flex-col gap-1.5">
+                    {MERGE_FIELDS.map(field => (
+                      <button
+                        key={field}
+                        onClick={() => navigator.clipboard.writeText(field)}
+                        className="flex items-center justify-between px-2.5 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100 transition-colors text-left group"
+                      >
+                        <code className="text-xs text-green-800 font-mono">{field}</code>
+                        <Copy size={10} className="text-gray-300 group-hover:text-gray-500" />
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-2">Click to copy. Paste into subject or text blocks.</p>
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Preview</h4>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-100">
+                    <div className="p-2 border-b border-gray-200 bg-gray-50">
+                      <p className="text-[10px] text-gray-500"><span className="font-semibold">Subject:</span> {(() => {
+                        let s = editingTemplateData.subject
+                        for (const [k, v] of Object.entries(SAMPLE_DATA)) s = s.replace(new RegExp(k.replace(/[{}]/g, '\\$&'), 'g'), v)
+                        return s
+                      })()}</p>
+                    </div>
+                    <iframe
+                      srcDoc={renderPreview(editingTemplateData)}
+                      className="w-full border-0"
+                      style={{ height: '400px' }}
+                      title="Template preview"
+                      sandbox="allow-same-origin"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Dashboard ── */}
         {activeTab === 'Dashboard' && (
           <div className="flex flex-col gap-4">

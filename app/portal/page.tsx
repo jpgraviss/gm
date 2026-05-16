@@ -1198,19 +1198,30 @@ export default function PortalPage() {
           </div>
         </div>
 
-        <Link
-          href="/portal/help"
-          className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 shadow-sm mb-6 hover:border-[#015035]/30 hover:shadow-md transition-all group"
-        >
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e6f0ec' }}>
-            <BookOpen size={16} style={{ color: '#015035' }} />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-gray-800 group-hover:text-[#015035] transition-colors">Help Center</p>
-            <p className="text-xs text-gray-500">Client-facing knowledge base with published articles</p>
-          </div>
-          <ChevronRight size={16} className="text-gray-300 group-hover:text-[#015035] transition-colors" />
-        </Link>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {([
+            { href: '/portal/projects',  icon: <FolderKanban size={16} style={{ color: '#015035' }} />, title: 'Project Dashboards',          desc: 'Track active projects, milestones, and deliverables' },
+            { href: '/portal/approvals', icon: <FileText size={16} style={{ color: '#015035' }} />,     title: 'Proposals & Contracts',       desc: 'Review, approve, or decline pending documents' },
+            { href: '/portal/billing',   icon: <FileText size={16} style={{ color: '#015035' }} />,     title: 'Invoices & Billing',          desc: 'View invoices, payment history, and download PDFs' },
+            { href: '/portal/tickets',   icon: <MessageSquare size={16} style={{ color: '#015035' }} />, title: 'Support Tickets',            desc: 'Submit requests and track ticket status' },
+            { href: '/portal/help',      icon: <BookOpen size={16} style={{ color: '#015035' }} />,     title: 'Help Center',                 desc: 'Client-facing knowledge base with published articles' },
+          ] as const).map(card => (
+            <Link
+              key={card.href}
+              href={card.href}
+              className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 shadow-sm hover:border-[#015035]/30 hover:shadow-md transition-all group"
+            >
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e6f0ec' }}>
+                {card.icon}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-gray-800 group-hover:text-[#015035] transition-colors">{card.title}</p>
+                <p className="text-xs text-gray-500">{card.desc}</p>
+              </div>
+              <ChevronRight size={16} className="text-gray-300 group-hover:text-[#015035] transition-colors" />
+            </Link>
+          ))}
+        </div>
 
         {/* Portal Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

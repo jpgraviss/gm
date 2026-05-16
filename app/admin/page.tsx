@@ -1537,29 +1537,63 @@ export default function AdminPage() {
             </div>
             <div className="p-5 flex flex-col gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Select Module</label>
-                <select value={exportModule} onChange={e => setExportModule(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700">
-                  {['All', 'Contacts', 'Companies', 'Proposals', 'Contracts', 'Invoices', 'Projects'].map(m => <option key={m}>{m}</option>)}
-                </select>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Select Entities</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'contacts', label: 'Contacts' },
+                    { key: 'companies', label: 'Companies' },
+                    { key: 'deals', label: 'Deals' },
+                    { key: 'projects', label: 'Projects' },
+                    { key: 'contracts', label: 'Contracts' },
+                    { key: 'invoices', label: 'Invoices' },
+                    { key: 'tasks', label: 'Tasks' },
+                    { key: 'time_entries', label: 'Time Entries' },
+                  ].map(e => (
+                    <label key={e.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={exportEntities[e.key] ?? false}
+                        onChange={() => setExportEntities(prev => ({ ...prev, [e.key]: !prev[e.key] }))}
+                        className="rounded border-gray-300 text-green-700 focus:ring-green-700"
+                      />
+                      {e.label}
+                    </label>
+                  ))}
+                </div>
               </div>
               <p className="text-xs text-gray-400">Exports as CSV format. All data visible to your role will be included.</p>
             </div>
             <div className="px-5 pb-5 flex gap-2">
               <button
-                onClick={() => {
-                  const csv = `Module,Exported At\n${exportModule},${new Date().toISOString()}\n`
-                  const blob = new Blob([csv], { type: 'text/csv' })
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url; a.download = `gravhub-export-${exportModule.toLowerCase()}-${Date.now()}.csv`
-                  a.click(); URL.revokeObjectURL(url)
-                  setShowExportModal(false)
+                disabled={exporting}
+                onClick={async () => {
+                  const selected = Object.entries(exportEntities).filter(([, v]) => v).map(([k]) => k)
+                  if (selected.length === 0) return
+                  setExporting(true)
+                  try {
+                    const res = await fetch('/api/admin/export', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ entities: selected }),
+                    })
+                    if (!res.ok) throw new Error('Export failed')
+                    const blob = await res.blob()
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url; a.download = `gravhub-export-${Date.now()}.csv`
+                    a.click(); URL.revokeObjectURL(url)
+                    setShowExportModal(false)
+                    toast('Data exported', 'success')
+                  } catch {
+                    toast('Export failed', 'error')
+                  } finally {
+                    setExporting(false)
+                  }
                 }}
-                className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl"
+                className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-50"
                 style={{ background: '#015035' }}
               >
-                Download CSV
+                {exporting ? 'Exporting...' : 'Download CSV'}
               </button>
               <button onClick={() => setShowExportModal(false)} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
             </div>

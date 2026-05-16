@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     const cols = config.columns.split(',').map(c => c.trim())
     const header = toCsvRow(cols)
     const rows = data.map(row =>
-      toCsvRow(cols.map(col => String((row as Record<string, unknown>)[col] ?? '')))
+      toCsvRow(cols.map(col => String((row as unknown as Record<string, unknown>)[col] ?? '')))
     )
 
     csvSections.push(`--- ${entity.toUpperCase()} ---`)

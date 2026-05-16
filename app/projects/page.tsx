@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
+import FileUpload from '@/components/ui/FileUpload'
 
 const DEPARTMENTS = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
 
@@ -134,6 +135,48 @@ function ProjectGridCard({ project, onClick }: { project: Project; onClick: () =
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+interface ProjectFile {
+  name: string
+  size: number
+  url: string
+  path: string
+  type: string
+  createdAt?: string
+}
+
+function ProjectFilesTab({ company }: { company: string }) {
+  const [files, setFiles] = useState<ProjectFile[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`/api/files?company=${encodeURIComponent(company)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setFiles(data.map((f: ProjectFile) => ({ ...f, type: f.type ?? '' }))) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [company])
+
+  if (loading) return <div className="py-12 text-center text-sm text-gray-400">Loading files...</div>
+
+  return (
+    <div className="flex flex-col gap-4">
+      <FileUpload
+        company={company}
+        files={files}
+        onUpload={file => setFiles(prev => [file, ...prev])}
+        onRemove={file => {
+          fetch('/api/files', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: file.path }),
+          })
+          setFiles(prev => prev.filter(f => f.path !== file.path))
+        }}
+      />
     </div>
   )
 }
@@ -636,6 +679,10 @@ function ProjectDetailPanel({
                 </button>
               )}
             </div>
+          )}
+
+          {tab === 'files' && (
+            <ProjectFilesTab company={project.company} />
           )}
         </div>
 

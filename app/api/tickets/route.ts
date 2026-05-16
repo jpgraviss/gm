@@ -28,6 +28,7 @@ function mapTicket(row: any) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
+  const company = searchParams.get('company')
   const { limit, cursor } = parsePagination(req)
   const db = createServiceClient()
   let query = db
@@ -36,6 +37,7 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(limit + 1)
   if (status) query = query.eq('status', status)
+  if (company) query = query.eq('company', company)
   if (cursor) query = query.lt('created_at', cursor)
   const { data, error } = await query
   if (error) {

@@ -413,7 +413,7 @@ export default function SettingsPage() {
         if (Array.isArray(d.notification_preferences?.activity) && d.notification_preferences.activity.length) setActivityNotifs(d.notification_preferences.activity)
         if (d.notification_preferences?.quiet_hours) setQuietHours(prev => ({ ...prev, ...d.notification_preferences.quiet_hours }))
         if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(d.invoice_defaults)
-        if (Array.isArray(d.pipelines) && d.pipelines.length) setPipelines(d.pipelines)
+        if (Array.isArray(d.pipelines) && d.pipelines.length) setPipelines(d.pipelines.map((p: PipelineConf) => ({ ...p, stages: Array.isArray(p.stages) ? p.stages : [] })))
         else if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length) setPipelines([{ id: 'sales', name: 'Sales Pipeline', stages: d.pipeline_stages.map((name: string, i: number) => ({ id: `s${i}`, name, color: STAGE_COLORS_CYCLE[i % STAGE_COLORS_CYCLE.length] })) }])
         if (Array.isArray(d.service_types)   && d.service_types.length)    setServiceTypes(d.service_types)
         if (Array.isArray(d.contact_tags)    && d.contact_tags.length)     setContactTags(d.contact_tags)

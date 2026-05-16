@@ -7,7 +7,6 @@ import { useUI } from '@/contexts/UIContext'
 import Sidebar from './Sidebar'
 import AssistantPanel from '@/components/ai/AssistantPanel'
 import CommandPalette from '@/components/ui/CommandPalette'
-import OnboardingWizard from '@/components/onboarding/OnboardingWizard'
 import { ShieldAlert, X, Sparkles } from 'lucide-react'
 import PushNotificationBanner from '@/components/ui/PushNotificationBanner'
 
@@ -42,7 +41,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading, impersonatedBy, exitImpersonation } = useAuth()
   const { sidebarOpen, closeSidebar } = useUI()
   const [assistantOpen, setAssistantOpen] = useState(false)
-  const [showOnboarding, setShowOnboarding] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -60,9 +58,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         }
         if (branding?.secondaryColor) {
           document.documentElement.style.setProperty('--brand-secondary', branding.secondaryColor)
-        }
-        if (data && !data.onboarding_completed) {
-          setShowOnboarding(true)
         }
       })
       .catch(() => {/* use CSS defaults */})
@@ -129,9 +124,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <CommandPalette />
-      {showOnboarding && user.isAdmin && (
-        <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
-      )}
       {/* Mobile backdrop */}
       {sidebarOpen && (
         <div

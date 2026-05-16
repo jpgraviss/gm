@@ -11,7 +11,13 @@ import {
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
   Trash2, X, Eye, EyeOff, AlertTriangle, Mail, LayoutDashboard,
   TrendingUp, Smartphone, Menu, ChevronUp, ChevronDown, RotateCcw, Star,
+  FileText, ArrowUp, ArrowDown, Copy,
 } from 'lucide-react'
+import {
+  type SystemTemplateName, type SystemEmailTemplate, type TemplateBlock,
+  TEMPLATE_LABELS, MERGE_FIELDS, SAMPLE_DATA,
+  getDefaultTemplate, renderPreview, newTemplateBlock,
+} from '@/lib/email-templates'
 import {
   defaultNavigation, buildDefaultNavConfig, buildDefaultRoleNavConfig,
   NAV_ROLES,
@@ -28,7 +34,7 @@ const membershipColors: Record<string, string> = {
   Client: 'bg-green-100 text-green-700',
 }
 
-const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Dashboard', 'Navigation', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing'] as const
+const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Email Templates', 'Dashboard', 'Navigation', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing'] as const
 type Tab = typeof tabs[number]
 
 const tabIcons: Record<Tab, React.ReactNode> = {
@@ -37,6 +43,7 @@ const tabIcons: Record<Tab, React.ReactNode> = {
   Permissions: <Shield size={15} />,
   Branding: <Palette size={15} />,
   'Email Defaults': <Mail size={15} />,
+  'Email Templates': <FileText size={15} />,
   Dashboard: <LayoutDashboard size={15} />,
   Navigation: <Menu size={15} />,
   Notifications: <Bell size={15} />,
@@ -205,6 +212,7 @@ export default function SettingsPage() {
       if (t === 'integrations') return 'Integrations'
       if (t === 'notifications') return 'Notifications'
       if (t === 'navigation') return 'Navigation'
+      if (t === 'email-templates') return 'Email Templates'
     }
     return 'Company'
   })
@@ -320,6 +328,12 @@ export default function SettingsPage() {
 
   // Engagement
   const [engagement, setEngagement] = useState(ENGAGEMENT_DEFAULTS)
+
+  // Email Templates
+  const ALL_TEMPLATE_NAMES: SystemTemplateName[] = ['task_assigned', 'task_due_today', 'deal_stage_changed', 'contract_signed', 'invoice_overdue', 'proposal_accepted', 'proposal_declined', 'new_ticket', 'ticket_updated', 'welcome_email']
+  const [emailTemplates, setEmailTemplates] = useState<Record<string, SystemEmailTemplate>>({})
+  const [editingTemplate, setEditingTemplate] = useState<SystemTemplateName | null>(null)
+  const [editingTemplateData, setEditingTemplateData] = useState<SystemEmailTemplate | null>(null)
 
   // Navigation config
   const [roleNavConfig, setRoleNavConfig] = useState<RoleNavConfig>(buildDefaultRoleNavConfig)

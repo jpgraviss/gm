@@ -30,10 +30,10 @@ export default function PortalSetupPage() {
 
   useEffect(() => {
     if (!emailParam) {
-      setStep('invalid')
+      requestAnimationFrame(() => setStep('invalid'))
       return
     }
-    setEmail(emailParam)
+    requestAnimationFrame(() => setEmail(emailParam))
     fetch(`/api/portal-clients/check-approval?email=${encodeURIComponent(emailParam)}`)
       .then(r => r.json())
       .then(data => {

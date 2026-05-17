@@ -13,7 +13,7 @@ function VerifyContent() {
 
   useEffect(() => {
     if (!token) {
-      setError('No token provided. Please request a new sign-in link.')
+      requestAnimationFrame(() => setError('No token provided. Please request a new sign-in link.'))
       return
     }
 

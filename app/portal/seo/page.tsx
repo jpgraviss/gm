@@ -77,7 +77,7 @@ export default function PortalSeoPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!company) { setLoading(false); return }
+    if (!company) { requestAnimationFrame(() => setLoading(false)); return }
     fetch(`/api/portal/seo?company=${encodeURIComponent(company)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {

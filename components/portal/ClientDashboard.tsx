@@ -185,9 +185,10 @@ export default function ClientDashboard() {
   const company = user?.company ?? ''
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [nowMs] = useState(() => Date.now())
 
   useEffect(() => {
-    if (!company) { setLoading(false); return }
+    if (!company) { requestAnimationFrame(() => setLoading(false)); return }
     fetch(`/api/portal/dashboard?company=${encodeURIComponent(company)}`)
       .then(r => r.ok ? r.json() : null)
       .then((d: DashboardData | null) => setData(d))
@@ -250,7 +251,6 @@ export default function ClientDashboard() {
 
   const startMs = activeContract?.startDate ? new Date(activeContract.startDate + 'T12:00:00').getTime() : 0
   const endMs = activeContract?.renewalDate ? new Date(activeContract.renewalDate + 'T12:00:00').getTime() : 0
-  const nowMs = Date.now()
   const totalDays = endMs > startMs ? Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24)) : 0
   const daysRemaining = endMs > nowMs ? Math.ceil((endMs - nowMs) / (1000 * 60 * 60 * 24)) : 0
   const agreementPct = totalDays > 0 ? Math.min(100, Math.max(0, ((totalDays - daysRemaining) / totalDays) * 100)) : 0

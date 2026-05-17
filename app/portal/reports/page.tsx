@@ -78,7 +78,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!company) { setLoading(false); return }
+    if (!company) { requestAnimationFrame(() => setLoading(false)); return }
     fetch(`/api/portal/dashboard?company=${encodeURIComponent(company)}`)
       .then(r => r.ok ? r.json() : null)
       .then((d: DashboardData | null) => setData(d))

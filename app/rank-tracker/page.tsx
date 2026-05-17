@@ -7,7 +7,7 @@ import {
   TrendingUp, TrendingDown, Minus, X, Trash2, Search, RefreshCw,
   Target, ArrowUp, ArrowDown, ChevronDown, ChevronUp, Download,
   Upload, Plus, Tag, Filter, BarChart3, Globe, MapPin,
-  Calendar, Users, FileText, Mail, Eye, ArrowRight, Check,
+  Calendar, Users, FileText, Mail, Eye, ArrowRight,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -768,19 +768,19 @@ function AddKeywordModal({ onClose, onCreated }: {
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10"><X size={16} className="text-white/70" /></button>
         </div>
         <div className="p-5 flex flex-col gap-3 max-h-[70vh] overflow-y-auto">
-          <Field label="Company"><input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Company name" className="field-input" /></Field>
-          <Field label="Site URL (GSC property)"><input value={siteUrl} onChange={e => setSiteUrl(e.target.value)} placeholder="https://site.com" className="field-input font-mono text-xs" /></Field>
-          <Field label="Keyword"><input value={keyword} onChange={e => setKeyword(e.target.value)} placeholder="best pizza brooklyn" className="field-input" /></Field>
-          <Field label="Target URL"><input value={targetUrl} onChange={e => setTargetUrl(e.target.value)} placeholder="https://site.com/pizza" className="field-input font-mono text-xs" /></Field>
+          <Field label="Company"><input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Company name" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" /></Field>
+          <Field label="Site URL (GSC property)"><input value={siteUrl} onChange={e => setSiteUrl(e.target.value)} placeholder="https://site.com" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-xs" /></Field>
+          <Field label="Keyword"><input value={keyword} onChange={e => setKeyword(e.target.value)} placeholder="best pizza brooklyn" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" /></Field>
+          <Field label="Target URL"><input value={targetUrl} onChange={e => setTargetUrl(e.target.value)} placeholder="https://site.com/pizza" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-xs" /></Field>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Country (ISO)"><input value={country} onChange={e => setCountry(e.target.value.toUpperCase())} placeholder="US" maxLength={3} className="field-input uppercase" /></Field>
+            <Field label="Country (ISO)"><input value={country} onChange={e => setCountry(e.target.value.toUpperCase())} placeholder="US" maxLength={3} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase" /></Field>
             <Field label="Search Engine">
-              <select value={searchEngine} onChange={e => setSearchEngine(e.target.value)} className="field-input">
+              <select value={searchEngine} onChange={e => setSearchEngine(e.target.value)} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 <option value="google">Google</option>
                 <option value="bing">Bing</option>
               </select>
             </Field>
-            <Field label="Location"><input value={location} onChange={e => setLocation(e.target.value)} placeholder="New York" className="field-input" /></Field>
+            <Field label="Location"><input value={location} onChange={e => setLocation(e.target.value)} placeholder="New York" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" /></Field>
           </div>
           <Field label="Tags">
             <div className="flex flex-wrap gap-1 mb-1.5">
@@ -791,7 +791,7 @@ function AddKeywordModal({ onClose, onCreated }: {
               ))}
             </div>
             <div className="flex gap-1">
-              <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput) } }} placeholder="Add tag..." className="field-input flex-1" />
+              <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput) } }} placeholder="Add tag..." className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 flex-1" />
             </div>
             <div className="flex flex-wrap gap-1 mt-1.5">
               {TAG_PRESETS.filter(t => !tags.includes(t)).map(t => (
@@ -807,9 +807,6 @@ function AddKeywordModal({ onClose, onCreated }: {
           <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
         </div>
       </div>
-      <style jsx>{`
-        .field-input { @apply w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500; }
-      `}</style>
     </div>
   )
 }
@@ -877,8 +874,8 @@ function BulkAddModal({ onClose, onCreated }: {
         </div>
         <div className="p-5 flex flex-col gap-3 max-h-[70vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Company"><input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Company name" className="field-input" /></Field>
-            <Field label="Site URL"><input value={siteUrl} onChange={e => setSiteUrl(e.target.value)} placeholder="https://site.com" className="field-input font-mono text-xs" /></Field>
+            <Field label="Company"><input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Company name" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" /></Field>
+            <Field label="Site URL"><input value={siteUrl} onChange={e => setSiteUrl(e.target.value)} placeholder="https://site.com" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-xs" /></Field>
           </div>
           <Field label={`Keywords (${kwCount})`}>
             <textarea
@@ -886,19 +883,19 @@ function BulkAddModal({ onClose, onCreated }: {
               onChange={e => setKeywordsText(e.target.value)}
               placeholder="best pizza brooklyn\npizza delivery near me\nnew york pizza restaurant"
               rows={6}
-              className="field-input font-mono text-xs resize-y"
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-xs resize-y"
             />
           </Field>
-          <Field label="Target URL (optional)"><input value={targetUrl} onChange={e => setTargetUrl(e.target.value)} placeholder="https://site.com/page" className="field-input font-mono text-xs" /></Field>
+          <Field label="Target URL (optional)"><input value={targetUrl} onChange={e => setTargetUrl(e.target.value)} placeholder="https://site.com/page" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-xs" /></Field>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Country"><input value={country} onChange={e => setCountry(e.target.value.toUpperCase())} placeholder="US" maxLength={3} className="field-input uppercase" /></Field>
+            <Field label="Country"><input value={country} onChange={e => setCountry(e.target.value.toUpperCase())} placeholder="US" maxLength={3} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase" /></Field>
             <Field label="Engine">
-              <select value={searchEngine} onChange={e => setSearchEngine(e.target.value)} className="field-input">
+              <select value={searchEngine} onChange={e => setSearchEngine(e.target.value)} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 <option value="google">Google</option>
                 <option value="bing">Bing</option>
               </select>
             </Field>
-            <Field label="Location"><input value={location} onChange={e => setLocation(e.target.value)} placeholder="New York" className="field-input" /></Field>
+            <Field label="Location"><input value={location} onChange={e => setLocation(e.target.value)} placeholder="New York" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" /></Field>
           </div>
           <Field label="Tags">
             <div className="flex flex-wrap gap-1 mb-1.5">
@@ -909,7 +906,7 @@ function BulkAddModal({ onClose, onCreated }: {
               ))}
             </div>
             <div className="flex gap-1">
-              <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput) } }} placeholder="Add tag..." className="field-input flex-1" />
+              <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput) } }} placeholder="Add tag..." className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 flex-1" />
             </div>
             <div className="flex flex-wrap gap-1 mt-1.5">
               {TAG_PRESETS.filter(t => !tags.includes(t)).map(t => (
@@ -925,9 +922,6 @@ function BulkAddModal({ onClose, onCreated }: {
           <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
         </div>
       </div>
-      <style jsx>{`
-        .field-input { @apply w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500; }
-      `}</style>
     </div>
   )
 }
@@ -1077,7 +1071,7 @@ function HistoryDrawer({ tracked, allKeywords, compareTarget, onCompare, onClose
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
+    requestAnimationFrame(() => { if (!cancelled) setLoading(true) })
     fetch(`/api/rank-tracker/keywords/${tracked.id}/history?days=${dateRange}`)
       .then(r => r.ok ? r.json() : { points: [] })
       .then(data => { if (!cancelled && Array.isArray(data?.points)) setPoints(data.points) })
@@ -1087,7 +1081,7 @@ function HistoryDrawer({ tracked, allKeywords, compareTarget, onCompare, onClose
   }, [tracked.id, dateRange])
 
   useEffect(() => {
-    if (!compareTarget) { setComparePoints([]); return }
+    if (!compareTarget) { requestAnimationFrame(() => setComparePoints([])); return }
     let cancelled = false
     fetch(`/api/rank-tracker/keywords/${compareTarget.id}/history?days=${dateRange}`)
       .then(r => r.ok ? r.json() : { points: [] })

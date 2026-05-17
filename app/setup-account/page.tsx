@@ -72,11 +72,13 @@ export default function SetupAccountPage() {
 
   useEffect(() => {
     if (!emailParam) {
-      setError('Invalid setup link. Please use the link from your invitation email.')
-      setValidating(false)
+      requestAnimationFrame(() => {
+        setError('Invalid setup link. Please use the link from your invitation email.')
+        setValidating(false)
+      })
       return
     }
-    setValidating(false)
+    requestAnimationFrame(() => setValidating(false))
   }, [tokenParam, emailParam])
 
   function handleCodeChange(index: number, value: string) {

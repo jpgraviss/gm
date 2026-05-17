@@ -30,9 +30,10 @@ export default function PortalAgreementPage() {
   const company = user?.company ?? ''
   const [contract, setContract] = useState<Contract | null>(null)
   const [loading, setLoading] = useState(true)
+  const [nowMs] = useState(() => Date.now())
 
   useEffect(() => {
-    if (!company) { setLoading(false); return }
+    if (!company) { requestAnimationFrame(() => setLoading(false)); return }
     fetch(`/api/contracts?company=${encodeURIComponent(company)}`)
       .then(r => r.ok ? r.json() : [])
       .then((data: Contract[]) => {
@@ -144,7 +145,6 @@ export default function PortalAgreementPage() {
 
   const startMs = contract.startDate ? new Date(contract.startDate + 'T12:00:00').getTime() : 0
   const endMs = contract.renewalDate ? new Date(contract.renewalDate + 'T12:00:00').getTime() : 0
-  const nowMs = Date.now()
   const totalDays = endMs > startMs ? Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24)) : 0
   const daysRemaining = endMs > nowMs ? Math.ceil((endMs - nowMs) / (1000 * 60 * 60 * 24)) : 0
   const progressPct = totalDays > 0 ? Math.min(100, Math.max(0, ((totalDays - daysRemaining) / totalDays) * 100)) : 0

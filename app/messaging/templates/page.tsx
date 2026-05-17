@@ -91,12 +91,8 @@ function loadTemplates(): Template[] {
 export default function SMSTemplatesPage() {
   const { toast } = useToast()
   const router = useRouter()
-  const [templates, setTemplates] = useState<Template[]>(DEFAULT_TEMPLATES)
+  const [templates, setTemplates] = useState<Template[]>(loadTemplates)
   const [search, setSearch] = useState('')
-
-  useEffect(() => {
-    setTemplates(loadTemplates())
-  }, [])
 
   const persistTemplates = useCallback((next: Template[]) => {
     setTemplates(next)

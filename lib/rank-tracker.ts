@@ -20,6 +20,7 @@ export interface TrackedKeyword {
   searchEngine: string
   location: string | null
   searchVolume: number | null
+  portalVisible: boolean
 }
 
 export interface RankHistoryPoint {
@@ -77,6 +78,7 @@ function mapTracked(row: any): TrackedKeyword {
     searchEngine:    row.search_engine ?? 'google',
     location:        row.location ?? null,
     searchVolume:    row.search_volume ?? null,
+    portalVisible:   row.portal_visible ?? true,
   }
 }
 

@@ -1088,6 +1088,86 @@ function BulkTagModal({ allTags, onApply, onClose }: {
 }
 
 // ---------------------------------------------------------------------------
+// GSC Sync Modal
+// ---------------------------------------------------------------------------
+
+function GscSyncModal({ onClose, onSynced, syncing, setSyncing }: {
+  onClose: () => void
+  onSynced: (count: number) => void
+  syncing: boolean
+  setSyncing: (v: boolean) => void
+}) {
+  const { toast } = useToast()
+  const [siteUrl, setSiteUrl] = useState('')
+  const [companyName, setCompanyName] = useState('')
+  const [companyId, setCompanyId] = useState('')
+
+  async function handleSync() {
+    if (!siteUrl.trim() || !companyName.trim()) return
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/rank-tracker/sync-gsc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          siteUrl: siteUrl.trim(),
+          companyName: companyName.trim(),
+          companyId: companyId.trim() || undefined,
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        toast(body.error || 'GSC sync failed', 'error')
+        return
+      }
+      const data = await res.json()
+      onSynced(data.synced ?? 0)
+    } catch {
+      toast('GSC sync failed', 'error')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100" style={{ background: '#012b1e' }}>
+          <h2 className="text-white font-bold text-sm">Sync from Google Search Console</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10"><X size={16} className="text-white/70" /></button>
+        </div>
+        <div className="p-5 flex flex-col gap-3">
+          <p className="text-xs text-gray-500">Pull top queries from GSC and sync them as tracked keywords.</p>
+          <div>
+            <label className="text-xs font-semibold text-gray-700 mb-1 block">Site URL</label>
+            <input value={siteUrl} onChange={e => setSiteUrl(e.target.value)} placeholder="https://example.com" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-700 mb-1 block">Company Name</label>
+            <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Company name" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-700 mb-1 block">Company ID (optional)</label>
+            <input value={companyId} onChange={e => setCompanyId(e.target.value)} placeholder="Company ID" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          </div>
+        </div>
+        <div className="p-4 border-t border-gray-100 flex gap-2">
+          <button
+            onClick={handleSync}
+            disabled={!siteUrl.trim() || !companyName.trim() || syncing}
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+            style={{ background: '#015035' }}
+          >
+            {syncing ? 'Syncing...' : 'Sync Keywords'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // History Drawer (with chart + comparison)
 // ---------------------------------------------------------------------------
 

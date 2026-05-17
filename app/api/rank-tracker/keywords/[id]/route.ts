@@ -37,6 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.searchEngine !== undefined) update.search_engine = body.searchEngine
   if (body.location !== undefined)    update.location     = body.location
   if (body.searchVolume !== undefined) update.search_volume = body.searchVolume
+  if (body.portalVisible !== undefined) update.portal_visible = body.portalVisible
 
   const { data, error } = await db
     .from('tracked_keywords')

@@ -2323,6 +2323,10 @@ const GOOGLE_PRODUCT_META: Record<MarketingStatus['product'], { name: string; de
 function MarketingIntegrationsSection() {
   const [statuses, setStatuses] = useState<MarketingStatus[]>([])
   const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null)
+  const [gscSiteUrl, setGscSiteUrl] = useState('')
+  const [gscSaving, setGscSaving] = useState(false)
+  const [gscSyncing, setGscSyncing] = useState(false)
+  const [gscLastSync, setGscLastSync] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/integrations/google-marketing/status')
@@ -2334,6 +2338,14 @@ function MarketingIntegrationsSection() {
       .then((r) => (r.ok ? r.json() : null))
       .then(setMetaStatus)
       .catch(() => {/* non-fatal */})
+
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.gsc_site_url) setGscSiteUrl(d.gsc_site_url)
+        if (d?.gsc_last_sync) setGscLastSync(d.gsc_last_sync)
+      })
+      .catch(() => {})
   }, [])
 
   const anyGoogleConnected = statuses.some((s) => s.connected)
@@ -2427,6 +2439,71 @@ function MarketingIntegrationsSection() {
           )
         })}
       </div>
+
+      {/* GSC Config */}
+      {statuses.find(s => s.product === 'search_console')?.connected && (
+        <div className="p-4 rounded-xl border border-gray-100 bg-gray-50 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">🔍</span>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Search Console Configuration</p>
+              <p className="text-xs text-gray-500">Configure the default site URL for GSC data sync</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              value={gscSiteUrl}
+              onChange={e => setGscSiteUrl(e.target.value)}
+              placeholder="https://gravissmarketing.com"
+              className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <button
+              onClick={async () => {
+                setGscSaving(true)
+                try {
+                  await fetch('/api/settings', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ gsc_site_url: gscSiteUrl.trim() }),
+                  })
+                } catch {/* ignore */}
+                setGscSaving(false)
+              }}
+              disabled={gscSaving}
+              className="px-3 py-2 rounded-xl text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50 whitespace-nowrap"
+              style={{ background: '#015035' }}
+            >
+              {gscSaving ? 'Saving...' : 'Save'}
+            </button>
+            <button
+              onClick={async () => {
+                if (!gscSiteUrl.trim()) return
+                setGscSyncing(true)
+                try {
+                  const res = await fetch('/api/rank-tracker/sync-gsc', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ siteUrl: gscSiteUrl.trim(), companyName: 'Graviss Marketing' }),
+                  })
+                  if (res.ok) {
+                    setGscLastSync(new Date().toISOString())
+                  }
+                } catch {/* ignore */}
+                setGscSyncing(false)
+              }}
+              disabled={gscSyncing || !gscSiteUrl.trim()}
+              className="px-3 py-2 rounded-xl border border-blue-200 text-blue-700 text-xs font-medium hover:bg-blue-50 disabled:opacity-50 whitespace-nowrap"
+            >
+              {gscSyncing ? 'Syncing...' : 'Sync Now'}
+            </button>
+          </div>
+          {gscLastSync && (
+            <p className="text-[10px] text-gray-400 mt-2">
+              Last synced: {new Date(gscLastSync).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Meta row */}
       <div className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50">

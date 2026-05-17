@@ -1213,6 +1213,20 @@ export default function SettingsPage() {
                 )
               })}
             </div>
+
+            <div className="mt-4 bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Delivery Templates</h3>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-sm text-gray-500 leading-relaxed">
+                  Delivery email templates (Welcome, Usage Guide, Monthly Report) are part of the
+                  <strong className="text-gray-700"> 8-Step Client Delivery System</strong> and are managed through the delivery workflow API at{' '}
+                  <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">/api/delivery/send-template</code>.
+                  Template source files are in <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">lib/templates/</code>.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 

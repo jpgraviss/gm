@@ -184,12 +184,13 @@ function NewWorkflowModal({
   const [loadingProjects, setLoadingProjects] = useState(false)
 
   useEffect(() => {
-    setLoadingProjects(true)
+    let cancelled = false
     fetch('/api/projects')
       .then(r => r.ok ? r.json() : [])
-      .then((data: Project[]) => { if (Array.isArray(data)) setProjects(data) })
+      .then((data: Project[]) => { if (!cancelled && Array.isArray(data)) setProjects(data) })
       .catch(() => {})
-      .finally(() => setLoadingProjects(false))
+      .finally(() => { if (!cancelled) setLoadingProjects(false) })
+    return () => { cancelled = true }
   }, [])
 
   const canCreate = company.trim() && service

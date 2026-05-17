@@ -482,7 +482,16 @@ export default function RankTrackerPage() {
                   <RefreshCw size={13} className={`inline -mt-0.5 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
                   {refreshing ? 'Checking...' : 'Refresh'}
                 </button>
+                <button onClick={() => setShowGscSync(true)} disabled={gscSyncing} className="px-3 py-2 rounded-xl border border-blue-200 text-blue-700 text-xs font-medium hover:bg-blue-50 disabled:opacity-50">
+                  <Globe size={13} className="inline -mt-0.5 mr-1" />
+                  {gscSyncing ? 'Syncing...' : 'Sync from GSC'}
+                </button>
               </div>
+              {gscLastSync && (
+                <p className="text-[10px] text-gray-400 mt-1 text-right">
+                  Last GSC sync: {new Date(gscLastSync).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                </p>
+              )}
             </div>
 
             {/* Bulk actions bar */}
@@ -624,6 +633,19 @@ export default function RankTrackerPage() {
           allTags={allTags}
           onApply={bulkTagApply}
           onClose={() => setShowBulkTag(false)}
+        />
+      )}
+      {showGscSync && (
+        <GscSyncModal
+          onClose={() => setShowGscSync(false)}
+          onSynced={(count) => {
+            setShowGscSync(false)
+            setGscLastSync(new Date().toISOString())
+            toast(`Synced ${count} keywords from GSC`, 'success')
+            load()
+          }}
+          syncing={gscSyncing}
+          setSyncing={setGscSyncing}
         />
       )}
     </>

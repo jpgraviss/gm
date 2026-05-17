@@ -223,6 +223,9 @@ export default function AdminPage() {
   const [bulkResetTarget, setBulkResetTarget] = useState('')
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([])
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [platformSettings, setPlatformSettings] = useState<Record<string, any> | null>(null)
+
   // KPI metrics
   const [metrics, setMetrics] = useState({ activeContracts: 0, pipelineValue: 0, mrr: 0, openProjects: 0 })
 
@@ -269,6 +272,10 @@ export default function AdminPage() {
       .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setAuditLog(data) })
       .catch(() => toast('Failed to load audit logs', 'error'))
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setPlatformSettings(data) })
+      .catch(() => {})
     fetchQBStatus()
   }, [])
 
@@ -1329,31 +1336,59 @@ export default function AdminPage() {
         )}
 
         {/* ── CONFIG ── */}
-        {tab === 'config' && (
+        {tab === 'config' && (() => {
+          const co = platformSettings?.company as Record<string, string> | undefined
+          const companyFields = [
+            { label: 'Company Name', value: co?.name ?? 'Graviss Marketing' },
+            { label: 'Admin Email', value: co?.email ?? 'jonathan@gravissmarketing.com' },
+            { label: 'Platform URL', value: co?.url ?? 'app.gravissmarketing.com' },
+            { label: 'Fiscal Year Start', value: co?.fiscalYearStart ?? 'January' },
+            { label: 'Default Currency', value: co?.currency ?? 'USD ($)' },
+            { label: 'Timezone', value: co?.timezone ?? 'America/New_York (ET)' },
+          ]
+
+          const serviceTypes = (platformSettings?.service_types as string[] | undefined) ?? [
+            'Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom', 'PPC / Paid Ads', 'Content Marketing',
+          ]
+
+          const DEFAULT_STAGE_COLORS: Record<string, string> = {
+            Lead: '#9ca3af', Qualified: '#3b82f6', 'Proposal Sent': '#f59e0b',
+            'Contract Sent': '#f97316', 'Closed Won': '#22c55e', 'Closed Lost': '#ef4444',
+          }
+          const rawStages = platformSettings?.pipeline_stages as
+            | { name: string; color?: string }[]
+            | string[]
+            | undefined
+          const pipelineStages = (rawStages ?? [
+            { name: 'Lead' }, { name: 'Qualified' }, { name: 'Proposal Sent' },
+            { name: 'Contract Sent' }, { name: 'Closed Won' }, { name: 'Closed Lost' },
+          ]).map((s, i) => {
+            const name = typeof s === 'string' ? s : s.name
+            const color = (typeof s === 'object' && s.color) ? s.color : (DEFAULT_STAGE_COLORS[name] ?? '#9ca3af')
+            return { name, color, order: i + 1 }
+          })
+
+          return (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Company */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Building size={15} style={{ color: '#015035' }} />
-                <h3 className="text-sm font-bold text-gray-800">Company Information</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Building size={15} style={{ color: '#015035' }} />
+                  <h3 className="text-sm font-bold text-gray-800">Company Information</h3>
+                </div>
+                <button
+                  onClick={() => router.push('/settings?tab=Company')}
+                  className="text-xs font-medium px-2 py-1 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+                >
+                  <Pencil size={12} className="inline mr-1" />Edit
+                </button>
               </div>
               <div className="flex flex-col gap-3">
-                {[
-                  { label: 'Company Name', value: 'Graviss Marketing' },
-                  { label: 'Admin Email', value: 'jonathan@gravissmarketing.com' },
-                  { label: 'Platform URL', value: 'app.gravissmarketing.com' },
-                  { label: 'Fiscal Year Start', value: 'January' },
-                  { label: 'Default Currency', value: 'USD ($)' },
-                  { label: 'Timezone', value: 'America/New_York (ET)' },
-                ].map(f => (
+                {companyFields.map(f => (
                   <div key={f.label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{f.label}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-800">{f.value}</span>
-                      <button className="text-gray-300 hover:text-blue-500 transition-colors">
-                        <Pencil size={12} />
-                      </button>
-                    </div>
+                    <span className="text-sm text-gray-800">{f.value}</span>
                   </div>
                 ))}
               </div>
@@ -1361,37 +1396,24 @@ export default function AdminPage() {
 
             {/* Services */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Zap size={15} style={{ color: '#015035' }} />
-                <h3 className="text-sm font-bold text-gray-800">Service Lines</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Zap size={15} style={{ color: '#015035' }} />
+                  <h3 className="text-sm font-bold text-gray-800">Service Lines</h3>
+                </div>
+                <button
+                  onClick={() => router.push('/settings?tab=CRM+Setup')}
+                  className="text-xs font-medium px-2 py-1 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+                >
+                  <Pencil size={12} className="inline mr-1" />Edit
+                </button>
               </div>
               <div className="flex flex-col gap-2">
-                {[
-                  { name: 'Website', enabled: true, deals: 3 },
-                  { name: 'SEO', enabled: true, deals: 2 },
-                  { name: 'Social Media', enabled: true, deals: 1 },
-                  { name: 'Branding', enabled: true, deals: 1 },
-                  { name: 'Email Marketing', enabled: true, deals: 1 },
-                  { name: 'Custom', enabled: true, deals: 1 },
-                  { name: 'PPC / Paid Ads', enabled: false, deals: 0 },
-                  { name: 'Content Marketing', enabled: false, deals: 0 },
-                ].map(s => (
-                  <div key={s.name} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                {serviceTypes.map(name => (
+                  <div key={name} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                     <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${s.enabled ? 'bg-green-500' : 'bg-gray-300'}`} />
-                      <span className="text-sm text-gray-700 font-medium">{s.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">{s.deals} deals</span>
-                      <div
-                        className="w-9 h-5 rounded-full relative cursor-pointer transition-colors"
-                        style={{ background: s.enabled ? '#015035' : '#d1d5db', width: '36px', height: '20px' }}
-                      >
-                        <div
-                          className="w-3.5 h-3.5 bg-white rounded-full shadow-sm absolute top-0.5 transition-transform"
-                          style={{ transform: s.enabled ? 'translateX(16px)' : 'translateX(2px)' }}
-                        />
-                      </div>
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-sm text-gray-700 font-medium">{name}</span>
                     </div>
                   </div>
                 ))}
@@ -1405,24 +1427,19 @@ export default function AdminPage() {
                   <Activity size={15} style={{ color: '#015035' }} />
                   <h3 className="text-sm font-bold text-gray-800">Pipeline Stages</h3>
                 </div>
-                <button className="text-xs font-medium px-2 py-1 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
-                  + Add Stage
+                <button
+                  onClick={() => router.push('/settings?tab=CRM+Setup')}
+                  className="text-xs font-medium px-2 py-1 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+                >
+                  <Pencil size={12} className="inline mr-1" />Edit
                 </button>
               </div>
               <div className="flex flex-col gap-1.5">
-                {[
-                  { name: 'Lead', color: '#9ca3af', order: 1 },
-                  { name: 'Qualified', color: '#3b82f6', order: 2 },
-                  { name: 'Proposal Sent', color: '#f59e0b', order: 3 },
-                  { name: 'Contract Sent', color: '#f97316', order: 4 },
-                  { name: 'Closed Won', color: '#22c55e', order: 5 },
-                  { name: 'Closed Lost', color: '#ef4444', order: 6 },
-                ].map(stage => (
+                {pipelineStages.map(stage => (
                   <div key={stage.name} className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 hover:border-gray-200">
                     <span className="text-xs text-gray-400 w-4 font-mono">{stage.order}</span>
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: stage.color }} />
                     <span className="text-sm text-gray-700 flex-1">{stage.name}</span>
-                    <Pencil size={12} className="text-gray-300 hover:text-blue-500 cursor-pointer" />
                   </div>
                 ))}
               </div>
@@ -1457,7 +1474,8 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* ── AUDIT LOG ── */}
         {tab === 'audit' && (

@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
         .or(`subject.ilike.${pattern},company.ilike.${pattern}`)
         .limit(LIMIT_PER_TYPE),
       db
-        .from('tasks')
+        .from('app_tasks')
         .select('id, title, assigned_to, status')
         .ilike('title', pattern)
         .limit(LIMIT_PER_TYPE),

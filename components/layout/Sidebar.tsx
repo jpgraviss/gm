@@ -11,7 +11,7 @@ import {
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
   Settings, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare, CheckSquare, Inbox,
   CalendarDays, CalendarCheck, Clock, Activity, Plug, BookOpen, GraduationCap,
-  Share2, ClipboardList, Search, FileBarChart, MessageCircle, Smartphone, Star, Layers,
+  Share2, ClipboardList, Search, FileBarChart, MessageCircle, Smartphone, Star, Layers, PackageCheck,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -107,6 +107,7 @@ export const defaultNavigation: NavSection[] = [
       { label: 'Booking',       href: '/calendar/booking', icon: <CalendarCheck size={16} /> },
       { label: 'Maintenance',   href: '/maintenance',   icon: <Wrench size={16} />,       contractorVisible: true },
       { label: 'Renewals',      href: '/renewals',      icon: <RefreshCw size={16} /> },
+      { label: 'Delivery',      href: '/crm/delivery-dashboard', icon: <PackageCheck size={16} /> },
     ],
   },
   {

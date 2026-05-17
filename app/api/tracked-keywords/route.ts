@@ -41,11 +41,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const tracked = await addTrackedKeyword({
-      companyName: body.companyName,
-      companyId:   body.companyId,
-      siteUrl:     body.siteUrl,
-      keyword:     body.keyword,
-      country:     body.country,
+      companyName:  body.companyName,
+      companyId:    body.companyId,
+      siteUrl:      body.siteUrl,
+      keyword:      body.keyword,
+      country:      body.country,
+      tags:         body.tags,
+      targetUrl:    body.targetUrl,
+      searchEngine: body.searchEngine,
+      location:     body.location,
     })
     logAudit({
       userName: 'system',

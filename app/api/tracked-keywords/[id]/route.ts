@@ -32,6 +32,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.siteUrl !== undefined)     update.site_url     = body.siteUrl
   if (body.keyword !== undefined)     update.keyword      = body.keyword
   if (body.country !== undefined)     update.country      = String(body.country).toUpperCase()
+  if (body.tags !== undefined)        update.tags         = body.tags
+  if (body.targetUrl !== undefined)   update.target_url   = body.targetUrl
+  if (body.searchEngine !== undefined) update.search_engine = body.searchEngine
+  if (body.location !== undefined)    update.location     = body.location
+  if (body.searchVolume !== undefined) update.search_volume = body.searchVolume
 
   const { data, error } = await db
     .from('tracked_keywords')

@@ -11,7 +11,7 @@ import {
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
   Settings, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare, CheckSquare, Inbox,
   CalendarDays, CalendarCheck, Clock, Activity, Plug, BookOpen, GraduationCap,
-  Share2, ClipboardList, Search, FileBarChart, MessageCircle, Smartphone, Star, Layers, PackageCheck,
+  Share2, ClipboardList, Search, FileBarChart, Star, Layers, PackageCheck,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -88,13 +88,6 @@ export const defaultNavigation: NavSection[] = [
       { label: 'Broadcasts',   href: '/marketing', icon: <Mail size={16} />,          allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
       { label: 'Forms',        href: '/forms',      icon: <ClipboardList size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
       { label: 'Funnels',      href: '/funnels',    icon: <Layers size={16} />,        allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-    ],
-  },
-  {
-    section: 'Communication',
-    items: [
-      { label: 'Messaging',      href: '/messaging',            icon: <MessageCircle size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'SMS Templates',  href: '/messaging/templates',  icon: <Smartphone size={16} />,    allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
     ],
   },
   {

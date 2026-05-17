@@ -144,14 +144,14 @@ const SERVICE_COLORS: Record<string, string> = {
 }
 
 const SERVICE_LINKS: Record<string, string> = {
-  'SEO': '/portal/seo',
-  'PPC': '/portal/ppc',
-  'Web Design': '/portal/web-design',
-  'Social Media': '/portal/social-media',
-  'Email Marketing': '/portal/email-marketing',
-  'Content Creation': '/portal/content-creation',
-  'Sales Training': '/portal/sales-training',
-  'Marketing Strategy': '/portal/marketing-strategy',
+  'SEO': '/portal/services/seo',
+  'PPC': '/portal/services/ppc',
+  'Web Design': '/portal/services/web-design',
+  'Social Media': '/portal/services/social-media',
+  'Email Marketing': '/portal/services/email-marketing',
+  'Content Creation': '/portal/services/content-creation',
+  'Sales Training': '/portal/services/sales-training',
+  'Marketing Strategy': '/portal/services/marketing-strategy',
 }
 
 function clientSinceDuration(dateStr: string | null): string {

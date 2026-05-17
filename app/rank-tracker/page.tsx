@@ -146,6 +146,18 @@ export default function RankTrackerPage() {
   // Competitors
   const [competitors, setCompetitors] = useState<Competitor[]>([])
 
+  // GSC sync
+  const [gscSyncing, setGscSyncing] = useState(false)
+  const [gscLastSync, setGscLastSync] = useState<string | null>(null)
+  const [showGscSync, setShowGscSync] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.gsc_last_sync) setGscLastSync(d.gsc_last_sync) })
+      .catch(() => {})
+  }, [])
+
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/rank-tracker/keywords')

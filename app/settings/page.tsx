@@ -156,7 +156,23 @@ const DASHBOARD_DEFAULTS = {
     evening: 'Good Evening',
     night: 'Burning the midnight oil',
   },
-  rotatingMessages: [] as { message: string; emoji: string }[],
+  rotatingMessages: [
+    { message: 'Revenue doesn\'t sleep. Neither does GravHub.', emoji: '🔥' },
+    { message: 'Every deal in your pipeline is a future payday.', emoji: '💰' },
+    { message: 'Outwork yesterday. Outclose tomorrow.', emoji: '🚀' },
+    { message: 'Your pipeline is your paycheck — keep it full.', emoji: '📈' },
+    { message: 'Closed is the only stage that pays.', emoji: '🎯' },
+    { message: 'Speed to lead. Speed to close. Speed to invoice.', emoji: '⚡' },
+    { message: 'The follow-up you skip is the deal you lose.', emoji: '📞' },
+    { message: 'A stale pipeline is a broke pipeline.', emoji: '💀' },
+    { message: 'Renewals are revenue you already earned. Go collect.', emoji: '💎' },
+    { message: 'You\'re not just selling — you\'re building an empire.', emoji: '👑' },
+    { message: 'The difference between good and great? One more follow-up.', emoji: '💪' },
+    { message: 'Opportunities don\'t expire — but your competitors don\'t wait.', emoji: '⏳' },
+    { message: 'Today\'s proposal is next month\'s revenue.', emoji: '📝' },
+    { message: 'Track everything. Miss nothing. Close more.', emoji: '🔒' },
+    { message: 'Your CRM is only as strong as the reps using it.', emoji: '🏋️' },
+  ] as { message: string; emoji: string }[],
 }
 
 const QB_SYNC_DEFAULTS = [
@@ -397,7 +413,7 @@ export default function SettingsPage() {
         if (Array.isArray(d.notification_preferences?.activity) && d.notification_preferences.activity.length) setActivityNotifs(d.notification_preferences.activity)
         if (d.notification_preferences?.quiet_hours) setQuietHours(prev => ({ ...prev, ...d.notification_preferences.quiet_hours }))
         if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(d.invoice_defaults)
-        if (Array.isArray(d.pipelines) && d.pipelines.length) setPipelines(d.pipelines)
+        if (Array.isArray(d.pipelines) && d.pipelines.length) setPipelines(d.pipelines.map((p: PipelineConf) => ({ ...p, stages: Array.isArray(p.stages) ? p.stages : [] })))
         else if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length) setPipelines([{ id: 'sales', name: 'Sales Pipeline', stages: d.pipeline_stages.map((name: string, i: number) => ({ id: `s${i}`, name, color: STAGE_COLORS_CYCLE[i % STAGE_COLORS_CYCLE.length] })) }])
         if (Array.isArray(d.service_types)   && d.service_types.length)    setServiceTypes(d.service_types)
         if (Array.isArray(d.contact_tags)    && d.contact_tags.length)     setContactTags(d.contact_tags)

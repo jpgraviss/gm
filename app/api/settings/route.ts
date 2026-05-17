@@ -83,6 +83,7 @@ export async function PATCH(req: NextRequest) {
   if (body.resend               !== undefined) updates.resend               = body.resend
   if (body.google_reviews       !== undefined) updates.google_reviews       = body.google_reviews
   if (body.onboarding_completed !== undefined) updates.onboarding_completed = body.onboarding_completed
+  if (body.approval_config      !== undefined) updates.approval_config      = body.approval_config
 
   const { data, error } = await db
     .from('app_settings')

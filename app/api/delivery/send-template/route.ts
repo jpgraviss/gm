@@ -5,6 +5,7 @@ import { sendEmail } from '@/lib/email'
 import { generateWelcomeEmail } from '@/lib/templates/generate-welcome'
 import { generateUsageGuideEmail } from '@/lib/templates/generate-usage-guide'
 import { generateMonthlyReportHtml } from '@/lib/templates/generate-monthly-report'
+import { generatePdf } from '@/lib/pdf-generator'
 
 const TEMPLATE_TYPES = ['welcome', 'usage_guide', 'monthly_report']
 const SUBJECT_MAP: Record<string, string> = {
@@ -15,15 +16,17 @@ const SUBJECT_MAP: Record<string, string> = {
 
 function generateHtml(templateType: string, customizationData: Record<string, unknown>): string {
   switch (templateType) {
-    case 'welcome':
+    case 'welcome': {
+      const mgr = customizationData.accountManager as { name: string; email: string; phone: string } | undefined
       return generateWelcomeEmail({
-        clientName: String(customizationData.clientName ?? ''),
+        firstName: String(customizationData.clientName ?? customizationData.firstName ?? ''),
         companyName: String(customizationData.companyName ?? 'Graviss Marketing'),
-        projectName: String(customizationData.projectName ?? ''),
         portalUrl: String(customizationData.portalUrl ?? 'https://app.gravissmarketing.com'),
-        teamMembers: (customizationData.teamMembers as Array<{ name: string; role: string; email: string }>) ?? [],
-        serviceType: String(customizationData.serviceType ?? 'Website'),
+        accountManager: mgr,
+        projectName: customizationData.projectName ? String(customizationData.projectName) : undefined,
+        serviceType: customizationData.serviceType ? String(customizationData.serviceType) : undefined,
       })
+    }
     case 'usage_guide':
       return generateUsageGuideEmail({
         clientName: String(customizationData.clientName ?? ''),
@@ -144,6 +147,22 @@ export async function POST(req: NextRequest) {
       emailId: emailResult?.id ?? null,
     },
   })
+
+  const format = req.nextUrl.searchParams.get('format')
+  if (format === 'pdf') {
+    const pdfBlob = generatePdf(html, {
+      title: SUBJECT_MAP[templateType] ?? 'Graviss Marketing',
+      filename: `${templateType}-${workflowId}`,
+      orientation: 'portrait',
+    })
+    const buffer = Buffer.from(await pdfBlob.arrayBuffer())
+    return new NextResponse(buffer, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${templateType}-${workflowId}.pdf"`,
+      },
+    })
+  }
 
   return NextResponse.json({
     html,

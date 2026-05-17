@@ -1,0 +1,35 @@
+import { NextResponse } from 'next/server'
+import { createServiceClient } from '@/lib/supabase'
+
+const BUCKETS = [
+  { name: 'uploads', public: false },
+  { name: 'reports', public: false },
+  { name: 'avatars', public: true },
+  { name: 'deliverables', public: false },
+] as const
+
+export async function POST() {
+  const db = createServiceClient()
+  const results: { bucket: string; status: 'created' | 'exists' | 'error'; error?: string }[] = []
+
+  for (const bucket of BUCKETS) {
+    const { data: existing } = await db.storage.getBucket(bucket.name)
+    if (existing) {
+      results.push({ bucket: bucket.name, status: 'exists' })
+      continue
+    }
+
+    const { error } = await db.storage.createBucket(bucket.name, {
+      public: bucket.public,
+      fileSizeLimit: 10 * 1024 * 1024,
+    })
+
+    if (error) {
+      results.push({ bucket: bucket.name, status: 'error', error: error.message })
+    } else {
+      results.push({ bucket: bucket.name, status: 'created' })
+    }
+  }
+
+  return NextResponse.json({ buckets: results })
+}

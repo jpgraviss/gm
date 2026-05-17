@@ -68,7 +68,14 @@ export async function POST(req: NextRequest) {
       .eq('status', 'active')
 
     if (admins && admins.length > 0) {
-      const adminEmails = admins.map((a: { email: string }) => a.email)
+      const { data: settingsRow } = await db
+        .from('app_settings')
+        .select('approval_config')
+        .eq('id', 'global')
+        .maybeSingle()
+      const approvalConfig = settingsRow?.approval_config as { teamMemberApprovals?: string[] } | null
+      const configuredEmails = approvalConfig?.teamMemberApprovals
+      const adminEmails = (configuredEmails?.length ? configuredEmails : admins.map((a: { email: string }) => a.email)).filter(Boolean)
       await sendEmail({
         to: adminEmails,
         subject: `New team member setup: ${name}`,

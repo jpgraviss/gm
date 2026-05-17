@@ -69,7 +69,14 @@ export async function POST(req: NextRequest) {
       .eq('is_admin', true)
 
     if (admins && admins.length > 0) {
-      const adminEmails = admins.map(a => a.email).filter(Boolean)
+      const { data: settingsRow } = await db
+        .from('app_settings')
+        .select('approval_config')
+        .eq('id', 'global')
+        .maybeSingle()
+      const approvalConfig = settingsRow?.approval_config as { portalClientApprovals?: string[] } | null
+      const configuredEmails = approvalConfig?.portalClientApprovals
+      const adminEmails = (configuredEmails?.length ? configuredEmails : admins.map(a => a.email)).filter(Boolean)
       const clientName = displayName || client.contact || normalizedEmail
       for (const adminEmail of adminEmails) {
         await sendEmail({

@@ -6,8 +6,9 @@ import CompanySelect from '@/components/ui/CompanySelect'
 import { useToast } from '@/components/ui/Toast'
 import {
   Search, ChevronDown, ChevronUp, CheckCircle2, Circle, Clock,
-  Plus, X, Send, Package, Filter, ArrowUpDown,
+  Plus, X, Send, Package, Filter, ArrowUpDown, UserPlus,
 } from 'lucide-react'
+import NewClientModal from '@/components/admin/NewClientModal'
 
 const SERVICE_TYPES = [
   'SEO', 'PPC', 'Web Design', 'Social Media',
@@ -266,6 +267,7 @@ export default function DeliveryDashboardPage() {
   const [showNewModal, setShowNewModal] = useState(false)
   const [sortField, setSortField] = useState<'company' | 'lastUpdated'>('lastUpdated')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [showNewClientModal, setShowNewClientModal] = useState(false)
 
   useEffect(() => {
     fetch('/api/delivery/workflows')
@@ -377,7 +379,17 @@ export default function DeliveryDashboardPage() {
         subtitle="8-Step Client Delivery System"
         action={{ label: 'New Workflow', onClick: () => setShowNewModal(true) }}
       />
+      <NewClientModal open={showNewClientModal} onClose={() => setShowNewClientModal(false)} />
       <div className="p-4 md:p-6 flex-1 flex flex-col">
+        <div className="flex justify-end mb-3">
+          <button
+            onClick={() => setShowNewClientModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-[#015035] border border-[#015035]/20 hover:bg-[#015035]/5 transition-colors"
+          >
+            <UserPlus size={14} />
+            <span className="hidden sm:inline">New Client</span>
+          </button>
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
           {[
             { label: 'Total Workflows', value: kpis.total, color: '#374151' },

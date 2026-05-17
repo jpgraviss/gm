@@ -15,6 +15,7 @@ import {
 // data loaded from API
 import { useToast } from '@/components/ui/Toast'
 import { formatCurrency } from '@/lib/utils'
+import NewClientModal from '@/components/admin/NewClientModal'
 
 type AdminTab = 'overview' | 'users' | 'integrations' | 'permissions' | 'config' | 'audit'
 
@@ -209,6 +210,7 @@ export default function AdminPage() {
   const [showBulkResetModal, setShowBulkResetModal] = useState(false)
   const [showClearCacheModal, setShowClearCacheModal] = useState(false)
   const [showBackupModal, setShowBackupModal] = useState(false)
+  const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [exportModule, setExportModule] = useState('All')
   const [exportEntities, setExportEntities] = useState<Record<string, boolean>>({
     contacts: true, companies: true, deals: true, projects: true,
@@ -795,7 +797,8 @@ export default function AdminPage() {
 
   return (
     <>
-      <Header title="Admin Panel" subtitle={`Super Admin • ${user.name}`} />
+      <Header title="Admin Panel" subtitle={`Super Admin • ${user.name}`} action={{ label: 'New Client', onClick: () => setShowNewClientModal(true) }} />
+      <NewClientModal open={showNewClientModal} onClose={() => setShowNewClientModal(false)} />
       <div className="p-4 md:p-6 flex-1">
 
         {/* Admin Banner */}

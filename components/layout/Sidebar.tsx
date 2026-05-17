@@ -127,6 +127,7 @@ export const defaultNavigation: NavSection[] = [
     section: 'System',
     items: [
       { label: 'Knowledge Base',    href: '/knowledge-base',            icon: <BookOpen size={16} /> },
+      { label: 'SOPs',              href: '/admin/sops',                icon: <FileText size={16} />,    adminOnly: true },
       { label: 'Admin',              href: '/admin',                     icon: <ShieldCheck size={16} />, adminOnly: true },
       { label: 'Portal Management',  href: '/admin/portal-management',   icon: <Globe size={16} />,       adminOnly: true },
       { label: 'Settings',           href: '/settings',                  icon: <Settings size={16} />,    allowedUnits: ['Leadership/Admin'] },

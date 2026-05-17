@@ -20,12 +20,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const db = createServiceClient()
   const update: Record<string, unknown> = {}
-  if (body.company   !== undefined) update.company    = body.company
-  if (body.service   !== undefined) update.service    = body.service
-  if (body.access    !== undefined) update.access     = body.access
-  if (body.lastLogin !== undefined) update.last_login = body.lastLogin
-  if (body.contact   !== undefined) update.contact    = body.contact
-  if (body.email     !== undefined) update.email      = body.email
+  if (body.company      !== undefined) update.company       = body.company
+  if (body.service      !== undefined) update.service       = body.service
+  if (body.access       !== undefined) update.access        = body.access
+  if (body.lastLogin    !== undefined) update.last_login    = body.lastLogin
+  if (body.contact      !== undefined) update.contact       = body.contact
+  if (body.email        !== undefined) update.email         = body.email
+  if (body.portalRole   !== undefined) update.portal_role   = body.portalRole
+  if (body.portalConfig !== undefined) update.portal_config = body.portalConfig
+  if (body.services     !== undefined) update.services      = body.services
+  if (body.companyId    !== undefined) update.company_id    = body.companyId
   const { data, error } = await db.from('portal_clients').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[portal-clients/:id PATCH]', error)

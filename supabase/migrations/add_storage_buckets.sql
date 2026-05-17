@@ -1,0 +1,8 @@
+-- Supabase Storage buckets cannot be created via SQL migrations.
+-- Use the API endpoint POST /api/storage/setup to create the required buckets:
+--   - uploads    (private, general file uploads)
+--   - reports    (private, PDF reports)
+--   - avatars    (public, profile photos)
+--   - deliverables (private, client deliverables)
+--
+-- Alternatively, create them via the Supabase Dashboard under Storage.

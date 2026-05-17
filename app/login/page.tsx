@@ -4,10 +4,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Link from 'next/link'
-import { Mail, AlertCircle, ArrowRight, Globe } from 'lucide-react'
+import { Mail, AlertCircle, ArrowRight, Globe, Lock, Wand2 } from 'lucide-react'
 import { getSupabaseClient } from '@/lib/supabase'
 
-// Minimal type shim for Google Identity Services
 declare global {
   interface Window {
     google?: {
@@ -40,26 +39,28 @@ declare global {
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''
 
+type AuthMethod = 'google' | 'magic-link' | 'email-password'
+
 export default function LoginPage() {
   const { loginWithGoogle, user, loading } = useAuth()
   const router = useRouter()
 
   const [mode, setMode] = useState<'login' | 'sent'>('login')
+  const [authMethod, setAuthMethod] = useState<AuthMethod>('google')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const gisInitialized = useRef(false)
   const googleBtnRef = useRef<HTMLDivElement>(null)
 
-  // Redirect if already authenticated
   useEffect(() => {
     if (!loading && user) {
       router.replace(user.userType === 'client' ? '/client' : '/')
     }
   }, [user, loading, router])
 
-  // Stable callback ref so the GIS callback doesn't go stale
   const handleGoogleCredential = useCallback(async ({ credential }: { credential: string }) => {
     setGoogleLoading(true)
     setError('')
@@ -73,13 +74,11 @@ export default function LoginPage() {
     if (result.ok) {
       router.push('/client')
     } else {
-      // eslint-disable-next-line no-console
       console.error('[login] google sign-in failed:', result)
-      setError(result.error || 'Sign-in failed — check the browser console for details.')
+      setError(result.error || 'Sign-in failed.')
     }
   }, [loginWithGoogle, router])
 
-  // Initialize Google Identity Services and render the official button
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return
 
@@ -113,37 +112,20 @@ export default function LoginPage() {
     }
   }, [handleGoogleCredential])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email) {
-      setError('Please enter your email address.')
-      return
-    }
+    if (!email) { setError('Please enter your email address.'); return }
     setError('')
     setSubmitting(true)
     try {
-      // Verify the email exists before sending magic link
-      const verifyRes = await fetch('/api/auth/verify-email', {
+      const res = await fetch('/api/portal-clients/magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.toLowerCase().trim() }),
       })
-      const { exists } = await verifyRes.json()
-      if (!exists) {
-        setError('No account found for this email. Contact your administrator.')
-        setSubmitting(false)
-        return
-      }
-
-      const supabase = getSupabaseClient()
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email: email.toLowerCase().trim(),
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm`,
-        },
-      })
-      if (otpError) {
-        setError(otpError.message)
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Failed to send sign-in link.')
         setSubmitting(false)
         return
       }
@@ -154,13 +136,40 @@ export default function LoginPage() {
     setSubmitting(false)
   }
 
+  const handleEmailPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!email || !password) { setError('Please enter email and password.'); return }
+    setError('')
+    setSubmitting(true)
+    try {
+      const supabase = getSupabaseClient()
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
+        password,
+      })
+      if (signInErr) {
+        setError(signInErr.message === 'Invalid login credentials' ? 'Invalid email or password.' : signInErr.message)
+        setSubmitting(false)
+        return
+      }
+      router.push('/client')
+    } catch {
+      setError('Sign-in failed. Please try again.')
+    }
+    setSubmitting(false)
+  }
+
   if (loading) return null
+
+  const authMethods: { id: AuthMethod; label: string; icon: React.ReactNode }[] = [
+    { id: 'google', label: 'Google', icon: <Globe size={13} /> },
+    { id: 'magic-link', label: 'Magic Link', icon: <Wand2 size={13} /> },
+    { id: 'email-password', label: 'Password', icon: <Lock size={13} /> },
+  ]
 
   return (
     <div className="min-h-screen flex" style={{ fontFamily: 'var(--font-body)' }}>
-      {/* ── Left brand panel (desktop only) ── */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style={{ background: '#012b1e' }}>
-        {/* Logo */}
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#015035' }}>
             <span className="text-white text-sm font-bold" style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.05em' }}>G</span>
@@ -168,7 +177,6 @@ export default function LoginPage() {
           <span className="text-white text-base font-bold tracking-widest" style={{ fontFamily: 'var(--font-heading)' }}>GRAVHUB</span>
         </div>
 
-        {/* Hero */}
         <div>
           <h1 className="text-white text-4xl font-bold leading-tight mb-5"
             style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em', lineHeight: 1.15 }}>
@@ -180,7 +188,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Feature list */}
         <div className="flex flex-col gap-3">
           {[
             'Real-time project progress tracking',
@@ -200,10 +207,8 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* ── Right login panel ── */}
       <div className="flex-1 flex items-center justify-center p-6" style={{ background: '#f4f5f7' }}>
         <div className="w-full max-w-md">
-          {/* Mobile logo */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#015035' }}>
               <span className="text-white text-sm font-bold" style={{ fontFamily: 'var(--font-heading)' }}>G</span>
@@ -213,7 +218,6 @@ export default function LoginPage() {
 
           <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
 
-            {/* ── Magic link sent confirmation ── */}
             {mode === 'sent' && (
               <div className="text-center py-4">
                 <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: '#e6f0ec' }}>
@@ -237,7 +241,6 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* ── Normal login ── */}
             {mode === 'login' && (
               <>
                 <div className="mb-6">
@@ -250,75 +253,134 @@ export default function LoginPage() {
                     SIGN IN
                   </h2>
                   <p className="text-gray-500 text-sm">Access your project dashboard, invoices, and files</p>
-                  <p className="text-[10px] text-gray-300 mt-1">build 2026-04-14.v5</p>
                 </div>
 
-                {/* ── Google Sign-In (official GIS rendered button) ── */}
-                <div className="mb-5">
-                  {!GOOGLE_CLIENT_ID ? (
-                    <div className="flex items-center justify-center gap-2 w-full h-11 rounded-lg border border-gray-200 bg-gray-50 text-gray-400 text-sm">
-                      Google Sign-In not configured
-                    </div>
-                  ) : (
-                    <div className="relative w-full">
-                      <div ref={googleBtnRef} className="w-full" style={{ minHeight: 44 }} />
-                      {googleLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-lg">
-                          <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                        </div>
-                      )}
-                    </div>
-                  )}
+                <div className="flex rounded-xl border border-gray-200 p-1 mb-5 bg-gray-50">
+                  {authMethods.map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => { setAuthMethod(m.id); setError('') }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                        authMethod === m.id
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-400 hover:text-gray-600'
+                      }`}
+                    >
+                      {m.icon} {m.label}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Divider */}
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="flex-1 h-px bg-gray-200" />
-                  <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">or sign in with email</span>
-                  <div className="flex-1 h-px bg-gray-200" />
-                </div>
-
-                {/* ── Magic link form ── */}
-                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                {authMethod === 'google' && (
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5"
-                      style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.08em' }}>Email Address</label>
-                    <div className="relative">
-                      <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
-                        placeholder="your@email.com"
-                        className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
-                        style={{ fontFamily: 'var(--font-body)' }}
-                        autoComplete="email"
-                        autoFocus
-                        disabled={submitting}
-                      />
-                    </div>
-                  </div>
-
-                  {error && (
-                    <div className="flex items-center gap-2.5 px-3 py-2.5 bg-red-50 border border-red-200 rounded-xl">
-                      <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
-                      <p className="text-sm text-red-700">{error}</p>
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-semibold transition-opacity mt-1"
-                    style={{ background: submitting ? '#6b7280' : '#015035' }}
-                  >
-                    {submitting ? (
-                      <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Sending link...</>
+                    {!GOOGLE_CLIENT_ID ? (
+                      <div className="flex items-center justify-center gap-2 w-full h-11 rounded-lg border border-gray-200 bg-gray-50 text-gray-400 text-sm">
+                        Google Sign-In not configured
+                      </div>
                     ) : (
-                      <>Send Sign-In Link <ArrowRight size={15} /></>
+                      <div className="relative w-full">
+                        <div ref={googleBtnRef} className="w-full" style={{ minHeight: 44 }} />
+                        {googleLoading && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-lg">
+                            <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                          </div>
+                        )}
+                      </div>
                     )}
-                  </button>
-                </form>
+                    <p className="text-xs text-gray-400 text-center mt-3">Sign in with your Google account linked to the portal</p>
+                  </div>
+                )}
+
+                {authMethod === 'magic-link' && (
+                  <form onSubmit={handleMagicLink} className="flex flex-col gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5"
+                        style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.08em' }}>Email Address</label>
+                      <div className="relative">
+                        <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          placeholder="your@email.com"
+                          className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                          autoComplete="email"
+                          autoFocus
+                          disabled={submitting}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-semibold transition-opacity"
+                      style={{ background: submitting ? '#6b7280' : '#015035' }}
+                    >
+                      {submitting ? (
+                        <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Sending link...</>
+                      ) : (
+                        <>Send Magic Link <Wand2 size={15} /></>
+                      )}
+                    </button>
+                  </form>
+                )}
+
+                {authMethod === 'email-password' && (
+                  <form onSubmit={handleEmailPassword} className="flex flex-col gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5"
+                        style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.08em' }}>Email Address</label>
+                      <div className="relative">
+                        <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          placeholder="your@email.com"
+                          className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                          autoComplete="email"
+                          autoFocus
+                          disabled={submitting}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5"
+                        style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.08em' }}>Password</label>
+                      <div className="relative">
+                        <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="password"
+                          value={password}
+                          onChange={e => setPassword(e.target.value)}
+                          placeholder="Your password"
+                          className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                          autoComplete="current-password"
+                          disabled={submitting}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-semibold transition-opacity"
+                      style={{ background: submitting ? '#6b7280' : '#015035' }}
+                    >
+                      {submitting ? (
+                        <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Signing in...</>
+                      ) : (
+                        <>Sign In <ArrowRight size={15} /></>
+                      )}
+                    </button>
+                  </form>
+                )}
+
+                {error && (
+                  <div className="flex items-center gap-2.5 px-3 py-2.5 bg-red-50 border border-red-200 rounded-xl mt-4">
+                    <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                )}
               </>
             )}
 

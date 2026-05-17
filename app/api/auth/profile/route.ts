@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       .from('portal_clients')
       .select('id, email, company, contact, service, access')
       .ilike('email', emailLower)
-      .single()
+      .maybeSingle()
 
     if (clientRow) {
       if (clientRow.access === 'Disabled') {

@@ -11,7 +11,7 @@ import {
   FolderKanban, Wrench, RefreshCw, Globe, BarChart3, Zap,
   Settings, X, ShieldCheck, LogOut, TrendingUp, Building2, Mail, MessageSquare, CheckSquare, Inbox,
   CalendarDays, CalendarCheck, Clock, Activity, Plug, BookOpen, GraduationCap,
-  Share2, ClipboardList, Search, FileBarChart, MessageCircle, Smartphone, Star, Layers,
+  Share2, ClipboardList, Search, FileBarChart, Star, Layers, PackageCheck,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -91,13 +91,6 @@ export const defaultNavigation: NavSection[] = [
     ],
   },
   {
-    section: 'Communication',
-    items: [
-      { label: 'Messaging',      href: '/messaging',            icon: <MessageCircle size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'SMS Templates',  href: '/messaging/templates',  icon: <Smartphone size={16} />,    allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-    ],
-  },
-  {
     section: 'Operations',
     items: [
       { label: 'Projects',      href: '/projects',      icon: <FolderKanban size={16} />, contractorVisible: true },
@@ -107,6 +100,7 @@ export const defaultNavigation: NavSection[] = [
       { label: 'Booking',       href: '/calendar/booking', icon: <CalendarCheck size={16} /> },
       { label: 'Maintenance',   href: '/maintenance',   icon: <Wrench size={16} />,       contractorVisible: true },
       { label: 'Renewals',      href: '/renewals',      icon: <RefreshCw size={16} /> },
+      { label: 'Delivery',      href: '/crm/delivery-dashboard', icon: <PackageCheck size={16} /> },
     ],
   },
   {
@@ -132,9 +126,11 @@ export const defaultNavigation: NavSection[] = [
   {
     section: 'System',
     items: [
-      { label: 'Knowledge Base', href: '/knowledge-base', icon: <BookOpen size={16} /> },
-      { label: 'Admin',          href: '/admin',           icon: <ShieldCheck size={16} />, adminOnly: true },
-      { label: 'Settings',       href: '/settings',        icon: <Settings size={16} />,    allowedUnits: ['Leadership/Admin'] },
+      { label: 'Knowledge Base',    href: '/knowledge-base',            icon: <BookOpen size={16} /> },
+      { label: 'SOPs',              href: '/admin/sops',                icon: <FileText size={16} />,    adminOnly: true },
+      { label: 'Admin',              href: '/admin',                     icon: <ShieldCheck size={16} />, adminOnly: true },
+      { label: 'Portal Management',  href: '/admin/portal-management',   icon: <Globe size={16} />,       adminOnly: true },
+      { label: 'Settings',           href: '/settings',                  icon: <Settings size={16} />,    allowedUnits: ['Leadership/Admin'] },
     ],
   },
 ]

@@ -16,6 +16,7 @@ import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
+import NewClientModal from '@/components/admin/NewClientModal'
 import {
   X, Phone, Mail, Calendar, TrendingUp, DollarSign,
   FileText, ScrollText, User, ChevronRight, ChevronLeft, Plus,
@@ -878,6 +879,7 @@ export default function PipelinePage() {
   const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
+  const [showNewClientModal, setShowNewClientModal] = useState(false)
 
   useEffect(() => { setMounted(true) }, []) // eslint-disable-line react-hooks/set-state-in-effect
 
@@ -988,8 +990,18 @@ export default function PipelinePage() {
         subtitle="Companies · Contacts · Deals · Activity"
         action={{ label: 'New Deal', onClick: () => setCreatingDeal(true) }}
       />
+      <NewClientModal open={showNewClientModal} onClose={() => setShowNewClientModal(false)} />
       <div className="p-4 md:p-6 flex-1 flex flex-col">
-        <CRMSubNav />
+        <div className="flex items-center justify-between mb-0">
+          <CRMSubNav />
+          <button
+            onClick={() => setShowNewClientModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-[#015035] border border-[#015035]/20 hover:bg-[#015035]/5 transition-colors"
+          >
+            <Plus size={14} />
+            <span className="hidden sm:inline">New Client</span>
+          </button>
+        </div>
 
         {/* Pipeline summary */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">

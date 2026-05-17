@@ -319,6 +319,9 @@ export default function SettingsPage() {
   const [activityNotifs, setActivityNotifs] = useState<ActivityNotif[]>(ACTIVITY_NOTIF_DEFAULTS)
   const [quietHours, setQuietHours] = useState(QUIET_HOURS_DEFAULTS)
 
+  // Approval Config
+  const [approvalConfig, setApprovalConfig] = useState<{ portalClientApprovals: string[]; teamMemberApprovals: string[] }>({ portalClientApprovals: [], teamMemberApprovals: [] })
+
   // Branding
   const [branding, setBranding] = useState(BRANDING_DEFAULTS)
 
@@ -430,6 +433,7 @@ export default function SettingsPage() {
           }
         }
         if (d.email_templates && typeof d.email_templates === 'object') setEmailTemplates(d.email_templates as Record<string, SystemEmailTemplate>)
+        if (d.approval_config && typeof d.approval_config === 'object') setApprovalConfig(prev => ({ ...prev, ...d.approval_config as Record<string, unknown> }))
       })
       .catch(() => {
         setCompany(loadLS('gravhub_company', COMPANY_DEFAULTS))
@@ -474,7 +478,7 @@ export default function SettingsPage() {
   }
 
   function saveNotifications() {
-    patchSettings({ notification_preferences: { activity: activityNotifs, quiet_hours: quietHours } }, 'Notifications')
+    patchSettings({ notification_preferences: { activity: activityNotifs, quiet_hours: quietHours }, approval_config: approvalConfig }, 'Notifications')
   }
 
   function saveInvoiceDefaults() {
@@ -1213,6 +1217,20 @@ export default function SettingsPage() {
                 )
               })}
             </div>
+
+            <div className="mt-4 bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Delivery Templates</h3>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-sm text-gray-500 leading-relaxed">
+                  Delivery email templates (Welcome, Usage Guide, Monthly Report) are part of the
+                  <strong className="text-gray-700"> 8-Step Client Delivery System</strong> and are managed through the delivery workflow API at{' '}
+                  <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">/api/delivery/send-template</code>.
+                  Template source files are in <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">lib/templates/</code>.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1528,6 +1546,63 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-1" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Approval Settings</h3>
+              <p className="text-xs text-gray-400 mb-5">Choose which admins receive approval requests. If none are selected, all admins are notified.</p>
+
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Who receives portal client approval requests?</label>
+                  <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                    {members.filter(m => m.role === 'Super Admin' || m.role === 'Leadership').map(m => (
+                      <label key={m.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={approvalConfig.portalClientApprovals.includes(m.email)}
+                          onChange={e => {
+                            setApprovalConfig(prev => ({
+                              ...prev,
+                              portalClientApprovals: e.target.checked
+                                ? [...prev.portalClientApprovals, m.email]
+                                : prev.portalClientApprovals.filter(x => x !== m.email),
+                            }))
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 accent-[#015035]"
+                        />
+                        <span className="text-sm text-gray-700">{m.name}</span>
+                        <span className="text-xs text-gray-400">{m.email}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Who receives team member setup approvals?</label>
+                  <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                    {members.filter(m => m.role === 'Super Admin' || m.role === 'Leadership').map(m => (
+                      <label key={m.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={approvalConfig.teamMemberApprovals.includes(m.email)}
+                          onChange={e => {
+                            setApprovalConfig(prev => ({
+                              ...prev,
+                              teamMemberApprovals: e.target.checked
+                                ? [...prev.teamMemberApprovals, m.email]
+                                : prev.teamMemberApprovals.filter(x => x !== m.email),
+                            }))
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 accent-[#015035]"
+                        />
+                        <span className="text-sm text-gray-700">{m.name}</span>
+                        <span className="text-xs text-gray-400">{m.email}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <button onClick={saveNotifications} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
@@ -2248,6 +2323,10 @@ const GOOGLE_PRODUCT_META: Record<MarketingStatus['product'], { name: string; de
 function MarketingIntegrationsSection() {
   const [statuses, setStatuses] = useState<MarketingStatus[]>([])
   const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null)
+  const [gscSiteUrl, setGscSiteUrl] = useState('')
+  const [gscSaving, setGscSaving] = useState(false)
+  const [gscSyncing, setGscSyncing] = useState(false)
+  const [gscLastSync, setGscLastSync] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/integrations/google-marketing/status')
@@ -2259,6 +2338,14 @@ function MarketingIntegrationsSection() {
       .then((r) => (r.ok ? r.json() : null))
       .then(setMetaStatus)
       .catch(() => {/* non-fatal */})
+
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.gsc_site_url) setGscSiteUrl(d.gsc_site_url)
+        if (d?.gsc_last_sync) setGscLastSync(d.gsc_last_sync)
+      })
+      .catch(() => {})
   }, [])
 
   const anyGoogleConnected = statuses.some((s) => s.connected)
@@ -2352,6 +2439,71 @@ function MarketingIntegrationsSection() {
           )
         })}
       </div>
+
+      {/* GSC Config */}
+      {statuses.find(s => s.product === 'search_console')?.connected && (
+        <div className="p-4 rounded-xl border border-gray-100 bg-gray-50 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">🔍</span>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Search Console Configuration</p>
+              <p className="text-xs text-gray-500">Configure the default site URL for GSC data sync</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              value={gscSiteUrl}
+              onChange={e => setGscSiteUrl(e.target.value)}
+              placeholder="https://gravissmarketing.com"
+              className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <button
+              onClick={async () => {
+                setGscSaving(true)
+                try {
+                  await fetch('/api/settings', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ gsc_site_url: gscSiteUrl.trim() }),
+                  })
+                } catch {/* ignore */}
+                setGscSaving(false)
+              }}
+              disabled={gscSaving}
+              className="px-3 py-2 rounded-xl text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50 whitespace-nowrap"
+              style={{ background: '#015035' }}
+            >
+              {gscSaving ? 'Saving...' : 'Save'}
+            </button>
+            <button
+              onClick={async () => {
+                if (!gscSiteUrl.trim()) return
+                setGscSyncing(true)
+                try {
+                  const res = await fetch('/api/rank-tracker/sync-gsc', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ siteUrl: gscSiteUrl.trim(), companyName: 'Graviss Marketing' }),
+                  })
+                  if (res.ok) {
+                    setGscLastSync(new Date().toISOString())
+                  }
+                } catch {/* ignore */}
+                setGscSyncing(false)
+              }}
+              disabled={gscSyncing || !gscSiteUrl.trim()}
+              className="px-3 py-2 rounded-xl border border-blue-200 text-blue-700 text-xs font-medium hover:bg-blue-50 disabled:opacity-50 whitespace-nowrap"
+            >
+              {gscSyncing ? 'Syncing...' : 'Sync Now'}
+            </button>
+          </div>
+          {gscLastSync && (
+            <p className="text-[10px] text-gray-400 mt-2">
+              Last synced: {new Date(gscLastSync).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Meta row */}
       <div className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50">

@@ -7,22 +7,53 @@ import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapClient(row: any) {
   return {
-    id:        row.id,
-    company:   row.company,
-    service:   row.service,
-    access:    row.access,
-    lastLogin: row.last_login,
-    contact:   row.contact,
-    email:     row.email,
+    id:           row.id,
+    company:      row.company,
+    service:      row.service,
+    access:       row.access,
+    lastLogin:    row.last_login,
+    contact:      row.contact,
+    email:        row.email,
+    role:         row.portal_role ?? 'Viewer',
+    portalConfig: row.portal_config ?? {},
+    services:     row.services ?? [],
+    companyId:    row.company_id ?? null,
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const db = createServiceClient()
-  const { data, error } = await db
+  const companyFilter = req.nextUrl.searchParams.get('company')
+  const pendingFilter = req.nextUrl.searchParams.get('pending_approval')
+
+  let query = db
     .from('portal_clients')
     .select('*')
     .order('created_at', { ascending: true })
+
+  if (companyFilter) {
+    query = query.eq('company', companyFilter)
+  }
+
+  if (pendingFilter === 'true') {
+    query = query.eq('pending_approval', true)
+    const { data, error } = await query
+    if (error) {
+      console.error('[portal-clients GET pending]', error)
+      return NextResponse.json({ error: error?.message || 'Failed to fetch pending portal clients' }, { status: 500 })
+    }
+    return NextResponse.json(
+      (data ?? []).map(row => ({
+        id: row.id,
+        contact: row.contact,
+        email: row.email,
+        company: row.company,
+        created_at: row.created_at,
+      }))
+    )
+  }
+
+  const { data, error } = await query
   if (error) {
     console.error('[portal-clients GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch portal clients' }, { status: 500 })
@@ -47,7 +78,6 @@ export async function POST(req: NextRequest) {
 
   const db = createServiceClient()
 
-  // Generate a cryptographically secure temp password for client login
   const tempPassword = crypto.randomBytes(16).toString('base64url')
   if (body.email) {
     const { error: authError } = await db.auth.admin.createUser({
@@ -55,23 +85,38 @@ export async function POST(req: NextRequest) {
       password: tempPassword,
       email_confirm: true,
     })
-    // If user already exists in auth (e.g. re-adding), ignore the conflict error
     if (authError && !authError.message.includes('already')) {
       console.error('[portal-clients POST] auth error:', authError)
       return NextResponse.json({ error: authError?.message || 'Failed to create client auth account' }, { status: 500 })
     }
   }
 
+  // If company already has portal users, inherit their portal_config
+  let portalConfig = body.portalConfig ?? null
+  if (!portalConfig) {
+    const { data: existing } = await db
+      .from('portal_clients')
+      .select('portal_config')
+      .eq('company', body.company as string)
+      .not('portal_config', 'is', null)
+      .limit(1)
+    if (existing && existing.length > 0) {
+      portalConfig = existing[0].portal_config
+    }
+  }
+
   const { data, error } = await db
     .from('portal_clients')
     .insert({
-      id:         body.id ?? `pc-${Date.now()}`,
-      company:    body.company,
-      service:    body.service ?? '',
-      access:     body.access ?? 'Not Setup',
-      last_login: body.lastLogin ?? 'Never',
-      contact:    body.contact ?? '',
-      email:      body.email ?? '',
+      id:            body.id ?? `pc-${Date.now()}`,
+      company:       body.company,
+      service:       body.service ?? '',
+      access:        body.access ?? 'Not Setup',
+      last_login:    body.lastLogin ?? 'Never',
+      contact:       body.contact ?? '',
+      email:         body.email ?? '',
+      portal_role:   body.role ?? 'Viewer',
+      portal_config: portalConfig,
     })
     .select()
     .single()

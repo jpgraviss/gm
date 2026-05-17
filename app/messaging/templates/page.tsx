@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
@@ -74,11 +74,30 @@ function previewText(body: string): string {
   return result
 }
 
+const LS_KEY = 'gravhub_sms_templates'
+
+function loadTemplates(): Template[] {
+  if (typeof window === 'undefined') return DEFAULT_TEMPLATES
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Template[]
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch { /* fall through */ }
+  return DEFAULT_TEMPLATES
+}
+
 export default function SMSTemplatesPage() {
   const { toast } = useToast()
   const router = useRouter()
-  const [templates, setTemplates] = useState<Template[]>(DEFAULT_TEMPLATES)
+  const [templates, setTemplates] = useState<Template[]>(loadTemplates)
   const [search, setSearch] = useState('')
+
+  const persistTemplates = useCallback((next: Template[]) => {
+    setTemplates(next)
+    try { localStorage.setItem(LS_KEY, JSON.stringify(next)) } catch { /* quota */ }
+  }, [])
   const [editing, setEditing] = useState<Template | null>(null)
   const [creating, setCreating] = useState(false)
   const [previewId, setPreviewId] = useState<string | null>(null)
@@ -112,19 +131,19 @@ export default function SMSTemplatesPage() {
       return
     }
     if (editing) {
-      setTemplates(prev => prev.map(t => t.id === editing.id ? { ...t, ...form } : t))
+      persistTemplates(templates.map(t => t.id === editing.id ? { ...t, ...form } : t))
       setEditing(null)
       toast('Template updated', 'success')
     } else {
       const newTemplate: Template = { id: `t-${Date.now()}`, ...form }
-      setTemplates(prev => [...prev, newTemplate])
+      persistTemplates([...templates, newTemplate])
       setCreating(false)
       toast('Template created', 'success')
     }
   }
 
   function handleDelete(id: string) {
-    setTemplates(prev => prev.filter(t => t.id !== id))
+    persistTemplates(templates.filter(t => t.id !== id))
     if (editing?.id === id) setEditing(null)
     toast('Template deleted', 'success')
   }

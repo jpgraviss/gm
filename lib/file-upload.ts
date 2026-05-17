@@ -17,6 +17,15 @@ const ALLOWED_TYPES = new Set([
   'text/csv',
 ])
 
+export const STORAGE_BUCKETS = {
+  uploads: 'uploads',
+  reports: 'reports',
+  avatars: 'avatars',
+  deliverables: 'deliverables',
+} as const
+
+export type StorageBucket = keyof typeof STORAGE_BUCKETS
+
 export function validateFile(file: File): string | null {
   if (file.size > MAX_FILE_SIZE) return `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.`
   if (!ALLOWED_TYPES.has(file.type)) return `File type "${file.type}" is not supported.`

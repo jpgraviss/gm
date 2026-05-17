@@ -66,6 +66,7 @@ const COMMANDS: CommandItem[] = [
   { id: 'settings',       label: 'Settings',         section: 'System',     href: '/settings',        icon: <Settings size={15} /> },
   { id: 'admin',          label: 'Admin',            section: 'System',     href: '/admin',           icon: <ShieldCheck size={15} />,      keywords: ['users', 'team'] },
   { id: 'audit-log',      label: 'Audit Log',        section: 'System',     href: '/admin/audit-log', icon: <Briefcase size={15} />,        keywords: ['activity', 'history'] },
+  { id: 'portal-mgmt',   label: 'Portal Management', section: 'System',    href: '/admin/portal-management', icon: <Globe size={15} />, keywords: ['portal', 'clients', 'companies'] },
 ]
 
 const RECENT_KEY = 'gravhub_recent_searches'

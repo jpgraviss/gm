@@ -15,6 +15,7 @@ import {
 // data loaded from API
 import { useToast } from '@/components/ui/Toast'
 import { formatCurrency } from '@/lib/utils'
+import NewClientModal from '@/components/admin/NewClientModal'
 
 type AdminTab = 'overview' | 'users' | 'integrations' | 'permissions' | 'config' | 'audit'
 
@@ -209,6 +210,7 @@ export default function AdminPage() {
   const [showBulkResetModal, setShowBulkResetModal] = useState(false)
   const [showClearCacheModal, setShowClearCacheModal] = useState(false)
   const [showBackupModal, setShowBackupModal] = useState(false)
+  const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [exportModule, setExportModule] = useState('All')
   const [exportEntities, setExportEntities] = useState<Record<string, boolean>>({
     contacts: true, companies: true, deals: true, projects: true,
@@ -222,6 +224,78 @@ export default function AdminPage() {
   const [backupDone, setBackupDone] = useState(false)
   const [bulkResetTarget, setBulkResetTarget] = useState('')
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([])
+  const [pendingApprovals, setPendingApprovals] = useState<{ id: string; name: string; email: string; role: string; unit: string; initials: string; verification_code: string }[]>([])
+  const [approvalLoading, setApprovalLoading] = useState<Record<string, boolean>>({})
+
+  const fetchPendingApprovals = () => {
+    return fetch('/api/auth/approve-setup')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setPendingApprovals(data) })
+      .catch(() => {})
+  }
+
+  useEffect(() => { fetchPendingApprovals() }, [])
+
+  async function handleApproval(userId: string, approved: boolean) {
+    setApprovalLoading(prev => ({ ...prev, [userId]: true }))
+    try {
+      const res = await fetch('/api/auth/approve-setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, approved }),
+      })
+      if (res.ok) {
+        toast(approved ? 'User approved' : 'User denied', approved ? 'success' : 'info')
+        fetchPendingApprovals()
+        fetchUsers()
+      } else {
+        toast('Failed to update approval', 'error')
+      }
+    } catch {
+      toast('Failed to update approval', 'error')
+    }
+    setApprovalLoading(prev => ({ ...prev, [userId]: false }))
+  }
+
+  type PendingPortalClient = { id: string; contact: string; email: string; company: string; created_at: string }
+  const [pendingPortalClients, setPendingPortalClients] = useState<PendingPortalClient[]>([])
+  const [portalApprovalLoading, setPortalApprovalLoading] = useState<Record<string, boolean>>({})
+
+  const fetchPendingPortalClients = () => {
+    return fetch('/api/portal-clients?pending_approval=true')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: PendingPortalClient[]) => {
+        if (Array.isArray(data)) {
+          setPendingPortalClients(data)
+        }
+      })
+      .catch(() => {})
+  }
+
+  useEffect(() => { fetchPendingPortalClients() }, [])
+
+  async function handlePortalApproval(clientId: string, approved: boolean) {
+    setPortalApprovalLoading(prev => ({ ...prev, [clientId]: true }))
+    try {
+      const res = await fetch('/api/portal-clients/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, approved }),
+      })
+      if (res.ok) {
+        toast(approved ? 'Portal client approved' : 'Portal client denied', approved ? 'success' : 'info')
+        fetchPendingPortalClients()
+      } else {
+        toast('Failed to update portal approval', 'error')
+      }
+    } catch {
+      toast('Failed to update portal approval', 'error')
+    }
+    setPortalApprovalLoading(prev => ({ ...prev, [clientId]: false }))
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [platformSettings, setPlatformSettings] = useState<Record<string, any> | null>(null)
 
   // KPI metrics
   const [metrics, setMetrics] = useState({ activeContracts: 0, pipelineValue: 0, mrr: 0, openProjects: 0 })
@@ -269,6 +343,10 @@ export default function AdminPage() {
       .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setAuditLog(data) })
       .catch(() => toast('Failed to load audit logs', 'error'))
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setPlatformSettings(data) })
+      .catch(() => {})
     fetchQBStatus()
   }, [])
 
@@ -719,7 +797,8 @@ export default function AdminPage() {
 
   return (
     <>
-      <Header title="Admin Panel" subtitle={`Super Admin • ${user.name}`} />
+      <Header title="Admin Panel" subtitle={`Super Admin • ${user.name}`} action={{ label: 'New Client', onClick: () => setShowNewClientModal(true) }} />
+      <NewClientModal open={showNewClientModal} onClose={() => setShowNewClientModal(false)} />
       <div className="p-4 md:p-6 flex-1">
 
         {/* Admin Banner */}
@@ -751,12 +830,66 @@ export default function AdminPage() {
             >
               {t.icon}
               {t.label}
+              {t.id === 'overview' && pendingPortalClients.length > 0 && (
+                <span className="ml-1 min-w-[18px] h-[18px] flex items-center justify-center bg-amber-500 text-white text-[10px] font-bold rounded-full px-1">
+                  {pendingPortalClients.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
         {/* ── OVERVIEW ── */}
         {tab === 'overview' && (
+          <div className="flex flex-col gap-4">
+
+            {pendingPortalClients.length > 0 && (
+              <div className="metric-card border-2 border-amber-200" style={{ background: '#fffbeb' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Building size={15} className="text-amber-600" />
+                  <h3 className="text-sm font-bold text-amber-900">Pending Portal Approvals</h3>
+                  <span className="ml-auto text-[10px] bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full font-bold">
+                    {pendingPortalClients.length} pending
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {pendingPortalClients.map(pc => (
+                    <div key={pc.id} className="flex items-center justify-between gap-3 p-3 bg-white rounded-lg border border-amber-100">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                          {(pc.contact || pc.email || '?')[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{pc.contact || pc.email}</p>
+                          <p className="text-xs text-gray-500 truncate">{pc.email} &middot; {pc.company}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-[10px] text-gray-400 hidden sm:inline">
+                          {pc.created_at ? new Date(pc.created_at).toLocaleDateString() : ''}
+                        </span>
+                        <button
+                          onClick={() => handlePortalApproval(pc.id, true)}
+                          disabled={portalApprovalLoading[pc.id]}
+                          className="px-3 py-1.5 text-xs font-bold text-white rounded-lg transition-opacity disabled:opacity-50"
+                          style={{ background: '#015035' }}
+                        >
+                          {portalApprovalLoading[pc.id] ? '...' : 'Approve'}
+                        </button>
+                        <button
+                          onClick={() => handlePortalApproval(pc.id, false)}
+                          disabled={portalApprovalLoading[pc.id]}
+                          className="px-3 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                        >
+                          Deny
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* KPIs */}
             <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -839,6 +972,7 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
+          </div>
         )}
 
         {/* ── USERS ── */}
@@ -898,6 +1032,54 @@ export default function AdminPage() {
                   <button onClick={() => setShowAddUser(false)} className="px-4 py-2 text-gray-600 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
                     Cancel
                   </button>
+                </div>
+              </div>
+            )}
+
+            {pendingApprovals.length > 0 && (
+              <div className="bg-white rounded-xl border border-amber-200 overflow-hidden mb-4">
+                <div className="flex items-center gap-2 px-5 py-3 border-b border-amber-100 bg-amber-50">
+                  <AlertTriangle size={14} className="text-amber-600" />
+                  <h3 className="text-sm font-bold text-amber-800">Pending Approvals ({pendingApprovals.length})</h3>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {pendingApprovals.map(pa => (
+                    <div key={pa.id} className="flex items-center justify-between px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: '#f59e0b' }}>
+                          {pa.initials}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{pa.name}</p>
+                          <p className="text-xs text-gray-400">{pa.email}</p>
+                        </div>
+                        <span className="status-badge bg-gray-100 text-gray-600 text-[11px]">{pa.role}</span>
+                        <span className="text-xs text-gray-400">{pa.unit}</span>
+                        {pa.verification_code && (
+                          <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-gray-100" style={{ color: '#015035' }}>
+                            {pa.verification_code}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleApproval(pa.id, true)}
+                          disabled={approvalLoading[pa.id]}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white rounded-lg disabled:opacity-50"
+                          style={{ background: '#015035' }}
+                        >
+                          <CheckCircle size={12} /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleApproval(pa.id, false)}
+                          disabled={approvalLoading[pa.id]}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <XCircle size={12} /> Deny
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -1329,31 +1511,59 @@ export default function AdminPage() {
         )}
 
         {/* ── CONFIG ── */}
-        {tab === 'config' && (
+        {tab === 'config' && (() => {
+          const co = platformSettings?.company as Record<string, string> | undefined
+          const companyFields = [
+            { label: 'Company Name', value: co?.name ?? 'Graviss Marketing' },
+            { label: 'Admin Email', value: co?.email ?? 'jonathan@gravissmarketing.com' },
+            { label: 'Platform URL', value: co?.url ?? 'app.gravissmarketing.com' },
+            { label: 'Fiscal Year Start', value: co?.fiscalYearStart ?? 'January' },
+            { label: 'Default Currency', value: co?.currency ?? 'USD ($)' },
+            { label: 'Timezone', value: co?.timezone ?? 'America/New_York (ET)' },
+          ]
+
+          const serviceTypes = (platformSettings?.service_types as string[] | undefined) ?? [
+            'Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom', 'PPC / Paid Ads', 'Content Marketing',
+          ]
+
+          const DEFAULT_STAGE_COLORS: Record<string, string> = {
+            Lead: '#9ca3af', Qualified: '#3b82f6', 'Proposal Sent': '#f59e0b',
+            'Contract Sent': '#f97316', 'Closed Won': '#22c55e', 'Closed Lost': '#ef4444',
+          }
+          const rawStages = platformSettings?.pipeline_stages as
+            | { name: string; color?: string }[]
+            | string[]
+            | undefined
+          const pipelineStages = (rawStages ?? [
+            { name: 'Lead' }, { name: 'Qualified' }, { name: 'Proposal Sent' },
+            { name: 'Contract Sent' }, { name: 'Closed Won' }, { name: 'Closed Lost' },
+          ]).map((s, i) => {
+            const name = typeof s === 'string' ? s : s.name
+            const color = (typeof s === 'object' && s.color) ? s.color : (DEFAULT_STAGE_COLORS[name] ?? '#9ca3af')
+            return { name, color, order: i + 1 }
+          })
+
+          return (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Company */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Building size={15} style={{ color: '#015035' }} />
-                <h3 className="text-sm font-bold text-gray-800">Company Information</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Building size={15} style={{ color: '#015035' }} />
+                  <h3 className="text-sm font-bold text-gray-800">Company Information</h3>
+                </div>
+                <button
+                  onClick={() => router.push('/settings?tab=Company')}
+                  className="text-xs font-medium px-2 py-1 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+                >
+                  <Pencil size={12} className="inline mr-1" />Edit
+                </button>
               </div>
               <div className="flex flex-col gap-3">
-                {[
-                  { label: 'Company Name', value: 'Graviss Marketing' },
-                  { label: 'Admin Email', value: 'jonathan@gravissmarketing.com' },
-                  { label: 'Platform URL', value: 'app.gravissmarketing.com' },
-                  { label: 'Fiscal Year Start', value: 'January' },
-                  { label: 'Default Currency', value: 'USD ($)' },
-                  { label: 'Timezone', value: 'America/New_York (ET)' },
-                ].map(f => (
+                {companyFields.map(f => (
                   <div key={f.label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{f.label}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-800">{f.value}</span>
-                      <button className="text-gray-300 hover:text-blue-500 transition-colors">
-                        <Pencil size={12} />
-                      </button>
-                    </div>
+                    <span className="text-sm text-gray-800">{f.value}</span>
                   </div>
                 ))}
               </div>
@@ -1361,37 +1571,24 @@ export default function AdminPage() {
 
             {/* Services */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Zap size={15} style={{ color: '#015035' }} />
-                <h3 className="text-sm font-bold text-gray-800">Service Lines</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Zap size={15} style={{ color: '#015035' }} />
+                  <h3 className="text-sm font-bold text-gray-800">Service Lines</h3>
+                </div>
+                <button
+                  onClick={() => router.push('/settings?tab=CRM+Setup')}
+                  className="text-xs font-medium px-2 py-1 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+                >
+                  <Pencil size={12} className="inline mr-1" />Edit
+                </button>
               </div>
               <div className="flex flex-col gap-2">
-                {[
-                  { name: 'Website', enabled: true, deals: 3 },
-                  { name: 'SEO', enabled: true, deals: 2 },
-                  { name: 'Social Media', enabled: true, deals: 1 },
-                  { name: 'Branding', enabled: true, deals: 1 },
-                  { name: 'Email Marketing', enabled: true, deals: 1 },
-                  { name: 'Custom', enabled: true, deals: 1 },
-                  { name: 'PPC / Paid Ads', enabled: false, deals: 0 },
-                  { name: 'Content Marketing', enabled: false, deals: 0 },
-                ].map(s => (
-                  <div key={s.name} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                {serviceTypes.map(name => (
+                  <div key={name} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                     <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${s.enabled ? 'bg-green-500' : 'bg-gray-300'}`} />
-                      <span className="text-sm text-gray-700 font-medium">{s.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">{s.deals} deals</span>
-                      <div
-                        className="w-9 h-5 rounded-full relative cursor-pointer transition-colors"
-                        style={{ background: s.enabled ? '#015035' : '#d1d5db', width: '36px', height: '20px' }}
-                      >
-                        <div
-                          className="w-3.5 h-3.5 bg-white rounded-full shadow-sm absolute top-0.5 transition-transform"
-                          style={{ transform: s.enabled ? 'translateX(16px)' : 'translateX(2px)' }}
-                        />
-                      </div>
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-sm text-gray-700 font-medium">{name}</span>
                     </div>
                   </div>
                 ))}
@@ -1405,24 +1602,19 @@ export default function AdminPage() {
                   <Activity size={15} style={{ color: '#015035' }} />
                   <h3 className="text-sm font-bold text-gray-800">Pipeline Stages</h3>
                 </div>
-                <button className="text-xs font-medium px-2 py-1 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
-                  + Add Stage
+                <button
+                  onClick={() => router.push('/settings?tab=CRM+Setup')}
+                  className="text-xs font-medium px-2 py-1 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+                >
+                  <Pencil size={12} className="inline mr-1" />Edit
                 </button>
               </div>
               <div className="flex flex-col gap-1.5">
-                {[
-                  { name: 'Lead', color: '#9ca3af', order: 1 },
-                  { name: 'Qualified', color: '#3b82f6', order: 2 },
-                  { name: 'Proposal Sent', color: '#f59e0b', order: 3 },
-                  { name: 'Contract Sent', color: '#f97316', order: 4 },
-                  { name: 'Closed Won', color: '#22c55e', order: 5 },
-                  { name: 'Closed Lost', color: '#ef4444', order: 6 },
-                ].map(stage => (
+                {pipelineStages.map(stage => (
                   <div key={stage.name} className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 hover:border-gray-200">
                     <span className="text-xs text-gray-400 w-4 font-mono">{stage.order}</span>
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: stage.color }} />
                     <span className="text-sm text-gray-700 flex-1">{stage.name}</span>
-                    <Pencil size={12} className="text-gray-300 hover:text-blue-500 cursor-pointer" />
                   </div>
                 ))}
               </div>
@@ -1457,28 +1649,21 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* ── AUDIT LOG ── */}
         {tab === 'audit' && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-bold text-gray-800">Full Audit Log</h3>
+              <h3 className="text-sm font-bold text-gray-800">Recent Audit Log</h3>
               <div className="flex items-center gap-2">
-                <select className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 text-gray-600">
-                  <option>All Users</option>
-                  {users.map(u => <option key={u.id}>{u.name}</option>)}
-                </select>
-                <select className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 text-gray-600">
-                  <option>All Modules</option>
-                  <option>CRM</option>
-                  <option>Contracts</option>
-                  <option>Billing</option>
-                  <option>Admin</option>
-                  <option>Integrations</option>
-                </select>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-                  <Download size={12} /> Export
+                <button
+                  onClick={() => router.push('/admin/audit-log')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white rounded-lg hover:opacity-90 transition-opacity"
+                  style={{ background: '#015035' }}
+                >
+                  <ScrollText size={12} /> View Full Audit Log
                 </button>
               </div>
             </div>

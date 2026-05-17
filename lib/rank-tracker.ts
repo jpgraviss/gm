@@ -2,19 +2,6 @@ import { createServiceClient } from '@/lib/supabase'
 import { DEFAULT_WORKSPACE_ID } from '@/lib/workspace'
 import { getGSCSearchAnalytics } from '@/lib/google-search-console'
 
-/**
- * Keyword rank tracker.
- *
- * Uses Google Search Console's search analytics API to pull the average
- * position for a tracked keyword on a given site. GSC has a 2–3 day lag,
- * so when checking we query the last 7 days and take the most recent
- * available data point.
- *
- * Data model:
- *   tracked_keywords    — one row per (site, keyword, country) we watch
- *   keyword_rank_history — append-only history, one row per check
- */
-
 export interface TrackedKeyword {
   id: string
   workspaceId: string
@@ -28,6 +15,12 @@ export interface TrackedKeyword {
   bestPosition: number | null
   lastCheckedAt: string | null
   createdAt: string
+  tags: string[]
+  targetUrl: string | null
+  searchEngine: string
+  location: string | null
+  searchVolume: number | null
+  portalVisible: boolean
 }
 
 export interface RankHistoryPoint {
@@ -35,6 +28,34 @@ export interface RankHistoryPoint {
   trackedKeywordId: string
   position: number | null
   checkedAt: string
+}
+
+export interface Competitor {
+  id: string
+  workspaceId: string
+  domain: string
+  label: string | null
+  createdAt: string
+}
+
+export interface CompetitorSnapshot {
+  id: string
+  competitorId: string
+  trackedKeywordId: string
+  position: number | null
+  url: string | null
+  checkedAt: string
+}
+
+export interface ScheduledReport {
+  id: string
+  workspaceId: string
+  name: string
+  frequency: string
+  recipients: string[]
+  filters: Record<string, unknown>
+  lastSentAt: string | null
+  createdAt: string
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,6 +73,12 @@ function mapTracked(row: any): TrackedKeyword {
     bestPosition:    row.best_position ?? null,
     lastCheckedAt:   row.last_checked_at ?? null,
     createdAt:       row.created_at,
+    tags:            row.tags ?? [],
+    targetUrl:       row.target_url ?? null,
+    searchEngine:    row.search_engine ?? 'google',
+    location:        row.location ?? null,
+    searchVolume:    row.search_volume ?? null,
+    portalVisible:   row.portal_visible ?? true,
   }
 }
 
@@ -65,6 +92,43 @@ function mapHistory(row: any): RankHistoryPoint {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapCompetitor(row: any): Competitor {
+  return {
+    id:          row.id,
+    workspaceId: row.workspace_id,
+    domain:      row.domain,
+    label:       row.label ?? null,
+    createdAt:   row.created_at,
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapCompetitorSnapshot(row: any): CompetitorSnapshot {
+  return {
+    id:               row.id,
+    competitorId:     row.competitor_id,
+    trackedKeywordId: row.tracked_keyword_id,
+    position:         row.position ?? null,
+    url:              row.url ?? null,
+    checkedAt:        row.checked_at,
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapReport(row: any): ScheduledReport {
+  return {
+    id:          row.id,
+    workspaceId: row.workspace_id,
+    name:        row.name,
+    frequency:   row.frequency ?? 'weekly',
+    recipients:  row.recipients ?? [],
+    filters:     row.filters ?? {},
+    lastSentAt:  row.last_sent_at ?? null,
+    createdAt:   row.created_at,
+  }
+}
+
 function newId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
@@ -73,11 +137,6 @@ function fmtDate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-/**
- * Query GSC for the most recent position the given site/keyword has
- * appeared at over the past 7 days (to account for GSC's 2–3 day lag).
- * Returns null if the keyword has no data.
- */
 async function fetchLatestPosition(
   siteUrl: string,
   keyword: string,
@@ -86,21 +145,6 @@ async function fetchLatestPosition(
   const end = new Date()
   const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000)
 
-  const filters: Array<{
-    dimension: string
-    operator: string
-    expression: string
-  }> = [
-    { dimension: 'query', operator: 'equals', expression: keyword.toLowerCase() },
-  ]
-  if (country) {
-    filters.push({ dimension: 'country', operator: 'equals', expression: country.toLowerCase() })
-  }
-
-  // We want the most recent date's data, so group by date and pick the last.
-  // The Search Analytics API doesn't accept filterGroups via our thin wrapper's
-  // typed params, so we call it directly with dimensions=['date','query'] and
-  // filter client-side.
   const rows = await getGSCSearchAnalytics({
     siteUrl,
     startDate: fmtDate(start),
@@ -115,21 +159,20 @@ async function fetchLatestPosition(
   )
   if (matches.length === 0) return null
 
-  // Most recent date first.
   matches.sort((a, b) => (b.keys?.[0] ?? '').localeCompare(a.keys?.[0] ?? ''))
   return matches[0].position ?? null
 }
 
-/**
- * Insert a new tracked keyword and immediately trigger an initial rank
- * pull so the row shows a current position right away.
- */
 export async function addTrackedKeyword(params: {
   companyName: string
   companyId?: string
   siteUrl: string
   keyword: string
   country?: string
+  tags?: string[]
+  targetUrl?: string
+  searchEngine?: string
+  location?: string
 }): Promise<TrackedKeyword> {
   const db = createServiceClient()
   const id = newId('kw')
@@ -139,12 +182,16 @@ export async function addTrackedKeyword(params: {
     .from('tracked_keywords')
     .insert({
       id,
-      workspace_id: DEFAULT_WORKSPACE_ID,
-      company_id:   params.companyId ?? null,
-      company_name: params.companyName,
-      site_url:     params.siteUrl,
-      keyword:      params.keyword,
+      workspace_id:  DEFAULT_WORKSPACE_ID,
+      company_id:    params.companyId ?? null,
+      company_name:  params.companyName,
+      site_url:      params.siteUrl,
+      keyword:       params.keyword,
       country,
+      tags:          params.tags ?? [],
+      target_url:    params.targetUrl ?? null,
+      search_engine: params.searchEngine ?? 'google',
+      location:      params.location ?? null,
     })
     .select()
     .single()
@@ -154,7 +201,6 @@ export async function addTrackedKeyword(params: {
   }
 
   const tracked = mapTracked(data)
-  // Best-effort initial pull — don't fail the insert if GSC errors.
   try {
     await checkKeyword(tracked)
     const { data: refreshed } = await db
@@ -169,10 +215,46 @@ export async function addTrackedKeyword(params: {
   return tracked
 }
 
-/**
- * Pull the latest position for one tracked keyword, write a history row,
- * and update the tracked_keywords aggregates.
- */
+export async function addTrackedKeywordsBulk(params: {
+  companyName: string
+  companyId?: string
+  siteUrl: string
+  keywords: string[]
+  country?: string
+  tags?: string[]
+  targetUrl?: string
+  searchEngine?: string
+  location?: string
+}): Promise<TrackedKeyword[]> {
+  const db = createServiceClient()
+  const country = (params.country ?? 'US').toUpperCase()
+
+  const rows = params.keywords.map(keyword => ({
+    id:            newId('kw'),
+    workspace_id:  DEFAULT_WORKSPACE_ID,
+    company_id:    params.companyId ?? null,
+    company_name:  params.companyName,
+    site_url:      params.siteUrl,
+    keyword:       keyword.trim(),
+    country,
+    tags:          params.tags ?? [],
+    target_url:    params.targetUrl ?? null,
+    search_engine: params.searchEngine ?? 'google',
+    location:      params.location ?? null,
+  }))
+
+  const { data, error } = await db
+    .from('tracked_keywords')
+    .insert(rows)
+    .select()
+
+  if (error || !data) {
+    throw new Error(`Failed to bulk insert: ${error?.message ?? 'unknown error'}`)
+  }
+
+  return data.map(mapTracked)
+}
+
 export async function checkKeyword(tracked: TrackedKeyword): Promise<number | null> {
   const db = createServiceClient()
   const position = await fetchLatestPosition(
@@ -183,8 +265,6 @@ export async function checkKeyword(tracked: TrackedKeyword): Promise<number | nu
 
   const checkedAt = new Date().toISOString()
 
-  // Always record a history row, even if position is null — it represents
-  // "we checked and the keyword wasn't found", which is useful context.
   await db.from('keyword_rank_history').insert({
     id:                 newId('kwh'),
     workspace_id:       DEFAULT_WORKSPACE_ID,
@@ -194,7 +274,6 @@ export async function checkKeyword(tracked: TrackedKeyword): Promise<number | nu
   })
 
   if (position == null) {
-    // Still stamp last_checked_at so we know we tried.
     await db
       .from('tracked_keywords')
       .update({ last_checked_at: checkedAt })
@@ -221,10 +300,6 @@ export async function checkKeyword(tracked: TrackedKeyword): Promise<number | nu
   return position
 }
 
-/**
- * Cron entrypoint — pull fresh positions for every tracked keyword.
- * Swallows per-keyword failures so one broken site doesn't block the job.
- */
 export async function checkAllRanks(): Promise<{
   checked: number
   updated: number
@@ -256,9 +331,6 @@ export async function checkAllRanks(): Promise<{
   return { checked: data?.length ?? 0, updated, failed }
 }
 
-/**
- * Read history rows for a chart. Returns oldest → newest.
- */
 export async function getKeywordHistory(
   trackedKeywordId: string,
   days = 90,
@@ -280,4 +352,100 @@ export async function getKeywordHistory(
   return (data ?? []).map(mapHistory)
 }
 
-export { mapTracked, mapHistory }
+export async function getCompetitors(): Promise<Competitor[]> {
+  const db = createServiceClient()
+  const { data, error } = await db
+    .from('rank_tracker_competitors')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('[rank-tracker] failed to load competitors', error)
+    return []
+  }
+  return (data ?? []).map(mapCompetitor)
+}
+
+export async function addCompetitor(domain: string, label?: string): Promise<Competitor> {
+  const db = createServiceClient()
+  const id = newId('rtc')
+  const { data, error } = await db
+    .from('rank_tracker_competitors')
+    .insert({
+      id,
+      workspace_id: DEFAULT_WORKSPACE_ID,
+      domain: domain.replace(/^https?:\/\//, '').replace(/\/+$/, ''),
+      label: label ?? null,
+    })
+    .select()
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to add competitor: ${error?.message ?? 'unknown'}`)
+  }
+  return mapCompetitor(data)
+}
+
+export async function deleteCompetitor(id: string): Promise<void> {
+  const db = createServiceClient()
+  await db.from('competitor_rank_snapshots').delete().eq('competitor_id', id)
+  await db.from('rank_tracker_competitors').delete().eq('id', id)
+}
+
+export async function getCompetitorSnapshots(keywordId: string): Promise<CompetitorSnapshot[]> {
+  const db = createServiceClient()
+  const { data, error } = await db
+    .from('competitor_rank_snapshots')
+    .select('*')
+    .eq('tracked_keyword_id', keywordId)
+    .order('checked_at', { ascending: false })
+    .limit(200)
+
+  if (error) return []
+  return (data ?? []).map(mapCompetitorSnapshot)
+}
+
+export async function getScheduledReports(): Promise<ScheduledReport[]> {
+  const db = createServiceClient()
+  const { data, error } = await db
+    .from('rank_tracker_reports')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) return []
+  return (data ?? []).map(mapReport)
+}
+
+export async function createScheduledReport(params: {
+  name: string
+  frequency: string
+  recipients: string[]
+  filters?: Record<string, unknown>
+}): Promise<ScheduledReport> {
+  const db = createServiceClient()
+  const id = newId('rtr')
+  const { data, error } = await db
+    .from('rank_tracker_reports')
+    .insert({
+      id,
+      workspace_id: DEFAULT_WORKSPACE_ID,
+      name: params.name,
+      frequency: params.frequency,
+      recipients: params.recipients,
+      filters: params.filters ?? {},
+    })
+    .select()
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to create report: ${error?.message ?? 'unknown'}`)
+  }
+  return mapReport(data)
+}
+
+export async function deleteScheduledReport(id: string): Promise<void> {
+  const db = createServiceClient()
+  await db.from('rank_tracker_reports').delete().eq('id', id)
+}
+
+export { mapTracked, mapHistory, mapCompetitor, mapCompetitorSnapshot, mapReport }

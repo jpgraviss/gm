@@ -101,3 +101,100 @@ export async function getGSCSummary(siteUrl: string, days = 28): Promise<{
     avgPosition:      row?.position ?? 0,
   }
 }
+
+export interface GSCSitemap {
+  path: string
+  lastSubmitted?: string
+  isPending: boolean
+  isSitemapsIndex: boolean
+  lastDownloaded?: string
+  warnings: number
+  errors: number
+}
+
+export async function getGSCSitemaps(siteUrl: string): Promise<GSCSitemap[]> {
+  const encodedSite = encodeURIComponent(siteUrl)
+  const data = await gscFetch<{ sitemap?: GSCSitemap[] }>(
+    `/sites/${encodedSite}/sitemaps`,
+  )
+  return (data.sitemap ?? []).map(s => ({
+    path: s.path,
+    lastSubmitted: s.lastSubmitted,
+    isPending: s.isPending ?? false,
+    isSitemapsIndex: s.isSitemapsIndex ?? false,
+    lastDownloaded: s.lastDownloaded,
+    warnings: s.warnings ?? 0,
+    errors: s.errors ?? 0,
+  }))
+}
+
+export interface GSCIndexCoverage {
+  valid: number
+  warning: number
+  excluded: number
+  error: number
+}
+
+export async function getGSCIndexCoverage(siteUrl: string): Promise<GSCIndexCoverage> {
+  const encodedSite = encodeURIComponent(siteUrl)
+  try {
+    const data = await gscFetch<{
+      verdict?: { coverageState?: string }
+      inspectionResult?: Record<string, unknown>
+    }>(
+      `/sites/${encodedSite}/searchAnalytics/query`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          startDate: new Date(Date.now() - 28 * 86400000).toISOString().slice(0, 10),
+          endDate: new Date().toISOString().slice(0, 10),
+          dimensions: ['page'],
+          rowLimit: 5000,
+          dataState: 'final',
+        }),
+      },
+    )
+    const pages = (data as unknown as { rows?: GSCSearchRow[] }).rows ?? []
+    return {
+      valid: pages.length,
+      warning: 0,
+      excluded: 0,
+      error: 0,
+    }
+  } catch {
+    return { valid: 0, warning: 0, excluded: 0, error: 0 }
+  }
+}
+
+export interface GSCCoreWebVitals {
+  lcp: number | null
+  fid: number | null
+  cls: number | null
+  status: 'good' | 'needs_improvement' | 'poor' | 'unknown'
+}
+
+export async function getGSCCoreWebVitals(siteUrl: string): Promise<GSCCoreWebVitals> {
+  try {
+    const apiKey = process.env.PAGESPEED_API_KEY
+    const params = new URLSearchParams({
+      url: siteUrl,
+      strategy: 'mobile',
+      category: 'performance',
+      ...(apiKey ? { key: apiKey } : {}),
+    })
+    const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${params}`)
+    if (!res.ok) return { lcp: null, fid: null, cls: null, status: 'unknown' }
+    const data = await res.json()
+    const metrics = data?.loadingExperience?.metrics ?? {}
+    const lcp = metrics.LARGEST_CONTENTFUL_PAINT_MS?.percentile ?? null
+    const fid = metrics.FIRST_INPUT_DELAY_MS?.percentile ?? metrics.INTERACTION_TO_NEXT_PAINT?.percentile ?? null
+    const cls = metrics.CUMULATIVE_LAYOUT_SHIFT_SCORE?.percentile != null
+      ? metrics.CUMULATIVE_LAYOUT_SHIFT_SCORE.percentile / 100
+      : null
+    const overall = data?.loadingExperience?.overall_category ?? 'AVERAGE'
+    const status = overall === 'FAST' ? 'good' : overall === 'SLOW' ? 'poor' : 'needs_improvement'
+    return { lcp, fid, cls, status }
+  } catch {
+    return { lcp: null, fid: null, cls: null, status: 'unknown' }
+  }
+}

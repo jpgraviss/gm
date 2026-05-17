@@ -827,12 +827,66 @@ export default function AdminPage() {
             >
               {t.icon}
               {t.label}
+              {t.id === 'overview' && pendingPortalClients.length > 0 && (
+                <span className="ml-1 min-w-[18px] h-[18px] flex items-center justify-center bg-amber-500 text-white text-[10px] font-bold rounded-full px-1">
+                  {pendingPortalClients.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
         {/* ── OVERVIEW ── */}
         {tab === 'overview' && (
+          <div className="flex flex-col gap-4">
+
+            {pendingPortalClients.length > 0 && (
+              <div className="metric-card border-2 border-amber-200" style={{ background: '#fffbeb' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Building size={15} className="text-amber-600" />
+                  <h3 className="text-sm font-bold text-amber-900">Pending Portal Approvals</h3>
+                  <span className="ml-auto text-[10px] bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full font-bold">
+                    {pendingPortalClients.length} pending
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {pendingPortalClients.map(pc => (
+                    <div key={pc.id} className="flex items-center justify-between gap-3 p-3 bg-white rounded-lg border border-amber-100">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                          {(pc.contact || pc.email || '?')[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{pc.contact || pc.email}</p>
+                          <p className="text-xs text-gray-500 truncate">{pc.email} &middot; {pc.company}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-[10px] text-gray-400 hidden sm:inline">
+                          {pc.created_at ? new Date(pc.created_at).toLocaleDateString() : ''}
+                        </span>
+                        <button
+                          onClick={() => handlePortalApproval(pc.id, true)}
+                          disabled={portalApprovalLoading[pc.id]}
+                          className="px-3 py-1.5 text-xs font-bold text-white rounded-lg transition-opacity disabled:opacity-50"
+                          style={{ background: '#015035' }}
+                        >
+                          {portalApprovalLoading[pc.id] ? '...' : 'Approve'}
+                        </button>
+                        <button
+                          onClick={() => handlePortalApproval(pc.id, false)}
+                          disabled={portalApprovalLoading[pc.id]}
+                          className="px-3 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                        >
+                          Deny
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* KPIs */}
             <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -914,6 +968,7 @@ export default function AdminPage() {
                 ))}
               </div>
             </div>
+          </div>
           </div>
         )}
 

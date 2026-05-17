@@ -13,27 +13,27 @@ export async function POST(req: NextRequest) {
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
-
     const db = createServiceClient()
-    const { data: linkData, error: linkError } = await db.auth.admin.generateLink({
-      type: 'magiclink',
-      email,
-      options: { redirectTo: `${appUrl}/auth/confirm` },
-    })
 
-    let magicLinkUrl = `${appUrl}/login`
-    if (!linkError && linkData?.properties?.hashed_token) {
-      const token = linkData.properties.hashed_token
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-      magicLinkUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=magiclink&redirect_to=${encodeURIComponent(`${appUrl}/auth/confirm`)}`
-    }
+    const verificationCode = String(Math.floor(100000 + Math.random() * 900000))
+    const verificationExpires = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+
+    await db
+      .from('portal_clients')
+      .update({
+        verification_code: verificationCode,
+        verification_expires: verificationExpires,
+      })
+      .ilike('email', email.toLowerCase().trim())
+
+    const setupUrl = `${appUrl}/portal/setup?email=${encodeURIComponent(email)}&token=invite`
 
     const result = await sendEmail({
       to: email,
       subject: isResendInvite
         ? `Reminder: Your ${company} client portal is ready`
         : `Your ${settings.company.name} client portal is ready`,
-      html: portalInviteHtml({ company, contactName, email, service, signInUrl: magicLinkUrl, isResend: isResendInvite, settings }),
+      html: portalInviteHtml({ company, contactName, email, service, signInUrl: setupUrl, isResend: isResendInvite, settings, verificationCode }),
     })
 
     if (!result.success) {
@@ -41,11 +41,85 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error || 'Failed to send portal invite email' }, { status: 500 })
     }
 
+    const { data: admins } = await db
+      .from('team_members')
+      .select('email, name')
+      .eq('is_admin', true)
+
+    if (admins && admins.length > 0) {
+      for (const admin of admins) {
+        if (!admin.email) continue
+        await sendEmail({
+          to: admin.email,
+          subject: `New portal client invited: ${contactName || email} (${company})`,
+          html: adminNotifyHtml({ company, contactName, email, settings }),
+        })
+      }
+    }
+
     return NextResponse.json({ success: true, id: result.id })
   } catch (err) {
     console.error('Portal invite error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+}
+
+function adminNotifyHtml({
+  company,
+  contactName,
+  email,
+  settings,
+}: {
+  company: string
+  contactName: string
+  email: string
+  settings: Awaited<ReturnType<typeof getSettings>>
+}) {
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@400;500;600;700;800&display=swap');</style></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
+    <tr><td align="center">
+      <table width="580" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:${settings.branding.darkBg};padding:32px 40px;text-align:center;">
+            <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.08em;font-family:'Syncopate',sans-serif;">${settings.company.name.toUpperCase()}</h1>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.55);font-size:12px;letter-spacing:0.04em;font-family:'Syncopate',sans-serif;">ADMIN NOTIFICATION</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:40px;">
+            <h2 style="margin:0 0 16px;color:#111827;font-size:18px;font-weight:700;">New Portal Client Invited</h2>
+            <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6;">
+              A new portal client <strong>${contactName || email}</strong> from <strong>${company}</strong> has been invited.
+              They'll need your approval to access the portal once they complete their account setup.
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
+              <tr>
+                <td style="padding:16px 20px;">
+                  <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;">Client</p>
+                  <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#111827;">${contactName || 'Not provided'}</p>
+                  <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;">Company</p>
+                  <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#111827;">${company}</p>
+                  <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;">Email</p>
+                  <p style="margin:0;font-size:14px;font-weight:600;color:#111827;">${email}</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 40px;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;">&copy; ${new Date().getFullYear()} ${settings.company.name}</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
 }
 
 function portalInviteHtml({
@@ -56,6 +130,7 @@ function portalInviteHtml({
   signInUrl,
   isResend,
   settings,
+  verificationCode,
 }: {
   company: string
   contactName: string
@@ -64,6 +139,7 @@ function portalInviteHtml({
   signInUrl: string
   isResend?: boolean
   settings: Awaited<ReturnType<typeof getSettings>>
+  verificationCode: string
 }) {
   return `<!DOCTYPE html>
 <html>
@@ -135,12 +211,23 @@ function portalInviteHtml({
               </tr>
             </table>
 
-            <!-- Login info -->
+            <!-- Verification Code -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;margin-bottom:28px;">
               <tr>
                 <td style="padding:20px 24px;">
-                  <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.05em;">Your Portal Email</p>
-                  <p style="margin:0;font-size:16px;font-weight:600;color:#0c4a6e;font-family:monospace;">${email}</p>
+                  <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.05em;">Your Verification Code</p>
+                  <p style="margin:0;font-size:28px;font-weight:800;color:#0c4a6e;font-family:monospace;letter-spacing:0.2em;">${verificationCode}</p>
+                  <p style="margin:8px 0 0;font-size:12px;color:#0369a1;">This code expires in 48 hours.</p>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Login info -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:28px;">
+              <tr>
+                <td style="padding:20px 24px;">
+                  <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;">Your Portal Email</p>
+                  <p style="margin:0;font-size:16px;font-weight:600;color:#111827;font-family:monospace;">${email}</p>
                 </td>
               </tr>
             </table>
@@ -150,14 +237,14 @@ function portalInviteHtml({
               <tr>
                 <td align="center">
                   <a href="${signInUrl}" style="display:inline-block;background:${settings.branding.primaryColor};color:#ffffff;font-size:14px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
-                    Access Your Client Portal →
+                    Set Up Your Account →
                   </a>
                 </td>
               </tr>
             </table>
 
             <p style="margin:0 0 8px;color:#9ca3af;font-size:13px;line-height:1.5;">
-              No password needed — just click the button above to sign in. Future sign-ins work the same way: enter your email and we'll send you a link.
+              Click the button above to set up your account. You'll need the verification code shown above to get started.
             </p>
             <p style="margin:0;color:#9ca3af;font-size:13px;line-height:1.5;">
               Questions? Reply to this email or contact your account manager directly.

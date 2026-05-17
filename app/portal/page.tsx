@@ -12,6 +12,8 @@ import {
   Check, BookOpen,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { useAuth } from '@/contexts/AuthContext'
+import ClientDashboard from '@/components/portal/ClientDashboard'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1089,6 +1091,12 @@ function ManageClientPanel({ client, onClose }: { client: PortalClient; onClose:
 // ─── Main Admin Page ───────────────────────────────────────────────────────────
 
 export default function PortalPage() {
+  const { user } = useAuth()
+  if (user?.userType === 'client') return <ClientDashboard />
+  return <PortalAdminPage />
+}
+
+function PortalAdminPage() {
   const { toast } = useToast()
   const [viewAsClient, setViewAsClient] = useState(false)
   const [clients, setClients] = useState<PortalClient[]>([])

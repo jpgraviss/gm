@@ -222,6 +222,75 @@ export default function AdminPage() {
   const [backupDone, setBackupDone] = useState(false)
   const [bulkResetTarget, setBulkResetTarget] = useState('')
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([])
+  const [pendingApprovals, setPendingApprovals] = useState<{ id: string; name: string; email: string; role: string; unit: string; initials: string; verification_code: string }[]>([])
+  const [approvalLoading, setApprovalLoading] = useState<Record<string, boolean>>({})
+
+  const fetchPendingApprovals = () => {
+    return fetch('/api/auth/approve-setup')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setPendingApprovals(data) })
+      .catch(() => {})
+  }
+
+  useEffect(() => { fetchPendingApprovals() }, [])
+
+  async function handleApproval(userId: string, approved: boolean) {
+    setApprovalLoading(prev => ({ ...prev, [userId]: true }))
+    try {
+      const res = await fetch('/api/auth/approve-setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, approved }),
+      })
+      if (res.ok) {
+        toast(approved ? 'User approved' : 'User denied', approved ? 'success' : 'info')
+        fetchPendingApprovals()
+        fetchUsers()
+      } else {
+        toast('Failed to update approval', 'error')
+      }
+    } catch {
+      toast('Failed to update approval', 'error')
+    }
+    setApprovalLoading(prev => ({ ...prev, [userId]: false }))
+  }
+
+  type PendingPortalClient = { id: string; contact: string; email: string; company: string; created_at: string }
+  const [pendingPortalClients, setPendingPortalClients] = useState<PendingPortalClient[]>([])
+  const [portalApprovalLoading, setPortalApprovalLoading] = useState<Record<string, boolean>>({})
+
+  const fetchPendingPortalClients = () => {
+    return fetch('/api/portal-clients?pending_approval=true')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: PendingPortalClient[]) => {
+        if (Array.isArray(data)) {
+          setPendingPortalClients(data)
+        }
+      })
+      .catch(() => {})
+  }
+
+  useEffect(() => { fetchPendingPortalClients() }, [])
+
+  async function handlePortalApproval(clientId: string, approved: boolean) {
+    setPortalApprovalLoading(prev => ({ ...prev, [clientId]: true }))
+    try {
+      const res = await fetch('/api/portal-clients/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, approved }),
+      })
+      if (res.ok) {
+        toast(approved ? 'Portal client approved' : 'Portal client denied', approved ? 'success' : 'info')
+        fetchPendingPortalClients()
+      } else {
+        toast('Failed to update portal approval', 'error')
+      }
+    } catch {
+      toast('Failed to update portal approval', 'error')
+    }
+    setPortalApprovalLoading(prev => ({ ...prev, [clientId]: false }))
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [platformSettings, setPlatformSettings] = useState<Record<string, any> | null>(null)
@@ -909,6 +978,54 @@ export default function AdminPage() {
               </div>
             )}
 
+            {pendingApprovals.length > 0 && (
+              <div className="bg-white rounded-xl border border-amber-200 overflow-hidden mb-4">
+                <div className="flex items-center gap-2 px-5 py-3 border-b border-amber-100 bg-amber-50">
+                  <AlertTriangle size={14} className="text-amber-600" />
+                  <h3 className="text-sm font-bold text-amber-800">Pending Approvals ({pendingApprovals.length})</h3>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {pendingApprovals.map(pa => (
+                    <div key={pa.id} className="flex items-center justify-between px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: '#f59e0b' }}>
+                          {pa.initials}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{pa.name}</p>
+                          <p className="text-xs text-gray-400">{pa.email}</p>
+                        </div>
+                        <span className="status-badge bg-gray-100 text-gray-600 text-[11px]">{pa.role}</span>
+                        <span className="text-xs text-gray-400">{pa.unit}</span>
+                        {pa.verification_code && (
+                          <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-gray-100" style={{ color: '#015035' }}>
+                            {pa.verification_code}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleApproval(pa.id, true)}
+                          disabled={approvalLoading[pa.id]}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white rounded-lg disabled:opacity-50"
+                          style={{ background: '#015035' }}
+                        >
+                          <CheckCircle size={12} /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleApproval(pa.id, false)}
+                          disabled={approvalLoading[pa.id]}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <XCircle size={12} /> Deny
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                 <div className="flex items-center gap-3">
@@ -1481,22 +1598,14 @@ export default function AdminPage() {
         {tab === 'audit' && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-bold text-gray-800">Full Audit Log</h3>
+              <h3 className="text-sm font-bold text-gray-800">Recent Audit Log</h3>
               <div className="flex items-center gap-2">
-                <select className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 text-gray-600">
-                  <option>All Users</option>
-                  {users.map(u => <option key={u.id}>{u.name}</option>)}
-                </select>
-                <select className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 text-gray-600">
-                  <option>All Modules</option>
-                  <option>CRM</option>
-                  <option>Contracts</option>
-                  <option>Billing</option>
-                  <option>Admin</option>
-                  <option>Integrations</option>
-                </select>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-                  <Download size={12} /> Export
+                <button
+                  onClick={() => router.push('/admin/audit-log')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white rounded-lg hover:opacity-90 transition-opacity"
+                  style={{ background: '#015035' }}
+                >
+                  <ScrollText size={12} /> View Full Audit Log
                 </button>
               </div>
             </div>

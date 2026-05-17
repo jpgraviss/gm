@@ -64,7 +64,7 @@ export default function ClientPortalPage() {
       fetch(`/api/projects?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setProject(d[0] ?? null) }).catch(() => toast('Failed to load project data', 'error')),
       fetch(`/api/contracts?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setContract(d[0] ?? null) }).catch(() => toast('Failed to load contract data', 'error')),
       fetch(`/api/invoices?company=${q}`).then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setClientInvoices(d) }).catch(() => toast('Failed to load invoices', 'error')),
-      fetch('/api/portal-clients').then(r => r.ok ? r.json() : []).then((clients: { company: string; service: string }[]) => {
+      fetch(`/api/portal-clients?company=${q}`).then(r => r.ok ? r.json() : []).then((clients: { company: string; service: string }[]) => {
         if (!Array.isArray(clients)) return
         const match = clients.find(c => c.company === company)
         if (match) setAccountInfo({ service: match.service })

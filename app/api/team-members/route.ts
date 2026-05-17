@@ -18,6 +18,8 @@ function mapMember(row: any) {
     suspendedReason: row.suspended_reason ?? null,
     accessSchedule:  row.access_schedule ?? null,
     deletedAt:       row.deleted_at ?? null,
+    pendingApproval: row.pending_approval ?? false,
+    setupCompleted:  row.setup_completed ?? false,
   }
 }
 

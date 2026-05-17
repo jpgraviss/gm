@@ -24,6 +24,7 @@ function mapClient(row: any) {
 export async function GET(req: NextRequest) {
   const db = createServiceClient()
   const companyFilter = req.nextUrl.searchParams.get('company')
+  const pendingFilter = req.nextUrl.searchParams.get('pending_approval')
 
   let query = db
     .from('portal_clients')
@@ -32,6 +33,24 @@ export async function GET(req: NextRequest) {
 
   if (companyFilter) {
     query = query.eq('company', companyFilter)
+  }
+
+  if (pendingFilter === 'true') {
+    query = query.eq('pending_approval', true)
+    const { data, error } = await query
+    if (error) {
+      console.error('[portal-clients GET pending]', error)
+      return NextResponse.json({ error: error?.message || 'Failed to fetch pending portal clients' }, { status: 500 })
+    }
+    return NextResponse.json(
+      (data ?? []).map(row => ({
+        id: row.id,
+        contact: row.contact,
+        email: row.email,
+        company: row.company,
+        created_at: row.created_at,
+      }))
+    )
   }
 
   const { data, error } = await query

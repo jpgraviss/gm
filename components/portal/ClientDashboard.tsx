@@ -10,8 +10,23 @@ import {
   Globe, FolderKanban, FileText, MessageSquare, ChevronRight,
   Calendar, Download, Search, BarChart3, Megaphone, Mail,
   Palette, BookOpen, PenTool, HelpCircle, Ticket, Clock,
-  CheckCircle, TrendingUp, Plus, Phone, Flag,
+  CheckCircle, TrendingUp, Plus, Phone, Flag, Target,
+  GraduationCap, Lightbulb,
 } from 'lucide-react'
+
+interface ServiceConfig {
+  enabled: boolean
+  frequency: string
+  last_updated: string
+  strategy: string
+}
+
+interface ReportEntry {
+  title: string
+  date: string
+  file_url: string
+  type: 'manual' | 'auto'
+}
 
 interface PortalConfig {
   show_agreement?: boolean
@@ -22,6 +37,10 @@ interface PortalConfig {
   visible_services?: string[]
   custom_welcome_message?: string
   seo_strategy?: Record<string, unknown>
+  client_logo_url?: string
+  client_brand_color?: string
+  services_config?: Record<string, ServiceConfig>
+  reports?: ReportEntry[]
 }
 
 interface CompanyInfo {
@@ -98,11 +117,14 @@ interface DashboardData {
 
 const SERVICE_ICONS: Record<string, typeof Globe> = {
   'SEO': Search,
-  'PPC': BarChart3,
+  'PPC': Target,
   'Web Design': Globe,
   'Social Media': Megaphone,
-  'Content Marketing': PenTool,
   'Email Marketing': Mail,
+  'Content Creation': PenTool,
+  'Sales Training': GraduationCap,
+  'Marketing Strategy': Lightbulb,
+  'Content Marketing': PenTool,
   'Branding': Palette,
   'Consulting': BookOpen,
 }
@@ -112,10 +134,24 @@ const SERVICE_COLORS: Record<string, string> = {
   'PPC': '#2563eb',
   'Web Design': '#7c3aed',
   'Social Media': '#ec4899',
-  'Content Marketing': '#ea580c',
   'Email Marketing': '#0891b2',
+  'Content Creation': '#ea580c',
+  'Sales Training': '#be123c',
+  'Marketing Strategy': '#4f46e5',
+  'Content Marketing': '#ea580c',
   'Branding': '#be123c',
   'Consulting': '#4f46e5',
+}
+
+const SERVICE_LINKS: Record<string, string> = {
+  'SEO': '/portal/seo',
+  'PPC': '/portal/ppc',
+  'Web Design': '/portal/web-design',
+  'Social Media': '/portal/social-media',
+  'Email Marketing': '/portal/email-marketing',
+  'Content Creation': '/portal/content-creation',
+  'Sales Training': '/portal/sales-training',
+  'Marketing Strategy': '/portal/marketing-strategy',
 }
 
 function clientSinceDuration(dateStr: string | null): string {
@@ -181,7 +217,10 @@ export default function ClientDashboard() {
 
   const config = data.portalConfig
   const companyInfo = data.company
-  const services = config.visible_services ?? data.services ?? []
+  const servicesFromConfig = config.services_config
+    ? Object.entries(config.services_config).filter(([, v]) => v.enabled).map(([k]) => k)
+    : null
+  const services = servicesFromConfig ?? config.visible_services ?? data.services ?? []
   const activeContract = data.contracts.find(c => ['Active', 'Signed by Client', 'Fully Executed'].includes(c.status)) ?? data.contracts[0]
   const activeProjects = data.projects.filter(p => p.status !== 'Completed' && p.status !== 'Cancelled')
   const hasProjects = data.projects.length > 0
@@ -195,10 +234,14 @@ export default function ClientDashboard() {
     ? config.custom_welcome_message.replace('[name]', welcomeName)
     : `Welcome back, ${welcomeName}!`
 
+  const clientLogo = config.client_logo_url
+  const clientBrandColor = config.client_brand_color
+
   const navItems = [
     { href: '/portal', label: 'Dashboard', icon: Globe, visible: true },
     { href: '/portal/projects', label: 'Projects', icon: FolderKanban, visible: hasProjects },
     { href: '/portal/seo', label: 'SEO Strategy', icon: Search, visible: config.show_seo === true },
+    { href: '/portal/reports', label: 'Reports', icon: BarChart3, visible: config.show_reports !== false },
     { href: '/portal/billing', label: 'Invoices', icon: FileText, visible: config.show_invoices !== false },
     { href: '/portal/agreement', label: 'Agreement', icon: FileText, visible: config.show_agreement === true },
     { href: '/portal/tickets', label: 'Tickets', icon: Ticket, visible: true },
@@ -213,15 +256,28 @@ export default function ClientDashboard() {
   const agreementPct = totalDays > 0 ? Math.min(100, Math.max(0, ((totalDays - daysRemaining) / totalDays) * 100)) : 0
 
   return (
-    <div className="min-h-screen" style={{ background: '#f8fafc' }}>
+    <div className="min-h-screen" style={{ background: '#f8fafc', ...(clientBrandColor ? { '--portal-accent': clientBrandColor } as React.CSSProperties : {}) }}>
       {/* Header */}
       <div className="border-b border-gray-200 bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-5">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold text-white" style={{ background: '#015035' }}>
-                {companyInfo.name[0]}
-              </div>
+              {clientLogo ? (
+                <div className="flex items-center gap-3">
+                  <img src={clientLogo} alt={companyInfo.name} className="h-10 w-auto max-w-[120px] object-contain" />
+                  <span className="text-xs text-gray-300 font-medium select-none">&times;</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white" style={{ background: '#015035' }}>
+                      G
+                    </div>
+                    <span className="text-[11px] font-semibold text-gray-400">Graviss Marketing</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold text-white" style={{ background: '#015035' }}>
+                  {companyInfo.name[0]}
+                </div>
+              )}
               <div>
                 <h1 className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
                   {companyInfo.name}
@@ -255,7 +311,7 @@ export default function ClientDashboard() {
                     ? 'text-gray-900'
                     : 'border-transparent text-gray-400 hover:text-gray-600'
                 }`}
-                style={isActive ? { borderColor: '#015035' } : {}}
+                style={isActive ? { borderColor: clientBrandColor || '#015035' } : {}}
               >
                 <Icon size={13} /> {item.label}
               </Link>
@@ -334,7 +390,7 @@ export default function ClientDashboard() {
                 const Icon = SERVICE_ICONS[svc] ?? Globe
                 const color = SERVICE_COLORS[svc] ?? '#015035'
                 const project = activeProjects.find(p => p.serviceType === svc)
-                const serviceLink = svc === 'SEO' && config.show_seo ? '/portal/seo' : '/portal/projects'
+                const serviceLink = SERVICE_LINKS[svc] ?? '/portal/projects'
                 return (
                   <div key={svc} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 hover:border-gray-300 transition-colors">
                     <div className="flex items-center justify-between mb-3">

@@ -26,6 +26,38 @@ export async function POST(req: NextRequest) {
 
     const userPrompt = buildUserPrompt(type, context)
 
+    // Try Ollama first (free, self-hosted)
+    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
+    const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.1'
+    try {
+      const ollamaRes = await fetch(`${ollamaUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: ollamaModel,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPTS[type] },
+            { role: 'user', content: userPrompt },
+          ],
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(30000),
+      })
+      if (ollamaRes.ok) {
+        const ollamaData = await ollamaRes.json() as { message?: { content: string } }
+        if (ollamaData.message?.content) {
+          return NextResponse.json({ content: ollamaData.message.content, source: 'ollama' })
+        }
+      }
+    } catch {
+      // Ollama not available, fall through to Claude or template
+    }
+
+    // Fall back to Claude if Ollama unavailable
+    if (!apiKey) {
+      return NextResponse.json({ content: generateFallback(type, context), source: 'template' })
+    }
+
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {

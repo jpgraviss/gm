@@ -24,7 +24,7 @@ import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
   ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload, BarChart3,
-  Monitor, Loader2,
+  Monitor, Loader2, Sparkles, Wand2, Share2, Brain,
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 import { useEnrichment } from '@/lib/useEnrichment'
@@ -56,6 +56,14 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const [localActivities, setLocalActivities] = useState(
     () => (crmActivities ?? []).filter(a => a.companyId === company.id)
   )
+  const [socialAnalysis, setSocialAnalysis] = useState<{ platforms: { name: string; url: string; status: string; notes: string }[]; summary: string; engagementOpportunities: string[] } | null>(null)
+  const [socialLoading, setSocialLoading] = useState(false)
+  const [socialOpen, setSocialOpen] = useState(false)
+  const [companyRecs, setCompanyRecs] = useState<{ type: string; priority: string; title: string; description: string; suggestedAction: string }[]>([])
+  const [recsLoading, setRecsLoading] = useState(false)
+  const [recsOpen, setRecsOpen] = useState(false)
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiProposalContent, setAiProposalContent] = useState<string | null>(null)
 
   function persistTags(tags: string[]) {
     fetch(`/api/crm/companies/${company.id}`, {

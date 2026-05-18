@@ -354,6 +354,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
 
   // UI state
   const [generating, setGenerating] = useState(false)
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false)
 
   // ─── Calculations ─────────────────────────────────────────────────────────
 
@@ -1145,7 +1146,44 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Proposal Content</p>
               <div className="flex flex-col gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-gray-500 mb-1 block">Executive Summary</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-semibold text-gray-500">Executive Summary</label>
+                    <button
+                      type="button"
+                      disabled={aiSummaryLoading || !company}
+                      onClick={async () => {
+                        setAiSummaryLoading(true)
+                        try {
+                          const res = await fetch('/api/ai/generate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              type: 'proposal_summary',
+                              context: {
+                                company: company,
+                                services: [
+                                  ...SETUP_ADDONS.filter(a => addons[a.id]?.enabled).map(a => a.label),
+                                  websiteMgmt ? 'Website Management' : '',
+                                  seoPackage !== 'none' ? `SEO (${seoPackage})` : '',
+                                ].filter(Boolean).join(', ') || 'marketing services',
+                                value: `$${(setupTotal + monthlyTotal * contractMonths).toLocaleString()}`,
+                                additionalContext: clientGoals ? `Client goals: ${clientGoals}` : '',
+                              },
+                            }),
+                          })
+                          if (res.ok) {
+                            const data = await res.json()
+                            setExecSummary(data.content)
+                          }
+                        } catch { /* ignore */ }
+                        setAiSummaryLoading(false)
+                      }}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-purple-600 hover:text-purple-800 disabled:opacity-40"
+                    >
+                      {aiSummaryLoading ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                      AI Summary
+                    </button>
+                  </div>
                   <textarea value={execSummary} onChange={e => setExecSummary(e.target.value)} rows={3}
                     placeholder="Brief overview of the opportunity and approach (optional — auto-generated if left blank)"
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none" />

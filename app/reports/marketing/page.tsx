@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import { Wand2, Loader2, X } from 'lucide-react'
 
 type DateRange = '30D' | '90D' | '12M'
 
@@ -103,6 +104,9 @@ export default function MarketingAnalyticsPage() {
 
   const totalFormSubmissions = formStats.reduce((s, f) => s + f.submissions, 0)
 
+  const [aiNarrative, setAiNarrative] = useState<string | null>(null)
+  const [aiNarrativeLoading, setAiNarrativeLoading] = useState(false)
+
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
@@ -138,6 +142,50 @@ export default function MarketingAnalyticsPage() {
               <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: m.color }}>{m.label}</p>
             </div>
           ))}
+        </div>
+
+        <div className="metric-card mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-800 text-sm">AI Narrative</h3>
+            <button
+              disabled={aiNarrativeLoading}
+              onClick={async () => {
+                setAiNarrativeLoading(true)
+                try {
+                  const res = await fetch('/api/ai/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      type: 'report_summary',
+                      context: {
+                        company: 'all clients',
+                        period: dateRange === '30D' ? 'last 30 days' : dateRange === '90D' ? 'last 90 days' : 'last 12 months',
+                        metrics: `Emails sent: ${totals.sent}, Open rate: ${openRate}%, Click rate: ${clickRate}%, Bounce rate: ${bounceRate}%, Form submissions: ${totalFormSubmissions}`,
+                        highlights: `${sentBroadcasts.length} campaigns sent, ${forms.length} active forms`,
+                      },
+                    }),
+                  })
+                  if (res.ok) {
+                    const data = await res.json()
+                    setAiNarrative(data.content)
+                  }
+                } catch { /* ignore */ }
+                setAiNarrativeLoading(false)
+              }}
+              className="flex items-center gap-1 text-xs font-semibold text-purple-600 hover:text-purple-800 disabled:opacity-40"
+            >
+              {aiNarrativeLoading ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+              Generate Narrative
+            </button>
+          </div>
+          {aiNarrative ? (
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg relative">
+              <button onClick={() => setAiNarrative(null)} className="absolute top-2 right-2 text-purple-400 hover:text-purple-600"><X size={12} /></button>
+              <pre className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-sans">{aiNarrative}</pre>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">Click &quot;Generate Narrative&quot; to create an AI-written summary of your marketing performance.</p>
+          )}
         </div>
 
         <div className="metric-card mb-6">

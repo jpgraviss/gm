@@ -7,7 +7,7 @@ import { formatDate } from '@/lib/utils'
 import { PLATFORM_META, type SocialPlatform, type PostStatus } from '@/lib/social-media'
 import {
   Calendar, List, ChevronLeft, ChevronRight, X, Send, Clock, Check,
-  AlertTriangle, Trash2, Eye, Pencil, Plus, Loader2,
+  AlertTriangle, Trash2, Eye, Pencil, Plus, Loader2, Wand2,
 } from 'lucide-react'
 
 interface SocialPost {
@@ -314,6 +314,7 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
   const [hashtags, setHashtags] = useState((post?.hashtags ?? []).join(', '))
   const [linkUrl, setLinkUrl] = useState(post?.linkUrl ?? '')
 
+  const [aiLoading, setAiLoading] = useState(false)
   const isEditing = !!post
   const canSave = company.trim() && content.trim() && platforms.length > 0
 
@@ -356,7 +357,40 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Content</label>
-              <span className="text-[10px] text-gray-400">{content.length} chars</span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={aiLoading}
+                  onClick={async () => {
+                    setAiLoading(true)
+                    try {
+                      const res = await fetch('/api/ai/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          type: 'social_post',
+                          context: {
+                            topic: company || 'marketing',
+                            platform: platforms[0] || 'LinkedIn',
+                            url: linkUrl || '',
+                            additionalContext: content || '',
+                          },
+                        }),
+                      })
+                      if (res.ok) {
+                        const data = await res.json()
+                        setContent(data.content)
+                      }
+                    } catch { /* ignore */ }
+                    setAiLoading(false)
+                  }}
+                  className="flex items-center gap-1 text-[10px] font-semibold text-purple-600 hover:text-purple-800 disabled:opacity-40"
+                >
+                  {aiLoading ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                  AI Post
+                </button>
+                <span className="text-[10px] text-gray-400">{content.length} chars</span>
+              </div>
             </div>
             <textarea value={content} onChange={e => setContent(e.target.value)} rows={6} placeholder="What do you want to share?"
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none" />

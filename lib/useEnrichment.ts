@@ -9,6 +9,12 @@ export interface EnrichmentResult {
   email?: string
   address?: string
   socialLinks?: Record<string, string>
+  ai?: {
+    companySize?: string
+    keyServices?: string[]
+    targetMarket?: string
+    linkedInUrl?: string
+  }
 }
 
 export function useEnrichment() {

@@ -12,6 +12,7 @@ import {
   Mail, Send, Users, Trash2, Eye, Edit, X, Sparkles, CheckCircle,
   AlertCircle, Clock, BarChart3, ChevronLeft, Palette, Layout, FlaskConical,
   ChevronDown, ChevronRight, Calendar, Building2, Ban, MousePointerClick, ExternalLink,
+  Wand2, Loader2,
 } from 'lucide-react'
 
 interface AudienceFilter {
@@ -380,6 +381,7 @@ function BroadcastEditor({
 
   const [clickData, setClickData] = useState<Array<{ url: string; totalClicks: number; uniqueClickers: number }>>([])
   const [clicksLoading, setClicksLoading] = useState(false)
+  const [aiDraftLoading, setAiDraftLoading] = useState(false)
 
   const isSent = broadcast.status === 'sent' || broadcast.status === 'sending'
 
@@ -490,7 +492,46 @@ function BroadcastEditor({
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Subject line</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Subject line</label>
+                  {!isSent && (
+                    <button
+                      type="button"
+                      disabled={aiDraftLoading}
+                      onClick={async () => {
+                        setAiDraftLoading(true)
+                        try {
+                          const res = await fetch('/api/ai/generate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              type: 'email_draft',
+                              context: {
+                                recipient: 'subscribers',
+                                purpose: draft.name || 'marketing broadcast',
+                                tone: 'professional and engaging',
+                                additionalContext: draft.subject ? `Current subject: ${draft.subject}` : '',
+                              },
+                            }),
+                          })
+                          if (res.ok) {
+                            const data = await res.json()
+                            const text: string = data.content
+                            const subjectMatch = text.match(/^Subject:\s*(.+)/m)
+                            if (subjectMatch) {
+                              setDraft(d => ({ ...d, subject: subjectMatch[1].trim() }))
+                            }
+                          }
+                        } catch { /* ignore */ }
+                        setAiDraftLoading(false)
+                      }}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-purple-600 hover:text-purple-800 disabled:opacity-40"
+                    >
+                      {aiDraftLoading ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                      AI Draft
+                    </button>
+                  )}
+                </div>
                 <input
                   value={draft.subject}
                   onChange={e => setDraft(d => ({ ...d, subject: e.target.value }))}

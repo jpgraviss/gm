@@ -24,9 +24,10 @@ import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
   ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload, BarChart3,
-  Monitor,
+  Monitor, Loader2,
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
+import { useEnrichment } from '@/lib/useEnrichment'
 
 // ─── Status colors ────────────────────────────────────────────────────────────
 
@@ -585,8 +586,31 @@ function EditCompanyPanel({
     status: company.status as CompanyStatus,
   })
 
+  const { enriching, enrichedFields, enrich, markEnriched, clearEnriched } = useEnrichment()
+
   function set(field: keyof typeof form, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  async function handleWebsiteBlur() {
+    if (!form.website.trim() || enriching) return
+    const data = await enrich(form.website)
+    if (!data) return
+    const filled: string[] = []
+    setForm(prev => {
+      const next = { ...prev }
+      if (data.name && !prev.name) { next.name = data.name; filled.push('name') }
+      if (data.industry && !prev.industry) { next.industry = data.industry; filled.push('industry') }
+      if (data.description && !prev.description) { next.description = data.description; filled.push('description') }
+      if (data.phone && !prev.phone) { next.phone = data.phone; filled.push('phone') }
+      if (data.address && !prev.hq) { next.hq = data.address; filled.push('hq') }
+      return next
+    })
+    if (filled.length > 0) markEnriched(filled)
+  }
+
+  function ec(field: string) {
+    return enrichedFields.has(field) ? 'ring-2 ring-blue-300 bg-blue-50/30' : ''
   }
 
   function handleSave() {
@@ -623,16 +647,32 @@ function EditCompanyPanel({
 
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company Name</label>
-            <input value={form.name} onChange={e => set('name', e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Company Name
+              {enrichedFields.has('name') && (
+                <button type="button" onClick={() => { clearEnriched('name'); set('name', '') }}
+                  className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                  auto-filled &times;
+                </button>
+              )}
+            </label>
+            <input value={form.name} onChange={e => { set('name', e.target.value); clearEnriched('name') }}
+              className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${ec('name')}`} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Industry</label>
-              <input value={form.industry} onChange={e => set('industry', e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                Industry
+                {enrichedFields.has('industry') && (
+                  <button type="button" onClick={() => { clearEnriched('industry'); set('industry', '') }}
+                    className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                    auto-filled &times;
+                  </button>
+                )}
+              </label>
+              <input value={form.industry} onChange={e => { set('industry', e.target.value); clearEnriched('industry') }}
+                className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${ec('industry')}`} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</label>
@@ -645,9 +685,17 @@ function EditCompanyPanel({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">HQ / Location</label>
-              <input value={form.hq} onChange={e => set('hq', e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                HQ / Location
+                {enrichedFields.has('hq') && (
+                  <button type="button" onClick={() => { clearEnriched('hq'); set('hq', '') }}
+                    className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                    auto-filled &times;
+                  </button>
+                )}
+              </label>
+              <input value={form.hq} onChange={e => { set('hq', e.target.value); clearEnriched('hq') }}
+                className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${ec('hq')}`} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Employees</label>
@@ -658,9 +706,17 @@ function EditCompanyPanel({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Phone</label>
-              <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                Phone
+                {enrichedFields.has('phone') && (
+                  <button type="button" onClick={() => { clearEnriched('phone'); set('phone', '') }}
+                    className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                    auto-filled &times;
+                  </button>
+                )}
+              </label>
+              <input type="tel" value={form.phone} onChange={e => { set('phone', e.target.value); clearEnriched('phone') }}
+                className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${ec('phone')}`} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Annual Revenue</label>
@@ -672,8 +728,16 @@ function EditCompanyPanel({
 
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Website</label>
-            <input value={form.website} onChange={e => set('website', e.target.value)} placeholder="gravissmarketing.com"
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            <div className="relative">
+              <input value={form.website} onChange={e => set('website', e.target.value)} placeholder="gravissmarketing.com"
+                onBlur={handleWebsiteBlur}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              {enriching && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-blue-600">
+                  <Loader2 size={12} className="animate-spin" /> Fetching info...
+                </span>
+              )}
+            </div>
           </div>
 
           <div>
@@ -686,10 +750,18 @@ function EditCompanyPanel({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
-            <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={4}
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Description
+              {enrichedFields.has('description') && (
+                <button type="button" onClick={() => { clearEnriched('description'); set('description', '') }}
+                  className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                  auto-filled &times;
+                </button>
+              )}
+            </label>
+            <textarea value={form.description} onChange={e => { set('description', e.target.value); clearEnriched('description') }} rows={4}
               placeholder="About this company..."
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none" />
+              className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none ${ec('description')}`} />
           </div>
         </div>
 

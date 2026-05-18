@@ -318,12 +318,20 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
             <FieldLabel>Contact Info</FieldLabel>
             <div className="flex flex-col gap-2">
               <div className="flex gap-2">
-                <Input
-                  type="url"
-                  placeholder="Website URL"
-                  value={form.website}
-                  onChange={e => set('website', e.target.value)}
-                />
+                <div className="relative flex-1">
+                  <Input
+                    type="url"
+                    placeholder="Website URL"
+                    value={form.website}
+                    onChange={e => set('website', e.target.value)}
+                    onBlur={handleWebsiteBlur}
+                  />
+                  {enriching && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-blue-600">
+                      <Loader2 size={12} className="animate-spin" /> Fetching info...
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={analyzeWebsite}
@@ -336,12 +344,16 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
                 </button>
               </div>
               {aiError && <p className="text-xs text-red-500 mt-1">{aiError}</p>}
-              <Input
-                type="tel"
-                placeholder="Main phone number"
-                value={form.phone}
-                onChange={e => set('phone', e.target.value)}
-              />
+              <div>
+                <Input
+                  type="tel"
+                  placeholder="Main phone number"
+                  value={form.phone}
+                  onChange={e => { set('phone', e.target.value); clearEnriched('phone') }}
+                  className={enrichedClass('phone')}
+                />
+                <EnrichBadge field="phone" />
+              </div>
             </div>
           </div>
 
@@ -375,13 +387,13 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
 
           {/* Description */}
           <div>
-            <FieldLabel>Description / Notes</FieldLabel>
+            <FieldLabel>Description / Notes <EnrichBadge field="description" /></FieldLabel>
             <textarea
               placeholder="What does this company do? Any context..."
               rows={3}
               value={form.description}
-              onChange={e => set('description', e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
+              onChange={e => { set('description', e.target.value); clearEnriched('description') }}
+              className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400 ${enrichedClass('description')}`}
             />
           </div>
 

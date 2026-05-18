@@ -50,10 +50,7 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
     fetch(`/api/chatbots/${id}`).then(r => r.ok ? r.json() : null).then(d => { if (d) setChatbot(d) }).catch(() => {})
   }, [id])
 
-  useEffect(() => { fetchConversations() }, [id, filter, search]) // eslint-disable-line react-hooks/exhaustive-deps
-
   async function fetchConversations() {
-    setLoading(true)
     try {
       const params = new URLSearchParams()
       if (filter !== 'all') params.set('status', filter)
@@ -63,6 +60,19 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
     } catch { /* ignore */ }
     setLoading(false)
   }
+
+  useEffect(() => {
+    let cancelled = false
+    const params = new URLSearchParams()
+    if (filter !== 'all') params.set('status', filter)
+    if (search) params.set('search', search)
+    fetch(`/api/chatbots/${id}/conversations?${params}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (!cancelled) setConversations(data) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [id, filter, search])
 
   async function toggleFlag(convo: Conversation) {
     try {

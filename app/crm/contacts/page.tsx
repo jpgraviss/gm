@@ -392,7 +392,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   const [engagementPoints, setEngagementPoints] = useState({ emailOpened: 5, linkClicked: 10, proposalViewed: 15, meetingHeld: 20 })
   const [engagementThresholds, setEngagementThresholds] = useState({ cold: 20, hot: 60 })
   const [aiScore, setAiScore] = useState<{ score: number; explanation: string } | null>(null)
-  const [aiScoreLoading, setAiScoreLoading] = useState(false)
+  const [aiScoreLoading, setAiScoreLoading] = useState(true)
   const [showAiExplanation, setShowAiExplanation] = useState(false)
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiDraftContent, setAiDraftContent] = useState<string | null>(null)
@@ -407,7 +407,6 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   }, [])
 
   useEffect(() => {
-    setAiScoreLoading(true)
     fetch(`/api/crm/contacts/${contact.id}/ai-score`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {

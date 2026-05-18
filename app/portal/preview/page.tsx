@@ -20,7 +20,7 @@ export default function PortalPreviewPage() {
       router.replace('/admin')
       return
     }
-    setAuthorized(true)
+    requestAnimationFrame(() => setAuthorized(true))
   }, [user, authLoading, router])
 
   useEffect(() => {

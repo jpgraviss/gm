@@ -58,16 +58,19 @@ export default function ChatbotsPage() {
   const [copied, setCopied] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => { fetchBots() }, [])
-
   async function fetchBots() {
-    setLoading(true)
     try {
       const res = await fetch('/api/chatbots')
       if (res.ok) setBots(await res.json())
     } catch { /* ignore */ }
     setLoading(false)
   }
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/chatbots').then(r => r.ok ? r.json() : []).then(data => { if (!cancelled) setBots(data) }).catch(() => {}).finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   function openCreate() {
     setEditingBot(null)

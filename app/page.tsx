@@ -1077,7 +1077,7 @@ function MarketingView() {
 
 function AiInsightsWidget() {
   const [recs, setRecs] = useState<{ type: string; priority: string; title: string; description: string; suggestedAction: string; companyName?: string }[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [loaded, setLoaded] = useState(false)
 
   function loadRecs() {
@@ -1090,7 +1090,13 @@ function AiInsightsWidget() {
       .finally(() => { setLoading(false); setLoaded(true) })
   }
 
-  useEffect(() => { loadRecs() }, [])
+  useEffect(() => {
+    fetch('/api/ai/recommendations?type=all')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setRecs(data) })
+      .catch(() => {})
+      .finally(() => { setLoading(false); setLoaded(true) })
+  }, [])
 
   const priorityStyles: Record<string, string> = {
     high: 'bg-red-50 text-red-600',

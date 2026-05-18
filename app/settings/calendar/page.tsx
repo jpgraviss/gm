@@ -676,6 +676,49 @@ export default function CalendarSettingsPage() {
           </button>
         </div>
       </div>
+
+      {showAddSub && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-900">Add Calendar Subscription</h3>
+              <button onClick={() => { setShowAddSub(false); setSubUrl(''); setSubName('') }} className="p-1 hover:bg-gray-100 rounded">
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">Paste an iCal subscription URL to import all events.</p>
+            <input
+              value={subName}
+              onChange={e => setSubName(e.target.value)}
+              placeholder="Calendar name (optional, auto-detected from ICS)"
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-3"
+            />
+            <input
+              value={subUrl}
+              onChange={e => setSubUrl(e.target.value)}
+              placeholder="https://calendar.google.com/calendar/ical/..."
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-4"
+              onKeyDown={e => e.key === 'Enter' && handleAddSubscription()}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleAddSubscription}
+                disabled={!subUrl.trim() || addingSub}
+                className="flex-1 flex items-center justify-center gap-2 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
+                style={{ background: '#015035' }}
+              >
+                {addingSub ? 'Importing...' : 'Import'}
+              </button>
+              <button
+                onClick={() => { setShowAddSub(false); setSubUrl(''); setSubName('') }}
+                className="px-4 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

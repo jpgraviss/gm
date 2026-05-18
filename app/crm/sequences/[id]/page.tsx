@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/Toast'
 import Header from '@/components/layout/Header'
-import CRMSubNav from '@/components/crm/CRMSubNav'
 import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronLeft, Edit2, Copy, TrendingUp, Search, MoreHorizontal,
@@ -478,9 +477,7 @@ export default function SequenceDetailPage() {
   return (
     <>
       <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" />
-      <div className="p-4 md:p-6 flex-1 flex flex-col">
-        <CRMSubNav />
-
+      <div className="p-4 md:p-6 flex-1 flex flex-col bg-[#f8faf9]">
         {/* Back + Title */}
         <div className="flex items-center gap-3 mb-1">
           <button onClick={() => router.push('/crm/sequences')} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">

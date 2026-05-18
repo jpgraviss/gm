@@ -7,7 +7,6 @@ import Header from '@/components/layout/Header'
 import { fetchCrmActivities, fetchCrmCompanies, fetchCrmContacts, fetchContracts } from '@/lib/supabase'
 import { formatCurrency, serviceTypeColors, contractStatusColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
@@ -991,9 +990,8 @@ export default function PipelinePage() {
         action={{ label: 'New Deal', onClick: () => setCreatingDeal(true) }}
       />
       <NewClientModal open={showNewClientModal} onClose={() => setShowNewClientModal(false)} />
-      <div className="p-4 md:p-6 flex-1 flex flex-col">
-        <div className="flex items-center justify-between mb-0">
-          <CRMSubNav />
+      <div className="p-4 md:p-6 flex-1 flex flex-col bg-[#f8faf9]">
+        <div className="flex items-center justify-end mb-0">
           <button
             onClick={() => setShowNewClientModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-[#015035] border border-[#015035]/20 hover:bg-[#015035]/5 transition-colors"

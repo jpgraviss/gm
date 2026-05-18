@@ -197,6 +197,13 @@ function applyNavConfig(config: NavConfig): NavSection[] {
 
 const COLLAPSIBLE_SECTIONS = new Set(['Sales', 'Operations', 'Marketing', 'Finance'])
 
+const sectionIcons: Record<string, React.ReactNode> = {
+  Sales: <TrendingUp size={16} />,
+  Operations: <FolderKanban size={16} />,
+  Marketing: <Megaphone size={16} />,
+  Finance: <CreditCard size={16} />,
+}
+
 export default function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
@@ -299,7 +306,14 @@ export default function Sidebar() {
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors
                     ${hasActiveChild ? 'bg-white/[0.08] text-white' : 'text-white/60 hover:text-white/80 hover:bg-white/[0.04]'}`}
                 >
-                  <ChevronDown size={12} className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+                  <span className="flex-shrink-0 lg:hidden lg:group-hover:block">
+                    <ChevronDown size={12} className={`transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+                  </span>
+                  {sectionIcons[group.section] && (
+                    <span className="flex-shrink-0 hidden lg:block lg:group-hover:hidden">
+                      {sectionIcons[group.section]}
+                    </span>
+                  )}
                   <span className="text-[11px] font-semibold tracking-widest uppercase whitespace-nowrap overflow-hidden
                     lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
                     {group.section}

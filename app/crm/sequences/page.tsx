@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/Toast'
 import Header from '@/components/layout/Header'
-import CRMSubNav from '@/components/crm/CRMSubNav'
 import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronRight, Edit2, Copy, TrendingUp, Search, MoreHorizontal,
@@ -357,9 +356,7 @@ export default function SequencesPage() {
         subtitle="Companies · Contacts · Deals · Activity"
         action={{ label: 'Create Sequence', onClick: () => setCreatingSeq(true) }}
       />
-      <div className="p-4 md:p-6 flex-1 flex flex-col">
-        <CRMSubNav />
-
+      <div className="p-4 md:p-6 flex-1 flex flex-col bg-[#f8faf9]">
         {/* Page Title */}
         <div className="flex items-center justify-between mb-5">
           <div>

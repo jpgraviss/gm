@@ -10,7 +10,6 @@ import {
   projectStatusColors, invoiceStatusColors,
 } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewCompanyPanel, { type NewCompanyFormData } from '@/components/crm/NewCompanyPanel'
@@ -1066,9 +1065,7 @@ export default function CompaniesPage() {
   return (
     <>
       <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" action={{ label: 'New Company', onClick: () => setCreatingCompany(true) }} />
-      <div className="p-4 md:p-6 flex-1 flex flex-col">
-        <CRMSubNav />
-
+      <div className="p-4 md:p-6 flex-1 flex flex-col bg-[#f8faf9]">
         {/* Filters */}
         <div className="flex items-center gap-3 mb-4 flex-wrap">
           <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 flex-1 max-w-sm">

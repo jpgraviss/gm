@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { X, ChevronLeft } from 'lucide-react'
+import { X, ChevronLeft, Loader2 } from 'lucide-react'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import CompanySelect from '@/components/ui/CompanySelect'
+import { useEnrichment } from '@/lib/useEnrichment'
 
 export interface NewContactFormData {
   firstName: string
@@ -23,11 +24,11 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   return <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{children}</label>
 }
 
-function Input({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+function Input({ className: extra, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+      className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 ${extra ?? ''}`}
     />
   )
 }
@@ -50,6 +51,7 @@ interface Props {
 
 export default function NewContactPanel({ onSave, onClose }: Props) {
   const REPS = useTeamMembers()
+  const { enriching, enrichedFields, enrich, markEnriched, clearEnriched } = useEnrichment()
 
   const [form, setForm] = useState<NewContactFormData>({
     firstName: '',
@@ -67,6 +69,45 @@ export default function NewContactPanel({ onSave, onClose }: Props) {
 
   function set(field: keyof NewContactFormData, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  async function handleEmailBlur() {
+    const email = form.email.trim()
+    if (!email || !email.includes('@')) return
+    const domain = email.split('@')[1]
+    if (!domain || ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com'].includes(domain)) return
+    if (enriching) return
+    const data = await enrich(domain)
+    if (!data) return
+    const filled: string[] = []
+    setForm(prev => {
+      const next = { ...prev }
+      if (data.name && !prev.companyName) { next.companyName = data.name; filled.push('companyName') }
+      if (data.phone && !prev.phone) { next.phone = data.phone; filled.push('phone') }
+      if (data.socialLinks?.linkedin && !prev.linkedIn) { next.linkedIn = data.socialLinks.linkedin; filled.push('linkedIn') }
+      if (!prev.website) { next.website = `https://${domain}`; filled.push('website') }
+      return next
+    })
+    if (filled.length > 0) markEnriched(filled)
+  }
+
+  async function handleWebsiteBlur() {
+    if (!form.website.trim() || enriching) return
+    const data = await enrich(form.website)
+    if (!data) return
+    const filled: string[] = []
+    setForm(prev => {
+      const next = { ...prev }
+      if (data.name && !prev.companyName) { next.companyName = data.name; filled.push('companyName') }
+      if (data.phone && !prev.phone) { next.phone = data.phone; filled.push('phone') }
+      if (data.socialLinks?.linkedin && !prev.linkedIn) { next.linkedIn = data.socialLinks.linkedin; filled.push('linkedIn') }
+      return next
+    })
+    if (filled.length > 0) markEnriched(filled)
+  }
+
+  function ec(field: string) {
+    return enrichedFields.has(field) ? 'ring-2 ring-blue-300 bg-blue-50/30' : ''
   }
 
   const canSave = form.firstName.trim() && form.lastName.trim() && form.email.trim() && form.companyName.trim()
@@ -123,11 +164,20 @@ export default function NewContactPanel({ onSave, onClose }: Props) {
 
           {/* Company */}
           <div>
-            <FieldLabel>Company</FieldLabel>
+            <FieldLabel>
+              Company
+              {enrichedFields.has('companyName') && (
+                <button type="button" onClick={() => { clearEnriched('companyName'); set('companyName', '') }}
+                  className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200 normal-case tracking-normal font-normal">
+                  auto-filled &times;
+                </button>
+              )}
+            </FieldLabel>
             <CompanySelect
               value={form.companyName}
-              onChange={(name) => set('companyName', name)}
+              onChange={(name) => { set('companyName', name); clearEnriched('companyName') }}
               placeholder="Select a company..."
+              className={ec('companyName')}
             />
           </div>
 
@@ -135,19 +185,36 @@ export default function NewContactPanel({ onSave, onClose }: Props) {
           <div>
             <FieldLabel>Contact Info</FieldLabel>
             <div className="flex flex-col gap-2">
-              <Input
-                type="email"
-                placeholder="Email address"
-                value={form.email}
-                onChange={e => set('email', e.target.value)}
-              />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="relative">
                 <Input
-                  type="tel"
-                  placeholder="Direct phone"
-                  value={form.phone}
-                  onChange={e => set('phone', e.target.value)}
+                  type="email"
+                  placeholder="Email address"
+                  value={form.email}
+                  onChange={e => set('email', e.target.value)}
+                  onBlur={handleEmailBlur}
                 />
+                {enriching && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-blue-600">
+                    <Loader2 size={12} className="animate-spin" /> Fetching info...
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Input
+                    type="tel"
+                    placeholder="Direct phone"
+                    value={form.phone}
+                    onChange={e => { set('phone', e.target.value); clearEnriched('phone') }}
+                    className={ec('phone')}
+                  />
+                  {enrichedFields.has('phone') && (
+                    <button type="button" onClick={() => { clearEnriched('phone'); set('phone', '') }}
+                      className="mt-0.5 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                      auto-filled &times;
+                    </button>
+                  )}
+                </div>
                 <Input
                   type="tel"
                   placeholder="Mobile"
@@ -162,18 +229,37 @@ export default function NewContactPanel({ onSave, onClose }: Props) {
           <div>
             <FieldLabel>Online Presence</FieldLabel>
             <div className="flex flex-col gap-2">
-              <Input
-                type="url"
-                placeholder="Website URL"
-                value={form.website}
-                onChange={e => set('website', e.target.value)}
-              />
-              <Input
-                type="url"
-                placeholder="LinkedIn URL"
-                value={form.linkedIn}
-                onChange={e => set('linkedIn', e.target.value)}
-              />
+              <div className="relative">
+                <Input
+                  type="url"
+                  placeholder="Website URL"
+                  value={form.website}
+                  onChange={e => { set('website', e.target.value); clearEnriched('website') }}
+                  onBlur={handleWebsiteBlur}
+                  className={ec('website')}
+                />
+                {enrichedFields.has('website') && (
+                  <button type="button" onClick={() => { clearEnriched('website'); set('website', '') }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                    auto-filled &times;
+                  </button>
+                )}
+              </div>
+              <div>
+                <Input
+                  type="url"
+                  placeholder="LinkedIn URL"
+                  value={form.linkedIn}
+                  onChange={e => { set('linkedIn', e.target.value); clearEnriched('linkedIn') }}
+                  className={ec('linkedIn')}
+                />
+                {enrichedFields.has('linkedIn') && (
+                  <button type="button" onClick={() => { clearEnriched('linkedIn'); set('linkedIn', '') }}
+                    className="mt-0.5 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                    auto-filled &times;
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

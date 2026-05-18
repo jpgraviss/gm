@@ -10,7 +10,7 @@ import {
   FileText, ScrollText, AlertCircle, Zap,
   Wrench, MessageSquare, CheckSquare, Clock,
   ChevronDown, Mail, Send, Eye, BarChart3, Target,
-  Briefcase, Users,
+  Briefcase, Users, Brain, Sparkles,
 } from 'lucide-react'
 import { formatCurrency, contractStatusColors, invoiceStatusColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
@@ -1075,6 +1075,76 @@ function MarketingView() {
 
 // ─── Executive View ─────────────────────────────────────────────────────────
 
+function AiInsightsWidget() {
+  const [recs, setRecs] = useState<{ type: string; priority: string; title: string; description: string; suggestedAction: string; companyName?: string }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loaded, setLoaded] = useState(false)
+
+  function loadRecs() {
+    if (loaded) return
+    setLoading(true)
+    fetch('/api/ai/recommendations?type=all')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setRecs(data) })
+      .catch(() => {})
+      .finally(() => { setLoading(false); setLoaded(true) })
+  }
+
+  useEffect(() => {
+    fetch('/api/ai/recommendations?type=all')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setRecs(data) })
+      .catch(() => {})
+      .finally(() => { setLoading(false); setLoaded(true) })
+  }, [])
+
+  const priorityStyles: Record<string, string> = {
+    high: 'bg-red-50 text-red-600',
+    medium: 'bg-yellow-50 text-yellow-700',
+    low: 'bg-gray-50 text-gray-500',
+  }
+
+  return (
+    <div className="metric-card">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles size={14} className="text-purple-600" />
+          <h3 className="font-bold text-gray-800 text-sm">AI Insights</h3>
+        </div>
+        <button
+          onClick={() => { setLoaded(false); loadRecs() }}
+          className="text-[10px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1"
+        >
+          <RefreshCw size={10} className={loading ? 'animate-spin' : ''} /> Refresh
+        </button>
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 justify-center">
+          <div className="w-4 h-4 rounded-full border-2 border-purple-200 border-t-purple-600 animate-spin" />
+          <span className="text-xs text-gray-400">Analyzing your CRM...</span>
+        </div>
+      ) : recs.length === 0 ? (
+        <p className="text-xs text-gray-400 py-4 text-center">No recommendations right now</p>
+      ) : (
+        <div className="flex flex-col divide-y divide-gray-50">
+          {recs.slice(0, 3).map((rec, i) => (
+            <div key={i} className="py-2.5 first:pt-0 last:pb-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${priorityStyles[rec.priority] ?? priorityStyles.low}`}>
+                  {rec.priority}
+                </span>
+                {rec.companyName && <span className="text-[10px] text-gray-400">{rec.companyName}</span>}
+              </div>
+              <p className="text-[12px] font-semibold text-gray-800">{rec.title}</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">{rec.suggestedAction}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ExecutiveView({ data, user }: { data: DashboardData; user: { name: string; isAdmin?: boolean } | null }) {
   const m = data.metrics
   const pendingContracts = data.recentContracts.filter(c =>
@@ -1212,6 +1282,8 @@ function ExecutiveView({ data, user }: { data: DashboardData; user: { name: stri
               ))}
             </div>
           </div>
+
+          <AiInsightsWidget />
 
           <div className="metric-card">
             <div className="flex items-center gap-2 mb-3">

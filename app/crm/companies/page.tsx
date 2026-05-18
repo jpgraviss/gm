@@ -24,8 +24,10 @@ import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
   ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload, BarChart3,
+  Monitor, Loader2, Sparkles, Wand2, Share2, Brain,
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
+import { useEnrichment } from '@/lib/useEnrichment'
 
 // ─── Status colors ────────────────────────────────────────────────────────────
 
@@ -54,6 +56,14 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const [localActivities, setLocalActivities] = useState(
     () => (crmActivities ?? []).filter(a => a.companyId === company.id)
   )
+  const [socialAnalysis, setSocialAnalysis] = useState<{ platforms: { name: string; url: string; status: string; notes: string }[]; summary: string; engagementOpportunities: string[] } | null>(null)
+  const [socialLoading, setSocialLoading] = useState(false)
+  const [socialOpen, setSocialOpen] = useState(false)
+  const [companyRecs, setCompanyRecs] = useState<{ type: string; priority: string; title: string; description: string; suggestedAction: string }[]>([])
+  const [recsLoading, setRecsLoading] = useState(false)
+  const [recsOpen, setRecsOpen] = useState(false)
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiProposalContent, setAiProposalContent] = useState<string | null>(null)
 
   function persistTags(tags: string[]) {
     fetch(`/api/crm/companies/${company.id}`, {
@@ -177,6 +187,15 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
+              <a
+                href={`/portal/preview?company=${encodeURIComponent(company.name)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0"
+                title="Preview client portal"
+              >
+                <Monitor size={15} className="text-white/60" />
+              </a>
               {onOpenIntegrations && (
                 <button onClick={onOpenIntegrations} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0" title="Client integrations">
                   <BarChart3 size={15} className="text-white/60" />
@@ -301,6 +320,180 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                   company.description ? `Description: ${company.description}` : '',
                 ].filter(Boolean).join('\n')}
               />
+
+              {/* AI Recommendations */}
+              <div className="border border-purple-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => {
+                    if (!recsOpen && companyRecs.length === 0) {
+                      setRecsOpen(true)
+                      setRecsLoading(true)
+                      fetch(`/api/ai/recommendations?companyId=${company.id}`)
+                        .then(r => r.ok ? r.json() : [])
+                        .then(data => { if (Array.isArray(data)) setCompanyRecs(data) })
+                        .catch(() => {})
+                        .finally(() => setRecsLoading(false))
+                    } else {
+                      setRecsOpen(v => !v)
+                    }
+                  }}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-purple-50 hover:bg-purple-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Brain size={14} className="text-purple-600" />
+                    <span className="text-sm font-semibold text-purple-800">AI Recommendations</span>
+                  </div>
+                  <ChevronRight size={14} className={`text-purple-600 transition-transform ${recsOpen ? 'rotate-90' : ''}`} />
+                </button>
+                {recsOpen && (
+                  <div className="px-4 py-3 bg-white">
+                    {recsLoading ? (
+                      <div className="flex items-center gap-2 py-3">
+                        <div className="w-4 h-4 rounded-full border-2 border-purple-200 border-t-purple-600 animate-spin" />
+                        <span className="text-xs text-gray-400">Analyzing...</span>
+                      </div>
+                    ) : companyRecs.length === 0 ? (
+                      <p className="text-xs text-gray-400 py-2">No recommendations at this time.</p>
+                    ) : (
+                      <div className="flex flex-col gap-2.5">
+                        {companyRecs.map((rec, i) => (
+                          <div key={i} className="p-3 border border-gray-100 rounded-lg">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                                rec.priority === 'high' ? 'bg-red-50 text-red-600' :
+                                rec.priority === 'medium' ? 'bg-yellow-50 text-yellow-700' :
+                                'bg-gray-50 text-gray-500'
+                              }`}>{rec.priority}</span>
+                              <span className="text-[10px] font-medium text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">{rec.type.replace(/_/g, ' ')}</span>
+                            </div>
+                            <p className="text-sm font-semibold text-gray-900">{rec.title}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{rec.description}</p>
+                            <p className="text-xs text-purple-700 mt-1.5 font-medium">{rec.suggestedAction}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Social Insights */}
+              <div className="border border-blue-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => {
+                    if (!socialOpen && !socialAnalysis) {
+                      setSocialOpen(true)
+                      setSocialLoading(true)
+                      fetch(`/api/crm/companies/${company.id}/social-analysis`)
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => { if (data) setSocialAnalysis(data) })
+                        .catch(() => {})
+                        .finally(() => setSocialLoading(false))
+                    } else {
+                      setSocialOpen(v => !v)
+                    }
+                  }}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Share2 size={14} className="text-blue-600" />
+                    <span className="text-sm font-semibold text-blue-800">Social Insights</span>
+                  </div>
+                  <ChevronRight size={14} className={`text-blue-600 transition-transform ${socialOpen ? 'rotate-90' : ''}`} />
+                </button>
+                {socialOpen && (
+                  <div className="px-4 py-3 bg-white">
+                    {socialLoading ? (
+                      <div className="flex items-center gap-2 py-3">
+                        <div className="w-4 h-4 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin" />
+                        <span className="text-xs text-gray-400">Analyzing social presence...</span>
+                      </div>
+                    ) : socialAnalysis ? (
+                      <div className="flex flex-col gap-3">
+                        <div className="flex flex-wrap gap-2">
+                          {socialAnalysis.platforms.map(p => (
+                            <div key={p.name} className="flex items-center gap-1.5">
+                              <div className={`w-2 h-2 rounded-full ${p.status === 'active' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                              {p.url ? (
+                                <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-blue-600 hover:underline">{p.name}</a>
+                              ) : (
+                                <span className="text-xs text-gray-400">{p.name}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-sm text-gray-700 leading-relaxed">{socialAnalysis.summary}</p>
+                        {socialAnalysis.engagementOpportunities.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide mb-1.5">Engagement Opportunities</p>
+                            <ul className="flex flex-col gap-1">
+                              {socialAnalysis.engagementOpportunities.map((opp, i) => (
+                                <li key={i} className="flex gap-2 text-xs text-gray-600">
+                                  <span className="text-blue-500 flex-shrink-0">-</span>
+                                  {opp}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 py-2">Unable to analyze social presence.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* AI Proposal Summary button */}
+              {openDeals.length > 0 && (
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <button
+                    onClick={async () => {
+                      setAiGenerating(true)
+                      setAiProposalContent(null)
+                      try {
+                        const res = await fetch('/api/ai/generate', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            type: 'proposal_summary',
+                            context: {
+                              company: company.name,
+                              services: openDeals.map(d => d.serviceType).join(', '),
+                              value: `$${openDeals.reduce((s, d) => s + d.value, 0).toLocaleString()}`,
+                              additionalContext: `Industry: ${company.industry}, Size: ${company.size}`,
+                            },
+                          }),
+                        })
+                        if (res.ok) {
+                          const data = await res.json()
+                          setAiProposalContent(data.content)
+                        }
+                      } catch { /* ignore */ }
+                      setAiGenerating(false)
+                    }}
+                    disabled={aiGenerating}
+                    className="flex items-center gap-2 text-sm font-semibold text-purple-700 hover:text-purple-900 disabled:opacity-50"
+                  >
+                    {aiGenerating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+                    AI Proposal Summary
+                  </button>
+                  {aiProposalContent && (
+                    <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                      <pre className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-sans">{aiProposalContent}</pre>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(aiProposalContent)
+                          toast('Copied to clipboard', 'success')
+                        }}
+                        className="mt-2 text-xs font-semibold text-purple-700 hover:text-purple-900"
+                      >
+                        Copy to clipboard
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Active project */}
               {companyProject && (
@@ -575,8 +768,31 @@ function EditCompanyPanel({
     status: company.status as CompanyStatus,
   })
 
+  const { enriching, enrichedFields, enrich, markEnriched, clearEnriched } = useEnrichment()
+
   function set(field: keyof typeof form, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  async function handleWebsiteBlur() {
+    if (!form.website.trim() || enriching) return
+    const data = await enrich(form.website)
+    if (!data) return
+    const filled: string[] = []
+    setForm(prev => {
+      const next = { ...prev }
+      if (data.name && !prev.name) { next.name = data.name; filled.push('name') }
+      if (data.industry && !prev.industry) { next.industry = data.industry; filled.push('industry') }
+      if (data.description && !prev.description) { next.description = data.description; filled.push('description') }
+      if (data.phone && !prev.phone) { next.phone = data.phone; filled.push('phone') }
+      if (data.address && !prev.hq) { next.hq = data.address; filled.push('hq') }
+      return next
+    })
+    if (filled.length > 0) markEnriched(filled)
+  }
+
+  function ec(field: string) {
+    return enrichedFields.has(field) ? 'ring-2 ring-blue-300 bg-blue-50/30' : ''
   }
 
   function handleSave() {
@@ -613,16 +829,32 @@ function EditCompanyPanel({
 
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company Name</label>
-            <input value={form.name} onChange={e => set('name', e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Company Name
+              {enrichedFields.has('name') && (
+                <button type="button" onClick={() => { clearEnriched('name'); set('name', '') }}
+                  className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                  auto-filled &times;
+                </button>
+              )}
+            </label>
+            <input value={form.name} onChange={e => { set('name', e.target.value); clearEnriched('name') }}
+              className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${ec('name')}`} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Industry</label>
-              <input value={form.industry} onChange={e => set('industry', e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                Industry
+                {enrichedFields.has('industry') && (
+                  <button type="button" onClick={() => { clearEnriched('industry'); set('industry', '') }}
+                    className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                    auto-filled &times;
+                  </button>
+                )}
+              </label>
+              <input value={form.industry} onChange={e => { set('industry', e.target.value); clearEnriched('industry') }}
+                className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${ec('industry')}`} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</label>
@@ -635,9 +867,17 @@ function EditCompanyPanel({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">HQ / Location</label>
-              <input value={form.hq} onChange={e => set('hq', e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                HQ / Location
+                {enrichedFields.has('hq') && (
+                  <button type="button" onClick={() => { clearEnriched('hq'); set('hq', '') }}
+                    className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                    auto-filled &times;
+                  </button>
+                )}
+              </label>
+              <input value={form.hq} onChange={e => { set('hq', e.target.value); clearEnriched('hq') }}
+                className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${ec('hq')}`} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Employees</label>
@@ -648,9 +888,17 @@ function EditCompanyPanel({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Phone</label>
-              <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                Phone
+                {enrichedFields.has('phone') && (
+                  <button type="button" onClick={() => { clearEnriched('phone'); set('phone', '') }}
+                    className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                    auto-filled &times;
+                  </button>
+                )}
+              </label>
+              <input type="tel" value={form.phone} onChange={e => { set('phone', e.target.value); clearEnriched('phone') }}
+                className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${ec('phone')}`} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Annual Revenue</label>
@@ -662,8 +910,16 @@ function EditCompanyPanel({
 
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Website</label>
-            <input value={form.website} onChange={e => set('website', e.target.value)} placeholder="gravissmarketing.com"
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            <div className="relative">
+              <input value={form.website} onChange={e => set('website', e.target.value)} placeholder="gravissmarketing.com"
+                onBlur={handleWebsiteBlur}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              {enriching && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-blue-600">
+                  <Loader2 size={12} className="animate-spin" /> Fetching info...
+                </span>
+              )}
+            </div>
           </div>
 
           <div>
@@ -676,10 +932,18 @@ function EditCompanyPanel({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
-            <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={4}
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Description
+              {enrichedFields.has('description') && (
+                <button type="button" onClick={() => { clearEnriched('description'); set('description', '') }}
+                  className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200">
+                  auto-filled &times;
+                </button>
+              )}
+            </label>
+            <textarea value={form.description} onChange={e => { set('description', e.target.value); clearEnriched('description') }} rows={4}
               placeholder="About this company..."
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none" />
+              className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none ${ec('description')}`} />
           </div>
         </div>
 

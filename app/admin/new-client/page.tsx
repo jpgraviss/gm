@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header'
 import CompanySelect from '@/components/ui/CompanySelect'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import { useToast } from '@/components/ui/Toast'
+import { useEnrichment } from '@/lib/useEnrichment'
 import {
   Building2, User, Briefcase, FileText, Globe, Users, CheckCircle,
   ChevronRight, ChevronLeft, Loader2, Mail, Phone, Tag, Calendar,
@@ -126,9 +127,9 @@ function FieldLabel({ children, required }: { children: React.ReactNode; require
   )
 }
 
-function Input({ value, onChange, placeholder, type = 'text', required, icon: Icon }: {
+function Input({ value, onChange, placeholder, type = 'text', required, icon: Icon, onBlur, className: extra }: {
   value: string; onChange: (v: string) => void; placeholder?: string; type?: string; required?: boolean
-  icon?: React.ComponentType<{ size: number; className?: string }>
+  icon?: React.ComponentType<{ size: number; className?: string }>; onBlur?: () => void; className?: string
 }) {
   return (
     <div className="relative">
@@ -141,9 +142,10 @@ function Input({ value, onChange, placeholder, type = 'text', required, icon: Ic
         type={type}
         value={value}
         onChange={e => onChange(e.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
         required={required}
-        className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-[#015035]/30 focus:border-[#015035] ${Icon ? 'pl-9' : ''}`}
+        className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-[#015035]/30 focus:border-[#015035] ${Icon ? 'pl-9' : ''} ${extra ?? ''}`}
       />
     </div>
   )
@@ -156,6 +158,26 @@ export default function NewClientPage() {
   const [step, setStep] = useState(0)
   const [data, setData] = useState<WizardData>(INITIAL_DATA)
   const [submitting, setSubmitting] = useState(false)
+  const { enriching, enrichedFields, enrich, markEnriched, clearEnriched } = useEnrichment()
+
+  async function handleWebsiteBlur() {
+    if (!data.website.trim() || enriching) return
+    const result = await enrich(data.website)
+    if (!result) return
+    const filled: string[] = []
+    setData(prev => {
+      const next = { ...prev }
+      if (result.name && !prev.companyName) { next.companyName = result.name; filled.push('companyName') }
+      if (result.industry && !prev.industry) { next.industry = result.industry; filled.push('industry') }
+      if (result.address && !prev.address) { next.address = result.address; filled.push('address') }
+      return next
+    })
+    if (filled.length > 0) markEnriched(filled)
+  }
+
+  function ec(field: string) {
+    return enrichedFields.has(field) ? 'ring-2 ring-blue-300 bg-blue-50/30' : ''
+  }
 
   function update<K extends keyof WizardData>(key: K, value: WizardData[K]) {
     setData(prev => ({ ...prev, [key]: value }))
@@ -274,18 +296,34 @@ export default function NewClientPage() {
         return (
           <div className="space-y-4">
             <div>
-              <FieldLabel required>Company Name</FieldLabel>
+              <FieldLabel required>
+                Company Name
+                {enrichedFields.has('companyName') && (
+                  <button type="button" onClick={() => { clearEnriched('companyName'); update('companyName', '') }}
+                    className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200 normal-case tracking-normal font-normal">
+                    auto-filled &times;
+                  </button>
+                )}
+              </FieldLabel>
               <CompanySelect
                 value={data.companyName}
-                onChange={(name, id) => { update('companyName', name); if (id) update('companyId', id) }}
+                onChange={(name, id) => { update('companyName', name); clearEnriched('companyName'); if (id) update('companyId', id) }}
               />
             </div>
             <div>
-              <FieldLabel>Industry</FieldLabel>
+              <FieldLabel>
+                Industry
+                {enrichedFields.has('industry') && (
+                  <button type="button" onClick={() => { clearEnriched('industry'); update('industry', '') }}
+                    className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200 normal-case tracking-normal font-normal">
+                    auto-filled &times;
+                  </button>
+                )}
+              </FieldLabel>
               <select
                 value={data.industry}
-                onChange={e => update('industry', e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-[#015035]/30"
+                onChange={e => { update('industry', e.target.value); clearEnriched('industry') }}
+                className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-[#015035]/30 ${ec('industry')}`}
               >
                 <option value="">Select industry...</option>
                 {['Technology', 'Healthcare', 'Finance', 'Retail', 'Manufacturing', 'Education', 'Real Estate', 'Legal', 'Non-Profit', 'Other'].map(i => (
@@ -295,11 +333,26 @@ export default function NewClientPage() {
             </div>
             <div>
               <FieldLabel>Website</FieldLabel>
-              <Input value={data.website} onChange={v => update('website', v)} placeholder="https://example.com" icon={Globe} />
+              <div className="relative">
+                <Input value={data.website} onChange={v => update('website', v)} placeholder="https://example.com" icon={Globe} onBlur={handleWebsiteBlur} />
+                {enriching && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-blue-600">
+                    <Loader2 size={12} className="animate-spin" /> Fetching info...
+                  </span>
+                )}
+              </div>
             </div>
             <div>
-              <FieldLabel>Address</FieldLabel>
-              <Input value={data.address} onChange={v => update('address', v)} placeholder="123 Main St, City, State" />
+              <FieldLabel>
+                Address
+                {enrichedFields.has('address') && (
+                  <button type="button" onClick={() => { clearEnriched('address'); update('address', '') }}
+                    className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200 normal-case tracking-normal font-normal">
+                    auto-filled &times;
+                  </button>
+                )}
+              </FieldLabel>
+              <Input value={data.address} onChange={v => { update('address', v); clearEnriched('address') }} placeholder="123 Main St, City, State" className={ec('address')} />
             </div>
           </div>
         )

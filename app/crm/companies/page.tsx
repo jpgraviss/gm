@@ -24,6 +24,7 @@ import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
   ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload, BarChart3,
+  Monitor,
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 
@@ -177,6 +178,15 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
+              <a
+                href={`/portal/preview?company=${encodeURIComponent(company.name)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0"
+                title="Preview client portal"
+              >
+                <Monitor size={15} className="text-white/60" />
+              </a>
               {onOpenIntegrations && (
                 <button onClick={onOpenIntegrations} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0" title="Client integrations">
                   <BarChart3 size={15} className="text-white/60" />

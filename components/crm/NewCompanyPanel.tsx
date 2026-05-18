@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { X, Check, Plus, Minus, ChevronDown, ChevronUp, ChevronLeft, Calculator, Sparkles, Loader2 } from 'lucide-react'
 import type { CompanySize, CompanyStatus } from '@/lib/types'
 import { useTeamMembers } from '@/lib/useTeamMembers'
+import { useEnrichment } from '@/lib/useEnrichment'
 
 // ─── Pricing Constants ─────────────────────────────────────────────────────────
 
@@ -81,20 +82,20 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   return <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{children}</label>
 }
 
-function Input({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+function Input({ className: extra, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+      className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 ${extra ?? ''}`}
     />
   )
 }
 
-function Select({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+function Select({ children, className: extra, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+      className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${extra ?? ''}`}
     >
       {children}
     </select>
@@ -156,6 +157,43 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
     } finally {
       setAiLoading(false)
     }
+  }
+
+  // ─── Website Enrichment (onBlur) ──────────────────────────────────────────
+  const { enriching, enrichedFields, enrich, markEnriched, clearEnriched } = useEnrichment()
+
+  async function handleWebsiteBlur() {
+    if (!form.website.trim() || enriching) return
+    const data = await enrich(form.website)
+    if (!data) return
+    const filled: string[] = []
+    setForm(prev => {
+      const next = { ...prev }
+      if (data.name && !prev.name) { next.name = data.name; filled.push('name') }
+      if (data.industry && !prev.industry) { next.industry = data.industry; filled.push('industry') }
+      if (data.description && !prev.description) { next.description = data.description; filled.push('description') }
+      if (data.phone && !prev.phone) { next.phone = data.phone; filled.push('phone') }
+      if (data.address && !prev.hq) { next.hq = data.address; filled.push('hq') }
+      return next
+    })
+    if (filled.length > 0) markEnriched(filled)
+  }
+
+  function enrichedClass(field: string) {
+    return enrichedFields.has(field) ? 'ring-2 ring-blue-300 bg-blue-50/30' : ''
+  }
+
+  function EnrichBadge({ field }: { field: string }) {
+    if (!enrichedFields.has(field)) return null
+    return (
+      <button
+        type="button"
+        onClick={() => { clearEnriched(field); set(field as keyof typeof form, '') }}
+        className="ml-1 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full hover:bg-blue-200"
+      >
+        auto-filled &times;
+      </button>
+    )
   }
 
   // ─── Proposal calculator state ────────────────────────────────────────────
@@ -236,20 +274,22 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
 
           {/* Company name */}
           <div>
-            <FieldLabel>Company Name</FieldLabel>
+            <FieldLabel>Company Name <EnrichBadge field="name" /></FieldLabel>
             <Input
               placeholder="e.g. Coastal Realty Group"
               value={form.name}
-              onChange={e => set('name', e.target.value)}
+              onChange={e => { set('name', e.target.value); clearEnriched('name') }}
               autoFocus
+              className={enrichedClass('name')}
             />
           </div>
 
           {/* Industry + Size */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <FieldLabel>Industry</FieldLabel>
-              <Select value={form.industry} onChange={e => set('industry', e.target.value)}>
+              <FieldLabel>Industry <EnrichBadge field="industry" /></FieldLabel>
+              <Select value={form.industry} onChange={e => { set('industry', e.target.value); clearEnriched('industry') }}
+                className={enrichedClass('industry')}>
                 <option value="">Select industry...</option>
                 {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
               </Select>
@@ -264,11 +304,12 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
 
           {/* HQ */}
           <div>
-            <FieldLabel>HQ Location</FieldLabel>
+            <FieldLabel>HQ Location <EnrichBadge field="hq" /></FieldLabel>
             <Input
               placeholder="e.g. Austin, TX"
               value={form.hq}
-              onChange={e => set('hq', e.target.value)}
+              onChange={e => { set('hq', e.target.value); clearEnriched('hq') }}
+              className={enrichedClass('hq')}
             />
           </div>
 

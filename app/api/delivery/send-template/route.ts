@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { sendEmail } from '@/lib/email'
+import { scheduleEmail } from '@/lib/email-scheduler'
 import { generateWelcomeEmail } from '@/lib/templates/generate-welcome'
 import { generateUsageGuideEmail } from '@/lib/templates/generate-usage-guide'
 import { generateMonthlyReportHtml } from '@/lib/templates/generate-monthly-report'
@@ -75,6 +76,8 @@ export async function POST(req: NextRequest) {
     recipientEmail: { required: true, type: 'string', maxLength: 320 },
     customizationData: { type: 'object' },
     sendEmail: { type: 'boolean' },
+    scheduleAt: { type: 'string' },
+    recurring: { type: 'string', enum: ['none', 'daily', 'weekly', 'biweekly', 'monthly', 'quarterly'] },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -85,6 +88,8 @@ export async function POST(req: NextRequest) {
     recipientEmail,
     customizationData = {},
     sendEmail: shouldSend = false,
+    scheduleAt,
+    recurring,
   } = body as {
     workflowId: string
     step: number
@@ -92,6 +97,8 @@ export async function POST(req: NextRequest) {
     recipientEmail: string
     customizationData: Record<string, unknown>
     sendEmail: boolean
+    scheduleAt?: string
+    recurring?: string
   }
 
   let html: string
@@ -105,7 +112,20 @@ export async function POST(req: NextRequest) {
   const now = new Date().toISOString()
 
   let emailResult: { success: boolean; id?: string; error?: string } | null = null
-  if (shouldSend) {
+  let scheduledResult: { id: string } | null = null
+
+  if (scheduleAt) {
+    const scheduled = await scheduleEmail({
+      to: recipientEmail,
+      subject: SUBJECT_MAP[templateType] ?? 'Graviss Marketing',
+      html,
+      sendAt: scheduleAt,
+      type: 'template',
+      recurring: (recurring as 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly') ?? 'none',
+      metadata: { workflowId, step, templateType },
+    })
+    scheduledResult = { id: scheduled.id }
+  } else if (shouldSend) {
     emailResult = await sendEmail({
       to: recipientEmail,
       subject: SUBJECT_MAP[templateType] ?? 'Graviss Marketing',
@@ -118,8 +138,8 @@ export async function POST(req: NextRequest) {
   const sentCol = STEP_SENT_COLUMN[mappedStep]
 
   const update: Record<string, unknown> = { updated_at: now }
-  if (statusCol) update[statusCol] = shouldSend ? 'Completed' : 'In Progress'
-  if (sentCol && shouldSend) update[sentCol] = now
+  if (statusCol) update[statusCol] = scheduleAt ? 'Scheduled' : shouldSend ? 'Completed' : 'In Progress'
+  if (sentCol && shouldSend && !scheduleAt) update[sentCol] = now
 
   const { data: workflow, error: updateErr } = await db
     .from('delivery_workflows')
@@ -168,5 +188,6 @@ export async function POST(req: NextRequest) {
     html,
     workflow,
     email: emailResult,
+    scheduled: scheduledResult,
   })
 }

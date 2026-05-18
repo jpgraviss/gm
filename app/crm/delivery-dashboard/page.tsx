@@ -6,7 +6,7 @@ import CompanySelect from '@/components/ui/CompanySelect'
 import { useToast } from '@/components/ui/Toast'
 import {
   Search, ChevronDown, ChevronUp, CheckCircle2, Circle, Clock,
-  Plus, X, Send, Package, Filter, ArrowUpDown, UserPlus,
+  Plus, X, Send, Package, Filter, ArrowUpDown, UserPlus, Calendar,
 } from 'lucide-react'
 import NewClientModal from '@/components/admin/NewClientModal'
 
@@ -268,6 +268,11 @@ export default function DeliveryDashboardPage() {
   const [sortField, setSortField] = useState<'company' | 'lastUpdated'>('lastUpdated')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [showNewClientModal, setShowNewClientModal] = useState(false)
+  const [sendModal, setSendModal] = useState<{ workflowId: string; step: number } | null>(null)
+  const [sendModalScheduleDate, setSendModalScheduleDate] = useState('')
+  const [sendModalScheduleTime, setSendModalScheduleTime] = useState('08:00')
+  const [sendModalRecurring, setSendModalRecurring] = useState('none')
+  const [sendModalMode, setSendModalMode] = useState<'now' | 'schedule'>('now')
 
   useEffect(() => {
     fetch('/api/delivery/workflows')
@@ -319,12 +324,32 @@ export default function DeliveryDashboardPage() {
   }
 
   function handleSendTemplate(workflowId: string, stepNum: number) {
-    toast(`Template for step ${stepNum} sent`, 'success')
-    fetch(`/api/delivery/workflows/${workflowId}/send-template`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ step: stepNum }),
-    }).catch(() => toast('Failed to send template', 'error'))
+    setSendModal({ workflowId, step: stepNum })
+    setSendModalMode('now')
+    setSendModalScheduleDate('')
+    setSendModalScheduleTime('08:00')
+    setSendModalRecurring('none')
+  }
+
+  async function executeSendTemplate() {
+    if (!sendModal) return
+    const payload: Record<string, unknown> = { step: sendModal.step }
+    if (sendModalMode === 'schedule' && sendModalScheduleDate) {
+      payload.scheduleAt = new Date(`${sendModalScheduleDate}T${sendModalScheduleTime}`).toISOString()
+      if (sendModalRecurring !== 'none') payload.recurring = sendModalRecurring
+    }
+    try {
+      const res = await fetch(`/api/delivery/workflows/${sendModal.workflowId}/send-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) { toast('Failed to send', 'error'); return }
+      toast(sendModalMode === 'schedule' ? 'Email scheduled' : `Template for step ${sendModal.step} sent`, 'success')
+    } catch {
+      toast('Failed to send template', 'error')
+    }
+    setSendModal(null)
   }
 
   function handleAddDeliverable(workflowId: string) {
@@ -525,6 +550,92 @@ export default function DeliveryDashboardPage() {
           )}
         </div>
       </div>
+
+      {sendModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setSendModal(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-bold text-gray-900">Send Template — Step {sendModal.step}</h2>
+              <button onClick={() => setSendModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={16} className="text-gray-400" /></button>
+            </div>
+            <div className="p-6 flex flex-col gap-4">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSendModalMode('now')}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 border transition-colors ${
+                    sendModalMode === 'now' ? 'text-white border-transparent' : 'text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                  style={sendModalMode === 'now' ? { background: '#015035' } : undefined}
+                >
+                  <Send size={14} /> Send Now
+                </button>
+                <button
+                  onClick={() => setSendModalMode('schedule')}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 border transition-colors ${
+                    sendModalMode === 'schedule' ? 'text-white border-transparent' : 'text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                  style={sendModalMode === 'schedule' ? { background: '#1e40af' } : undefined}
+                >
+                  <Calendar size={14} /> Schedule
+                </button>
+              </div>
+              {sendModalMode === 'schedule' && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Date</label>
+                      <input
+                        type="date"
+                        value={sendModalScheduleDate}
+                        onChange={e => setSendModalScheduleDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Time</label>
+                      <input
+                        type="time"
+                        value={sendModalScheduleTime}
+                        onChange={e => setSendModalScheduleTime(e.target.value)}
+                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  {sendModal.step === 8 && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Recurring</label>
+                      <select
+                        value={sendModalRecurring}
+                        onChange={e => setSendModalRecurring(e.target.value)}
+                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="none">One-time</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                      </select>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-2">
+              <button
+                onClick={executeSendTemplate}
+                disabled={sendModalMode === 'schedule' && !sendModalScheduleDate}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+                style={{ background: sendModalMode === 'now' ? '#015035' : '#1e40af' }}
+              >
+                {sendModalMode === 'now' ? <><Send size={14} /> Send Now</> : <><Calendar size={14} /> Schedule</>}
+              </button>
+              <button onClick={() => setSendModal(null)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showNewModal && (
         <NewWorkflowModal

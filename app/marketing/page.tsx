@@ -259,8 +259,12 @@ export default function MarketingPage() {
                         <td className="px-4 py-3.5 text-center text-sm text-gray-600 hidden lg:table-cell">
                           {b.totalSent > 0 ? `${clickRate}%` : '—'}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-[11px] text-gray-500 hidden lg:table-cell">
-                          {b.sentAt ? formatDate(b.sentAt) : formatDate(b.createdAt)}
+                        <td className="px-4 py-3.5 text-right text-[11px] hidden lg:table-cell">
+                          {b.status === 'scheduled' && b.scheduledAt ? (
+                            <span className="text-blue-600 font-medium">Scheduled {formatDate(b.scheduledAt)}</span>
+                          ) : (
+                            <span className="text-gray-500">{b.sentAt ? formatDate(b.sentAt) : formatDate(b.createdAt)}</span>
+                          )}
                         </td>
                         <td className="px-2 py-3.5">
                           <div className="flex gap-1 justify-end">
@@ -382,6 +386,9 @@ function BroadcastEditor({
   const [clickData, setClickData] = useState<Array<{ url: string; totalClicks: number; uniqueClickers: number }>>([])
   const [clicksLoading, setClicksLoading] = useState(false)
   const [aiDraftLoading, setAiDraftLoading] = useState(false)
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduleTime, setScheduleTime] = useState('08:00')
+  const [showScheduleForm, setShowScheduleForm] = useState(false)
 
   const isSent = broadcast.status === 'sent' || broadcast.status === 'sending'
 
@@ -438,6 +445,24 @@ function BroadcastEditor({
       toast('Failed to send', 'error')
       setSending(false)
     }
+  }
+
+  async function scheduleSend() {
+    if (!scheduleDate) { toast('Select a date', 'error'); return }
+    const sendAt = new Date(`${scheduleDate}T${scheduleTime}`).toISOString()
+    setSending(true)
+    try {
+      await save()
+      const updated = await onSave({ scheduledAt: sendAt, status: 'scheduled' as Broadcast['status'] })
+      if (updated) {
+        toast(`Scheduled for ${new Date(sendAt).toLocaleString()}`, 'success')
+        onRefresh()
+        onClose()
+      }
+    } catch {
+      toast('Failed to schedule', 'error')
+    }
+    setSending(false)
   }
 
   return (
@@ -936,6 +961,74 @@ function BroadcastEditor({
                       <p className="text-[10px] text-gray-500">Clicked</p>
                       <p className="text-lg font-bold text-emerald-700">{broadcast.totalClicked}</p>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {!isSent && draft.status !== 'scheduled' && (
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Clock size={14} className="text-blue-600" />
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Schedule for later</p>
+                  </div>
+                  {showScheduleForm ? (
+                    <div className="flex flex-col gap-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Date</label>
+                          <input
+                            type="date"
+                            value={scheduleDate}
+                            onChange={e => setScheduleDate(e.target.value)}
+                            min={new Date().toISOString().split('T')[0]}
+                            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Time</label>
+                          <input
+                            type="time"
+                            value={scheduleTime}
+                            onChange={e => setScheduleTime(e.target.value)}
+                            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={scheduleSend}
+                          disabled={sending || !scheduleDate}
+                          className="flex-1 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+                          style={{ background: '#1e40af' }}
+                        >
+                          <Calendar size={14} /> {sending ? 'Scheduling...' : 'Schedule Broadcast'}
+                        </button>
+                        <button
+                          onClick={() => setShowScheduleForm(false)}
+                          className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowScheduleForm(true)}
+                      className="w-full py-2.5 rounded-xl border border-blue-200 bg-blue-50 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Calendar size={14} /> Pick a date & time
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {draft.status === 'scheduled' && draft.scheduledAt && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="flex items-center gap-2">
+                    <Calendar size={16} className="text-blue-600" />
+                    <p className="text-sm font-semibold text-blue-800">
+                      Scheduled for {new Date(draft.scheduledAt).toLocaleString()}
+                    </p>
                   </div>
                 </div>
               )}

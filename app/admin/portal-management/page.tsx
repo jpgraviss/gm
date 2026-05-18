@@ -11,7 +11,7 @@ import {
   FileText, BarChart3, Globe, CreditCard, Megaphone, Palette,
   MessageSquare, BookOpen, ArrowLeft, Image, Paintbrush,
   Target, PenTool, GraduationCap, Lightbulb, Upload, Calendar,
-  RefreshCw,
+  RefreshCw, ExternalLink, Check,
 } from 'lucide-react'
 
 const ALL_SERVICES = [
@@ -154,6 +154,7 @@ export default function PortalManagementPage() {
   const [reportModal, setReportModal] = useState<string | null>(null)
   const [reportForm, setReportForm] = useState({ title: '', date: new Date().toISOString().split('T')[0], file_url: '' })
   const [expandedServices, setExpandedServices] = useState<Record<string, boolean>>({})
+  const [autoSaved, setAutoSaved] = useState<string | null>(null)
 
   useEffect(() => {
     if (!authLoading && (!user || !user.isAdmin)) {

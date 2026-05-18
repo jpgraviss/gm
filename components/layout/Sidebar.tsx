@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, FileText, CreditCard,
   FolderKanban, Globe,
   Settings, X, ShieldCheck, LogOut, TrendingUp, MessageSquare, Inbox,
-  BookOpen, Star, Megaphone,
+  BookOpen, Star, Megaphone, Bot,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -77,6 +77,7 @@ export const defaultNavigation: NavSection[] = [
       { label: 'Portal',     href: '/portal',     icon: <Globe size={16} />,         billingVisible: true },
       { label: 'Tickets',    href: '/tickets',    icon: <MessageSquare size={16} />, contractorVisible: true, billingVisible: true },
       { label: 'Reputation', href: '/reputation', icon: <Star size={16} />,          allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Chatbots',   href: '/chatbots',   icon: <Bot size={16} /> },
     ],
   },
   {

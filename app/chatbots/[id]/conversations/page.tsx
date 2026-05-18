@@ -6,7 +6,7 @@ import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import {
   ArrowLeft, Search, Flag, CheckCircle, Trash2, X,
-  MessageSquare, User, Bot, Filter, Eye,
+  MessageSquare, User, Bot,
 } from 'lucide-react'
 
 interface ConversationMessage {

@@ -878,7 +878,6 @@ Guidelines:
     // Try Ollama first (free, self-hosted)
     const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
     const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.1'
-    let ollamaAvailable = false
 
     try {
       const ollamaRes = await fetch(`${ollamaUrl}/api/chat`, {
@@ -901,21 +900,14 @@ Guidelines:
         }
       }
     } catch {
-      ollamaAvailable = false
+      // Ollama not available, fall through to Claude
     }
 
     // Fall back to Claude (Anthropic API)
     const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey && !ollamaAvailable) {
-      return NextResponse.json({
-        reply: 'No AI provider is available. Please configure Ollama or set ANTHROPIC_API_KEY.',
-        source: 'error',
-      })
-    }
-
     if (!apiKey) {
       return NextResponse.json({
-        reply: 'Ollama is unavailable and no Anthropic API key is configured.',
+        reply: 'No AI provider is available. Please configure Ollama or set ANTHROPIC_API_KEY.',
         source: 'error',
       })
     }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { useTeamMembers } from '@/lib/useTeamMembers'
@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 import { useEnrichment } from '@/lib/useEnrichment'
+import Pagination from '@/components/ui/Pagination'
 
 // ─── Status colors ────────────────────────────────────────────────────────────
 
@@ -978,12 +979,27 @@ export default function CompaniesPage() {
   const [creatingCompany, setCreatingCompany] = useState(false)
   const [showImport, setShowImport] = useState(false)
 
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gravhub-companies-pageSize')
+      return saved ? Number(saved) : 25
+    }
+    return 25
+  })
+
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
   const [deals, setDeals] = useState<Deal[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [crmActivities, setCrmActivities] = useState<CRMActivity[]>([])
+
+  const handlePageSizeChange = useCallback((size: number) => {
+    setPageSize(size)
+    setCurrentPage(1)
+    localStorage.setItem('gravhub-companies-pageSize', String(size))
+  }, [])
 
   useEffect(() => {
     fetch('/api/crm/companies')
@@ -1058,7 +1074,12 @@ export default function CompaniesPage() {
     return matchSearch && matchStatus
   })
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  useEffect(() => { setCurrentPage(1) }, [search, statusFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const safeCurrentPage = Math.min(currentPage, totalPages)
+  const startIndex = (safeCurrentPage - 1) * pageSize
+  const paginatedCompanies = filtered.slice(startIndex, startIndex + pageSize)
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
@@ -1118,7 +1139,7 @@ export default function CompaniesPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(company => {
+              {paginatedCompanies.map(company => {
                 const companyContacts = crmContacts.filter(c => c.companyId === company.id)
                 const companyDeals = deals.filter(d => d.company === company.name && !d.stage.startsWith('Closed'))
                 const companyContract = contracts.find(c => c.company === company.name)
@@ -1212,6 +1233,18 @@ export default function CompaniesPage() {
             </div>
           )}
           </div>
+          {filtered.length > 0 && (
+            <div className="border-t border-gray-100">
+              <Pagination
+                currentPage={safeCurrentPage}
+                totalPages={totalPages}
+                totalItems={filtered.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchCrmContacts, fetchCrmCompanies, fetchDeals, fetchContracts, fetchProjects, fetchCrmActivities } from '@/lib/supabase'
@@ -25,6 +25,7 @@ import {
   PhoneCall, Video, Pencil, Trash2, Upload, Eye, MessageSquare, MousePointerClick,
   Flame, Thermometer, Snowflake, MessageCircle, Sparkles, Brain, Wand2,
 } from 'lucide-react'
+import Pagination from '@/components/ui/Pagination'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1289,11 +1290,26 @@ export default function ContactsPage() {
   const [creatingContact, setCreatingContact] = useState(false)
   const [showImport, setShowImport] = useState(false)
 
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gravhub-contacts-pageSize')
+      return saved ? Number(saved) : 25
+    }
+    return 25
+  })
+
   const [crmCompanies, setCrmCompanies] = useState<CRMCompany[]>([])
   const [deals, setDeals] = useState<Deal[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [crmActivities, setCrmActivities] = useState<CRMActivity[]>([])
+
+  const handlePageSizeChange = useCallback((size: number) => {
+    setPageSize(size)
+    setCurrentPage(1)
+    localStorage.setItem('gravhub-contacts-pageSize', String(size))
+  }, [])
 
   useEffect(() => {
     fetch('/api/crm/contacts')
@@ -1374,6 +1390,13 @@ export default function ContactsPage() {
     c.emails.join(' ').toLowerCase().includes(search.toLowerCase())
   )
 
+  useEffect(() => { setCurrentPage(1) }, [search])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const safeCurrentPage = Math.min(currentPage, totalPages)
+  const startIndex = (safeCurrentPage - 1) * pageSize
+  const paginatedContacts = filtered.slice(startIndex, startIndex + pageSize)
+
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
@@ -1417,7 +1440,7 @@ export default function ContactsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(contact => {
+              {paginatedContacts.map(contact => {
                 const activeDeal = deals.find(d => d.company === contact.companyName && !d.stage.startsWith('Closed'))
                 const contactContract = contracts.find(c => c.company === contact.companyName)
                 return (

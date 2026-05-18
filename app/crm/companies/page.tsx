@@ -321,6 +321,180 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                 ].filter(Boolean).join('\n')}
               />
 
+              {/* AI Recommendations */}
+              <div className="border border-purple-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => {
+                    if (!recsOpen && companyRecs.length === 0) {
+                      setRecsOpen(true)
+                      setRecsLoading(true)
+                      fetch(`/api/ai/recommendations?companyId=${company.id}`)
+                        .then(r => r.ok ? r.json() : [])
+                        .then(data => { if (Array.isArray(data)) setCompanyRecs(data) })
+                        .catch(() => {})
+                        .finally(() => setRecsLoading(false))
+                    } else {
+                      setRecsOpen(v => !v)
+                    }
+                  }}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-purple-50 hover:bg-purple-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Brain size={14} className="text-purple-600" />
+                    <span className="text-sm font-semibold text-purple-800">AI Recommendations</span>
+                  </div>
+                  <ChevronRight size={14} className={`text-purple-600 transition-transform ${recsOpen ? 'rotate-90' : ''}`} />
+                </button>
+                {recsOpen && (
+                  <div className="px-4 py-3 bg-white">
+                    {recsLoading ? (
+                      <div className="flex items-center gap-2 py-3">
+                        <div className="w-4 h-4 rounded-full border-2 border-purple-200 border-t-purple-600 animate-spin" />
+                        <span className="text-xs text-gray-400">Analyzing...</span>
+                      </div>
+                    ) : companyRecs.length === 0 ? (
+                      <p className="text-xs text-gray-400 py-2">No recommendations at this time.</p>
+                    ) : (
+                      <div className="flex flex-col gap-2.5">
+                        {companyRecs.map((rec, i) => (
+                          <div key={i} className="p-3 border border-gray-100 rounded-lg">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                                rec.priority === 'high' ? 'bg-red-50 text-red-600' :
+                                rec.priority === 'medium' ? 'bg-yellow-50 text-yellow-700' :
+                                'bg-gray-50 text-gray-500'
+                              }`}>{rec.priority}</span>
+                              <span className="text-[10px] font-medium text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">{rec.type.replace(/_/g, ' ')}</span>
+                            </div>
+                            <p className="text-sm font-semibold text-gray-900">{rec.title}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{rec.description}</p>
+                            <p className="text-xs text-purple-700 mt-1.5 font-medium">{rec.suggestedAction}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Social Insights */}
+              <div className="border border-blue-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => {
+                    if (!socialOpen && !socialAnalysis) {
+                      setSocialOpen(true)
+                      setSocialLoading(true)
+                      fetch(`/api/crm/companies/${company.id}/social-analysis`)
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => { if (data) setSocialAnalysis(data) })
+                        .catch(() => {})
+                        .finally(() => setSocialLoading(false))
+                    } else {
+                      setSocialOpen(v => !v)
+                    }
+                  }}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Share2 size={14} className="text-blue-600" />
+                    <span className="text-sm font-semibold text-blue-800">Social Insights</span>
+                  </div>
+                  <ChevronRight size={14} className={`text-blue-600 transition-transform ${socialOpen ? 'rotate-90' : ''}`} />
+                </button>
+                {socialOpen && (
+                  <div className="px-4 py-3 bg-white">
+                    {socialLoading ? (
+                      <div className="flex items-center gap-2 py-3">
+                        <div className="w-4 h-4 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin" />
+                        <span className="text-xs text-gray-400">Analyzing social presence...</span>
+                      </div>
+                    ) : socialAnalysis ? (
+                      <div className="flex flex-col gap-3">
+                        <div className="flex flex-wrap gap-2">
+                          {socialAnalysis.platforms.map(p => (
+                            <div key={p.name} className="flex items-center gap-1.5">
+                              <div className={`w-2 h-2 rounded-full ${p.status === 'active' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                              {p.url ? (
+                                <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-blue-600 hover:underline">{p.name}</a>
+                              ) : (
+                                <span className="text-xs text-gray-400">{p.name}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-sm text-gray-700 leading-relaxed">{socialAnalysis.summary}</p>
+                        {socialAnalysis.engagementOpportunities.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide mb-1.5">Engagement Opportunities</p>
+                            <ul className="flex flex-col gap-1">
+                              {socialAnalysis.engagementOpportunities.map((opp, i) => (
+                                <li key={i} className="flex gap-2 text-xs text-gray-600">
+                                  <span className="text-blue-500 flex-shrink-0">-</span>
+                                  {opp}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 py-2">Unable to analyze social presence.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* AI Proposal Summary button */}
+              {openDeals.length > 0 && (
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <button
+                    onClick={async () => {
+                      setAiGenerating(true)
+                      setAiProposalContent(null)
+                      try {
+                        const res = await fetch('/api/ai/generate', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            type: 'proposal_summary',
+                            context: {
+                              company: company.name,
+                              services: openDeals.map(d => d.serviceType).join(', '),
+                              value: `$${openDeals.reduce((s, d) => s + d.value, 0).toLocaleString()}`,
+                              additionalContext: `Industry: ${company.industry}, Size: ${company.size}`,
+                            },
+                          }),
+                        })
+                        if (res.ok) {
+                          const data = await res.json()
+                          setAiProposalContent(data.content)
+                        }
+                      } catch { /* ignore */ }
+                      setAiGenerating(false)
+                    }}
+                    disabled={aiGenerating}
+                    className="flex items-center gap-2 text-sm font-semibold text-purple-700 hover:text-purple-900 disabled:opacity-50"
+                  >
+                    {aiGenerating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+                    AI Proposal Summary
+                  </button>
+                  {aiProposalContent && (
+                    <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                      <pre className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-sans">{aiProposalContent}</pre>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(aiProposalContent)
+                          toast('Copied to clipboard', 'success')
+                        }}
+                        className="mt-2 text-xs font-semibold text-purple-700 hover:text-purple-900"
+                      >
+                        Copy to clipboard
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Active project */}
               {companyProject && (
                 <div className="p-4 bg-gray-50 rounded-xl">

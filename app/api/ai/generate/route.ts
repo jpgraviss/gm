@@ -53,11 +53,6 @@ export async function POST(req: NextRequest) {
       // Ollama not available, fall through to Claude or template
     }
 
-    // Fall back to Claude if Ollama unavailable
-    if (!apiKey) {
-      return NextResponse.json({ content: generateFallback(type, context), source: 'template' })
-    }
-
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {

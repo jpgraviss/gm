@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Download, Save, FileText, Plus, Minus, Check } from 'lucide-react'
+import { X, Download, Save, FileText, Plus, Minus, Check, Wand2, Loader2 } from 'lucide-react'
 import { useSettings } from '@/lib/useSettings'
 import CompanySelect from '@/components/ui/CompanySelect'
 import type { Proposal, ProposalLineItem, ServiceType } from '@/lib/types'

@@ -14,9 +14,14 @@ export async function PATCH(req: NextRequest) {
 
     const db = createServiceClient()
 
+    const update: Record<string, unknown> = { portal_config: portalConfig }
+    if (Array.isArray(portalConfig.services)) {
+      update.services = portalConfig.services
+    }
+
     const { error } = await db
       .from('portal_clients')
-      .update({ portal_config: portalConfig })
+      .update(update)
       .eq('company', company)
 
     if (error) {

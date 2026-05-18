@@ -842,14 +842,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'messages are required' }, { status: 400 })
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({
-        reply: 'The AI assistant requires an Anthropic API key. Please set ANTHROPIC_API_KEY in your environment variables.',
-        source: 'error',
-      })
-    }
-
     const systemPrompt = `You are GravHub AI, the intelligent assistant built into GravHub — the operating system for Graviss Marketing, a full-service digital marketing agency based in Florida.
 
 You have access to the full CRM, pipeline, billing, project, and document systems through your tools. You can do everything a user can do through the UI, including:
@@ -882,6 +874,43 @@ Guidelines:
       role: m.role as 'user' | 'assistant',
       content: m.content,
     }))
+
+    // Try Ollama first (free, self-hosted)
+    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
+    const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.1'
+
+    try {
+      const ollamaRes = await fetch(`${ollamaUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: ollamaModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...messages.map(m => ({ role: m.role, content: m.content })),
+          ],
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(60000),
+      })
+      if (ollamaRes.ok) {
+        const ollamaData = await ollamaRes.json() as { message?: { content: string } }
+        if (ollamaData.message?.content) {
+          return NextResponse.json({ reply: ollamaData.message.content, source: 'ollama' })
+        }
+      }
+    } catch {
+      // Ollama not available, fall through to Claude
+    }
+
+    // Fall back to Claude (Anthropic API)
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({
+        reply: 'No AI provider is available. Please configure Ollama or set ANTHROPIC_API_KEY.',
+        source: 'error',
+      })
+    }
 
     // Agentic loop — keep calling Claude until it stops using tools
     let currentMessages: AnthropicMessage[] = [...anthropicMessages]
@@ -920,13 +949,11 @@ Guidelines:
         stop_reason: string
       }
 
-      // If no tool use, extract text and return
       if (data.stop_reason === 'end_turn' || !data.content.some(c => c.type === 'tool_use')) {
         finalText = data.content.filter(c => c.type === 'text').map(c => c.text).join('')
         break
       }
 
-      // Process tool calls
       const toolResults: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = []
 
       for (const block of data.content) {
@@ -940,11 +967,9 @@ Guidelines:
         }
       }
 
-      // Also extract any text from this turn
       const turnText = data.content.filter(c => c.type === 'text').map(c => c.text).join('')
       if (turnText) finalText = turnText
 
-      // Append assistant response and tool results to conversation
       currentMessages = [
         ...currentMessages,
         { role: 'assistant' as const, content: data.content },
@@ -952,7 +977,7 @@ Guidelines:
       ]
     }
 
-    return NextResponse.json({ reply: finalText, source: 'ai' })
+    return NextResponse.json({ reply: finalText, source: 'claude' })
   } catch (err) {
     console.error('[ai/chat]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

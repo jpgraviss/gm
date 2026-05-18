@@ -27,7 +27,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.contact      !== undefined) update.contact       = body.contact
   if (body.email        !== undefined) update.email         = body.email
   if (body.portalRole   !== undefined) update.portal_role   = body.portalRole
-  if (body.portalConfig !== undefined) update.portal_config = body.portalConfig
+  if (body.portalConfig !== undefined) {
+    if (body.mergePortalConfig === true) {
+      const existing = await db.from('portal_clients').select('portal_config').eq('id', id).single()
+      const existingConfig = (existing.data?.portal_config as Record<string, unknown>) ?? {}
+      update.portal_config = { ...existingConfig, ...(body.portalConfig as Record<string, unknown>) }
+    } else {
+      update.portal_config = body.portalConfig
+    }
+  }
   if (body.services     !== undefined) update.services      = body.services
   if (body.companyId    !== undefined) update.company_id    = body.companyId
   const { data, error } = await db.from('portal_clients').update(update).eq('id', id).select().single()

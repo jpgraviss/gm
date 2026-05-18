@@ -11,7 +11,7 @@ import {
   FileText, BarChart3, Globe, CreditCard, Megaphone, Palette,
   MessageSquare, BookOpen, ArrowLeft, Image, Paintbrush,
   Target, PenTool, GraduationCap, Lightbulb, Upload, Calendar,
-  RefreshCw,
+  RefreshCw, ExternalLink, Check, Monitor,
 } from 'lucide-react'
 
 const ALL_SERVICES = [
@@ -154,6 +154,8 @@ export default function PortalManagementPage() {
   const [reportModal, setReportModal] = useState<string | null>(null)
   const [reportForm, setReportForm] = useState({ title: '', date: new Date().toISOString().split('T')[0], file_url: '' })
   const [expandedServices, setExpandedServices] = useState<Record<string, boolean>>({})
+  const [autoSaved, setAutoSaved] = useState<string | null>(null)
+  const [autoSaving, setAutoSaving] = useState<string | null>(null)
 
   useEffect(() => {
     if (!authLoading && (!user || !user.isAdmin)) {
@@ -220,6 +222,24 @@ export default function PortalManagementPage() {
       setSavingCompany(null)
     }
   }
+
+  const autoSaveCompanyConfig = useCallback(async (company: string, config: PortalConfig) => {
+    setAutoSaving(company)
+    try {
+      const res = await fetch('/api/portal-clients/company-config', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company, portalConfig: config }),
+      })
+      if (!res.ok) throw new Error('Failed to save')
+      setAutoSaved(company)
+      setTimeout(() => setAutoSaved(prev => prev === company ? null : prev), 2000)
+    } catch {
+      toast('Auto-save failed', 'error')
+    } finally {
+      setAutoSaving(null)
+    }
+  }, [toast])
 
   const inviteMember = async (company: string) => {
     if (!inviteForm.name || !inviteForm.email) {
@@ -289,6 +309,7 @@ export default function PortalManagementPage() {
   }
 
   const toggleServiceConfig = (company: string, serviceKey: string, enabled: boolean) => {
+    let updatedConfig: PortalConfig | null = null
     updateConfig(company, prev => {
       const sc = { ...prev.services_config }
       if (enabled) {
@@ -302,8 +323,12 @@ export default function PortalManagementPage() {
       const services = enabled
         ? (prev.services.includes(serviceKey as ServiceKey) ? prev.services : [...prev.services, serviceKey as ServiceKey])
         : prev.services.filter(s => s !== serviceKey)
-      return { ...prev, services_config: sc, services }
+      updatedConfig = { ...prev, services_config: sc, services }
+      return updatedConfig
     })
+    setTimeout(() => {
+      if (updatedConfig) autoSaveCompanyConfig(company, updatedConfig)
+    }, 0)
   }
 
   const updateServiceConfig = (company: string, serviceKey: string, updates: Partial<ServiceConfig>) => {
@@ -399,6 +424,16 @@ export default function PortalManagementPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <a
+                        href={`/portal/preview?company=${encodeURIComponent(group.company)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-lg text-white transition-opacity hover:opacity-90"
+                        style={{ background: '#015035' }}
+                      >
+                        <Monitor size={10} /> Preview
+                      </a>
                       {group.portalConfig.services.slice(0, 3).map(s => (
                         <span key={s} className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{s}</span>
                       ))}
@@ -520,6 +555,14 @@ export default function PortalManagementPage() {
                           <div className="flex items-center gap-2 mb-3">
                             <BarChart3 size={14} style={{ color: '#015035' }} />
                             <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Services</h3>
+                            {autoSaving === group.company && (
+                              <span className="text-[10px] text-gray-400 font-medium ml-auto">Saving...</span>
+                            )}
+                            {autoSaved === group.company && autoSaving !== group.company && (
+                              <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-semibold ml-auto">
+                                <Check size={10} /> Saved
+                              </span>
+                            )}
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                             {ALL_SERVICES.map(service => {
@@ -656,15 +699,24 @@ export default function PortalManagementPage() {
                               return (
                                 <button
                                   key={key}
-                                  onClick={() => updateConfig(group.company, prev => ({
-                                    ...prev,
-                                    visibility: { ...prev.visibility, [key]: !on },
-                                  }))}
+                                  onClick={() => {
+                                    const updated = {
+                                      ...group.portalConfig,
+                                      visibility: { ...group.portalConfig.visibility, [key]: !on },
+                                    }
+                                    updateConfig(group.company, () => updated)
+                                    autoSaveCompanyConfig(group.company, updated)
+                                  }}
                                   className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors bg-white"
                                 >
                                   <div className="flex items-center gap-2 text-xs font-medium text-gray-700">{icon} {label}</div>
-                                  <div className={`w-8 h-[18px] rounded-full flex items-center transition-colors ${on ? 'justify-end' : 'justify-start'}`} style={{ background: on ? '#015035' : '#d1d5db' }}>
-                                    <div className="w-3.5 h-3.5 rounded-full bg-white shadow-sm mx-0.5" />
+                                  <div className="flex items-center gap-1.5">
+                                    {autoSaved === group.company && autoSaving !== group.company && (
+                                      <Check size={12} className="text-emerald-500" />
+                                    )}
+                                    <div className={`w-8 h-[18px] rounded-full flex items-center transition-colors ${on ? 'justify-end' : 'justify-start'}`} style={{ background: on ? '#015035' : '#d1d5db' }}>
+                                      <div className="w-3.5 h-3.5 rounded-full bg-white shadow-sm mx-0.5" />
+                                    </div>
                                   </div>
                                 </button>
                               )

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Building2, ChevronDown, Plus, Search, X } from 'lucide-react'
+import { Building2, ChevronDown, Loader2, Plus, Search, X } from 'lucide-react'
+import { useEnrichment } from '@/lib/useEnrichment'
 
 const INDUSTRIES = [
   'Technology', 'Healthcare', 'Finance', 'Retail', 'Manufacturing',
@@ -34,6 +35,7 @@ export default function CompanySelect({ value, onChange, placeholder = 'Select a
   const [newIndustry, setNewIndustry] = useState('')
   const [newWebsite, setNewWebsite] = useState('')
   const [createLoading, setCreateLoading] = useState(false)
+  const { enriching, enrich } = useEnrichment()
   const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -69,6 +71,14 @@ export default function CompanySelect({ value, onChange, placeholder = 'Select a
   function handleSelect(company: Company) {
     onChange(company.name, company.id)
     setOpen(false)
+  }
+
+  async function handleNewWebsiteBlur() {
+    if (!newWebsite.trim() || enriching) return
+    const data = await enrich(newWebsite)
+    if (!data) return
+    if (data.name && !newName) setNewName(data.name)
+    if (data.industry && !newIndustry) setNewIndustry(data.industry)
   }
 
   function openCreateForm() {
@@ -159,12 +169,20 @@ export default function CompanySelect({ value, onChange, placeholder = 'Select a
                 <option value="">Select industry...</option>
                 {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
               </select>
-              <input
-                value={newWebsite}
-                onChange={e => setNewWebsite(e.target.value)}
-                placeholder="Website (optional)"
-                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-emerald-500"
-              />
+              <div className="relative">
+                <input
+                  value={newWebsite}
+                  onChange={e => setNewWebsite(e.target.value)}
+                  onBlur={handleNewWebsiteBlur}
+                  placeholder="Website (optional)"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                {enriching && (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-blue-600">
+                    <Loader2 size={10} className="animate-spin" />
+                  </span>
+                )}
+              </div>
               <div className="flex gap-2 pt-1">
                 <button
                   type="button"

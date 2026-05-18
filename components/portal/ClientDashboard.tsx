@@ -179,10 +179,10 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export default function ClientDashboard() {
+export default function ClientDashboard({ companyOverride }: { companyOverride?: string } = {}) {
   const { user } = useAuth()
   const { toast } = useToast()
-  const company = user?.company ?? ''
+  const company = companyOverride || user?.company || ''
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [nowMs] = useState(() => Date.now())

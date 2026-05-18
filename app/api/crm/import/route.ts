@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
         probability:   parseNum(get(row, 'Deal Probability', 'Probability', 'probability', 'Deal probability', 'Win probability')) ?? stageProbability(stage),
         notes:         [],
         last_activity: get(row, 'Last Activity Date', 'Last activity date', 'Last Modified Date') || new Date().toISOString().split('T')[0],
+        import_batch_id: batchId,
       })
 
       if (error) { console.error('[crm/import POST] deal insert', error); errors.push(`Deal ${company}: import failed`); continue }
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ inserted, skipped, errors })
+  return NextResponse.json({ inserted, skipped, errors, batchId })
 }
 
 function normalizeLifecycle(val?: string): string | null {

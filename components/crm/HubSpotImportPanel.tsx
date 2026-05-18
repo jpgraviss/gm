@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import { X, Upload, FileText, CheckCircle, AlertCircle, Building2, Users, TrendingUp, Cloud, FileUp, RefreshCw } from 'lucide-react'
+import { X, Upload, FileText, CheckCircle, AlertCircle, Building2, Users, TrendingUp, Cloud, FileUp, RefreshCw, Undo2 } from 'lucide-react'
 
 type ImportType = 'companies' | 'contacts' | 'deals'
 type ImportMode = 'csv' | 'api'
@@ -11,6 +11,7 @@ interface ImportResult {
   updated?: number
   skipped: number
   errors: string[]
+  batchId?: string
 }
 
 interface HubSpotContact {
@@ -108,6 +109,8 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
   const [apiNextAfter, setApiNextAfter] = useState<string | null>(null)
   const [apiLoaded, setApiLoaded] = useState(false)
   const [importProgress, setImportProgress] = useState('')
+  const [undoing, setUndoing] = useState(false)
+  const [undone, setUndone] = useState(false)
 
   const handleFile = useCallback((f: File) => {
     setFile(f)
@@ -217,6 +220,23 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
     }
     setImporting(false)
     setImportProgress('')
+  }
+
+  const handleUndo = async () => {
+    if (!result?.batchId) return
+    setUndoing(true)
+    try {
+      const res = await fetch('/api/crm/import/undo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ importId: result.batchId }),
+      })
+      if (res.ok) {
+        setUndone(true)
+        onComplete?.()
+      }
+    } catch { /* ignore */ }
+    setUndoing(false)
   }
 
   const columns = preview.length > 0 ? Object.keys(preview[0]) : []
@@ -475,37 +495,57 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
           {/* Result */}
           {result && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 text-center">
-              <CheckCircle size={32} className="mx-auto mb-3 text-emerald-600" />
-              <h3 className="text-lg font-bold text-gray-900 mb-1">Import Complete</h3>
-              <div className="flex justify-center gap-6 mt-3">
-                <div>
-                  <p className="text-2xl font-bold text-emerald-700">{result.inserted}</p>
-                  <p className="text-xs text-gray-500">Imported</p>
-                </div>
-                {(result.updated ?? 0) > 0 && (
-                  <div>
-                    <p className="text-2xl font-bold text-blue-600">{result.updated}</p>
-                    <p className="text-xs text-gray-500">Updated</p>
+              {undone ? (
+                <>
+                  <Undo2 size={32} className="mx-auto mb-3 text-amber-600" />
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">Import Undone</h3>
+                  <p className="text-sm text-gray-500">All {result.inserted} imported records have been removed.</p>
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={32} className="mx-auto mb-3 text-emerald-600" />
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">Import Complete</h3>
+                  <div className="flex justify-center gap-6 mt-3">
+                    <div>
+                      <p className="text-2xl font-bold text-emerald-700">{result.inserted}</p>
+                      <p className="text-xs text-gray-500">Imported</p>
+                    </div>
+                    {(result.updated ?? 0) > 0 && (
+                      <div>
+                        <p className="text-2xl font-bold text-blue-600">{result.updated}</p>
+                        <p className="text-xs text-gray-500">Updated</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-2xl font-bold text-amber-600">{result.skipped}</p>
+                      <p className="text-xs text-gray-500">Skipped</p>
+                    </div>
+                    {result.errors.length > 0 && (
+                      <div>
+                        <p className="text-2xl font-bold text-red-600">{result.errors.length}</p>
+                        <p className="text-xs text-gray-500">Errors</p>
+                      </div>
+                    )}
                   </div>
-                )}
-                <div>
-                  <p className="text-2xl font-bold text-amber-600">{result.skipped}</p>
-                  <p className="text-xs text-gray-500">Skipped</p>
-                </div>
-                {result.errors.length > 0 && (
-                  <div>
-                    <p className="text-2xl font-bold text-red-600">{result.errors.length}</p>
-                    <p className="text-xs text-gray-500">Errors</p>
-                  </div>
-                )}
-              </div>
-              {result.errors.length > 0 && (
-                <div className="mt-3 text-left bg-red-50 border border-red-200 rounded-lg p-3">
-                  {result.errors.slice(0, 5).map((err, i) => (
-                    <p key={i} className="text-xs text-red-600">{err}</p>
-                  ))}
-                  {result.errors.length > 5 && <p className="text-xs text-red-400 mt-1">... and {result.errors.length - 5} more</p>}
-                </div>
+                  {result.errors.length > 0 && (
+                    <div className="mt-3 text-left bg-red-50 border border-red-200 rounded-lg p-3">
+                      {result.errors.slice(0, 5).map((err, i) => (
+                        <p key={i} className="text-xs text-red-600">{err}</p>
+                      ))}
+                      {result.errors.length > 5 && <p className="text-xs text-red-400 mt-1">... and {result.errors.length - 5} more</p>}
+                    </div>
+                  )}
+                  {result.batchId && result.inserted > 0 && (
+                    <button
+                      onClick={handleUndo}
+                      disabled={undoing}
+                      className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors disabled:opacity-50"
+                    >
+                      {undoing ? <RefreshCw size={12} className="animate-spin" /> : <Undo2 size={12} />}
+                      Undo Import
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}

@@ -116,6 +116,10 @@ export default function CalendarSettingsPage() {
       if (user?.email && links[user.email]) setGcalLink(links[user.email])
       setFetching(false)
     })
+    fetch(`/api/calendar/subscriptions${user?.email ? `?email=${encodeURIComponent(user.email)}` : ''}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { if (Array.isArray(d)) setSubscriptions(d) })
+      .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.email])
 
@@ -199,6 +203,73 @@ export default function CalendarSettingsPage() {
     } finally {
       setSyncing(false)
     }
+  }
+
+  async function handleAddSubscription() {
+    if (!subUrl.trim()) return
+    setAddingSub(true)
+    try {
+      const res = await fetch('/api/calendar/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: subUrl.trim(), name: subName.trim() || undefined, userEmail: user?.email || '' }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setSubscriptions(prev => [{ id: data.id, user_email: user?.email || '', name: data.name, ical_url: subUrl.trim(), last_synced_at: new Date().toISOString(), event_count: data.total, created_at: new Date().toISOString() }, ...prev])
+        setSubUrl('')
+        setSubName('')
+        setShowAddSub(false)
+      }
+    } catch { /* ignore */ }
+    setAddingSub(false)
+  }
+
+  async function handleSyncSubscription(id: string) {
+    setSyncingSubId(id)
+    try {
+      const res = await fetch('/api/calendar/subscriptions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setSubscriptions(prev => prev.map(s => s.id === id ? { ...s, last_synced_at: new Date().toISOString(), event_count: data.synced } : s))
+      }
+    } catch { /* ignore */ }
+    setSyncingSubId(null)
+  }
+
+  async function handleDeleteSubscription(id: string) {
+    if (!confirm('Remove this calendar subscription and all its imported events?')) return
+    setDeletingSubId(id)
+    try {
+      await fetch('/api/calendar/subscriptions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      setSubscriptions(prev => prev.filter(s => s.id !== id))
+    } catch { /* ignore */ }
+    setDeletingSubId(null)
+  }
+
+  async function handleSyncAllSubscriptions() {
+    setSyncingAll(true)
+    try {
+      await fetch('/api/calendar/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync-all', userEmail: user?.email || '' }),
+      })
+      const res = await fetch(`/api/calendar/subscriptions${user?.email ? `?email=${encodeURIComponent(user.email)}` : ''}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data)) setSubscriptions(data)
+      }
+    } catch { /* ignore */ }
+    setSyncingAll(false)
   }
 
   function toggleDay(day: number) {
@@ -502,6 +573,87 @@ export default function CalendarSettingsPage() {
               <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
           </div>
+        </div>
+
+        {/* ── Calendar Subscriptions ── */}
+        <div className="bg-white rounded-xl border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+                <Calendar className="w-4 h-4 text-indigo-500" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-gray-900">Calendar Subscriptions</div>
+                <div className="text-xs text-gray-500">Import events from external calendars via iCal URLs</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {subscriptions.length > 0 && (
+                <button
+                  onClick={handleSyncAllSubscriptions}
+                  disabled={syncingAll}
+                  className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncingAll ? 'animate-spin' : ''}`} />
+                  {syncingAll ? 'Syncing...' : 'Sync All'}
+                </button>
+              )}
+              <button
+                onClick={() => setShowAddSub(true)}
+                className="flex items-center gap-1.5 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:opacity-90 transition-colors"
+                style={{ background: '#015035' }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Calendar
+              </button>
+            </div>
+          </div>
+
+          {subscriptions.length === 0 ? (
+            <div className="text-center py-6">
+              <Calendar className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+              <p className="text-sm text-gray-400">No calendar subscriptions yet.</p>
+              <p className="text-xs text-gray-400 mt-1">Add an iCal URL to import events from external calendars.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {subscriptions.map(sub => (
+                <div key={sub.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                    <Calendar className="w-4 h-4 text-indigo-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-gray-900 truncate">{sub.name}</div>
+                    <div className="text-xs text-gray-400 truncate">{sub.ical_url}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {sub.event_count} event{sub.event_count !== 1 ? 's' : ''}
+                      {sub.last_synced_at && (
+                        <span> · Last synced {new Date(sub.last_synced_at).toLocaleDateString()}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={() => handleSyncSubscription(sub.id)}
+                      disabled={syncingSubId === sub.id}
+                      className="p-1.5 rounded-lg hover:bg-white border border-gray-200 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+                      title="Sync"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${syncingSubId === sub.id ? 'animate-spin' : ''}`} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSubscription(sub.id)}
+                      disabled={deletingSubId === sub.id}
+                      className="p-1.5 rounded-lg hover:bg-red-50 border border-gray-200 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                      title="Remove"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── Save ── */}

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   Calendar, Check, Link2, Copy, ExternalLink, AlertCircle,
-  ChevronDown, Clock, Globe, Zap, RefreshCw, Plus, Trash2, X,
+  ChevronDown, Clock, Globe, Zap, RefreshCw, Plus, Trash2, X, Rss,
 } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
@@ -72,6 +72,7 @@ export default function CalendarSettingsPage() {
   const [syncingSubId, setSyncingSubId] = useState<string | null>(null)
   const [syncingAll, setSyncingAll] = useState(false)
   const [deletingSubId, setDeletingSubId] = useState<string | null>(null)
+  const [copiedFeed, setCopiedFeed] = useState(false)
 
   // Form state
   const [slug, setSlug]                   = useState(defaultSlug)
@@ -88,7 +89,19 @@ export default function CalendarSettingsPage() {
     ? `${window.location.origin}/book/${slug}`
     : `/book/${slug}`
 
+  const calendarId = (settings as { id?: string } | null)?.id ?? ''
+  const feedUrl = typeof window !== 'undefined' && calendarId
+    ? `${window.location.origin}/api/calendar/feed/${calendarId}`
+    : ''
+
   const googleConnected = Boolean((settings as { google_refresh_token?: string | null } | null)?.google_refresh_token)
+
+  function copyFeedUrl() {
+    if (!feedUrl) return
+    navigator.clipboard.writeText(feedUrl)
+    setCopiedFeed(true)
+    setTimeout(() => setCopiedFeed(false), 2000)
+  }
 
   // Load existing settings
   useEffect(() => {
@@ -367,6 +380,82 @@ export default function CalendarSettingsPage() {
                 )}
               </div>
             </div>
+          )}
+        </div>
+
+        {/* ── Microsoft Outlook / 365 ── */}
+        <div className="bg-white rounded-xl border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+              <Calendar className="w-4 h-4 text-blue-500" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-gray-900">Microsoft Outlook / 365</div>
+              <div className="text-xs text-gray-500">Subscribe to your GravHub calendar from Outlook</div>
+            </div>
+            <span className="ml-auto text-xs bg-gray-100 text-gray-500 font-semibold px-2 py-1 rounded-full">
+              Coming Soon
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mb-3">
+            Native Microsoft OAuth integration is coming soon. In the meantime, you can subscribe to your GravHub calendar using the iCal feed URL below.
+          </p>
+          {feedUrl && (
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={feedUrl}
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600 bg-gray-50 focus:outline-none"
+              />
+              <button
+                onClick={copyFeedUrl}
+                className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
+              >
+                {copiedFeed ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedFeed ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ── Apple Calendar ── */}
+        <div className="bg-white rounded-xl border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+              <Calendar className="w-4 h-4 text-gray-600" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-gray-900">Apple Calendar</div>
+              <div className="text-xs text-gray-500">Subscribe from Apple Calendar, iCal, or any app that supports iCal feeds</div>
+            </div>
+          </div>
+          {feedUrl ? (
+            <div>
+              <p className="text-xs text-gray-500 mb-3">
+                Paste this URL into Apple Calendar (File &rarr; New Calendar Subscription) or any calendar app that supports iCal feeds.
+              </p>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                  <span className="px-3 py-2 text-xs text-gray-400 border-r border-gray-200 flex-shrink-0">
+                    <Rss className="w-3.5 h-3.5" />
+                  </span>
+                  <input
+                    readOnly
+                    value={feedUrl}
+                    className="flex-1 px-3 py-2 text-xs text-gray-600 bg-transparent focus:outline-none"
+                  />
+                </div>
+                <button
+                  onClick={copyFeedUrl}
+                  className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
+                >
+                  {copiedFeed ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedFeed ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">Save your calendar settings first to generate your iCal feed URL.</p>
           )}
         </div>
 

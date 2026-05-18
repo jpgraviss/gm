@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react'
 import {
   ChevronLeft, ChevronRight, Clock, Check, Video, Phone, MapPin,
-  User, Mail, Building2, FileText, ArrowLeft, CalendarDays,
+  User, Mail, Building2, FileText, ArrowLeft, CalendarDays, Download,
 } from 'lucide-react'
 
 interface BookingTypeData {
@@ -203,14 +203,70 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     }
   }
 
-  function addToCalendarUrl() {
-    if (!bt || !selectedDate || !selectedSlot) return '#'
-    const [y, m, d] = selectedDate.split('-')
-    const startDate = `${y}${m}${d}T${selectedSlot.start.replace(':', '')}00`
-    const endDate = `${y}${m}${d}T${selectedSlot.end.replace(':', '')}00`
-    const title = encodeURIComponent(bt.name)
-    const details = encodeURIComponent(`Booked by ${name} (${email})${notes ? `\n\nNotes: ${notes}` : ''}`)
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${details}`
+  function getCalendarEvent() {
+    if (!bt || !selectedDate || !selectedSlot) return null
+    return {
+      title: bt.name,
+      startDateTime: `${selectedDate}T${selectedSlot.start}:00`,
+      endDateTime: `${selectedDate}T${selectedSlot.end}:00`,
+      timezone: 'America/Chicago',
+      description: `Booked by ${name} (${email})${notes ? `\n\nNotes: ${notes}` : ''}`,
+      location: '',
+    }
+  }
+
+  function getGoogleCalLink() {
+    const ev = getCalendarEvent()
+    if (!ev) return '#'
+    const [y, m, d] = selectedDate!.split('-')
+    const startDate = `${y}${m}${d}T${selectedSlot!.start.replace(':', '')}00`
+    const endDate = `${y}${m}${d}T${selectedSlot!.end.replace(':', '')}00`
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: ev.title,
+      dates: `${startDate}/${endDate}`,
+      details: ev.description,
+      ctz: ev.timezone,
+    })
+    return `https://calendar.google.com/calendar/render?${params}`
+  }
+
+  function getOutlookLink() {
+    const ev = getCalendarEvent()
+    if (!ev) return '#'
+    const [y, m, d] = selectedDate!.split('-')
+    const start = `${y}${m}${d}T${selectedSlot!.start.replace(':', '')}00`
+    const end = `${y}${m}${d}T${selectedSlot!.end.replace(':', '')}00`
+    const params = new URLSearchParams({
+      path: '/calendar/action/compose',
+      rru: 'addevent',
+      subject: ev.title,
+      startdt: start,
+      enddt: end,
+      body: ev.description,
+    })
+    return `https://outlook.live.com/calendar/0/deeplink/compose?${params}`
+  }
+
+  function getOutlook365Link() {
+    const ev = getCalendarEvent()
+    if (!ev) return '#'
+    const [y, m, d] = selectedDate!.split('-')
+    const start = `${y}${m}${d}T${selectedSlot!.start.replace(':', '')}00`
+    const end = `${y}${m}${d}T${selectedSlot!.end.replace(':', '')}00`
+    const params = new URLSearchParams({
+      path: '/calendar/action/compose',
+      rru: 'addevent',
+      subject: ev.title,
+      startdt: start,
+      enddt: end,
+      body: ev.description,
+    })
+    return `https://outlook.office.com/calendar/0/deeplink/compose?${params}`
+  }
+
+  function getICSUrl() {
+    return bookingId ? `/api/calendar/bookings/${bookingId}/ics` : '#'
   }
 
   if (!bt && !notFound) {
@@ -266,15 +322,45 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
             </div>
           </div>
 
-          <a
-            href={addToCalendarUrl()}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full bg-[#012b1e] text-white rounded-xl py-3 font-semibold text-sm hover:bg-[#015035] transition-colors"
-          >
-            <CalendarDays className="w-4 h-4" />
-            Add to Google Calendar
-          </a>
+          <div className="mb-2">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Add to Calendar</div>
+            <div className="grid grid-cols-2 gap-2">
+              <a
+                href={getGoogleCalLink()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <CalendarDays className="w-4 h-4 text-red-500" />
+                Google
+              </a>
+              <a
+                href={getICSUrl()}
+                className="flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <Download className="w-4 h-4 text-gray-500" />
+                Apple / iCal
+              </a>
+              <a
+                href={getOutlookLink()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <CalendarDays className="w-4 h-4 text-blue-500" />
+                Outlook
+              </a>
+              <a
+                href={getOutlook365Link()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <CalendarDays className="w-4 h-4 text-blue-600" />
+                Outlook 365
+              </a>
+            </div>
+          </div>
 
           <div className="mt-6 pt-4 border-t border-gray-100">
             <div className="text-xs text-gray-400">Powered by</div>

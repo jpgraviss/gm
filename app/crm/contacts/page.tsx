@@ -24,7 +24,7 @@ import {
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
   PhoneCall, Video, Pencil, Trash2, Upload, Eye, MessageSquare, MousePointerClick,
-  Flame, Thermometer, Snowflake, MessageCircle,
+  Flame, Thermometer, Snowflake, MessageCircle, Sparkles, Brain, Wand2,
 } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -391,6 +391,11 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   const [engagementBreakdown, setEngagementBreakdown] = useState({ emailsOpened: 0, linksClicked: 0, proposalsViewed: 0, meetings: 0 })
   const [engagementPoints, setEngagementPoints] = useState({ emailOpened: 5, linkClicked: 10, proposalViewed: 15, meetingHeld: 20 })
   const [engagementThresholds, setEngagementThresholds] = useState({ cold: 20, hot: 60 })
+  const [aiScore, setAiScore] = useState<{ score: number; explanation: string } | null>(null)
+  const [aiScoreLoading, setAiScoreLoading] = useState(false)
+  const [showAiExplanation, setShowAiExplanation] = useState(false)
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiDraftContent, setAiDraftContent] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/settings')
@@ -400,6 +405,17 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       })
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    setAiScoreLoading(true)
+    fetch(`/api/crm/contacts/${contact.id}/ai-score`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.score !== undefined) setAiScore(data)
+      })
+      .catch(() => {})
+      .finally(() => setAiScoreLoading(false))
+  }, [contact.id])
 
   useEffect(() => {
     let cancelled = false
@@ -662,7 +678,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
               </div>
 
               {/* Quick action buttons */}
-              <div className="flex justify-center gap-8 py-3 border-b border-gray-100">
+              <div className="flex justify-center gap-6 py-3 border-b border-gray-100">
                 <button
                   onClick={() => setAddingNote(true)}
                   className="flex flex-col items-center gap-1.5"
@@ -690,7 +706,65 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                   </div>
                   <span className="text-[10px] text-gray-500 font-medium">Log Activity</span>
                 </button>
+                <button
+                  onClick={async () => {
+                    setAiGenerating(true)
+                    setAiDraftContent(null)
+                    try {
+                      const res = await fetch('/api/ai/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          type: 'follow_up',
+                          context: {
+                            recipient: contact.fullName,
+                            company: contact.companyName,
+                            lastInteraction: contact.lastActivity ? `Last active ${new Date(contact.lastActivity).toLocaleDateString()}` : 'initial outreach',
+                            goal: activeDeal ? `Progress ${activeDeal.stage} deal` : 'Re-engage contact',
+                          },
+                        }),
+                      })
+                      if (res.ok) {
+                        const data = await res.json()
+                        setAiDraftContent(data.content)
+                      }
+                    } catch { /* ignore */ }
+                    setAiGenerating(false)
+                  }}
+                  className="flex flex-col items-center gap-1.5"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 hover:bg-purple-100 flex items-center justify-center text-purple-600 transition-colors">
+                    {aiGenerating ? <div className="w-4 h-4 rounded-full border-2 border-purple-200 border-t-purple-600 animate-spin" /> : <Wand2 size={16} />}
+                  </div>
+                  <span className="text-[10px] text-purple-600 font-medium">AI Draft</span>
+                </button>
               </div>
+
+              {aiDraftContent && (
+                <div className="px-5 pt-3">
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles size={12} className="text-purple-600" />
+                        <span className="text-xs font-semibold text-purple-800">AI-Generated Follow-Up</span>
+                      </div>
+                      <button onClick={() => setAiDraftContent(null)} className="text-purple-400 hover:text-purple-600">
+                        <X size={12} />
+                      </button>
+                    </div>
+                    <pre className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-sans">{aiDraftContent}</pre>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(aiDraftContent)
+                        toast('Copied to clipboard', 'success')
+                      }}
+                      className="mt-2 text-xs font-semibold text-purple-700 hover:text-purple-900"
+                    >
+                      Copy to clipboard
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Inline forms */}
               <div className="px-5 pt-3 flex flex-col gap-3">
@@ -1023,6 +1097,46 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
           {tab === 'about' && (
             <div className="flex flex-col">
               <EngagementScoreBar score={engagementScore} breakdown={engagementBreakdown} points={engagementPoints} thresholds={engagementThresholds} />
+
+              <div className="px-5 py-3 border-b border-gray-100">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <Brain size={14} className="text-purple-600" />
+                    <span className="text-sm font-bold text-gray-900">AI Lead Score</span>
+                  </div>
+                  {aiScoreLoading ? (
+                    <div className="w-4 h-4 rounded-full border-2 border-purple-200 border-t-purple-600 animate-spin" />
+                  ) : aiScore ? (
+                    <button
+                      onClick={() => setShowAiExplanation(v => !v)}
+                      className="flex items-center gap-1.5"
+                    >
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                        style={{ background: aiScore.score >= 70 ? '#22c55e' : aiScore.score >= 30 ? '#f59e0b' : '#ef4444' }}
+                      >
+                        {aiScore.score}
+                      </div>
+                      <span
+                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                        style={{
+                          color: aiScore.score >= 70 ? '#15803d' : aiScore.score >= 30 ? '#b45309' : '#dc2626',
+                          background: aiScore.score >= 70 ? '#f0fdf4' : aiScore.score >= 30 ? '#fffbeb' : '#fef2f2',
+                        }}
+                      >
+                        {aiScore.score >= 70 ? 'High' : aiScore.score >= 30 ? 'Medium' : 'Low'}
+                      </span>
+                    </button>
+                  ) : (
+                    <span className="text-xs text-gray-400">Unavailable</span>
+                  )}
+                </div>
+                {showAiExplanation && aiScore && (
+                  <p className="text-xs text-gray-600 leading-relaxed mt-2 p-3 bg-purple-50 rounded-lg border border-purple-100">
+                    {aiScore.explanation}
+                  </p>
+                )}
+              </div>
 
               <button
                 onClick={() => setAboutOpen(v => !v)}

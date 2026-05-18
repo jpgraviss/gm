@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { anthropicInsightsModel } from '@/lib/anthropic'
+
+const INDUSTRIES = [
+  'OOH', 'Real Estate', 'Healthcare', 'Technology', 'Finance', 'Retail',
+  'Education', 'Construction', 'Hospitality', 'Legal', 'Non-Profit', 'Other',
+]
 
 export async function POST(req: NextRequest) {
   let body: { url?: string }
@@ -54,15 +60,76 @@ export async function POST(req: NextRequest) {
   const address = extractAddress(html) || undefined
   const socialLinks = extractSocialLinks(html)
 
+  let aiAnalysis: {
+    industry?: string
+    companySize?: string
+    keyServices?: string[]
+    targetMarket?: string
+    linkedInUrl?: string
+  } = {}
+
+  if (socialLinks.linkedin) {
+    aiAnalysis.linkedInUrl = socialLinks.linkedin
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (apiKey) {
+    const textContent = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 3000)
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: anthropicInsightsModel(),
+          max_tokens: 400,
+          system: 'You are a business analyst. Analyze website content and return ONLY valid JSON, no markdown.',
+          messages: [{
+            role: 'user',
+            content: `Analyze this website content and return JSON with:\n- "industry": one of ${JSON.stringify(INDUSTRIES)}\n- "companySize": one of "small", "medium", "enterprise"\n- "keyServices": array of up to 4 key services offered\n- "targetMarket": one sentence describing their target market\n\nWebsite URL: ${url.toString()}\nContent:\n${textContent}`,
+          }],
+        }),
+      })
+
+      if (res.ok) {
+        const data = await res.json() as { content: { type: string; text: string }[] }
+        const text = data.content.find(c => c.type === 'text')?.text ?? ''
+        const jsonMatch = text.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          aiAnalysis = { ...aiAnalysis, ...parsed }
+        }
+      }
+    } catch {
+      // AI analysis failed, continue with basic enrichment
+    }
+  }
+
   return NextResponse.json({
     name,
     description,
-    industry,
+    industry: aiAnalysis.industry || industry,
     logoUrl,
     phone,
     email,
     address,
     socialLinks,
+    ai: {
+      companySize: aiAnalysis.companySize,
+      keyServices: aiAnalysis.keyServices,
+      targetMarket: aiAnalysis.targetMarket,
+      linkedInUrl: aiAnalysis.linkedInUrl,
+    },
   })
 }
 

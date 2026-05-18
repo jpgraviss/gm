@@ -1540,6 +1540,18 @@ export default function ContactsPage() {
             </div>
           )}
           </div>
+          {filtered.length > 0 && (
+            <div className="border-t border-gray-100">
+              <Pagination
+                currentPage={safeCurrentPage}
+                totalPages={totalPages}
+                totalItems={filtered.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </div>
+          )}
         </div>
       </div>
 

@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = createServiceClient()
+  const batchId = `import-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   let inserted = 0
   let skipped = 0
   const errors: string[] = []
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
         contact_notes:   [],
         contact_tasks:   [],
         created_date:    get(row, 'Create Date', 'Create date', 'createdate', 'Created', 'Date added') || new Date().toISOString().split('T')[0],
+        import_batch_id: batchId,
       })
 
       if (error) { console.error('[crm/import POST] contact insert', error); errors.push(`Contact ${firstName} ${lastName}: import failed`); continue }
@@ -102,6 +104,7 @@ export async function POST(req: NextRequest) {
         deal_ids:       [],
         total_deal_value: 0,
         created_date:   get(row, 'Create Date', 'Create date', 'createdate', 'Created', 'Date added') || new Date().toISOString().split('T')[0],
+        import_batch_id: batchId,
       })
 
       if (error) { console.error('[crm/import POST] company insert', error); errors.push(`Company ${name}: import failed`); continue }

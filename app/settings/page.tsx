@@ -11,7 +11,7 @@ import {
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
   Trash2, X, Eye, EyeOff, AlertTriangle, Mail, LayoutDashboard,
   TrendingUp, Smartphone, Menu, ChevronUp, ChevronDown, RotateCcw, Star,
-  FileText, ArrowUp, ArrowDown, Copy,
+  FileText, ArrowUp, ArrowDown, Copy, Clock,
 } from 'lucide-react'
 import {
   type SystemTemplateName, type SystemEmailTemplate, type TemplateBlock,
@@ -34,7 +34,7 @@ const membershipColors: Record<string, string> = {
   Client: 'bg-green-100 text-green-700',
 }
 
-const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Email Templates', 'Dashboard', 'Navigation', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing'] as const
+const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Email Templates', 'Email Scheduling', 'Dashboard', 'Navigation', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing'] as const
 type Tab = typeof tabs[number]
 
 const tabIcons: Record<Tab, React.ReactNode> = {
@@ -44,6 +44,7 @@ const tabIcons: Record<Tab, React.ReactNode> = {
   Branding: <Palette size={15} />,
   'Email Defaults': <Mail size={15} />,
   'Email Templates': <FileText size={15} />,
+  'Email Scheduling': <Clock size={15} />,
   Dashboard: <LayoutDashboard size={15} />,
   Navigation: <Menu size={15} />,
   Notifications: <Bell size={15} />,
@@ -216,6 +217,70 @@ function loadLS<T>(key: string, fallback: T): T {
     const raw = localStorage.getItem(key)
     return raw ? JSON.parse(raw) : fallback
   } catch { return fallback }
+}
+
+const TIMEZONES = [
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Anchorage', 'Pacific/Honolulu', 'Europe/London', 'Europe/Paris',
+  'Asia/Tokyo', 'Australia/Sydney', 'UTC',
+]
+
+function EmailSchedulingSection() {
+  const [defaultSendTime, setDefaultSendTime] = useState(() => loadLS('emailSchedule_defaultTime', '08:00'))
+  const [timezone, setTimezone] = useState(() => loadLS('emailSchedule_timezone', 'America/Chicago'))
+  const [saved, setSaved] = useState(false)
+
+  function save() {
+    localStorage.setItem('emailSchedule_defaultTime', defaultSendTime)
+    localStorage.setItem('emailSchedule_timezone', timezone)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Email Scheduling</h3>
+        {saved && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Default send time for reports</label>
+          <input
+            type="time"
+            value={defaultSendTime}
+            onChange={e => setDefaultSendTime(e.target.value)}
+            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+          />
+          <p className="text-[10px] text-gray-400 mt-1">Scheduled reports will default to this time</p>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Timezone</label>
+          <select
+            value={timezone}
+            onChange={e => setTimezone(e.target.value)}
+            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+          >
+            {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="rounded-xl border border-gray-200 p-4 mb-4 bg-gray-50">
+        <div className="flex items-center gap-2 mb-2">
+          <Clock size={14} className="text-gray-500" />
+          <p className="text-xs font-semibold text-gray-700">Queue processing</p>
+        </div>
+        <p className="text-xs text-gray-500">
+          Scheduled emails are processed via cron at <span className="font-semibold text-gray-700">/api/email/scheduled/process</span>.
+          Configure your cron provider (Vercel Cron, Railway, etc.) to call this endpoint at your desired interval (e.g. every 5 minutes).
+          The endpoint is protected by the <code className="bg-gray-200 px-1 rounded text-[11px]">CRON_SECRET</code> environment variable.
+        </p>
+      </div>
+      <button onClick={save} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
+        {saved ? <><CheckCircle size={14} /> Saved!</> : 'Save Preferences'}
+      </button>
+    </div>
+  )
 }
 
 export default function SettingsPage() {
@@ -1419,6 +1484,11 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ── Email Scheduling ── */}
+        {activeTab === 'Email Scheduling' && (
+          <EmailSchedulingSection />
         )}
 
         {/* ── Dashboard ── */}

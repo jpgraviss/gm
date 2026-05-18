@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { sendEmail } from '@/lib/email'
+import { scheduleEmail } from '@/lib/email-scheduler'
 import { generateMonthlyReportHtml, type MonthlyReportData } from '@/lib/templates/generate-monthly-report'
 
 export async function POST(req: NextRequest) {
@@ -9,10 +10,17 @@ export async function POST(req: NextRequest) {
   const result = validate(body, {
     workflowId: { required: true, type: 'string', maxLength: 100 },
     reportDate: { type: 'string', maxLength: 10 },
+    scheduleAt: { type: 'string' },
+    recurring: { type: 'string', enum: ['none', 'daily', 'weekly', 'biweekly', 'monthly', 'quarterly'] },
   })
   if (!result.valid) return validationError(result.error)
 
-  const { workflowId, reportDate } = body as { workflowId: string; reportDate?: string }
+  const { workflowId, reportDate, scheduleAt, recurring } = body as {
+    workflowId: string
+    reportDate?: string
+    scheduleAt?: string
+    recurring?: string
+  }
   void reportDate
 
   const db = createServiceClient()
@@ -62,12 +70,39 @@ export async function POST(req: NextRequest) {
   }
 
   let emailResult: { success: boolean; id?: string; error?: string } | null = null
-  if (recipientEmail) {
+  let scheduledResult: { id: string } | null = null
+
+  if (recipientEmail && scheduleAt) {
+    const scheduled = await scheduleEmail({
+      to: recipientEmail,
+      subject: `Monthly Report - ${reportData.period.label}`,
+      html,
+      sendAt: scheduleAt,
+      type: 'report',
+      recurring: (recurring as 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly') ?? 'none',
+      metadata: { workflowId, period: reportData.period },
+    })
+    scheduledResult = { id: scheduled.id }
+  } else if (recipientEmail) {
     emailResult = await sendEmail({
       to: recipientEmail,
       subject: `Monthly Report - ${reportData.period.label}`,
       html,
     })
+
+    if (emailResult.success && recurring === 'monthly') {
+      const nextMonth = new Date()
+      nextMonth.setMonth(nextMonth.getMonth() + 1)
+      await scheduleEmail({
+        to: recipientEmail,
+        subject: `Monthly Report - ${reportData.period.label}`,
+        html,
+        sendAt: nextMonth.toISOString(),
+        type: 'report',
+        recurring: 'monthly',
+        metadata: { workflowId, period: reportData.period },
+      })
+    }
   }
 
   const now = new Date().toISOString()
@@ -106,6 +141,7 @@ export async function POST(req: NextRequest) {
     html,
     workflow: updated,
     email: emailResult,
+    scheduled: scheduledResult,
     recipientEmail,
   })
 }

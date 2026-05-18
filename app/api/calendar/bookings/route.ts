@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getValidAccessToken, createGoogleEvent, type CalendarSettings } from '@/lib/google-calendar'
+import { generateICS } from '@/lib/ics-generator'
+import { getGoogleCalendarLink, getOutlookCalendarLink, getOutlook365CalendarLink } from '@/lib/calendar-links'
+import { getResend } from '@/lib/resend'
+import { getSettings } from '@/lib/settings'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -175,12 +179,144 @@ export async function POST(req: NextRequest) {
           })
           await db.from('booking_type_bookings').update({
             google_event_id: result.eventId,
+            meet_link: result.meetLink,
           }).eq('id', data.id)
           data.google_event_id = result.eventId
+          data.meet_link = result.meetLink
         }
       }
     } catch (e) {
       console.error('[calendar/bookings POST] Google Calendar event creation failed:', e)
+    }
+
+    try {
+      const btName = (await db.from('booking_types').select('name').eq('id', bt.id).single()).data?.name ?? 'Meeting'
+      const { data: calForEmail } = await db
+        .from('calendar_settings')
+        .select('user_name, user_email, timezone')
+        .limit(1)
+        .single()
+
+      const organizerName = calForEmail?.user_name ?? 'Graviss Marketing'
+      const organizerEmail = calForEmail?.user_email ?? 'info@gravissmarketing.com'
+      const tz = calForEmail?.timezone ?? 'America/Chicago'
+      const meetLink = data.meet_link || ''
+      const eventTitle = `${btName} with Graviss Marketing`
+
+      const calEvent = {
+        title: eventTitle,
+        startDateTime: `${date}T${start_time}`,
+        endDateTime: `${date}T${end_time}`,
+        timezone: tz,
+        description: `${btName} — Booked via GravHub${meetLink ? `\n\nJoin: ${meetLink}` : ''}`,
+        location: meetLink,
+      }
+
+      const googleLink = getGoogleCalendarLink(calEvent)
+      const outlookLink = getOutlookCalendarLink(calEvent)
+      const outlook365Link = getOutlook365CalendarLink(calEvent)
+      const icsDownloadUrl = `${process.env.NEXT_PUBLIC_APP_URL || ''}/api/calendar/bookings/${data.id}/ics`
+
+      const icsContent = generateICS({
+        ...calEvent,
+        organizerName,
+        organizerEmail,
+        attendeeEmail: guest_email,
+        uid: `booking-${data.id}@gravhub`,
+      })
+
+      const dateObj = new Date(`${date}T12:00:00`)
+      const formattedDate = dateObj.toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      })
+      const [sh, sm] = start_time.split(':').map(Number)
+      const period = sh < 12 ? 'AM' : 'PM'
+      const hr = sh % 12 === 0 ? 12 : sh % 12
+      const formattedTime = `${hr}:${String(sm).padStart(2, '0')} ${period}`
+
+      const appSettings = await getSettings()
+      const fromEmail = `${appSettings.email.fromName} <${appSettings.email.fromEmail}>`
+
+      const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:system-ui,-apple-system,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+<tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
+  <tr><td style="background:#012b1e;padding:32px 32px 24px;">
+    <div style="font-size:11px;font-weight:700;color:#ffffff;letter-spacing:2px;">GRAVISS</div>
+    <div style="font-size:8px;color:rgba(255,255,255,0.4);letter-spacing:2px;">MARKETING</div>
+  </td></tr>
+  <tr><td style="padding:32px;">
+    <div style="width:56px;height:56px;background:#e6f4ed;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+      <div style="width:24px;height:24px;color:#015035;font-size:24px;text-align:center;line-height:24px;">&#10003;</div>
+    </div>
+    <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#111827;text-align:center;">You're booked!</h1>
+    <p style="margin:0 0 24px;font-size:14px;color:#6b7280;text-align:center;">Your meeting has been confirmed.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:12px;padding:20px;margin-bottom:24px;">
+      <tr><td>
+        <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">What</div>
+        <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:16px;">${btName}</div>
+        <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">When</div>
+        <div style="font-size:14px;color:#111827;margin-bottom:2px;">${formattedDate}</div>
+        <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${formattedTime} (${tz})</div>
+        <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Host</div>
+        <div style="font-size:14px;color:#111827;">${organizerName}</div>
+      </td></tr>
+    </table>
+
+    ${meetLink ? `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr><td align="center">
+        <a href="${meetLink}" style="display:inline-block;background:#012b1e;color:#ffffff;font-size:14px;font-weight:600;padding:12px 32px;border-radius:12px;text-decoration:none;">Join Google Meet</a>
+      </td></tr>
+    </table>
+    ` : ''}
+
+    <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:12px;">Add to Calendar</div>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="padding:0 4px 8px 0;"><a href="${googleLink}" style="display:block;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;text-decoration:none;font-size:12px;font-weight:600;color:#374151;text-align:center;">Google Calendar</a></td>
+        <td style="padding:0 4px 8px;"><a href="${outlookLink}" style="display:block;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;text-decoration:none;font-size:12px;font-weight:600;color:#374151;text-align:center;">Outlook</a></td>
+        <td style="padding:0 0 8px 4px;"><a href="${icsDownloadUrl}" style="display:block;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;text-decoration:none;font-size:12px;font-weight:600;color:#374151;text-align:center;">Apple / iCal</a></td>
+      </tr>
+      <tr>
+        <td colspan="3" style="padding:0 0 0 0;"><a href="${outlook365Link}" style="display:block;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;text-decoration:none;font-size:12px;font-weight:600;color:#374151;text-align:center;">Outlook 365</a></td>
+      </tr>
+    </table>
+  </td></tr>
+  <tr><td style="padding:0 32px 24px;">
+    <div style="border-top:1px solid #f3f4f6;padding-top:16px;text-align:center;">
+      <div style="font-size:10px;color:#9ca3af;">Powered by</div>
+      <div style="font-size:10px;font-weight:700;color:#015035;letter-spacing:2px;margin-top:2px;">GRAVISS MARKETING</div>
+    </div>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
+
+      const resend = getResend()
+      await resend.emails.send({
+        from: fromEmail,
+        replyTo: appSettings.email.replyTo,
+        to: [guest_email],
+        subject: `Confirmed: ${btName} with Graviss Marketing`,
+        html: emailHtml,
+        attachments: [
+          {
+            filename: 'invite.ics',
+            content: Buffer.from(icsContent).toString('base64'),
+            contentType: 'text/calendar; method=REQUEST',
+          },
+        ],
+      })
+    } catch (emailErr) {
+      console.error('[calendar/bookings POST] Confirmation email failed:', emailErr)
     }
   }
 

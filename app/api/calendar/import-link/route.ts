@@ -1,10 +1,86 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { parseICS } from '@/lib/ical-parser'
+
+function isIcsUrl(link: string): boolean {
+  return (
+    link.includes('/calendar/ical/') ||
+    link.endsWith('.ics') ||
+    link.includes('.ics?') ||
+    link.includes('webcal://') ||
+    link.includes('/basic.ics')
+  )
+}
+
+function normalizeIcsUrl(url: string): string {
+  return url.replace(/^webcal:\/\//, 'https://')
+}
 
 export async function POST(req: NextRequest) {
-  const { link } = await req.json()
+  const { link, userEmail, subscriptionName } = await req.json()
   if (!link || typeof link !== 'string') {
     return NextResponse.json({ error: 'Missing link' }, { status: 400 })
+  }
+
+  const db = createServiceClient()
+
+  if (isIcsUrl(link)) {
+    const fetchUrl = normalizeIcsUrl(link.trim())
+    let icsText: string
+    try {
+      const res = await fetch(fetchUrl, { headers: { Accept: 'text/calendar' } })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      icsText = await res.text()
+    } catch (err) {
+      return NextResponse.json({ error: `Failed to fetch ICS URL: ${err instanceof Error ? err.message : 'unknown error'}` }, { status: 400 })
+    }
+
+    const cal = parseICS(icsText)
+    const name = subscriptionName?.trim() || cal.name || 'Imported Calendar'
+    const email = userEmail || ''
+
+    const subId = `sub-${Date.now()}`
+    await db.from('calendar_subscriptions').insert({
+      id: subId,
+      user_email: email,
+      name,
+      ical_url: fetchUrl,
+      last_synced_at: new Date().toISOString(),
+      event_count: cal.events.length,
+    })
+
+    let imported = 0
+    for (const event of cal.events) {
+      if (!event.dtstart) continue
+      const startDate = new Date(event.dtstart)
+      const endDate = event.dtend ? new Date(event.dtend) : startDate
+      const date = startDate.toISOString().split('T')[0]
+      const startHHMM = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`
+      const endHHMM = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`
+
+      await db.from('bookings').upsert({
+        id: `ics-${subId}-${event.uid}`,
+        calendar_slug: 'imported',
+        client_name: event.summary,
+        client_email: '',
+        date,
+        start_time: startHHMM,
+        end_time: endHHMM === startHHMM ? (() => { const e = new Date(startDate.getTime() + 3600000); return `${String(e.getHours()).padStart(2, '0')}:${String(e.getMinutes()).padStart(2, '0')}` })() : endHHMM,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        status: 'confirmed',
+        notes: event.description || (event.location ? `Location: ${event.location}` : `Imported from ${name}`),
+        subscription_id: subId,
+      }, { onConflict: 'id' })
+      imported++
+    }
+
+    return NextResponse.json({
+      type: 'subscription',
+      subscriptionId: subId,
+      name,
+      imported,
+      total: cal.events.length,
+    })
   }
 
   let title = 'Google Calendar Event'
@@ -39,7 +115,6 @@ export async function POST(req: NextRequest) {
     // best-effort parsing
   }
 
-  const db = createServiceClient()
   const id = `gcal-import-${Date.now()}`
 
   const { data, error } = await db.from('bookings').insert({
@@ -59,5 +134,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json(data)
+  return NextResponse.json({ type: 'single', ...data })
 }

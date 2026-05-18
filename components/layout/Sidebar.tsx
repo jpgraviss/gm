@@ -10,7 +10,10 @@ import {
   LayoutDashboard, Users, FileText, CreditCard,
   FolderKanban, Globe,
   Settings, X, ShieldCheck, LogOut, TrendingUp, MessageSquare, Inbox,
-  BookOpen, Star, Megaphone, Bot,
+  BookOpen, Star, Megaphone, Bot, ChevronDown,
+  ScrollText, GraduationCap, Share2, Mail, ClipboardList, Layers,
+  CheckSquare, Clock, CalendarDays, CalendarCheck, Wrench, RefreshCw, PackageCheck, Zap,
+  BarChart3, Plug, Search, Activity,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -21,6 +24,7 @@ export interface NavItem {
   allowedUnits?: string[]
   contractorVisible?: boolean
   billingVisible?: boolean
+  children?: NavItem[]
 }
 
 export interface NavSection {
@@ -63,12 +67,50 @@ export const defaultNavigation: NavSection[] = [
     ],
   },
   {
-    section: 'Business',
+    section: 'Sales',
     items: [
-      { label: 'Sales',      href: '/sales',         icon: <TrendingUp size={16} />,   billingVisible: true },
-      { label: 'Operations', href: '/operations',    icon: <FolderKanban size={16} />, contractorVisible: true, billingVisible: true },
-      { label: 'Marketing',  href: '/marketing/hub', icon: <Megaphone size={16} />,    allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'Finance',    href: '/finance',       icon: <CreditCard size={16} />,   allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Pipeline', href: '/crm/pipeline', icon: <TrendingUp size={16} />, billingVisible: true },
+      { label: 'Companies', href: '/crm/companies', icon: <Users size={16} />, billingVisible: true },
+      { label: 'Contacts', href: '/crm/contacts', icon: <Users size={16} />, billingVisible: true },
+      { label: 'Sequences', href: '/crm/sequences', icon: <Zap size={16} />, billingVisible: true },
+      { label: 'Proposals', href: '/proposals', icon: <FileText size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Contracts', href: '/contracts', icon: <ScrollText size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Enablement', href: '/sales-enablement', icon: <BookOpen size={16} />, allowedUnits: ['Leadership/Admin', 'Sales'] },
+      { label: 'Courses', href: '/courses', icon: <GraduationCap size={16} />, allowedUnits: ['Leadership/Admin', 'Sales'] },
+    ],
+  },
+  {
+    section: 'Operations',
+    items: [
+      { label: 'Projects', href: '/projects', icon: <FolderKanban size={16} />, contractorVisible: true },
+      { label: 'Tasks', href: '/tasks', icon: <CheckSquare size={16} />, contractorVisible: true, billingVisible: true },
+      { label: 'Time Tracking', href: '/time-tracking', icon: <Clock size={16} />, contractorVisible: true, billingVisible: true },
+      { label: 'Calendar', href: '/calendar', icon: <CalendarDays size={16} /> },
+      { label: 'Booking', href: '/calendar/booking', icon: <CalendarCheck size={16} /> },
+      { label: 'Maintenance', href: '/maintenance', icon: <Wrench size={16} />, contractorVisible: true },
+      { label: 'Renewals', href: '/renewals', icon: <RefreshCw size={16} /> },
+      { label: 'Delivery', href: '/crm/delivery-dashboard', icon: <PackageCheck size={16} /> },
+      { label: 'Automation', href: '/automation', icon: <Zap size={16} />, allowedUnits: ['Leadership/Admin'] },
+    ],
+  },
+  {
+    section: 'Marketing',
+    items: [
+      { label: 'Broadcasts', href: '/marketing', icon: <Mail size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Social Media', href: '/social', icon: <Share2 size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Forms', href: '/forms', icon: <ClipboardList size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Funnels', href: '/funnels', icon: <Layers size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Rank Tracker', href: '/rank-tracker', icon: <Search size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+    ],
+  },
+  {
+    section: 'Finance',
+    items: [
+      { label: 'Billing', href: '/billing', icon: <CreditCard size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Reports', href: '/reports', icon: <BarChart3 size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Client Reports', href: '/reports/client', icon: <FileText size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Integrations', href: '/integrations', icon: <Plug size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Monitoring', href: '/monitoring', icon: <Activity size={16} />, allowedUnits: ['Leadership/Admin', 'Delivery/Operations'] },
     ],
   },
   {
@@ -153,12 +195,15 @@ function applyNavConfig(config: NavConfig): NavSection[] {
     .filter((s): s is NavSection => !!s)
 }
 
+const COLLAPSIBLE_SECTIONS = new Set(['Sales', 'Operations', 'Marketing', 'Finance'])
+
 export default function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const { closeSidebar } = useUI()
   const settings = useSettings()
   const [roleNavConfig, setRoleNavConfig] = useState<RoleNavConfig | null>(null)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set())
 
   useEffect(() => {
     fetch('/api/settings')
@@ -177,6 +222,19 @@ export default function Sidebar() {
 
   const activeConfig = roleNavConfig ? resolveConfigForUser(roleNavConfig, user ?? null) : null
   const resolvedNavigation = activeConfig ? applyNavConfig(activeConfig) : defaultNavigation
+
+  useEffect(() => {
+    const toExpand: string[] = []
+    for (const group of resolvedNavigation) {
+      if (COLLAPSIBLE_SECTIONS.has(group.section)) {
+        const hasActive = group.items.some(item => pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)))
+        if (hasActive) toExpand.push(group.section)
+      }
+    }
+    if (toExpand.length > 0) {
+      requestAnimationFrame(() => setExpandedSections(prev => { const next = new Set(prev); toExpand.forEach(s => next.add(s)); return next }))
+    }
+  }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogout = () => {
     logout()
@@ -224,43 +282,70 @@ export default function Sidebar() {
           })
           if (visibleItems.length === 0) return null
 
+          const isCollapsible = COLLAPSIBLE_SECTIONS.has(group.section)
+          const isExpanded = expandedSections.has(group.section)
+          const hasActiveChild = visibleItems.some(item => pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)))
+
           return (
             <div key={group.section} className="mb-3">
-              <p className="block lg:hidden lg:group-hover:block text-white/30 text-[10px] font-semibold tracking-widest uppercase px-3 mb-1.5 whitespace-nowrap overflow-hidden">
-                {group.section}
-              </p>
-              <div className="hidden lg:block lg:group-hover:hidden h-px bg-white/[0.06] mx-2 mb-2" />
+              {isCollapsible ? (
+                <button
+                  onClick={() => setExpandedSections(prev => {
+                    const next = new Set(prev)
+                    if (next.has(group.section)) next.delete(group.section)
+                    else next.add(group.section)
+                    return next
+                  })}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors
+                    ${hasActiveChild ? 'bg-white/[0.08] text-white' : 'text-white/60 hover:text-white/80 hover:bg-white/[0.04]'}`}
+                >
+                  <ChevronDown size={12} className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+                  <span className="text-[11px] font-semibold tracking-widest uppercase whitespace-nowrap overflow-hidden
+                    lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
+                    {group.section}
+                  </span>
+                </button>
+              ) : (
+                <>
+                  <p className="block lg:hidden lg:group-hover:block text-white/30 text-[10px] font-semibold tracking-widest uppercase px-3 mb-1.5 whitespace-nowrap overflow-hidden">
+                    {group.section}
+                  </p>
+                  <div className="hidden lg:block lg:group-hover:hidden h-px bg-white/[0.06] mx-2 mb-2" />
+                </>
+              )}
 
-              <div className="flex flex-col gap-0.5">
-                {visibleItems.map((item) => {
-                  const isActive =
-                    pathname === item.href ||
-                    (item.href !== '/' && pathname.startsWith(item.href))
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={closeSidebar}
-                      title={item.label}
-                      className={`sidebar-nav-item ${isActive ? 'active' : ''} justify-start`}
-                    >
-                      <span className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-white/50'}`}>
-                        {item.icon}
-                      </span>
-                      <span className="flex-1 text-[13px] whitespace-nowrap overflow-hidden
-                                       lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
-                        {item.label}
-                      </span>
-                      {item.adminOnly && (
-                        <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap
-                                         lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
-                          ADMIN
+              {(!isCollapsible || isExpanded) && (
+                <div className={`flex flex-col gap-0.5 ${isCollapsible ? 'mt-0.5 ml-2' : ''}`}>
+                  {visibleItems.map((item) => {
+                    const isActive =
+                      pathname === item.href ||
+                      (item.href !== '/' && pathname.startsWith(item.href))
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={closeSidebar}
+                        title={item.label}
+                        className={`sidebar-nav-item ${isActive ? 'active' : ''} justify-start`}
+                      >
+                        <span className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-white/50'}`}>
+                          {item.icon}
                         </span>
-                      )}
-                    </Link>
-                  )
-                })}
-              </div>
+                        <span className="flex-1 text-[13px] whitespace-nowrap overflow-hidden
+                                         lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
+                          {item.label}
+                        </span>
+                        {item.adminOnly && (
+                          <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap
+                                           lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
+                            ADMIN
+                          </span>
+                        )}
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )
         })}

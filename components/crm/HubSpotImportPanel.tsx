@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import { X, Upload, FileText, CheckCircle, AlertCircle, Building2, Users, TrendingUp, Cloud, FileUp, RefreshCw, Undo2 } from 'lucide-react'
+import { X, Upload, FileText, CheckCircle, AlertCircle, Building2, Users, TrendingUp, Cloud, FileUp, RefreshCw, Undo2, GitMerge } from 'lucide-react'
 
 type ImportType = 'companies' | 'contacts' | 'deals'
 type ImportMode = 'csv' | 'api'
@@ -28,6 +28,7 @@ interface HubSpotContact {
 interface Props {
   onClose: () => void
   onComplete?: () => void
+  onShowDuplicates?: () => void
   defaultType?: ImportType
 }
 
@@ -93,7 +94,7 @@ const typeConfig: Record<ImportType, { icon: typeof Building2; label: string; de
   },
 }
 
-export default function HubSpotImportPanel({ onClose, onComplete, defaultType }: Props) {
+export default function HubSpotImportPanel({ onClose, onComplete, onShowDuplicates, defaultType }: Props) {
   const [type, setType] = useState<ImportType>(defaultType ?? 'companies')
   const [mode, setMode] = useState<ImportMode>('api')
   const [file, setFile] = useState<File | null>(null)
@@ -102,6 +103,7 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [duplicateCount, setDuplicateCount] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [apiContacts, setApiContacts] = useState<HubSpotContact[]>([])
@@ -184,6 +186,15 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
       } else {
         setResult(data)
         onComplete?.()
+        if (data.inserted > 0 && type !== 'deals') {
+          try {
+            const dupRes = await fetch(`/api/crm/duplicates?type=${type}`)
+            if (dupRes.ok) {
+              const dupData = await dupRes.json()
+              setDuplicateCount((dupData.groups ?? []).length)
+            }
+          } catch { /* ignore */ }
+        }
       }
     } catch {
       setError('Import failed. Please try again.')
@@ -214,6 +225,15 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
           errors: data.errors,
         })
         onComplete?.()
+        if (data.inserted > 0) {
+          try {
+            const dupRes = await fetch('/api/crm/duplicates?type=contacts')
+            if (dupRes.ok) {
+              const dupData = await dupRes.json()
+              setDuplicateCount((dupData.groups ?? []).length)
+            }
+          } catch { /* ignore */ }
+        }
       }
     } catch {
       setError('Import failed. Please try again.')
@@ -544,6 +564,22 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
                       {undoing ? <RefreshCw size={12} className="animate-spin" /> : <Undo2 size={12} />}
                       Undo Import
                     </button>
+                  )}
+                  {duplicateCount > 0 && onShowDuplicates && (
+                    <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-xl">
+                      <div className="flex items-center gap-2 justify-center">
+                        <GitMerge size={14} className="text-orange-600" />
+                        <span className="text-sm font-semibold text-orange-800">
+                          {duplicateCount} potential duplicate{duplicateCount > 1 ? 's' : ''} detected
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => { onClose(); onShowDuplicates() }}
+                        className="mt-2 text-xs font-semibold text-orange-700 hover:text-orange-900 underline"
+                      >
+                        Review Duplicates
+                      </button>
+                    </div>
                   )}
                 </>
               )}

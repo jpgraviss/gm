@@ -12,9 +12,11 @@ import type { Contract, ContractStatus, Invoice, Project, Proposal, SignatureReq
 import {
   X, CheckCircle, Clock, AlertCircle, ScrollText, Calendar, DollarSign, User,
   ExternalLink, FileText, FolderKanban, Send, RefreshCw, Shield, Plus, FilePlus2,
-  PenTool, Mail, Search, Eye, Pencil, FileSignature, TrendingUp,
+  PenTool, Mail, Search, Eye, Pencil, FileSignature, TrendingUp, Trash2, Download,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import BulkActionBar from '@/components/ui/BulkActionBar'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 
 const allStatuses: ContractStatus[] = [
   'Draft', 'Sent', 'Viewed', 'Signed by Client', 'Countersign Needed', 'Fully Executed', 'Expired',
@@ -677,6 +679,8 @@ export default function ContractsPage() {
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [signatures, setSignatures] = useState<SignatureRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
 
   useEffect(() => {
     fetch('/api/contracts')
@@ -897,6 +901,41 @@ export default function ContractsPage() {
     ? byStatus.filter(c => c.company.toLowerCase().includes(searchQuery.toLowerCase()))
     : byStatus
 
+  const allFilteredIds = filtered.map(c => c.id)
+  const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id))
+  const someSelected = selectedIds.size > 0
+
+  function toggleSelectAll() {
+    if (allSelected) setSelectedIds(new Set())
+    else setSelectedIds(new Set(allFilteredIds))
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selectedIds)
+    setLocalContracts(prev => prev.filter(c => !selectedIds.has(c.id)))
+    setSelectedIds(new Set())
+    setShowBulkDeleteConfirm(false)
+    try {
+      await fetch('/api/crm/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'contracts', ids }),
+      })
+      toast(`${ids.length} contracts deleted`, 'success')
+    } catch {
+      toast('Failed to delete contracts', 'error')
+    }
+  }
+
   const totalContracts = localContracts.length
   const activeCount = localContracts.filter(c => c.status === 'Fully Executed').length
   const totalMRR = localContracts
@@ -981,6 +1020,14 @@ export default function ContractsPage() {
             <table className="data-table min-w-[800px]">
               <thead>
                 <tr>
+                  <th className="w-10">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                    />
+                  </th>
                   <th>Company</th>
                   <th>Service</th>
                   <th>Status</th>
@@ -993,7 +1040,15 @@ export default function ContractsPage() {
               </thead>
               <tbody>
                 {filtered.map(c => (
-                  <tr key={c.id} className="group cursor-pointer" onClick={() => setSelected(c)}>
+                  <tr key={c.id} className={`group cursor-pointer ${selectedIds.has(c.id) ? 'bg-emerald-50/50' : ''}`} onClick={() => setSelected(c)}>
+                    <td onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(c.id)}
+                        onChange={() => toggleSelect(c.id)}
+                        className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                      />
+                    </td>
                     <td>
                       <p className="font-semibold text-gray-900">{c.company}</p>
                       <p className="text-[11px] text-gray-400 mt-0.5">{c.id.toUpperCase()}</p>
@@ -1119,6 +1174,24 @@ export default function ContractsPage() {
           contracts={localContracts}
           onSave={handleNewAddendum}
           onClose={() => setCreatingAddendum(false)}
+        />
+      )}
+      {someSelected && (
+        <BulkActionBar
+          selectedCount={selectedIds.size}
+          onDeselectAll={() => setSelectedIds(new Set())}
+          actions={[
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {} },
+            { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
+          ]}
+        />
+      )}
+      {showBulkDeleteConfirm && (
+        <ConfirmModal
+          title={`Delete ${selectedIds.size} contracts?`}
+          description="This action cannot be undone. Selected contracts will be permanently removed."
+          onConfirm={handleBulkDelete}
+          onCancel={() => setShowBulkDeleteConfirm(false)}
         />
       )}
     </>

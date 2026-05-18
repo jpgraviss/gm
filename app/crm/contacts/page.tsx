@@ -23,8 +23,11 @@ import {
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
   PhoneCall, Video, Pencil, Trash2, Upload, Eye, MessageSquare, MousePointerClick,
-  Flame, Thermometer, Snowflake, MessageCircle, Sparkles, Brain, Wand2,
+  Flame, Thermometer, Snowflake, MessageCircle, Sparkles, Brain, Wand2, GitMerge, Download, Tag,
 } from 'lucide-react'
+import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
+import BulkActionBar from '@/components/ui/BulkActionBar'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import Pagination from '@/components/ui/Pagination'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1289,6 +1292,11 @@ export default function ContactsPage() {
   const [localContacts, setLocalContacts] = useState<CRMContact[]>([])
   const [creatingContact, setCreatingContact] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showDuplicates, setShowDuplicates] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  const [showBulkTag, setShowBulkTag] = useState(false)
+  const [bulkTagValue, setBulkTagValue] = useState('')
 
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(() => {
@@ -1390,6 +1398,66 @@ export default function ContactsPage() {
     c.emails.join(' ').toLowerCase().includes(search.toLowerCase())
   )
 
+  const allFilteredIds = filtered.map(c => c.id)
+  const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id))
+  const someSelected = selectedIds.size > 0
+
+  function toggleSelectAll() {
+    if (allSelected) setSelectedIds(new Set())
+    else setSelectedIds(new Set(allFilteredIds))
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selectedIds)
+    setLocalContacts(prev => prev.filter(c => !selectedIds.has(c.id)))
+    setSelectedIds(new Set())
+    setShowBulkDeleteConfirm(false)
+    try {
+      await fetch('/api/crm/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'contacts', ids }),
+      })
+      toast(`${ids.length} contacts deleted`, 'success')
+    } catch {
+      toast('Failed to delete contacts', 'error')
+    }
+  }
+
+  async function handleBulkTag() {
+    const tag = bulkTagValue.trim()
+    if (!tag) return
+    const ids = Array.from(selectedIds)
+    setLocalContacts(prev => prev.map(c =>
+      selectedIds.has(c.id) && !c.tags.includes(tag)
+        ? { ...c, tags: [...c.tags, tag] }
+        : c
+    ))
+    setShowBulkTag(false)
+    setBulkTagValue('')
+    setSelectedIds(new Set())
+    for (const id of ids) {
+      const contact = localContacts.find(c => c.id === id)
+      if (contact && !contact.tags.includes(tag)) {
+        fetch(`/api/crm/contacts/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tags: [...contact.tags, tag] }),
+        }).catch(() => {})
+      }
+    }
+    toast(`Tag "${tag}" applied to ${ids.length} contacts`, 'success')
+  }
+
   useEffect(() => { setCurrentPage(1) }, [search])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
@@ -1416,6 +1484,12 @@ export default function ContactsPage() {
             />
           </div>
           <button
+            onClick={() => setShowDuplicates(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
+          >
+            <GitMerge size={13} /> Show Duplicates
+          </button>
+          <button
             onClick={() => setShowImport(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
           >
@@ -1430,6 +1504,14 @@ export default function ContactsPage() {
           <table className="w-full min-w-[560px]">
             <thead>
               <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
+                <th className="w-10 py-2.5 px-4">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                  />
+                </th>
                 <th className="text-left py-2.5 px-4 font-semibold">Name</th>
                 <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Company</th>
                 <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Title</th>
@@ -1447,8 +1529,16 @@ export default function ContactsPage() {
                   <tr
                     key={contact.id}
                     onClick={() => setSelectedContact(contact)}
-                    className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors"
+                    className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors ${selectedIds.has(contact.id) ? 'bg-emerald-50/50' : ''}`}
                   >
+                    <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(contact.id)}
+                        onChange={() => toggleSelect(contact.id)}
+                        className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                      />
+                    </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <div
@@ -1583,7 +1673,59 @@ export default function ContactsPage() {
           onComplete={() => {
             fetch('/api/crm/contacts').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalContacts(data) })
           }}
+          onShowDuplicates={() => setShowDuplicates(true)}
         />
+      )}
+      {showDuplicates && (
+        <DuplicatesPanel
+          type="contacts"
+          onClose={() => setShowDuplicates(false)}
+          onMergeComplete={() => {
+            fetch('/api/crm/contacts').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalContacts(data) })
+          }}
+        />
+      )}
+      {someSelected && (
+        <BulkActionBar
+          selectedCount={selectedIds.size}
+          onDeselectAll={() => setSelectedIds(new Set())}
+          actions={[
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {} },
+            { label: 'Tag', icon: <Tag size={13} />, onClick: () => setShowBulkTag(true) },
+            { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
+          ]}
+        />
+      )}
+      {showBulkDeleteConfirm && (
+        <ConfirmModal
+          title={`Delete ${selectedIds.size} contacts?`}
+          description="This action cannot be undone. Selected contacts will be permanently removed."
+          onConfirm={handleBulkDelete}
+          onCancel={() => setShowBulkDeleteConfirm(false)}
+        />
+      )}
+      {showBulkTag && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBulkTag(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 flex flex-col gap-4">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Tag {selectedIds.size} contacts</p>
+              <p className="text-xs text-gray-500 mt-0.5">Apply a tag to all selected contacts</p>
+            </div>
+            <input
+              value={bulkTagValue}
+              onChange={e => setBulkTagValue(e.target.value)}
+              placeholder="Tag name..."
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') handleBulkTag() }}
+            />
+            <div className="flex gap-2">
+              <button onClick={handleBulkTag} disabled={!bulkTagValue.trim()} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>Apply Tag</button>
+              <button onClick={() => setShowBulkTag(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

@@ -4,10 +4,20 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   Calendar, Check, Link2, Copy, ExternalLink, AlertCircle,
-  ChevronDown, Clock, Globe, Zap, RefreshCw,
+  ChevronDown, Clock, Globe, Zap, RefreshCw, Plus, Trash2, X,
 } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
+
+interface CalendarSubscription {
+  id: string
+  user_email: string
+  name: string
+  ical_url: string
+  last_synced_at: string | null
+  event_count: number
+  created_at: string
+}
 
 const TIMEZONES = [
   'America/New_York',
@@ -54,6 +64,14 @@ export default function CalendarSettingsPage() {
   const [copied, setCopied]       = useState(false)
   const [syncing, setSyncing]     = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
+  const [subscriptions, setSubscriptions] = useState<CalendarSubscription[]>([])
+  const [showAddSub, setShowAddSub] = useState(false)
+  const [subUrl, setSubUrl] = useState('')
+  const [subName, setSubName] = useState('')
+  const [addingSub, setAddingSub] = useState(false)
+  const [syncingSubId, setSyncingSubId] = useState<string | null>(null)
+  const [syncingAll, setSyncingAll] = useState(false)
+  const [deletingSubId, setDeletingSubId] = useState<string | null>(null)
 
   // Form state
   const [slug, setSlug]                   = useState(defaultSlug)

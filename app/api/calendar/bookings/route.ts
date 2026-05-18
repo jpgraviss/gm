@@ -175,8 +175,10 @@ export async function POST(req: NextRequest) {
           })
           await db.from('booking_type_bookings').update({
             google_event_id: result.eventId,
+            meet_link: result.meetLink,
           }).eq('id', data.id)
           data.google_event_id = result.eventId
+          data.meet_link = result.meetLink
         }
       }
     } catch (e) {

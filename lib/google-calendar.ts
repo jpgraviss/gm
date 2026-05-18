@@ -199,7 +199,7 @@ export async function createGoogleEvent(
         attendees: [{ email: params.attendeeEmail, displayName: params.attendeeName }],
         conferenceData: {
           createRequest: {
-            requestId:             `gravhub-${Date.now()}`,
+            requestId:             crypto.randomUUID(),
             conferenceSolutionKey: { type: 'hangoutsMeet' },
           },
         },

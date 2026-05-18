@@ -44,6 +44,17 @@ interface Booking {
   timezone: string
   status: string
   meet_link: string | null
+  subscription_id: string | null
+  created_at: string
+}
+
+interface CalendarSubscription {
+  id: string
+  user_email: string
+  name: string
+  ical_url: string
+  last_synced_at: string | null
+  event_count: number
   created_at: string
 }
 
@@ -84,8 +95,11 @@ export default function CalendarPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showAddFromLink, setShowAddFromLink] = useState(false)
   const [gcalLinkInput, setGcalLinkInput] = useState('')
+  const [gcalLinkName, setGcalLinkName] = useState('')
   const [addingFromLink, setAddingFromLink] = useState(false)
   const [lastSync, setLastSync] = useState<string | null>(null)
+  const [subscriptions, setSubscriptions] = useState<CalendarSubscription[]>([])
+  const [importResult, setImportResult] = useState<string | null>(null)
   const [typeBookings, setTypeBookings] = useState<BookingTypeBooking[]>([])
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date()
@@ -124,6 +138,10 @@ export default function CalendarPage() {
     fetch('/api/calendar/bookings')
       .then(r => r.ok ? r.json() : [])
       .then(d => { if (Array.isArray(d)) setTypeBookings(d) })
+      .catch(() => {})
+    fetch('/api/calendar/subscriptions')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { if (Array.isArray(d)) setSubscriptions(d) })
       .catch(() => {})
   }, [])
 
@@ -195,22 +213,77 @@ export default function CalendarPage() {
     setDeletingId(null)
   }
 
+  function isIcsUrl(link: string): boolean {
+    return (
+      link.includes('/calendar/ical/') ||
+      link.endsWith('.ics') ||
+      link.includes('.ics?') ||
+      link.includes('webcal://') ||
+      link.includes('/basic.ics')
+    )
+  }
+
   async function handleAddFromGcalLink() {
     if (!gcalLinkInput.trim()) return
     setAddingFromLink(true)
+    setImportResult(null)
     try {
-      const res = await fetch('/api/calendar/import-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ link: gcalLinkInput.trim() }),
-      })
-      if (res.ok) {
-        const booking = await res.json()
-        setBookings(prev => [booking, ...prev])
-        setGcalLinkInput('')
-        setShowAddFromLink(false)
+      if (isIcsUrl(gcalLinkInput)) {
+        const res = await fetch('/api/calendar/subscriptions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: gcalLinkInput.trim(),
+            name: gcalLinkName.trim() || undefined,
+            userEmail: user?.email || '',
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setSubscriptions(prev => [{ id: data.id, user_email: user?.email || '', name: data.name, ical_url: gcalLinkInput.trim(), last_synced_at: new Date().toISOString(), event_count: data.total, created_at: new Date().toISOString() }, ...prev])
+          setImportResult(`Imported ${data.imported} events from "${data.name}"`)
+          const params = userSlug ? `?slug=${userSlug}` : ''
+          const bookingsRes = await fetch(`/api/bookings${params}`)
+          if (bookingsRes.ok) {
+            const bookingsData = await bookingsRes.json()
+            setBookings(Array.isArray(bookingsData) ? bookingsData : [])
+          }
+          setGcalLinkInput('')
+          setGcalLinkName('')
+          setTimeout(() => { setImportResult(null); setShowAddFromLink(false) }, 2000)
+        } else {
+          const err = await res.json()
+          setImportResult(err.error || 'Import failed')
+        }
+      } else {
+        const res = await fetch('/api/calendar/import-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ link: gcalLinkInput.trim(), userEmail: user?.email || '' }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.type === 'subscription') {
+            setSubscriptions(prev => [{ id: data.subscriptionId, user_email: user?.email || '', name: data.name, ical_url: gcalLinkInput.trim(), last_synced_at: new Date().toISOString(), event_count: data.total, created_at: new Date().toISOString() }, ...prev])
+            setImportResult(`Imported ${data.imported} events from "${data.name}"`)
+            const params = userSlug ? `?slug=${userSlug}` : ''
+            const bookingsRes = await fetch(`/api/bookings${params}`)
+            if (bookingsRes.ok) {
+              const bookingsData = await bookingsRes.json()
+              setBookings(Array.isArray(bookingsData) ? bookingsData : [])
+            }
+          } else {
+            setBookings(prev => [data, ...prev])
+            setImportResult('Event added')
+          }
+          setGcalLinkInput('')
+          setGcalLinkName('')
+          setTimeout(() => { setImportResult(null); setShowAddFromLink(false) }, 2000)
+        }
       }
-    } catch { /* ignore */ }
+    } catch {
+      setImportResult('Import failed')
+    }
     setAddingFromLink(false)
   }
 
@@ -298,6 +371,11 @@ export default function CalendarPage() {
   const weekDates = getWeekDates(weekStart)
 
   // Get bookings for a specific date string
+  function getSubscriptionName(subId: string | null): string | null {
+    if (!subId) return null
+    return subscriptions.find(s => s.id === subId)?.name ?? 'Imported'
+  }
+
   function getBookingsForDate(dateStr: string): Booking[] {
     const base = bookings.filter(b => b.date === dateStr && b.status !== 'cancelled')
     const fromTypes: Booking[] = typeBookings
@@ -315,7 +393,8 @@ export default function CalendarPage() {
         end_time: tb.end_time,
         timezone: 'America/Chicago',
         status: tb.status,
-        meet_link: null,
+        meet_link: (tb as unknown as { meet_link?: string | null }).meet_link ?? null,
+        subscription_id: null,
         created_at: tb.created_at,
       }))
     return [...base, ...fromTypes]
@@ -743,16 +822,20 @@ export default function CalendarPage() {
                           if (bh < WEEK_START_HOUR || bh >= WEEK_END_HOUR) return null
                           const top = timeToY(b.start_time, WEEK_START_HOUR, HOUR_HEIGHT)
                           const height = Math.max(bookingHeight(b.start_time, b.end_time, HOUR_HEIGHT), 24)
+                          const sourceName = getSubscriptionName(b.subscription_id)
                           return (
                             <button
                               key={b.id}
                               onClick={() => setSelected(selected?.id === b.id ? null : b)}
-                              className={`absolute left-1 right-1 bg-[#015035] text-white rounded-lg px-2 py-1 text-left overflow-hidden hover:bg-[#012b1e] transition-colors cursor-pointer z-10 ${
+                              className={`absolute left-1 right-1 ${sourceName ? 'bg-indigo-600' : 'bg-[#015035]'} text-white rounded-lg px-2 py-1 text-left overflow-hidden hover:opacity-90 transition-colors cursor-pointer z-10 ${
                                 selected?.id === b.id ? 'ring-2 ring-[#012b1e] ring-offset-1' : 'shadow-sm'
                               }`}
                               style={{ top, height }}
                             >
-                              <div className="text-[11px] font-semibold truncate">{b.client_name}</div>
+                              <div className="text-[11px] font-semibold truncate flex items-center gap-1">
+                                {b.meet_link && <Video className="w-3 h-3 flex-shrink-0" />}
+                                {b.client_name}
+                              </div>
                               {height > 30 && (
                                 <div className="text-[10px] opacity-80 truncate">{formatTime(b.start_time)}</div>
                               )}
@@ -828,18 +911,23 @@ export default function CalendarPage() {
                     if (bh < DAY_START_HOUR || bh >= DAY_END_HOUR) return null
                     const top = timeToY(b.start_time, DAY_START_HOUR, HOUR_HEIGHT)
                     const height = Math.max(bookingHeight(b.start_time, b.end_time, HOUR_HEIGHT), 40)
+                    const sourceName = getSubscriptionName(b.subscription_id)
                     return (
                       <button
                         key={b.id}
                         onClick={() => setSelected(selected?.id === b.id ? null : b)}
-                        className={`absolute left-[64px] right-2 bg-[#015035] text-white rounded-lg px-4 py-2 text-left overflow-hidden hover:bg-[#012b1e] transition-colors cursor-pointer z-10 ${
+                        className={`absolute left-[64px] right-2 ${sourceName ? 'bg-indigo-600' : 'bg-[#015035]'} text-white rounded-lg px-4 py-2 text-left overflow-hidden hover:opacity-90 transition-colors cursor-pointer z-10 ${
                           selected?.id === b.id ? 'ring-2 ring-[#012b1e] ring-offset-1' : 'shadow-sm'
                         }`}
                         style={{ top, height }}
                       >
-                        <div className="text-sm font-semibold truncate">{b.client_name}</div>
+                        <div className="text-sm font-semibold truncate flex items-center gap-1.5">
+                          {b.meet_link && <Video className="w-3.5 h-3.5 flex-shrink-0" />}
+                          {b.client_name}
+                        </div>
                         <div className="text-[11px] opacity-80 truncate">
                           {formatTime(b.start_time)} – {formatTime(b.end_time)}
+                          {sourceName && <span className="ml-1.5 opacity-70">· {sourceName}</span>}
                         </div>
                         {height > 60 && (
                           <div className="text-[11px] opacity-70 truncate mt-0.5">
@@ -908,7 +996,15 @@ export default function CalendarPage() {
                   >
                     <div className="flex items-center justify-between sm:block">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{booking.client_name}</div>
+                        <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                          {booking.meet_link && <Video className="w-3 h-3 text-blue-500 flex-shrink-0" />}
+                          {booking.client_name}
+                          {booking.subscription_id && (
+                            <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-medium">
+                              {getSubscriptionName(booking.subscription_id) || 'Imported'}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-gray-400">{booking.client_email}</div>
                       </div>
                       <span className={`sm:hidden text-xs px-2 py-1 rounded-full font-medium ${
@@ -972,6 +1068,26 @@ export default function CalendarPage() {
                   <div className="text-xs text-gray-500">{selected.client_phone}</div>
                 )}
               </div>
+
+              {selected.meet_link && (
+                <a
+                  href={selected.meet_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700 font-medium hover:bg-blue-100 transition-colors"
+                >
+                  <Video className="w-3.5 h-3.5" />
+                  <span className="truncate">{selected.meet_link.replace('https://', '')}</span>
+                  <ExternalLink className="w-3 h-3 flex-shrink-0 ml-auto" />
+                </a>
+              )}
+
+              {selected.subscription_id && (
+                <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-xs text-indigo-700 font-medium">
+                  <Calendar className="w-3.5 h-3.5" />
+                  Source: {getSubscriptionName(selected.subscription_id) || 'Imported Calendar'}
+                </div>
+              )}
 
               <div className="bg-gray-50 rounded-lg p-3 space-y-2">
                 <div className="flex items-center gap-2 text-xs text-gray-600">
@@ -1045,19 +1161,34 @@ export default function CalendarPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-gray-900">Add from Google Calendar</h3>
-              <button onClick={() => { setShowAddFromLink(false); setGcalLinkInput('') }} className="p-1 hover:bg-gray-100 rounded">
+              <h3 className="text-sm font-bold text-gray-900">Add from Calendar Link</h3>
+              <button onClick={() => { setShowAddFromLink(false); setGcalLinkInput(''); setGcalLinkName(''); setImportResult(null) }} className="p-1 hover:bg-gray-100 rounded">
                 <X className="w-4 h-4 text-gray-400" />
               </button>
             </div>
-            <p className="text-xs text-gray-500 mb-3">Paste a shareable Google Calendar event link to add it to your calendar.</p>
+            <p className="text-xs text-gray-500 mb-3">
+              Paste a Google Calendar event link or an iCal subscription URL (.ics) to import events.
+            </p>
             <input
               value={gcalLinkInput}
               onChange={e => setGcalLinkInput(e.target.value)}
-              placeholder="https://calendar.google.com/calendar/event?eid=..."
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-4"
+              placeholder="https://calendar.google.com/calendar/ical/... or event?eid=..."
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-3"
               onKeyDown={e => e.key === 'Enter' && handleAddFromGcalLink()}
             />
+            {isIcsUrl(gcalLinkInput) && (
+              <input
+                value={gcalLinkName}
+                onChange={e => setGcalLinkName(e.target.value)}
+                placeholder="Calendar name (optional, auto-detected)"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-3"
+              />
+            )}
+            {importResult && (
+              <div className={`text-xs px-3 py-2 rounded-lg mb-3 ${importResult.includes('fail') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
+                {importResult}
+              </div>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={handleAddFromGcalLink}
@@ -1065,15 +1196,20 @@ export default function CalendarPage() {
                 className="flex-1 flex items-center justify-center gap-2 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
                 style={{ background: '#015035' }}
               >
-                {addingFromLink ? 'Adding...' : 'Add Event'}
+                {addingFromLink ? 'Importing...' : isIcsUrl(gcalLinkInput) ? 'Import Calendar' : 'Add Event'}
               </button>
               <button
-                onClick={() => { setShowAddFromLink(false); setGcalLinkInput('') }}
+                onClick={() => { setShowAddFromLink(false); setGcalLinkInput(''); setGcalLinkName(''); setImportResult(null) }}
                 className="px-4 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
               >
                 Cancel
               </button>
             </div>
+            {isIcsUrl(gcalLinkInput) && (
+              <p className="text-[11px] text-gray-400 mt-2">
+                This will subscribe to the calendar and import all events. You can re-sync later from Settings.
+              </p>
+            )}
           </div>
         </div>
       )}

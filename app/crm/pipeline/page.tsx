@@ -1219,6 +1219,24 @@ export default function PipelinePage() {
           }}
         />
       )}
+      {someSelected && (
+        <BulkActionBar
+          selectedCount={selectedIds.size}
+          onDeselectAll={() => setSelectedIds(new Set())}
+          actions={[
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {} },
+            { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
+          ]}
+        />
+      )}
+      {showBulkDeleteConfirm && (
+        <ConfirmModal
+          title={`Delete ${selectedIds.size} deals?`}
+          description="This action cannot be undone. Selected deals will be permanently removed."
+          onConfirm={handleBulkDeleteDeals}
+          onCancel={() => setShowBulkDeleteConfirm(false)}
+        />
+      )}
     </>
   )
 }

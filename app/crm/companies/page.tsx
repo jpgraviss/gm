@@ -1115,7 +1115,7 @@ export default function CompaniesPage() {
     }
   }
 
-  useEffect(() => { setCurrentPage(1) }, [search, statusFilter])
+  useEffect(() => { requestAnimationFrame(() => setCurrentPage(1)) }, [search, statusFilter])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safeCurrentPage = Math.min(currentPage, totalPages)

@@ -1458,7 +1458,7 @@ export default function ContactsPage() {
     toast(`Tag "${tag}" applied to ${ids.length} contacts`, 'success')
   }
 
-  useEffect(() => { setCurrentPage(1) }, [search])
+  useEffect(() => { requestAnimationFrame(() => setCurrentPage(1)) }, [search])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safeCurrentPage = Math.min(currentPage, totalPages)

@@ -11,8 +11,10 @@ import type { Deal, Contract, Proposal, ProposalStatus } from '@/lib/types'
 import {
   Eye, Send, CheckCircle, XCircle, FileText, DollarSign, Calendar, User, X,
   Clock, ExternalLink, Mail, Phone, TrendingUp, AlertTriangle, Edit2, ShieldCheck,
-  Search, Copy, BarChart3, Percent, Inbox,
+  Search, Copy, BarChart3, Percent, Inbox, Trash2, Download,
 } from 'lucide-react'
+import BulkActionBar from '@/components/ui/BulkActionBar'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 
 function generateId(prefix: string) {
   return `${prefix}-${Date.now()}`
@@ -490,6 +492,8 @@ export default function ProposalsPage() {
   const [deals, setDeals] = useState<Deal[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
 
   useEffect(() => {
     fetch('/api/proposals')
@@ -702,6 +706,41 @@ export default function ProposalsPage() {
     return list
   }, [localProposals, statusFilter, searchQuery])
 
+  const allFilteredIds = filtered.map(p => p.id)
+  const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id))
+  const someSelected = selectedIds.size > 0
+
+  function toggleSelectAll() {
+    if (allSelected) setSelectedIds(new Set())
+    else setSelectedIds(new Set(allFilteredIds))
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selectedIds)
+    setLocalProposals(prev => prev.filter(p => !selectedIds.has(p.id)))
+    setSelectedIds(new Set())
+    setShowBulkDeleteConfirm(false)
+    try {
+      await fetch('/api/crm/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'proposals', ids }),
+      })
+      toast(`${ids.length} proposals deleted`, 'success')
+    } catch {
+      toast('Failed to delete proposals', 'error')
+    }
+  }
+
   const tabCounts = useMemo(() => {
     const base = searchQuery.trim()
       ? localProposals.filter(p => {
@@ -810,6 +849,14 @@ export default function ProposalsPage() {
               <table className="data-table min-w-[700px]">
                 <thead>
                   <tr>
+                    <th className="w-10">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                      />
+                    </th>
                     <th>Company</th>
                     <th>Status</th>
                     <th className="hidden sm:table-cell">Value</th>
@@ -821,7 +868,15 @@ export default function ProposalsPage() {
                 </thead>
                 <tbody>
                   {filtered.map(p => (
-                    <tr key={p.id} onClick={() => setSelected(p)} className="cursor-pointer group">
+                    <tr key={p.id} onClick={() => setSelected(p)} className={`cursor-pointer group ${selectedIds.has(p.id) ? 'bg-emerald-50/50' : ''}`}>
+                      <td onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(p.id)}
+                          onChange={() => toggleSelect(p.id)}
+                          className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                        />
+                      </td>
                       <td>
                         <div className="flex items-center gap-3">
                           <div
@@ -945,6 +1000,24 @@ export default function ProposalsPage() {
           initialData={editingProposal ?? undefined}
           onSave={handleNewProposal}
           onClose={() => { setCreatingProposal(false); setEditingProposal(null) }}
+        />
+      )}
+      {someSelected && (
+        <BulkActionBar
+          selectedCount={selectedIds.size}
+          onDeselectAll={() => setSelectedIds(new Set())}
+          actions={[
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {} },
+            { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
+          ]}
+        />
+      )}
+      {showBulkDeleteConfirm && (
+        <ConfirmModal
+          title={`Delete ${selectedIds.size} proposals?`}
+          description="This action cannot be undone. Selected proposals will be permanently removed."
+          onConfirm={handleBulkDelete}
+          onCancel={() => setShowBulkDeleteConfirm(false)}
         />
       )}
     </>

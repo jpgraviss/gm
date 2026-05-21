@@ -9,8 +9,10 @@ import { useToast } from '@/components/ui/Toast'
 import {
   MessageSquare, CheckCircle, Clock, X, ExternalLink,
   Plus, ChevronRight, Send, User, FolderKanban,
-  Zap, Circle, Trash2, Search, Inbox,
+  Zap, Circle, Trash2, Search, Inbox, Download,
 } from 'lucide-react'
+import BulkActionBar from '@/components/ui/BulkActionBar'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 
 type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Client' | 'Resolved' | 'Closed'
 type TicketPriority = 'Low' | 'Medium' | 'High' | 'Urgent'
@@ -266,6 +268,8 @@ export default function TicketsPage() {
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | 'All'>('All')
   const [searchQuery, setSearchQuery] = useState('')
   const [creatingTicket, setCreatingTicket] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
 
   useEffect(() => {
     fetch('/api/tickets')
@@ -388,6 +392,41 @@ export default function TicketsPage() {
     return list
   }, [localTickets, statusFilter, priorityFilter, searchQuery])
 
+  const allFilteredIds = filtered.map(t => t.id)
+  const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id))
+  const someSelected = selectedIds.size > 0
+
+  function toggleSelectAll() {
+    if (allSelected) setSelectedIds(new Set())
+    else setSelectedIds(new Set(allFilteredIds))
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selectedIds)
+    setLocalTickets(prev => prev.filter(t => !selectedIds.has(t.id)))
+    setSelectedIds(new Set())
+    setShowBulkDeleteConfirm(false)
+    try {
+      await fetch('/api/crm/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'tickets', ids }),
+      })
+      toast(`${ids.length} tickets deleted`, 'success')
+    } catch {
+      toast('Failed to delete tickets', 'error')
+    }
+  }
+
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
@@ -489,6 +528,14 @@ export default function TicketsPage() {
             <table className="w-full min-w-[640px]">
               <thead>
                 <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50/80">
+                  <th className="w-10 py-3 px-4">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                    />
+                  </th>
                   <th className="w-1" />
                   <th className="text-left py-3 px-4 font-semibold">Subject</th>
                   <th className="text-left py-3 px-4 font-semibold hidden sm:table-cell">Company</th>
@@ -505,9 +552,17 @@ export default function TicketsPage() {
                   return (
                     <tr
                       key={t.id}
-                      className="hover:bg-gray-50/70 cursor-pointer border-b border-gray-100 last:border-0 transition-colors group"
+                      className={`hover:bg-gray-50/70 cursor-pointer border-b border-gray-100 last:border-0 transition-colors group ${selectedIds.has(t.id) ? 'bg-emerald-50/50' : ''}`}
                       onClick={() => setSelected(t)}
                     >
+                      <td className="py-3.5 px-4" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(t.id)}
+                          onChange={() => toggleSelect(t.id)}
+                          className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                        />
+                      </td>
                       <td className="w-1 p-0">
                         <div className="w-1 h-full min-h-[56px] rounded-r-sm" style={{ background: pCfg.color }} />
                       </td>
@@ -602,6 +657,24 @@ export default function TicketsPage() {
       )}
       {creatingTicket && (
         <NewTicketPanel onSave={handleNewTicket} onClose={() => setCreatingTicket(false)} />
+      )}
+      {someSelected && (
+        <BulkActionBar
+          selectedCount={selectedIds.size}
+          onDeselectAll={() => setSelectedIds(new Set())}
+          actions={[
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {} },
+            { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
+          ]}
+        />
+      )}
+      {showBulkDeleteConfirm && (
+        <ConfirmModal
+          title={`Delete ${selectedIds.size} tickets?`}
+          description="This action cannot be undone. Selected tickets will be permanently removed."
+          onConfirm={handleBulkDelete}
+          onCancel={() => setShowBulkDeleteConfirm(false)}
+        />
       )}
     </>
   )

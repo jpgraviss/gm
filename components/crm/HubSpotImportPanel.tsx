@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import { X, Upload, FileText, CheckCircle, AlertCircle, Building2, Users, TrendingUp, Cloud, FileUp, RefreshCw } from 'lucide-react'
+import { X, Upload, FileText, CheckCircle, AlertCircle, Building2, Users, TrendingUp, Cloud, FileUp, RefreshCw, Undo2, GitMerge } from 'lucide-react'
 
 type ImportType = 'companies' | 'contacts' | 'deals'
 type ImportMode = 'csv' | 'api'
@@ -11,6 +11,7 @@ interface ImportResult {
   updated?: number
   skipped: number
   errors: string[]
+  batchId?: string
 }
 
 interface HubSpotContact {
@@ -27,6 +28,7 @@ interface HubSpotContact {
 interface Props {
   onClose: () => void
   onComplete?: () => void
+  onShowDuplicates?: () => void
   defaultType?: ImportType
 }
 
@@ -92,7 +94,7 @@ const typeConfig: Record<ImportType, { icon: typeof Building2; label: string; de
   },
 }
 
-export default function HubSpotImportPanel({ onClose, onComplete, defaultType }: Props) {
+export default function HubSpotImportPanel({ onClose, onComplete, onShowDuplicates, defaultType }: Props) {
   const [type, setType] = useState<ImportType>(defaultType ?? 'companies')
   const [mode, setMode] = useState<ImportMode>('api')
   const [file, setFile] = useState<File | null>(null)
@@ -101,6 +103,7 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [duplicateCount, setDuplicateCount] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [apiContacts, setApiContacts] = useState<HubSpotContact[]>([])
@@ -108,6 +111,8 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
   const [apiNextAfter, setApiNextAfter] = useState<string | null>(null)
   const [apiLoaded, setApiLoaded] = useState(false)
   const [importProgress, setImportProgress] = useState('')
+  const [undoing, setUndoing] = useState(false)
+  const [undone, setUndone] = useState(false)
 
   const handleFile = useCallback((f: File) => {
     setFile(f)
@@ -181,6 +186,15 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
       } else {
         setResult(data)
         onComplete?.()
+        if (data.inserted > 0 && type !== 'deals') {
+          try {
+            const dupRes = await fetch(`/api/crm/duplicates?type=${type}`)
+            if (dupRes.ok) {
+              const dupData = await dupRes.json()
+              setDuplicateCount((dupData.groups ?? []).length)
+            }
+          } catch { /* ignore */ }
+        }
       }
     } catch {
       setError('Import failed. Please try again.')
@@ -211,12 +225,38 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
           errors: data.errors,
         })
         onComplete?.()
+        if (data.inserted > 0) {
+          try {
+            const dupRes = await fetch('/api/crm/duplicates?type=contacts')
+            if (dupRes.ok) {
+              const dupData = await dupRes.json()
+              setDuplicateCount((dupData.groups ?? []).length)
+            }
+          } catch { /* ignore */ }
+        }
       }
     } catch {
       setError('Import failed. Please try again.')
     }
     setImporting(false)
     setImportProgress('')
+  }
+
+  const handleUndo = async () => {
+    if (!result?.batchId) return
+    setUndoing(true)
+    try {
+      const res = await fetch('/api/crm/import/undo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ importId: result.batchId }),
+      })
+      if (res.ok) {
+        setUndone(true)
+        onComplete?.()
+      }
+    } catch { /* ignore */ }
+    setUndoing(false)
   }
 
   const columns = preview.length > 0 ? Object.keys(preview[0]) : []
@@ -475,37 +515,73 @@ export default function HubSpotImportPanel({ onClose, onComplete, defaultType }:
           {/* Result */}
           {result && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 text-center">
-              <CheckCircle size={32} className="mx-auto mb-3 text-emerald-600" />
-              <h3 className="text-lg font-bold text-gray-900 mb-1">Import Complete</h3>
-              <div className="flex justify-center gap-6 mt-3">
-                <div>
-                  <p className="text-2xl font-bold text-emerald-700">{result.inserted}</p>
-                  <p className="text-xs text-gray-500">Imported</p>
-                </div>
-                {(result.updated ?? 0) > 0 && (
-                  <div>
-                    <p className="text-2xl font-bold text-blue-600">{result.updated}</p>
-                    <p className="text-xs text-gray-500">Updated</p>
+              {undone ? (
+                <>
+                  <Undo2 size={32} className="mx-auto mb-3 text-amber-600" />
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">Import Undone</h3>
+                  <p className="text-sm text-gray-500">All {result.inserted} imported records have been removed.</p>
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={32} className="mx-auto mb-3 text-emerald-600" />
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">Import Complete</h3>
+                  <div className="flex justify-center gap-6 mt-3">
+                    <div>
+                      <p className="text-2xl font-bold text-emerald-700">{result.inserted}</p>
+                      <p className="text-xs text-gray-500">Imported</p>
+                    </div>
+                    {(result.updated ?? 0) > 0 && (
+                      <div>
+                        <p className="text-2xl font-bold text-blue-600">{result.updated}</p>
+                        <p className="text-xs text-gray-500">Updated</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-2xl font-bold text-amber-600">{result.skipped}</p>
+                      <p className="text-xs text-gray-500">Skipped</p>
+                    </div>
+                    {result.errors.length > 0 && (
+                      <div>
+                        <p className="text-2xl font-bold text-red-600">{result.errors.length}</p>
+                        <p className="text-xs text-gray-500">Errors</p>
+                      </div>
+                    )}
                   </div>
-                )}
-                <div>
-                  <p className="text-2xl font-bold text-amber-600">{result.skipped}</p>
-                  <p className="text-xs text-gray-500">Skipped</p>
-                </div>
-                {result.errors.length > 0 && (
-                  <div>
-                    <p className="text-2xl font-bold text-red-600">{result.errors.length}</p>
-                    <p className="text-xs text-gray-500">Errors</p>
-                  </div>
-                )}
-              </div>
-              {result.errors.length > 0 && (
-                <div className="mt-3 text-left bg-red-50 border border-red-200 rounded-lg p-3">
-                  {result.errors.slice(0, 5).map((err, i) => (
-                    <p key={i} className="text-xs text-red-600">{err}</p>
-                  ))}
-                  {result.errors.length > 5 && <p className="text-xs text-red-400 mt-1">... and {result.errors.length - 5} more</p>}
-                </div>
+                  {result.errors.length > 0 && (
+                    <div className="mt-3 text-left bg-red-50 border border-red-200 rounded-lg p-3">
+                      {result.errors.slice(0, 5).map((err, i) => (
+                        <p key={i} className="text-xs text-red-600">{err}</p>
+                      ))}
+                      {result.errors.length > 5 && <p className="text-xs text-red-400 mt-1">... and {result.errors.length - 5} more</p>}
+                    </div>
+                  )}
+                  {result.batchId && result.inserted > 0 && (
+                    <button
+                      onClick={handleUndo}
+                      disabled={undoing}
+                      className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors disabled:opacity-50"
+                    >
+                      {undoing ? <RefreshCw size={12} className="animate-spin" /> : <Undo2 size={12} />}
+                      Undo Import
+                    </button>
+                  )}
+                  {duplicateCount > 0 && onShowDuplicates && (
+                    <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-xl">
+                      <div className="flex items-center gap-2 justify-center">
+                        <GitMerge size={14} className="text-orange-600" />
+                        <span className="text-sm font-semibold text-orange-800">
+                          {duplicateCount} potential duplicate{duplicateCount > 1 ? 's' : ''} detected
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => { onClose(); onShowDuplicates() }}
+                        className="mt-2 text-xs font-semibold text-orange-700 hover:text-orange-900 underline"
+                      >
+                        Review Duplicates
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

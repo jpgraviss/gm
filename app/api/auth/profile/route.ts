@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
 
         const { error: insertErr } = await db.from('team_members').insert({
           id: authUser.id, name, email: emailLower, role: 'Team Member',
-          unit: 'Leadership/Admin', initials, status: 'Active', is_admin: false,
+          unit: 'Leadership/Admin', initials, status: 'active', is_admin: false,
         })
 
         if (!insertErr) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { useTeamMembers } from '@/lib/useTeamMembers'
@@ -10,7 +10,6 @@ import {
   projectStatusColors, invoiceStatusColors,
 } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewCompanyPanel, { type NewCompanyFormData } from '@/components/crm/NewCompanyPanel'
@@ -24,10 +23,14 @@ import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
   ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload, BarChart3,
-  Monitor, Loader2, Sparkles, Wand2, Share2, Brain,
+  Monitor, Loader2, Sparkles, Wand2, Share2, Brain, Download, GitMerge,
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
+import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
+import BulkActionBar from '@/components/ui/BulkActionBar'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import { useEnrichment } from '@/lib/useEnrichment'
+import Pagination from '@/components/ui/Pagination'
 
 // ─── Status colors ────────────────────────────────────────────────────────────
 
@@ -978,6 +981,18 @@ export default function CompaniesPage() {
   const [localCompanies, setLocalCompanies] = useState<CRMCompany[]>([])
   const [creatingCompany, setCreatingCompany] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showDuplicates, setShowDuplicates] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gravhub-companies-pageSize')
+      return saved ? Number(saved) : 25
+    }
+    return 25
+  })
 
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
   const [deals, setDeals] = useState<Deal[]>([])
@@ -985,6 +1000,12 @@ export default function CompaniesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [crmActivities, setCrmActivities] = useState<CRMActivity[]>([])
+
+  const handlePageSizeChange = useCallback((size: number) => {
+    setPageSize(size)
+    setCurrentPage(1)
+    localStorage.setItem('gravhub-companies-pageSize', String(size))
+  }, [])
 
   useEffect(() => {
     fetch('/api/crm/companies')
@@ -1059,16 +1080,54 @@ export default function CompaniesPage() {
     return matchSearch && matchStatus
   })
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  const allFilteredIds = filtered.map(c => c.id)
+  const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id))
+  const someSelected = selectedIds.size > 0
+
+  function toggleSelectAll() {
+    if (allSelected) setSelectedIds(new Set())
+    else setSelectedIds(new Set(allFilteredIds))
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selectedIds)
+    setLocalCompanies(prev => prev.filter(c => !selectedIds.has(c.id)))
+    setSelectedIds(new Set())
+    setShowBulkDeleteConfirm(false)
+    try {
+      await fetch('/api/crm/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'companies', ids }),
+      })
+      toast(`${ids.length} companies deleted`, 'success')
+    } catch {
+      toast('Failed to delete companies', 'error')
+    }
+  }
+
+  useEffect(() => { setCurrentPage(1) }, [search, statusFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const safeCurrentPage = Math.min(currentPage, totalPages)
+  const startIndex = (safeCurrentPage - 1) * pageSize
+  const paginatedCompanies = filtered.slice(startIndex, startIndex + pageSize)
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
     <>
       <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" action={{ label: 'New Company', onClick: () => setCreatingCompany(true) }} />
-      <div className="p-4 md:p-6 flex-1 flex flex-col">
-        <CRMSubNav />
-
+      <div className="p-4 md:p-6 flex-1 flex flex-col bg-[#f8faf9]">
         {/* Filters */}
         <div className="flex items-center gap-3 mb-4 flex-wrap">
           <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 flex-1 max-w-sm">
@@ -1096,6 +1155,12 @@ export default function CompaniesPage() {
             ))}
           </div>
           <button
+            onClick={() => setShowDuplicates(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
+          >
+            <GitMerge size={13} /> Show Duplicates
+          </button>
+          <button
             onClick={() => setShowImport(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
           >
@@ -1110,6 +1175,14 @@ export default function CompaniesPage() {
           <table className="w-full min-w-[600px]">
             <thead>
               <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
+                <th className="w-10 py-2.5 px-4">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                  />
+                </th>
                 <th className="text-left py-2.5 px-4 font-semibold">Company</th>
                 <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Industry</th>
                 <th className="text-left py-2.5 px-4 font-semibold">Status</th>
@@ -1121,7 +1194,7 @@ export default function CompaniesPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(company => {
+              {paginatedCompanies.map(company => {
                 const companyContacts = crmContacts.filter(c => c.companyId === company.id)
                 const companyDeals = deals.filter(d => d.company === company.name && !d.stage.startsWith('Closed'))
                 const companyContract = contracts.find(c => c.company === company.name)
@@ -1129,8 +1202,16 @@ export default function CompaniesPage() {
                   <tr
                     key={company.id}
                     onClick={() => setSelectedCompany(company)}
-                    className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors"
+                    className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors ${selectedIds.has(company.id) ? 'bg-emerald-50/50' : ''}`}
                   >
+                    <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(company.id)}
+                        onChange={() => toggleSelect(company.id)}
+                        className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                      />
+                    </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
@@ -1215,6 +1296,18 @@ export default function CompaniesPage() {
             </div>
           )}
           </div>
+          {filtered.length > 0 && (
+            <div className="border-t border-gray-100">
+              <Pagination
+                currentPage={safeCurrentPage}
+                totalPages={totalPages}
+                totalItems={filtered.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -1253,6 +1346,34 @@ export default function CompaniesPage() {
           defaultType="companies"
           onClose={() => setShowImport(false)}
           onComplete={() => {
+            fetch('/api/crm/companies').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
+          }}
+          onShowDuplicates={() => setShowDuplicates(true)}
+        />
+      )}
+      {someSelected && (
+        <BulkActionBar
+          selectedCount={selectedIds.size}
+          onDeselectAll={() => setSelectedIds(new Set())}
+          actions={[
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {} },
+            { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
+          ]}
+        />
+      )}
+      {showBulkDeleteConfirm && (
+        <ConfirmModal
+          title={`Delete ${selectedIds.size} companies?`}
+          description="This will also remove associated contacts, deals, and contracts."
+          onConfirm={handleBulkDelete}
+          onCancel={() => setShowBulkDeleteConfirm(false)}
+        />
+      )}
+      {showDuplicates && (
+        <DuplicatesPanel
+          type="companies"
+          onClose={() => setShowDuplicates(false)}
+          onMergeComplete={() => {
             fetch('/api/crm/companies').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
           }}
         />

@@ -7,7 +7,6 @@ import Header from '@/components/layout/Header'
 import { fetchCrmActivities, fetchCrmCompanies, fetchCrmContacts, fetchContracts } from '@/lib/supabase'
 import { formatCurrency, serviceTypeColors, contractStatusColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import CRMSubNav from '@/components/crm/CRMSubNav'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
@@ -21,8 +20,10 @@ import {
   X, Phone, Mail, Calendar, TrendingUp, DollarSign,
   FileText, ScrollText, User, ChevronRight, ChevronLeft, Plus,
   CheckCircle2, Circle, AlertCircle, Settings, Upload,
-  GripVertical, Pencil, Trash2, Check,
+  GripVertical, Pencil, Trash2, Check, Download,
 } from 'lucide-react'
+import BulkActionBar from '@/components/ui/BulkActionBar'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 
 // ─── Pipeline Config Types ────────────────────────────────────────────────────
 
@@ -78,11 +79,15 @@ function DealCard({
   index,
   stageColor,
   onClick,
+  selected,
+  onToggleSelect,
 }: {
   deal: LocalDeal
   index: number
   stageColor: string
   onClick: () => void
+  selected?: boolean
+  onToggleSelect?: () => void
 }) {
   return (
     <Draggable draggableId={deal.id} index={index}>
@@ -91,13 +96,24 @@ function DealCard({
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`deal-card cursor-grab active:cursor-grabbing select-none ${snapshot.isDragging ? 'shadow-xl rotate-1 opacity-90' : ''}`}
+          className={`deal-card cursor-grab active:cursor-grabbing select-none ${snapshot.isDragging ? 'shadow-xl rotate-1 opacity-90' : ''} ${selected ? 'ring-2 ring-[#015035] bg-emerald-50/30' : ''}`}
           onClick={onClick}
         >
           <div className="flex items-start justify-between mb-2">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">{deal.company}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{deal.contact.name}</p>
+            <div className="flex items-start gap-2">
+              {onToggleSelect && (
+                <input
+                  type="checkbox"
+                  checked={!!selected}
+                  onChange={e => { e.stopPropagation(); onToggleSelect() }}
+                  onClick={e => e.stopPropagation()}
+                  className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer mt-0.5 flex-shrink-0"
+                />
+              )}
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{deal.company}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{deal.contact.name}</p>
+              </div>
             </div>
             <StatusBadge label={deal.serviceType} colorClass={serviceTypeColors[deal.serviceType] ?? 'bg-gray-100 text-gray-600'} />
           </div>
@@ -880,6 +896,8 @@ export default function PipelinePage() {
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
   const [showNewClientModal, setShowNewClientModal] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
 
   useEffect(() => { setMounted(true) }, []) // eslint-disable-line react-hooks/set-state-in-effect
 
@@ -981,6 +999,34 @@ export default function PipelinePage() {
     fetch(`/api/crm/companies/${companyId}`, { method: 'DELETE' }).catch(() => toast('Failed to delete company', 'error'))
   }
 
+  const someSelected = selectedIds.size > 0
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleBulkDeleteDeals() {
+    const ids = Array.from(selectedIds)
+    setLocalDeals(prev => prev.filter(d => !selectedIds.has(d.id)))
+    setSelectedIds(new Set())
+    setShowBulkDeleteConfirm(false)
+    try {
+      await fetch('/api/crm/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'deals', ids }),
+      })
+      toast(`${ids.length} deals deleted`, 'success')
+    } catch {
+      toast('Failed to delete deals', 'error')
+    }
+  }
+
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   return (
@@ -991,9 +1037,8 @@ export default function PipelinePage() {
         action={{ label: 'New Deal', onClick: () => setCreatingDeal(true) }}
       />
       <NewClientModal open={showNewClientModal} onClose={() => setShowNewClientModal(false)} />
-      <div className="p-4 md:p-6 flex-1 flex flex-col">
-        <div className="flex items-center justify-between mb-0">
-          <CRMSubNav />
+      <div className="p-4 md:p-6 flex-1 flex flex-col bg-[#f8faf9]">
+        <div className="flex items-center justify-end mb-0">
           <button
             onClick={() => setShowNewClientModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-[#015035] border border-[#015035]/20 hover:bg-[#015035]/5 transition-colors"
@@ -1095,6 +1140,8 @@ export default function PipelinePage() {
                             index={index}
                             stageColor={stage.color}
                             onClick={() => setSelectedDeal(deal)}
+                            selected={selectedIds.has(deal.id)}
+                            onToggleSelect={() => toggleSelect(deal.id)}
                           />
                         ))}
                         {provided.placeholder}
@@ -1170,6 +1217,24 @@ export default function PipelinePage() {
               body: JSON.stringify({ pipelines: updated }),
             }).catch(() => toast('Failed to save pipeline settings', 'error'))
           }}
+        />
+      )}
+      {someSelected && (
+        <BulkActionBar
+          selectedCount={selectedIds.size}
+          onDeselectAll={() => setSelectedIds(new Set())}
+          actions={[
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {} },
+            { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
+          ]}
+        />
+      )}
+      {showBulkDeleteConfirm && (
+        <ConfirmModal
+          title={`Delete ${selectedIds.size} deals?`}
+          description="This action cannot be undone. Selected deals will be permanently removed."
+          onConfirm={handleBulkDeleteDeals}
+          onCancel={() => setShowBulkDeleteConfirm(false)}
         />
       )}
     </>

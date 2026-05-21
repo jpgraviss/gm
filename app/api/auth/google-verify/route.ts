@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
           role: 'Team Member',
           unit: 'Leadership/Admin',
           initials,
-          status: 'Active',
+          status: 'active',
           is_admin: false,
         })
         .select('id, email, name, role, unit, initials, is_admin, status')

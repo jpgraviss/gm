@@ -37,10 +37,11 @@ export default function Pagination({
   pageSize,
   onPageChange,
   onPageSizeChange,
-  pageSizeOptions = [25, 50, 100],
+  pageSizeOptions = [25, 50, 100, -1],
 }: Props) {
-  const start = (currentPage - 1) * pageSize + 1
-  const end = Math.min(currentPage * pageSize, totalItems)
+  const effectivePageSize = pageSize <= 0 ? totalItems : pageSize
+  const start = (currentPage - 1) * effectivePageSize + 1
+  const end = Math.min(currentPage * effectivePageSize, totalItems)
 
   if (totalItems === 0) return null
 
@@ -63,7 +64,7 @@ export default function Pagination({
           className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         >
           {pageSizeOptions.map(size => (
-            <option key={size} value={size}>{size} / page</option>
+            <option key={size} value={size}>{size <= 0 ? 'All' : `${size} / page`}</option>
           ))}
         </select>
       </div>

@@ -1008,7 +1008,7 @@ export default function CompaniesPage() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/crm/companies')
+    fetch('/api/crm/companies?limit=50000')
       .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
       .catch(() => toast('Failed to load companies', 'error'))
@@ -1117,10 +1117,11 @@ export default function CompaniesPage() {
 
   useEffect(() => { requestAnimationFrame(() => setCurrentPage(1)) }, [search, statusFilter])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const effectivePageSize = pageSize <= 0 ? filtered.length : pageSize
+  const totalPages = Math.max(1, Math.ceil(filtered.length / effectivePageSize))
   const safeCurrentPage = Math.min(currentPage, totalPages)
-  const startIndex = (safeCurrentPage - 1) * pageSize
-  const paginatedCompanies = filtered.slice(startIndex, startIndex + pageSize)
+  const startIndex = (safeCurrentPage - 1) * effectivePageSize
+  const paginatedCompanies = filtered.slice(startIndex, startIndex + effectivePageSize)
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
@@ -1346,7 +1347,7 @@ export default function CompaniesPage() {
           defaultType="companies"
           onClose={() => setShowImport(false)}
           onComplete={() => {
-            fetch('/api/crm/companies').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
+            fetch('/api/crm/companies?limit=50000').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
           }}
           onShowDuplicates={() => setShowDuplicates(true)}
         />
@@ -1374,7 +1375,7 @@ export default function CompaniesPage() {
           type="companies"
           onClose={() => setShowDuplicates(false)}
           onMergeComplete={() => {
-            fetch('/api/crm/companies').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
+            fetch('/api/crm/companies?limit=50000').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
           }}
         />
       )}

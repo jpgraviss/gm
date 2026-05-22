@@ -1320,7 +1320,7 @@ export default function ContactsPage() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/crm/contacts')
+    fetch('/api/crm/contacts?limit=50000')
       .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setLocalContacts(data) })
       .catch(() => toast('Failed to load contacts', 'error'))
@@ -1460,10 +1460,11 @@ export default function ContactsPage() {
 
   useEffect(() => { requestAnimationFrame(() => setCurrentPage(1)) }, [search])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const effectivePageSize = pageSize <= 0 ? filtered.length : pageSize
+  const totalPages = Math.max(1, Math.ceil(filtered.length / effectivePageSize))
   const safeCurrentPage = Math.min(currentPage, totalPages)
-  const startIndex = (safeCurrentPage - 1) * pageSize
-  const paginatedContacts = filtered.slice(startIndex, startIndex + pageSize)
+  const startIndex = (safeCurrentPage - 1) * effectivePageSize
+  const paginatedContacts = filtered.slice(startIndex, startIndex + effectivePageSize)
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
@@ -1671,7 +1672,7 @@ export default function ContactsPage() {
           defaultType="contacts"
           onClose={() => setShowImport(false)}
           onComplete={() => {
-            fetch('/api/crm/contacts').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalContacts(data) })
+            fetch('/api/crm/contacts?limit=50000').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalContacts(data) })
           }}
           onShowDuplicates={() => setShowDuplicates(true)}
         />
@@ -1681,7 +1682,7 @@ export default function ContactsPage() {
           type="contacts"
           onClose={() => setShowDuplicates(false)}
           onMergeComplete={() => {
-            fetch('/api/crm/contacts').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalContacts(data) })
+            fetch('/api/crm/contacts?limit=50000').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalContacts(data) })
           }}
         />
       )}

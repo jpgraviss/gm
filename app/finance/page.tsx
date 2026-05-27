@@ -1,18 +1,20 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import Link from 'next/link'
 import {
   CreditCard, BarChart3, DollarSign, FileBarChart, Plug,
   Activity, ArrowRight, Users,
 } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils'
 
-const KPI_ITEMS = [
-  { label: 'Revenue This Month', value: '—', icon: <DollarSign size={16} />, color: '#015035' },
-  { label: 'Outstanding Invoices', value: '—', icon: <CreditCard size={16} />, color: '#ef4444' },
-  { label: 'MRR', value: '—', icon: <BarChart3 size={16} />, color: '#3b82f6' },
-  { label: 'Active Clients', value: '—', icon: <Users size={16} />, color: '#22c55e' },
-]
+interface FinanceKpis {
+  revenueThisMonth: number
+  outstandingInvoices: number
+  mrr: number
+  activeClients: number
+}
 
 const CARDS = [
   { title: 'Billing & Invoices', href: '/billing',         icon: <CreditCard size={20} />,   color: '#015035', description: 'Invoices, payments, and billing' },
@@ -24,12 +26,28 @@ const CARDS = [
 ]
 
 export default function FinanceHub() {
+  const [kpis, setKpis] = useState<FinanceKpis | null>(null)
+
+  useEffect(() => {
+    fetch('/api/finance/kpis')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setKpis(d) })
+      .catch(() => {})
+  }, [])
+
+  const kpiItems = [
+    { label: 'Revenue This Month', value: kpis ? formatCurrency(kpis.revenueThisMonth) : '...', icon: <DollarSign size={16} />, color: '#015035' },
+    { label: 'Outstanding Invoices', value: kpis ? String(kpis.outstandingInvoices) : '...', icon: <CreditCard size={16} />, color: '#ef4444' },
+    { label: 'MRR', value: kpis ? formatCurrency(kpis.mrr) : '...', icon: <BarChart3 size={16} />, color: '#3b82f6' },
+    { label: 'Active Clients', value: kpis ? String(kpis.activeClients) : '...', icon: <Users size={16} />, color: '#22c55e' },
+  ]
+
   return (
     <>
       <Header title="Finance" subtitle="Billing, reporting, and revenue" />
       <main className="p-4 md:p-6 space-y-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {KPI_ITEMS.map(k => (
+          {kpiItems.map(k => (
             <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: k.color + '14', color: k.color }}>
                 {k.icon}

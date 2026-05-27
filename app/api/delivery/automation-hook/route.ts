@@ -30,6 +30,12 @@ const EVENT_STEP_MAP: Record<string, { step: number; statusCol: string; complete
 }
 
 export async function POST(req: NextRequest) {
+  const authHeader = req.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const body = await req.json()
   const result = validate(body, {
     workflowId: { required: true, type: 'string', maxLength: 100 },

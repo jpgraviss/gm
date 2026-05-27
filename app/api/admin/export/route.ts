@@ -24,6 +24,15 @@ function toCsvRow(values: string[]): string {
 }
 
 export async function POST(req: NextRequest) {
+  const authHeader = req.headers.get('authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const db = createServiceClient()
+  const { data: { user }, error: authErr } = await db.auth.getUser(token)
+  if (authErr || !user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: member } = await db.from('team_members').select('is_admin').eq('email', user.email).single()
+  if (!member?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   let body: { entities?: string[] }
   try {
     body = await req.json()
@@ -35,8 +44,6 @@ export async function POST(req: NextRequest) {
   if (!entities || !Array.isArray(entities) || entities.length === 0) {
     return NextResponse.json({ error: 'No entities selected' }, { status: 400 })
   }
-
-  const db = createServiceClient()
   const csvSections: string[] = []
 
   for (const entity of entities) {

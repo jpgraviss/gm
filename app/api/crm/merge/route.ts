@@ -3,6 +3,15 @@ import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 
 export async function POST(req: NextRequest) {
+  const authHeader = req.headers.get('authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const db = createServiceClient()
+  const { data: { user }, error: authErr } = await db.auth.getUser(token)
+  if (authErr || !user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: member } = await db.from('team_members').select('is_admin').eq('email', user.email).single()
+  if (!member?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const body = await req.json() as {
     type: 'contacts' | 'companies'
     primaryId: string
@@ -19,8 +28,6 @@ export async function POST(req: NextRequest) {
   if (mergeIds.includes(primaryId)) {
     return NextResponse.json({ error: 'primaryId must not be in mergeIds' }, { status: 400 })
   }
-
-  const db = createServiceClient()
 
   if (type === 'contacts') {
     const { data: primary, error: pErr } = await db.from('crm_contacts').select('*').eq('id', primaryId).single()

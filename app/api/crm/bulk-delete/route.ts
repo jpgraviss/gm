@@ -11,6 +11,15 @@ const TABLE_MAP: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
+  const authHeader = req.headers.get('authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const db = createServiceClient()
+  const { data: { user }, error: authErr } = await db.auth.getUser(token)
+  if (authErr || !user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: member } = await db.from('team_members').select('is_admin').eq('email', user.email).single()
+  if (!member?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const { type, ids } = await req.json() as { type: string; ids: string[] }
 
   if (!type || !ids?.length) {
@@ -21,8 +30,6 @@ export async function POST(req: NextRequest) {
   if (!table) {
     return NextResponse.json({ error: `Invalid type: ${type}` }, { status: 400 })
   }
-
-  const db = createServiceClient()
   let deleted = 0
 
   if (type === 'companies') {

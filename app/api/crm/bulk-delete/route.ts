@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     deleted = count ?? 0
   }
 
-  await db.from('audit_log').insert({
+  await db.from('audit_logs').insert({
     id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     action: 'bulk_delete',
     entity_type: type,

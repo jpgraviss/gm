@@ -39,21 +39,38 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   let engagement: { emailsOpened: number; linksClicked: number; proposalsViewed: number; meetings: number } | undefined
   try {
-    const { data: timeline } = await db
-      .from('contact_timeline')
+    const { data: activityTypes } = await db
+      .from('crm_activities')
       .select('type')
       .eq('contact_id', id)
 
-    if (timeline) {
-      engagement = {
-        emailsOpened: timeline.filter(t => t.type === 'email_opened').length,
-        linksClicked: timeline.filter(t => t.type === 'link_clicked').length,
-        proposalsViewed: timeline.filter(t => t.type === 'proposal_viewed').length,
-        meetings: timeline.filter(t => t.type === 'meeting').length,
-      }
+    const { count: broadcastOpens } = await db
+      .from('broadcast_recipients')
+      .select('id', { count: 'exact', head: true })
+      .eq('contact_id', id)
+      .eq('status', 'opened')
+
+    const { count: proposalCount } = await db
+      .from('proposals')
+      .select('id', { count: 'exact', head: true })
+      .eq('contact_id', id)
+
+    const { count: contractCount } = await db
+      .from('contracts')
+      .select('id', { count: 'exact', head: true })
+      .eq('contact_id', id)
+
+    const meetingCount = (activityTypes ?? []).filter(a => a.type === 'meeting').length
+    const linkClicks = (activityTypes ?? []).filter(a => a.type === 'link_clicked').length
+
+    engagement = {
+      emailsOpened: broadcastOpens ?? 0,
+      linksClicked: linkClicks,
+      proposalsViewed: (proposalCount ?? 0) + (contractCount ?? 0),
+      meetings: meetingCount,
     }
   } catch {
-    // timeline table may not exist
+    // engagement data unavailable
   }
 
   const result = await scoreContact(

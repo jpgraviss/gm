@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { anthropicChatModel } from '@/lib/anthropic'
+import { chatCompletion } from '@/lib/ai-client'
 
 interface ConversationMessage {
   role: 'user' | 'assistant'
@@ -69,74 +69,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     existingMessages.push(userMsg)
 
     const systemPrompt = buildSystemPrompt(chatbot.system_prompt, chatbot.knowledge)
-    const chatMessages = existingMessages.map(m => ({ role: m.role, content: m.content }))
+    const chatMessages = existingMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
-    let reply = ''
-    let source = 'fallback'
+    const result = await chatCompletion({
+      system: systemPrompt,
+      messages: chatMessages,
+      maxTokens: 2048,
+      timeoutMs: 30_000,
+    })
 
-    // Try Ollama first
-    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
-    const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.1'
-    try {
-      const ollamaRes = await fetch(`${ollamaUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: ollamaModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...chatMessages,
-          ],
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(30000),
-      })
-      if (ollamaRes.ok) {
-        const ollamaData = await ollamaRes.json() as { message?: { content: string } }
-        if (ollamaData.message?.content) {
-          reply = ollamaData.message.content
-          source = 'ollama'
-        }
-      }
-    } catch {
-      // Ollama not available
-    }
+    let reply = result.text
+    let source = result.source as string
 
-    // Fall back to Claude
-    if (!reply) {
-      const apiKey = process.env.ANTHROPIC_API_KEY
-      if (apiKey) {
-        try {
-          const res = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': apiKey,
-              'anthropic-version': '2023-06-01',
-            },
-            body: JSON.stringify({
-              model: anthropicChatModel(),
-              max_tokens: 2048,
-              system: systemPrompt,
-              messages: chatMessages,
-            }),
-          })
-          if (res.ok) {
-            const data = await res.json() as { content: Array<{ type: string; text?: string }> }
-            const text = data.content.filter(c => c.type === 'text').map(c => c.text).join('')
-            if (text) {
-              reply = text
-              source = 'claude'
-            }
-          }
-        } catch {
-          // Claude not available
-        }
-      }
-    }
-
-    // Ultimate fallback
-    if (!reply) {
+    if (!reply || result.source === 'none') {
       reply = "Thanks for your message! I'm unable to process your request right now. Please contact us directly for assistance."
       source = 'fallback'
     }

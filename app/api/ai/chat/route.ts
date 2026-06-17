@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { anthropicChatModel } from '@/lib/anthropic'
+import { chatCompletion, buildToolResultMessage, buildAssistantMessage, type AiMessage, type AiToolDef } from '@/lib/ai-client'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -799,30 +799,16 @@ Write the proposal in this format:
 
 Keep the tone professional but approachable. Be specific about deliverables. Use the company details from CRM if available to personalize the content.`
 
-      // Make a separate Claude call to generate the proposal
-      const apiKey = process.env.ANTHROPIC_API_KEY
-      if (!apiKey) return 'API key not configured for proposal generation.'
-
-      const proposalRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: anthropicChatModel(),
-          max_tokens: 4096,
-          messages: [{ role: 'user', content: proposalPrompt }],
-        }),
+      const proposalResult = await chatCompletion({
+        messages: [{ role: 'user', content: proposalPrompt }],
+        maxTokens: 4096,
       })
 
-      if (!proposalRes.ok) {
-        return 'Failed to generate proposal content. Please try again.'
+      if (proposalResult.source === 'none') {
+        return 'No AI provider available for proposal generation. Configure Ollama or set GROQ_API_KEY.'
       }
 
-      const proposalData = await proposalRes.json() as { content: Array<{ type: string; text?: string }> }
-      const proposalText = proposalData.content.filter(c => c.type === 'text').map(c => c.text).join('')
+      const proposalText = proposalResult.text
 
       return `--- AI-GENERATED PROPOSAL FOR ${company.toUpperCase()} ---\n\n${proposalText}`
     }
@@ -866,118 +852,64 @@ Guidelines:
 - You are speaking to internal Graviss Marketing team members.
 - After creating or updating records, always confirm the action with key details from the result.`
 
-    // Convert to Anthropic format — use `unknown` for content since tool-use
-    // turns send structured content blocks, not plain strings.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    type AnthropicMessage = { role: 'user' | 'assistant'; content: any }
-    const anthropicMessages: AnthropicMessage[] = messages.map(m => ({
+    const aiMessages: AiMessage[] = messages.map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
     }))
 
-    // Try Ollama first (free, self-hosted)
-    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
-    const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.1'
+    const aiTools: AiToolDef[] = TOOLS
 
-    try {
-      const ollamaRes = await fetch(`${ollamaUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: ollamaModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...messages.map(m => ({ role: m.role, content: m.content })),
-          ],
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(60000),
-      })
-      if (ollamaRes.ok) {
-        const ollamaData = await ollamaRes.json() as { message?: { content: string } }
-        if (ollamaData.message?.content) {
-          return NextResponse.json({ reply: ollamaData.message.content, source: 'ollama' })
-        }
-      }
-    } catch {
-      // Ollama not available, fall through to Claude
-    }
-
-    // Fall back to Claude (Anthropic API)
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({
-        reply: 'No AI provider is available. Please configure Ollama or set ANTHROPIC_API_KEY.',
-        source: 'error',
-      })
-    }
-
-    // Agentic loop — keep calling Claude until it stops using tools
-    let currentMessages: AnthropicMessage[] = [...anthropicMessages]
+    // Agentic loop — keep calling the AI until it stops using tools
+    let currentMessages = [...aiMessages]
     let finalText = ''
+    let source = 'none'
     const maxIterations = 10
 
     for (let i = 0; i < maxIterations; i++) {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: anthropicChatModel(),
-          max_tokens: 4096,
-          system: systemPrompt,
-          tools: TOOLS,
-          messages: currentMessages,
-        }),
+      const result = await chatCompletion({
+        system: systemPrompt,
+        messages: currentMessages,
+        tools: aiTools,
+        maxTokens: 4096,
+        timeoutMs: 60_000,
       })
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }))
-        console.error('[ai/chat] Anthropic API error:', res.status, JSON.stringify(err))
-        const detail = err?.error?.message || err?.error?.type || `HTTP ${res.status}`
+      source = result.source
+
+      if (result.source === 'none') {
         return NextResponse.json({
-          reply: `Sorry, there was an error communicating with the AI (${detail}). Please try again.`,
+          reply: 'No AI provider is available. Please configure Ollama or set GROQ_API_KEY.',
           source: 'error',
         })
       }
 
-      const data = await res.json() as {
-        content: Array<{ type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }>
-        stop_reason: string
-      }
-
-      if (data.stop_reason === 'end_turn' || !data.content.some(c => c.type === 'tool_use')) {
-        finalText = data.content.filter(c => c.type === 'text').map(c => c.text).join('')
+      if (result.finishReason !== 'tool_calls' || result.toolCalls.length === 0) {
+        finalText = result.text
         break
       }
 
-      const toolResults: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = []
+      if (result.text) finalText = result.text
 
-      for (const block of data.content) {
-        if (block.type === 'tool_use' && block.id && block.name) {
-          const result = await executeTool(block.name, block.input ?? {})
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: block.id,
-            content: result,
-          })
-        }
+      const rawToolCalls = result.toolCalls.map(tc => ({
+        id: tc.id,
+        type: 'function' as const,
+        function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+      }))
+
+      const toolResultMessages: AiMessage[] = []
+      for (const tc of result.toolCalls) {
+        const toolOutput = await executeTool(tc.name, tc.args)
+        toolResultMessages.push(buildToolResultMessage(tc.id, toolOutput))
       }
-
-      const turnText = data.content.filter(c => c.type === 'text').map(c => c.text).join('')
-      if (turnText) finalText = turnText
 
       currentMessages = [
         ...currentMessages,
-        { role: 'assistant' as const, content: data.content },
-        { role: 'user' as const, content: toolResults },
+        buildAssistantMessage(result.text || null, rawToolCalls),
+        ...toolResultMessages,
       ]
     }
 
-    return NextResponse.json({ reply: finalText, source: 'claude' })
+    return NextResponse.json({ reply: finalText, source })
   } catch (err) {
     console.error('[ai/chat]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

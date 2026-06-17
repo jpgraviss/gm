@@ -1,4 +1,4 @@
-import { anthropicInsightsModel } from '@/lib/anthropic'
+import { chatCompletion } from '@/lib/ai-client'
 
 export type RecommendationType = 'follow_up' | 'upsell' | 'at_risk' | 'renewal_reminder' | 'engagement_drop'
 export type RecommendationPriority = 'high' | 'medium' | 'low'
@@ -85,42 +85,25 @@ export async function getRecommendations(opts: {
     ].join('\n'))
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    return generateFallbackRecommendations(targetCompanies, deals, contracts, activities)
-  }
-
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: anthropicInsightsModel(),
-        max_tokens: 1000,
-        system: `You are a CRM intelligence assistant for a marketing agency. Analyze the data and return 3-5 actionable recommendations. Return ONLY valid JSON array, no markdown or explanation.
+    const result = await chatCompletion({
+      system: `You are a CRM intelligence assistant for a marketing agency. Analyze the data and return 3-5 actionable recommendations. Return ONLY valid JSON array, no markdown or explanation.
 
 Each item must have: type (follow_up|upsell|at_risk|renewal_reminder|engagement_drop), priority (high|medium|low), title (short), description (1-2 sentences), suggestedAction (specific next step), companyName (if applicable).`,
-        messages: [{
-          role: 'user',
-          content: `Analyze these accounts and provide recommendations:\n\n${contextLines.join('\n\n')}\n\nToday's date: ${new Date().toISOString().split('T')[0]}`,
-        }],
-      }),
+      messages: [{
+        role: 'user',
+        content: `Analyze these accounts and provide recommendations:\n\n${contextLines.join('\n\n')}\n\nToday's date: ${new Date().toISOString().split('T')[0]}`,
+      }],
+      maxTokens: 1000,
+      fast: true,
     })
 
-    if (!res.ok) {
-      return generateFallbackRecommendations(targetCompanies, deals, contracts, activities)
-    }
-
-    const data = await res.json() as { content: { type: string; text: string }[] }
-    const text = data.content.find(c => c.type === 'text')?.text ?? ''
-    const jsonMatch = text.match(/\[[\s\S]*\]/)
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as Recommendation[]
-      return parsed.slice(0, 5)
+    if (result.source !== 'none' && result.text) {
+      const jsonMatch = result.text.match(/\[[\s\S]*\]/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as Recommendation[]
+        return parsed.slice(0, 5)
+      }
     }
   } catch {
     // fall through

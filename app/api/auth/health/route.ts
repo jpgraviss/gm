@@ -30,7 +30,8 @@ export async function GET() {
       TOKEN_ENCRYPTION_KEY: mask(process.env.TOKEN_ENCRYPTION_KEY),
       CRON_SECRET: mask(process.env.CRON_SECRET),
       RESEND_API_KEY: mask(process.env.RESEND_API_KEY),
-      ANTHROPIC_API_KEY: mask(process.env.ANTHROPIC_API_KEY),
+      GROQ_API_KEY: mask(process.env.GROQ_API_KEY),
+      OLLAMA_URL: process.env.OLLAMA_URL || '(default: http://localhost:11434)',
     },
     clientIdMatch:
       process.env.GOOGLE_CLIENT_ID && process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID

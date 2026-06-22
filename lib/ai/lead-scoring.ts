@@ -1,4 +1,4 @@
-import { anthropicInsightsModel } from '@/lib/anthropic'
+import { chatCompletion } from '@/lib/ai-client'
 
 export interface LeadScoreResult {
   score: number
@@ -113,30 +113,19 @@ export async function scoreContact(
   else if (score >= 30) explanation += 'This lead shows moderate engagement and warrants continued nurturing.'
   else explanation += 'This lead has limited engagement. Consider re-engagement strategies.'
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (apiKey && factors.length > 0) {
+  if (factors.length > 0) {
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: anthropicInsightsModel(),
-          max_tokens: 300,
-          system: 'You are a sales intelligence assistant. Generate a concise 2-3 sentence lead score explanation for internal sales reps. Be specific and actionable.',
-          messages: [{
-            role: 'user',
-            content: `Contact: ${contact.fullName} at ${contact.companyName} (${contact.title})\nLead score: ${score}/100\n\nScoring factors:\n${factors.map(f => `- ${f.label}: +${f.impact} pts (${f.detail})`).join('\n')}\n\nWrite a brief, actionable explanation of this score and what the rep should do next.`,
-          }],
-        }),
+      const result = await chatCompletion({
+        system: 'You are a sales intelligence assistant. Generate a concise 2-3 sentence lead score explanation for internal sales reps. Be specific and actionable.',
+        messages: [{
+          role: 'user',
+          content: `Contact: ${contact.fullName} at ${contact.companyName} (${contact.title})\nLead score: ${score}/100\n\nScoring factors:\n${factors.map(f => `- ${f.label}: +${f.impact} pts (${f.detail})`).join('\n')}\n\nWrite a brief, actionable explanation of this score and what the rep should do next.`,
+        }],
+        maxTokens: 300,
+        fast: true,
       })
-      if (res.ok) {
-        const data = await res.json() as { content: { type: string; text: string }[] }
-        const text = data.content.find(c => c.type === 'text')?.text
-        if (text) explanation = text
+      if (result.source !== 'none' && result.text) {
+        explanation = result.text
       }
     } catch {
       // keep fallback explanation

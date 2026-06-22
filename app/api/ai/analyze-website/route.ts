@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { anthropicInsightsModel } from '@/lib/anthropic'
+import { chatCompletion } from '@/lib/ai-client'
 
 export async function POST(req: NextRequest) {
   try {
@@ -7,11 +7,6 @@ export async function POST(req: NextRequest) {
 
     if (!url || typeof url !== 'string') {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 })
-    }
-
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: 'API key not configured' }, { status: 500 })
     }
 
     const prompt = `Analyze the website at this URL: ${url}
@@ -27,31 +22,17 @@ Based on the URL and your knowledge of this company/website, infer the following
   "phone": phone number if known, or empty string
 }`
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: anthropicInsightsModel(),
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }],
-      }),
+    const result = await chatCompletion({
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 1024,
+      fast: true,
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Anthropic API error:', errorText)
-      return NextResponse.json({ error: 'AI analysis failed' }, { status: 502 })
+    if (result.source === 'none') {
+      return NextResponse.json({ error: 'No AI provider configured' }, { status: 500 })
     }
 
-    const data = await response.json()
-    const text = data?.content?.[0]?.text ?? ''
-
-    // Parse the JSON from Claude's response
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    const jsonMatch = result.text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       return NextResponse.json({ error: 'Could not parse AI response' }, { status: 502 })
     }

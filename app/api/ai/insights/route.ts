@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { anthropicInsightsModel } from '@/lib/anthropic'
+import { chatCompletion } from '@/lib/ai-client'
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,13 +11,6 @@ export async function POST(req: NextRequest) {
 
     if (!name) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 })
-    }
-
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) {
-      // Fallback: return template-based insights without AI
-      const fallback = generateTemplateFallback(type, name, context)
-      return NextResponse.json({ insights: fallback, source: 'template' })
     }
 
     const systemPrompt = type === 'company'
@@ -43,31 +36,19 @@ Provide exactly these four sections (use the exact headers):
 ## NEXT BEST ACTION
 One concrete recommended next step (1-2 sentences).`
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: anthropicInsightsModel(),
-        max_tokens: 800,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
+    const result = await chatCompletion({
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+      maxTokens: 800,
+      fast: true,
     })
 
-    if (!res.ok) {
-      const err = await res.json()
-      console.error('[ai/insights] Anthropic API error:', err)
+    if (result.source === 'none') {
       const fallback = generateTemplateFallback(type, name, context)
       return NextResponse.json({ insights: fallback, source: 'template' })
     }
 
-    const data = await res.json() as { content: { type: string; text: string }[] }
-    const text = data.content.find(c => c.type === 'text')?.text ?? ''
-    return NextResponse.json({ insights: text, source: 'ai' })
+    return NextResponse.json({ insights: result.text, source: result.source })
   } catch (err) {
     console.error('[ai/insights]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

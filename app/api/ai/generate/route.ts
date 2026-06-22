@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { anthropicChatModel } from '@/lib/anthropic'
+import { chatCompletion } from '@/lib/ai-client'
 
 type GenerationType = 'email_draft' | 'proposal_summary' | 'report_summary' | 'social_post' | 'follow_up'
 
@@ -19,62 +19,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid generation type' }, { status: 400 })
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ content: generateFallback(type, context), source: 'template' })
-    }
-
     const userPrompt = buildUserPrompt(type, context)
 
-    // Try Ollama first (free, self-hosted)
-    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
-    const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.1'
-    try {
-      const ollamaRes = await fetch(`${ollamaUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: ollamaModel,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPTS[type] },
-            { role: 'user', content: userPrompt },
-          ],
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(30000),
-      })
-      if (ollamaRes.ok) {
-        const ollamaData = await ollamaRes.json() as { message?: { content: string } }
-        if (ollamaData.message?.content) {
-          return NextResponse.json({ content: ollamaData.message.content, source: 'ollama' })
-        }
-      }
-    } catch {
-      // Ollama not available, fall through to Claude or template
-    }
-
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: anthropicChatModel(),
-        max_tokens: 1500,
-        system: SYSTEM_PROMPTS[type],
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
+    const result = await chatCompletion({
+      system: SYSTEM_PROMPTS[type],
+      messages: [{ role: 'user', content: userPrompt }],
+      maxTokens: 1500,
+      timeoutMs: 30_000,
     })
 
-    if (!res.ok) {
+    if (result.source === 'none') {
       return NextResponse.json({ content: generateFallback(type, context), source: 'template' })
     }
 
-    const data = await res.json() as { content: { type: string; text: string }[] }
-    const text = data.content.find(c => c.type === 'text')?.text ?? ''
-    return NextResponse.json({ content: text, source: 'ai' })
+    return NextResponse.json({ content: result.text, source: result.source })
   } catch (err) {
     console.error('[ai/generate]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

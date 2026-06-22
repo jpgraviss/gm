@@ -392,3 +392,31 @@ export interface CRMActivity {
   pinned?: boolean
 }
 
+// ── Website / SEO Audit ─────────────────────────────────────────────────────
+
+export type AuditStatus = 'pending' | 'running' | 'completed' | 'failed'
+export type AuditType = 'full' | 'seo' | 'website'
+
+export interface AuditSectionResult {
+  name: string
+  score: number // 0-100
+  grade: 'A' | 'B' | 'C' | 'D' | 'F'
+  findings: string[]
+  recommendations: string[]
+}
+
+export interface AuditResult {
+  id: string
+  websiteUrl: string
+  companyId?: string
+  companyName?: string
+  auditType: AuditType
+  status: AuditStatus
+  overallScore?: number
+  overallGrade?: string
+  summary?: string
+  sections: AuditSectionResult[]
+  createdAt: string
+  completedAt?: string
+}
+

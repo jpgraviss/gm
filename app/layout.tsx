@@ -5,6 +5,7 @@ import { UIProvider } from '@/contexts/UIContext'
 import { ToastProvider } from '@/components/ui/Toast'
 import { SettingsProvider } from '@/lib/useSettings'
 import AppShell from '@/components/layout/AppShell'
+import CookieConsent from '@/components/ui/CookieConsent'
 
 export const metadata: Metadata = {
   title: 'GravHub — Run Your Agency Like a Machine',
@@ -42,6 +43,7 @@ export default function RootLayout({
                 <AppShell>
                   {children}
                 </AppShell>
+                <CookieConsent />
               </SettingsProvider>
             </ToastProvider>
           </UIProvider>

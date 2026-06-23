@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUI } from '@/contexts/UIContext'
+import { useSettings } from '@/lib/useSettings'
 import Sidebar from './Sidebar'
 import AssistantPanel from '@/components/ai/AssistantPanel'
 import CommandPalette from '@/components/ui/CommandPalette'
@@ -40,6 +41,7 @@ function isRouteAllowed(pathname: string, user: { isAdmin: boolean; unit: string
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading, impersonatedBy, exitImpersonation } = useAuth()
   const { sidebarOpen, closeSidebar } = useUI()
+  const settings = useSettings()
   const [assistantOpen, setAssistantOpen] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
@@ -47,21 +49,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // /go/* routes are public — clients access booking pages, forms, and funnels without logging in
   const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/') || pathname.startsWith('/unsubscribe/') || pathname.startsWith('/go/')
 
-  // Inject brand CSS variables from settings + check onboarding
+  // Inject brand CSS variables from shared settings (no duplicate fetch)
   useEffect(() => {
-    fetch('/api/settings')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        const branding = data?.branding
-        if (branding?.primaryColor) {
-          document.documentElement.style.setProperty('--brand-primary', branding.primaryColor)
-        }
-        if (branding?.secondaryColor) {
-          document.documentElement.style.setProperty('--brand-secondary', branding.secondaryColor)
-        }
-      })
-      .catch(() => {/* use CSS defaults */})
-  }, [])
+    const branding = settings?.branding
+    if (branding?.primaryColor) {
+      document.documentElement.style.setProperty('--brand-primary', branding.primaryColor)
+    }
+    if (branding?.secondaryColor) {
+      document.documentElement.style.setProperty('--brand-secondary', branding.secondaryColor)
+    }
+  }, [settings])
 
   useEffect(() => {
     if (loading) return

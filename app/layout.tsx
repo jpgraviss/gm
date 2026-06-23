@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Montserrat, Syncopate } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { UIProvider } from '@/contexts/UIContext'
@@ -6,6 +7,20 @@ import { ToastProvider } from '@/components/ui/Toast'
 import { SettingsProvider } from '@/lib/useSettings'
 import AppShell from '@/components/layout/AppShell'
 import CookieConsent from '@/components/ui/CookieConsent'
+
+const montserrat = Montserrat({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  display: 'swap',
+  variable: '--font-body',
+})
+
+const syncopate = Syncopate({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  display: 'swap',
+  variable: '--font-heading',
+})
 
 export const metadata: Metadata = {
   title: 'GravHub — Run Your Agency Like a Machine',
@@ -18,19 +33,13 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${montserrat.variable} ${syncopate.variable}`}>
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#015035" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="GravHub" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Syncopate:wght@400;700&display=swap"
-          rel="stylesheet"
-        />
         {/* Google Identity Services */}
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script id="google-gsi" src="https://accounts.google.com/gsi/client" async defer />

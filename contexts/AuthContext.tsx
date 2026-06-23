@@ -300,27 +300,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {/* non-blocking */}
     }
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // Fast path: restore from localStorage immediately so UI renders instantly
+    const hadCachedUser = tryRestoreGoogleUser()
+    if (hadCachedUser) setLoading(false)
+
+    // Background: verify session and refresh profile from server (2s timeout)
+    const sessionWithTimeout = Promise.race([
+      supabase.auth.getSession(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
+    ])
+    sessionWithTimeout.then(async ({ data: { session } }) => {
       if (session?.user?.email) {
         const profile = await restoreProfile(session.user.email)
-        if (profile) await restoreGmailToken(profile.email)
+        // Defer gmail token restoration — not needed for initial render
+        if (profile) restoreGmailToken(profile.email)
+      } else if (!hadCachedUser) {
+        // No Supabase session and no cached user — nothing to restore
       } else {
-        // No Supabase session — try restoring a Google SSO user from localStorage
-        const restored = tryRestoreGoogleUser()
-        if (restored) {
-          try {
-            const stored = localStorage.getItem('gravhub_user')
-            if (stored) {
-              const parsed = JSON.parse(stored) as AuthUser
-              if (parsed?.email) await restoreGmailToken(parsed.email)
-            }
-          } catch {/* ignore */}
-        }
+        // Had cached user but no Supabase session — restore gmail in background
+        try {
+          const stored = localStorage.getItem('gravhub_user')
+          if (stored) {
+            const parsed = JSON.parse(stored) as AuthUser
+            if (parsed?.email) restoreGmailToken(parsed.email)
+          }
+        } catch {/* ignore */}
       }
       setLoading(false)
     }).catch(() => {
-      // If Supabase fails, still try localStorage restoration so users aren't locked out
-      tryRestoreGoogleUser()
+      if (!hadCachedUser) tryRestoreGoogleUser()
       setLoading(false)
     })
 

@@ -70,7 +70,7 @@ export default function AuditDetailPage() {
   const [audit, setAudit] = useState<AuditData | null>(null)
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
-  const { addToast } = useToast()
+  const { toast } = useToast()
 
   useEffect(() => {
     async function load() {
@@ -79,7 +79,7 @@ export default function AuditDetailPage() {
         if (!res.ok) throw new Error('Not found')
         setAudit(await res.json())
       } catch {
-        addToast('Audit not found', 'error')
+        toast('Audit not found', 'error')
         router.push('/audits')
       } finally {
         setLoading(false)
@@ -100,7 +100,7 @@ export default function AuditDetailPage() {
       const filename = `audit-${(audit.company_name || audit.website_url).replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-${new Date(audit.created_at).toISOString().slice(0, 10)}.pdf`
       downloadPdf(blob, filename)
     } catch {
-      addToast('PDF download failed', 'error')
+      toast('PDF download failed', 'error')
     } finally {
       setDownloading(false)
     }

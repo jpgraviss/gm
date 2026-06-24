@@ -47,7 +47,9 @@ export async function GET() {
     console.error('[settings GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch settings' }, { status: 500 })
   }
-  return NextResponse.json(data ?? {})
+  return NextResponse.json(data ?? {}, {
+    headers: { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=600' },
+  })
 }
 
 export async function PATCH(req: NextRequest) {

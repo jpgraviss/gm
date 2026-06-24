@@ -49,14 +49,14 @@ export default function AuditsPage() {
   const [companyName, setCompanyName] = useState('')
   const [auditType, setAuditType] = useState<string>('full')
   const [running, setRunning] = useState(false)
-  const { addToast } = useToast()
+  const { toast } = useToast()
 
   async function loadAudits() {
     try {
       const res = await fetch('/api/ai/audit')
       if (res.ok) setAudits(await res.json())
     } catch {
-      addToast('Failed to load audits', 'error')
+      toast('Failed to load audits', 'error')
     } finally {
       setLoading(false)
     }
@@ -75,13 +75,13 @@ export default function AuditsPage() {
       })
       if (!res.ok) throw new Error('Audit failed')
       const result = await res.json()
-      addToast(`Audit complete — Score: ${result.overallScore}/100`, 'success')
+      toast(`Audit complete — Score: ${result.overallScore}/100`, 'success')
       setShowNew(false)
       setUrl('')
       setCompanyName('')
       loadAudits()
     } catch {
-      addToast('Audit failed. Check AI provider configuration.', 'error')
+      toast('Audit failed. Check AI provider configuration.', 'error')
     } finally {
       setRunning(false)
     }

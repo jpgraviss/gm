@@ -28,6 +28,25 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: '/sw.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+          { key: 'Service-Worker-Allowed', value: '/' },
+        ],
+      },
+      {
+        source: '/(icon-192|icon-512|favicon)\\.(png|ico)',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=604800, immutable' },
+        ],
+      },
+      {
+        source: '/manifest.json',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=86400' },
+        ],
+      },
     ]
   },
 };

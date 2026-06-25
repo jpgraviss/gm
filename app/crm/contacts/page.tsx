@@ -1500,7 +1500,41 @@ export default function ContactsPage() {
 
         {/* Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile card view */}
+          <div className="md:hidden space-y-3 p-4">
+            {paginatedContacts.map(contact => {
+              const stage = contact.lifecycleStage ?? 'Lead'
+              return (
+                <div key={contact.id} onClick={() => setSelectedContact(contact)} className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer active:bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                        {contact.firstName[0]}{contact.lastName[0]}
+                      </div>
+                      <span className="font-semibold text-sm text-gray-900">{contact.fullName}</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium capitalize" style={{ background: '#e6f0ec', color: '#015035' }}>
+                      {stage}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div>Company: <span className="text-gray-700">{contact.companyName}</span></div>
+                    {contact.emails[0] && (
+                      <div>Email: <span className="text-gray-700">{contact.emails[0]}</span></div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+            {filtered.length === 0 && (
+              <div className="text-center py-12">
+                <User size={32} className="text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-400">No contacts match your search.</p>
+              </div>
+            )}
+          </div>
+          {/* Desktop table view */}
+          <div className="overflow-x-auto hidden md:block">
           <table className="w-full min-w-[560px]">
             <thead>
               <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">

@@ -46,6 +46,15 @@ export async function GET(req: NextRequest) {
     results.sequenceReplies = { error: 'Failed' }
   }
 
+  // 1c. Resume pending automation steps (Wait action)
+  try {
+    await resumePendingAutomationSteps()
+    results.pendingSteps = { checked: true }
+  } catch (err) {
+    console.error('[cron] Pending automation steps failed:', err)
+    results.pendingSteps = { error: 'Failed' }
+  }
+
   // 2. Check time-based automation triggers
   try {
     await checkTimeBasedTriggers()
@@ -58,7 +67,10 @@ export async function GET(req: NextRequest) {
   // 3. Calendar sync
   try {
     const baseUrl2 = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-    const syncRes = await fetch(`${baseUrl2}/api/calendar/sync`, { method: 'POST' })
+    const syncRes = await fetch(`${baseUrl2}/api/calendar/sync`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cronSecret}` },
+    })
     results.calendarSync = await syncRes.json()
   } catch (err) {
     console.error('[cron] Calendar sync failed:', err)
@@ -77,7 +89,10 @@ export async function GET(req: NextRequest) {
   // 4. Email-to-ticket conversion
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-    const emailRes = await fetch(`${baseUrl}/api/tickets/from-email`, { method: 'POST' })
+    const emailRes = await fetch(`${baseUrl}/api/tickets/from-email`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cronSecret}` },
+    })
     results.emailToTicket = await emailRes.json()
   } catch (err) {
     console.error('[cron] Email-to-ticket failed:', err)
@@ -258,6 +273,54 @@ async function spawnRecurringTasks() {
 
     // Null out recurrence on the completed task so it doesn't spawn again
     await db.from('app_tasks').update({ recurrence: null }).eq('id', task.id)
+  }
+}
+
+async function resumePendingAutomationSteps() {
+  const db = createServiceClient()
+  const now = new Date().toISOString()
+
+  const { data: pending } = await db
+    .from('automation_pending_steps')
+    .select('*')
+    .eq('status', 'pending')
+    .lte('resume_at', now)
+    .limit(50)
+
+  if (!pending?.length) return
+
+  for (const step of pending) {
+    try {
+      const { data: automation } = await db
+        .from('automations')
+        .select('*')
+        .eq('id', step.automation_id)
+        .single()
+
+      if (!automation || automation.status !== 'Active') {
+        await db.from('automation_pending_steps').update({ status: 'cancelled' }).eq('id', step.id)
+        continue
+      }
+
+      const remainingActions = (step.remaining_actions as string[]) ?? []
+      const ctx = (step.context as Record<string, unknown>) ?? {}
+
+      for (const action of remainingActions) {
+        const { executeWorkflow } = await import('@/lib/automations-engine')
+        await executeWorkflow(
+          { ...automation, actions: remainingActions },
+          'pending_resume',
+          ctx,
+          db,
+        )
+        break
+      }
+
+      await db.from('automation_pending_steps').update({ status: 'completed' }).eq('id', step.id)
+    } catch (err) {
+      console.error(`[cron] Failed to resume pending step ${step.id}:`, err)
+      await db.from('automation_pending_steps').update({ status: 'failed' }).eq('id', step.id)
+    }
   }
 }
 

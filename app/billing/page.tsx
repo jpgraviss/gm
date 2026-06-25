@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchContracts, fetchRevenueByMonth } from '@/lib/supabase'
@@ -10,8 +9,8 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import type { Invoice, InvoiceStatus, Contract, RevenueMonth } from '@/lib/types'
 import {
   DollarSign, AlertCircle, CheckCircle, Clock, Send, RefreshCw,
-  X, ExternalLink, ScrollText, Calendar, Zap, ArrowDownToLine,
-  RotateCcw, Link2, Info, Search, FileText,
+  X, ExternalLink, ScrollText, Calendar,
+  Search, FileText,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
@@ -175,12 +174,7 @@ function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: I
           </div>
         </div>
 
-        {/* Footer — view only, all changes happen in QuickBooks */}
         <div className="flex-shrink-0 p-4 border-t border-gray-100 flex flex-col gap-2">
-          <div className="flex items-start gap-2 p-2.5 bg-blue-50 rounded-lg">
-            <Info size={12} className="text-blue-500 flex-shrink-0 mt-0.5" />
-            <p className="text-[11px] text-blue-700">Invoice data is read-only — all changes are managed in QuickBooks Online.</p>
-          </div>
           <div className="flex gap-2">
             {invoice.status === 'Paid' && (
               <button onClick={() => downloadReceipt(invoice)} className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
@@ -211,56 +205,7 @@ export default function BillingPage() {
   const [billableSummary, setBillableSummary] = useState<any[]>([])
   const [showBillable, setShowBillable] = useState(false)
 
-  // QuickBooks
-  const [qbConnected, setQbConnected]     = useState(false)
-  const [qbStatus, setQbStatus]           = useState<{ lastSync: string | null; invoicesSynced: number; paymentsSynced: number } | null>(null)
-  const [qbSyncing, setQbSyncing]         = useState(false)
   const [loading, setLoading] = useState(true)
-
-  // Handle QB callback params
-  const searchParams = useSearchParams()
-  useEffect(() => {
-    if (searchParams.get('qb_connected') === 'true') {
-      toast('QuickBooks connected successfully!', 'success')
-      fetchQBStatus()
-      window.history.replaceState({}, '', '/billing')
-    }
-    if (searchParams.get('qb_error')) {
-      const err = searchParams.get('qb_error')
-      toast(`QuickBooks connection failed: ${err}`, 'error')
-      window.history.replaceState({}, '', '/billing')
-    }
-  }, [searchParams])
-
-  function fetchQBStatus() {
-    fetch('/api/quickbooks/status')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d?.connected) {
-          setQbConnected(true)
-          setQbStatus({ lastSync: d.lastSync, invoicesSynced: d.invoicesSynced, paymentsSynced: d.paymentsSynced })
-        } else {
-          setQbConnected(false)
-          setQbStatus(null)
-        }
-      })
-      .catch(() => {/* QB not configured — silently ignore */})
-  }
-
-  async function handleQBSync() {
-    setQbSyncing(true)
-    try {
-      const res  = await fetch('/api/quickbooks/sync', { method: 'POST' })
-      const data = await res.json()
-      if (data.success) {
-        fetchQBStatus()
-        // Refresh invoices after sync
-        fetch('/api/invoices').then(r => r.json()).then(d => { if (Array.isArray(d)) setLocalInvoices(d) }).catch(() => toast('Failed to load invoices', 'error'))
-      }
-    } catch { toast('QuickBooks sync failed', 'error') } finally {
-      setQbSyncing(false)
-    }
-  }
 
   useEffect(() => {
     fetch('/api/invoices')
@@ -270,7 +215,6 @@ export default function BillingPage() {
       .finally(() => setLoading(false))
     fetchContracts().then(d => { if (Array.isArray(d)) setContracts(d) }).catch(() => toast('Failed to load contracts', 'error'))
     fetchRevenueByMonth().then(d => { if (Array.isArray(d)) setRevenueByMonth(d) }).catch(() => toast('Failed to load revenue data', 'error'))
-    fetchQBStatus()
     fetch('/api/time-entries/billable-summary').then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setBillableSummary(d) }).catch(() => toast('Failed to load billable time summary', 'error'))
   }, [])
 
@@ -308,7 +252,7 @@ export default function BillingPage() {
 
   return (
     <>
-      <Header title="Billing & Revenue" subtitle="View-only · Invoice data synced from QuickBooks Online" />
+      <Header title="Billing & Revenue" subtitle="Invoices, contracts, and revenue tracking" />
       <div className="page-content">
 
         {/* KPI cards */}
@@ -402,106 +346,6 @@ export default function BillingPage() {
               </div>
             </div>
 
-            {/* QuickBooks mini status */}
-            <div className="mt-4 p-2.5 bg-gray-50 rounded-lg flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${qbConnected ? 'bg-emerald-400 animate-pulse' : 'bg-gray-300'}`} />
-                <div>
-                  <p className="text-[11px] font-semibold text-gray-700">QuickBooks Online</p>
-                  <p className="text-[10px] text-gray-400">
-                    {qbConnected
-                      ? qbStatus?.lastSync ? `Last pull: ${new Date(qbStatus.lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Connected'
-                      : 'Not connected'}
-                  </p>
-                </div>
-              </div>
-              {qbConnected && (
-                <button
-                  onClick={handleQBSync}
-                  disabled={qbSyncing}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 transition-colors disabled:opacity-50"
-                >
-                  <RotateCcw size={10} className={qbSyncing ? 'animate-spin' : ''} /> {qbSyncing ? 'Syncing…' : 'Sync'}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* QuickBooks Integration Banner */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#2CA01C18' }}>
-                <Link2 size={16} style={{ color: '#2CA01C' }} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800">QuickBooks Online Integration</p>
-                <p className="text-xs text-gray-500">
-                  {qbConnected ? 'Billing data pulled directly from your QuickBooks account' : 'Connect QuickBooks to sync invoices and payments'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {qbConnected ? (
-                <>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[11px] font-semibold text-emerald-700">Connected</span>
-                  </div>
-                  <button
-                    onClick={handleQBSync}
-                    disabled={qbSyncing}
-                    className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50"
-                  >
-                    <ArrowDownToLine size={12} /> {qbSyncing ? 'Pulling…' : 'Pull Latest Data'}
-                  </button>
-                  <a href="/settings?tab=Billing" className="text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                    Settings
-                  </a>
-                </>
-              ) : (
-                <a href="/api/quickbooks/connect" className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-white transition-colors hover:opacity-90" style={{ background: '#015035' }}>
-                  Connect QuickBooks
-                </a>
-              )}
-            </div>
-          </div>
-          {qbConnected ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-100">
-              {[
-                { label: 'Invoices Synced', value: String(qbStatus?.invoicesSynced ?? 0), icon: <Zap size={13} className="text-green-600" />, note: 'From QuickBooks' },
-                { label: 'Last Pull', value: qbStatus?.lastSync ? new Date(qbStatus.lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—', icon: <RotateCcw size={13} className="text-blue-500" />, note: 'Most recent sync' },
-                { label: 'Payments Synced', value: String(qbStatus?.paymentsSynced ?? 0), icon: <CheckCircle size={13} className="text-emerald-500" />, note: 'Status updated' },
-                { label: 'QB Account', value: 'GravHub App', icon: <Link2 size={13} className="text-gray-400" />, note: 'quickbooks.com' },
-              ].map(item => (
-                <div key={item.label} className="px-5 py-3.5">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    {item.icon}
-                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{item.label}</span>
-                  </div>
-                  <p className="text-sm font-bold text-gray-900">{item.value}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{item.note}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="px-5 py-4 text-xs text-gray-400">
-              <a href="/api/quickbooks/connect" className="text-emerald-700 font-semibold hover:underline">Connect QuickBooks</a> to enable automatic invoice and payment sync.
-            </div>
-          )}
-          <div className="px-5 py-3 bg-blue-50 border-t border-blue-100 flex items-center justify-between">
-            <p className="text-xs text-blue-700">
-              <strong>Read-only integration:</strong> Invoice creation and payment status flow from QuickBooks into GravHub. Full accounting features remain in QuickBooks.
-            </p>
-            <a
-              href="https://quickbooks.intuit.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 flex-shrink-0 ml-4"
-            >
-              Open QuickBooks <ExternalLink size={11} />
-            </a>
           </div>
         </div>
 

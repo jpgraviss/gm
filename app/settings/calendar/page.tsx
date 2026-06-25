@@ -383,41 +383,6 @@ export default function CalendarSettingsPage() {
           )}
         </div>
 
-        {/* ── Microsoft Outlook / 365 ── */}
-        <div className="bg-white rounded-xl border border-gray-100 p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
-              <Calendar className="w-4 h-4 text-blue-500" />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-gray-900">Microsoft Outlook / 365</div>
-              <div className="text-xs text-gray-500">Subscribe to your GravHub calendar from Outlook</div>
-            </div>
-            <span className="ml-auto text-xs bg-gray-100 text-gray-500 font-semibold px-2 py-1 rounded-full">
-              Coming Soon
-            </span>
-          </div>
-          <p className="text-xs text-gray-500 mb-3">
-            Native Microsoft OAuth integration is coming soon. In the meantime, you can subscribe to your GravHub calendar using the iCal feed URL below.
-          </p>
-          {feedUrl && (
-            <div className="flex items-center gap-2">
-              <input
-                readOnly
-                value={feedUrl}
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600 bg-gray-50 focus:outline-none"
-              />
-              <button
-                onClick={copyFeedUrl}
-                className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
-              >
-                {copiedFeed ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiedFeed ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* ── Apple Calendar ── */}
         <div className="bg-white rounded-xl border border-gray-100 p-6">
           <div className="flex items-center gap-3 mb-4">

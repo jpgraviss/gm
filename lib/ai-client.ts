@@ -156,42 +156,40 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
   const timeoutMs = opts.timeoutMs ?? 60_000
   const model = opts.fast ? groqFastModel() : groqChatModel()
 
-  // 1. Try Ollama
-  try {
-    const result = await callProvider(
-      `${ollamaUrl()}/v1/chat/completions`,
-      {},
-      opts.fast ? ollamaModel() : ollamaModel(),
-      msgs,
-      openAiTools,
-      maxTokens,
-      timeoutMs,
-    )
-    return { ...result, source: 'ollama' }
-  } catch {
-    // Ollama unavailable, try Groq
-  }
-
-  // 2. Try Groq
-  const key = groqKey()
-  if (key) {
+  // 1. Try Ollama (only if explicitly configured — localhost won't work in production)
+  if (process.env.OLLAMA_URL) {
     try {
       const result = await callProvider(
-        'https://api.groq.com/openai/v1/chat/completions',
-        { Authorization: `Bearer ${key}` },
-        model,
+        `${ollamaUrl()}/v1/chat/completions`,
+        {},
+        ollamaModel(),
         msgs,
         openAiTools,
         maxTokens,
         timeoutMs,
       )
-      return { ...result, source: 'groq' }
-    } catch (err) {
-      console.error('[ai-client] Groq error:', err)
+      return { ...result, source: 'ollama' }
+    } catch {
+      // Ollama unavailable, fall through to Groq
     }
   }
 
-  // 3. No provider available
+  // 2. Try Groq
+  const key = groqKey()
+  if (key) {
+    const result = await callProvider(
+      'https://api.groq.com/openai/v1/chat/completions',
+      { Authorization: `Bearer ${key}` },
+      model,
+      msgs,
+      openAiTools,
+      maxTokens,
+      timeoutMs,
+    )
+    return { ...result, source: 'groq' }
+  }
+
+  // 3. No provider configured
   return {
     text: '',
     toolCalls: [],

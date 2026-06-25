@@ -176,14 +176,6 @@ const DASHBOARD_DEFAULTS = {
   ] as { message: string; emoji: string }[],
 }
 
-const QB_SYNC_DEFAULTS = [
-  { label: 'Sync new invoices to QuickBooks automatically', enabled: true },
-  { label: 'Pull payment updates from QuickBooks', enabled: true },
-  { label: 'Match QB customers to GravHub companies', enabled: true },
-  { label: 'Sync overdue flags from QuickBooks', enabled: true },
-  { label: 'Create QB invoice when GravHub invoice is sent', enabled: false },
-]
-
 const INVOICE_DEFAULTS = {
   paymentTerms: 'Net 7',
   dueDays: '7',
@@ -301,72 +293,7 @@ export default function SettingsPage() {
   })
   const [saved, setSaved] = useState<string | null>(null)
 
-  // QuickBooks status
-  const [qbConnected, setQbConnected]   = useState(false)
-  const [qbStatus, setQbStatus]         = useState<{ lastSync: string | null; invoicesSynced: number; paymentsSynced: number; syncErrors: number } | null>(null)
-  const [qbSyncing, setQbSyncing]       = useState(false)
-  const [qbMessage, setQbMessage]       = useState<string | null>(null)
-
-  const fetchQBStatus = useCallback(() => {
-    return fetch('/api/quickbooks/status')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d?.connected) {
-          setQbConnected(true)
-          setQbStatus({ lastSync: d.lastSync, invoicesSynced: d.invoicesSynced, paymentsSynced: d.paymentsSynced, syncErrors: d.syncErrors })
-        } else {
-          setQbConnected(false)
-          setQbStatus(null)
-        }
-      })
-      .catch(() => toast('Failed to load QuickBooks status', 'error'))
-  }, [])
-
-  useEffect(() => { fetchQBStatus().finally(() => setLoading(false)) }, [fetchQBStatus])
-
-  // Handle OAuth callback params
-  useEffect(() => {
-    if (searchParams.get('qb_connected') === 'true') {
-      setQbConnected(true)
-      fetchQBStatus()
-      setQbMessage('QuickBooks connected successfully!')
-      setTimeout(() => setQbMessage(null), 4000)
-      router.replace('/settings?tab=integrations')
-    } else if (searchParams.get('qb_error')) {
-      setQbMessage(`Connection failed: ${searchParams.get('qb_error')}`)
-      setTimeout(() => setQbMessage(null), 6000)
-      router.replace('/settings?tab=integrations')
-    }
-  }, [searchParams, fetchQBStatus, router])
-
-  function connectQB() {
-    window.location.href = '/api/quickbooks/connect'
-  }
-
-  async function disconnectQB() {
-    await fetch('/api/quickbooks/disconnect', { method: 'POST' })
-    setQbConnected(false)
-    setQbStatus(null)
-  }
-
-  async function syncQB() {
-    setQbSyncing(true)
-    try {
-      const res = await fetch('/api/quickbooks/sync', { method: 'POST' })
-      const data = await res.json()
-      if (data.success) {
-        setQbMessage(`Synced ${data.invoicesSynced} invoices, ${data.paymentsSynced} payments`)
-        fetchQBStatus()
-      } else {
-        setQbMessage(`Sync failed: ${data.error}`)
-      }
-    } catch {
-      setQbMessage('Sync failed')
-    } finally {
-      setQbSyncing(false)
-      setTimeout(() => setQbMessage(null), 4000)
-    }
-  }
+  useEffect(() => { setLoading(false) }, [])
 
   // Company
   const [company, setCompany] = useState(COMPANY_DEFAULTS)
@@ -395,9 +322,6 @@ export default function SettingsPage() {
 
   // Dashboard Config
   const [dashboardConfig, setDashboardConfig] = useState(DASHBOARD_DEFAULTS)
-
-  // QB Sync
-  const [qbSync, setQbSync] = useState(QB_SYNC_DEFAULTS)
 
   // Invoice defaults
   const [invoiceDefaults, setInvoiceDefaults] = useState(INVOICE_DEFAULTS)
@@ -474,7 +398,6 @@ export default function SettingsPage() {
           setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
           setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
           setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
-          setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
           return
         }
         if (d.company          && Object.keys(d.company).length)           setCompany(d.company)
@@ -488,7 +411,6 @@ export default function SettingsPage() {
         if (d.branding         && Object.keys(d.branding).length)          setBranding(prev => ({ ...prev, ...d.branding }))
         if (d.email_defaults   && Object.keys(d.email_defaults).length)    setEmailDefaults(prev => ({ ...prev, ...d.email_defaults }))
         if (d.dashboard_config && Object.keys(d.dashboard_config).length)  setDashboardConfig(prev => ({ ...prev, ...d.dashboard_config }))
-        if (Array.isArray(d.qb_sync)         && d.qb_sync.length)          setQbSync(d.qb_sync)
         if (d.engagement && Object.keys(d.engagement).length) setEngagement(prev => ({ points: { ...prev.points, ...d.engagement.points }, thresholds: { ...prev.thresholds, ...d.engagement.thresholds } }))
         if (d.navigation_config) {
           if (d.navigation_config.global?.sections?.length) {
@@ -508,7 +430,6 @@ export default function SettingsPage() {
         setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
         setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
         setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
-        setQbSync(loadLS('gravhub_qb_sync', QB_SYNC_DEFAULTS))
       })
   }, [])
 
@@ -571,10 +492,6 @@ export default function SettingsPage() {
 
   function saveDashboardConfig() {
     patchSettings({ dashboardConfig }, 'Dashboard')
-  }
-
-  function saveQbSync() {
-    patchSettings({ qbSync }, 'QB Sync')
   }
 
   function saveEngagement() {
@@ -1710,30 +1627,6 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* QuickBooks row */}
-              <div className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
-                <div className="text-2xl flex-shrink-0">{qbConnected ? '🟢' : '⚪'}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800">QuickBooks Online</p>
-                  <p className="text-xs text-gray-500">Sync invoices, payments, and client accounts</p>
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <span className={`text-[11px] font-semibold hidden sm:flex items-center gap-0.5 ${qbConnected ? 'text-emerald-600' : 'text-gray-400'}`}>
-                    {qbConnected ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
-                    {qbConnected ? 'Connected' : 'Not Connected'}
-                  </span>
-                  {qbConnected ? (
-                    <button onClick={disconnectQB} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-200 transition-colors">
-                      Disconnect
-                    </button>
-                  ) : (
-                    <button onClick={connectQB} className="text-xs font-medium px-3 py-1.5 rounded-lg text-white transition-colors" style={{ background: '#015035' }}>
-                      Connect
-                    </button>
-                  )}
-                </div>
-              </div>
-
               {[
                 { name: 'Google Workspace', description: 'Single sign-on and calendar integration', status: 'connected', statusLabel: 'Active', icon: '🔵', action: 'Manage' },
                 { name: 'DocuSign', description: 'E-signature workflow for proposals and contracts', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
@@ -2005,53 +1898,6 @@ export default function SettingsPage() {
         {activeTab === 'Billing' && (
           <div className="flex flex-col gap-4">
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              {qbMessage && (
-                <div className={`mb-4 px-4 py-2.5 rounded-lg text-xs font-medium ${qbMessage.includes('failed') || qbMessage.includes('Failed') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
-                  {qbMessage}
-                </div>
-              )}
-              <div className="flex flex-wrap items-start gap-4 mb-5">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: qbConnected ? '#e8f5e9' : '#f3f4f6' }}>
-                  <span className="text-xl">{qbConnected ? '🟢' : '⚪'}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-800">QuickBooks Online</p>
-                  {qbConnected ? (
-                    <>
-                      <p className="text-xs text-emerald-600 font-medium mt-0.5">Connected · Syncing automatically</p>
-                      {qbStatus?.lastSync && (
-                        <p className="text-[11px] text-gray-400 mt-0.5">Last sync: {new Date(qbStatus.lastSync).toLocaleString()}</p>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-xs text-gray-500 mt-0.5">Not connected</p>
-                      <p className="flex items-center gap-1 text-[11px] text-gray-400 mt-1">
-                        <AlertCircle size={11} /> Connect QuickBooks to sync invoices and payments
-                      </p>
-                    </>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {qbConnected ? (
-                    <>
-                      <button onClick={syncQB} disabled={qbSyncing} className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg text-white disabled:opacity-60" style={{ background: '#015035' }}>
-                        <RefreshCw size={12} className={qbSyncing ? 'animate-spin' : ''} /> {qbSyncing ? 'Syncing…' : 'Sync Now'}
-                      </button>
-                      <button onClick={disconnectQB} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-                        Disconnect
-                      </button>
-                    </>
-                  ) : (
-                    <button onClick={connectQB} className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg text-white" style={{ background: '#015035' }}>
-                      Connect QuickBooks
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Invoice Defaults</h3>
                 {saved === 'Billing' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
@@ -2069,23 +1915,6 @@ export default function SettingsPage() {
               </button>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>QB Sync Settings</h3>
-                {saved === 'QB Sync' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
-              </div>
-              <div className="flex flex-col gap-1">
-                {qbSync.map(item => (
-                  <div key={item.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0 gap-3">
-                    <span className="text-sm text-gray-700">{item.label}</span>
-                    <Toggle enabled={item.enabled} onChange={() => setQbSync(prev => prev.map(x => x.label === item.label ? { ...x, enabled: !x.enabled } : x))} />
-                  </div>
-                ))}
-              </div>
-              <button onClick={saveQbSync} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
-                {saved === 'QB Sync' ? <><CheckCircle size={14} /> Saved!</> : 'Save QB Sync Settings'}
-              </button>
-            </div>
           </div>
         )}
 

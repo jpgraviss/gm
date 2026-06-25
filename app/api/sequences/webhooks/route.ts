@@ -373,13 +373,27 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Handle opens — calculate from activities count (accurate)
+  // Handle opens — update engagement status and recalculate rate
   if (type === 'email.opened') {
+    await db
+      .from('sequence_enrollments')
+      .update({ delivery_status: 'opened' })
+      .eq('id', enrollment.id)
     await recalculateRate(db, seqId, 'open_rate', 'opened')
   }
 
-  // Handle clicks — calculate from activities count (accurate)
+  // Handle clicks — update engagement status and recalculate rate
   if (type === 'email.clicked') {
+    await db
+      .from('sequence_enrollments')
+      .update({ delivery_status: 'clicked' })
+      .eq('id', enrollment.id)
+
+    if (enrollment.contact_id) {
+      await db.from('crm_contacts').update({
+        last_activity: new Date().toISOString(),
+      }).eq('id', enrollment.contact_id)
+    }
     await recalculateRate(db, seqId, 'click_rate', 'clicked')
   }
 

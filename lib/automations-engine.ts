@@ -117,6 +117,11 @@ export async function executeWorkflow(
 
   try {
     for (const action of automation.actions) {
+      if (triggerData._skipRemaining) {
+        steps.push({ name: action, status: 'skipped', duration_ms: 0 })
+        continue
+      }
+
       const stepStart = Date.now()
       try {
         await executeAction(action, triggerData, supabase)
@@ -310,8 +315,29 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         logged_by: 'System',
       })
 
-      const userId = (context.assigned_rep_user_id as string) ?? ''
-      if (userId && target === 'assigned_rep') {
+      const targetUserIds: string[] = []
+      if (target === 'assigned_rep') {
+        const userId = (context.assigned_rep_user_id as string) ?? ''
+        if (userId) targetUserIds.push(userId)
+      } else {
+        const unitMap: Record<string, string> = {
+          sales_team: 'Sales',
+          finance_team: 'Billing/Finance',
+          delivery_team: 'Delivery',
+          leadership: 'Leadership/Admin',
+        }
+        const unit = unitMap[target]
+        if (unit) {
+          const { data: members } = await db
+            .from('team_members')
+            .select('id')
+            .eq('unit', unit)
+            .eq('status', 'Active')
+          for (const m of members ?? []) targetUserIds.push(m.id)
+        }
+      }
+
+      for (const userId of targetUserIds) {
         sendPushNotification({
           userId,
           title: 'Automation Notification',
@@ -357,7 +383,8 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       }
 
       if (!matched) {
-        throw new Error(`Condition not met: ${field} ${operator} ${compareValue} (actual: ${actual})`)
+        // Condition not met — skip remaining actions gracefully (not an error)
+        context._skipRemaining = true
       }
       break
     }
@@ -424,15 +451,39 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     case 'Notify Finance Team':
     case 'Notify Delivery Team':
     case 'Notify Assigned Rep': {
+      const notifMessage = `${action}: ${context.trigger ?? 'Automation triggered'} for ${company}`
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
         type: 'Notification',
-        description: `[Auto] ${action}: ${context.trigger ?? 'Automation triggered'} for ${company}`,
+        description: `[Auto] ${notifMessage}`,
         company_id: (context.companyId as string) ?? null,
         contact_id: (context.contactId as string) ?? null,
         timestamp: new Date().toISOString(),
         logged_by: 'System',
       })
+
+      const unitMap: Record<string, string> = {
+        'Notify Sales Rep': 'Sales',
+        'Notify Finance Team': 'Billing/Finance',
+        'Notify Delivery Team': 'Delivery',
+        'Notify Assigned Rep': '',
+      }
+      const targetUnit = unitMap[action]
+      if (targetUnit) {
+        const { data: members } = await db
+          .from('team_members')
+          .select('id')
+          .eq('unit', targetUnit)
+          .eq('status', 'Active')
+        for (const m of members ?? []) {
+          sendPushNotification({ userId: m.id, title: action, body: notifMessage, url: '/automation' }).catch(() => {})
+        }
+      } else if (action === 'Notify Assigned Rep') {
+        const repId = (context.assigned_rep_user_id as string) ?? ''
+        if (repId) {
+          sendPushNotification({ userId: repId, title: action, body: notifMessage, url: '/automation' }).catch(() => {})
+        }
+      }
       break
     }
 

@@ -847,6 +847,7 @@ export default function RenewalsPage() {
               )}
             </div>
           ) : (
+            <>
             {/* Mobile card view */}
             <div className="md:hidden space-y-3 p-4">
               {filtered.map(r => (
@@ -861,12 +862,6 @@ export default function RenewalsPage() {
                   </div>
                 </div>
               ))}
-              {filtered.length === 0 && (
-                <div className="text-center py-12">
-                  <Inbox size={32} className="text-gray-300 mx-auto mb-3" />
-                  <p className="text-sm text-gray-400">No renewals match your search.</p>
-                </div>
-              )}
             </div>
             {/* Desktop table view */}
             <div className="overflow-x-auto hidden md:block">
@@ -954,6 +949,7 @@ export default function RenewalsPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           {filtered.length > 0 && (

@@ -775,7 +775,39 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
                       {file.type && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{file.type}</span>}
                       <button
                         className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1.5 rounded-lg hover:bg-gray-100"
-                        onClick={() => toast(`Download for "${file.name}" is not yet available`, 'info')}
+                        onClick={async () => {
+                          try {
+                            // If file already has a signed URL, open it directly
+                            if (file.url) {
+                              window.open(file.url, '_blank')
+                              return
+                            }
+                            // If file has a webViewLink (Google Drive), open it
+                            if (file.webViewLink) {
+                              window.open(file.webViewLink, '_blank')
+                              return
+                            }
+                            // If file has a path, fetch a fresh signed URL
+                            if (file.path) {
+                              const res = await fetch(`/api/files/download?path=${encodeURIComponent(file.path)}`)
+                              if (res.ok) {
+                                const data = await res.json()
+                                if (data.url) {
+                                  window.open(data.url, '_blank')
+                                  return
+                                }
+                              }
+                            }
+                            // If file has a Google Drive id, download via Drive API
+                            if (file.id && typeof file.id === 'string' && file.id.length > 10) {
+                              window.open(`/api/drive?action=download&fileId=${encodeURIComponent(file.id)}`, '_blank')
+                              return
+                            }
+                            toast('Download failed — file has no download link', 'error')
+                          } catch {
+                            toast('Download failed — please try again', 'error')
+                          }
+                        }}
                       >
                         <Download size={13} />
                       </button>

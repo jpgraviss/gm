@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/admin-auth'
 
 const BUCKETS = [
   { name: 'uploads', public: false },
@@ -8,7 +9,10 @@ const BUCKETS = [
   { name: 'deliverables', public: false },
 ] as const
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const db = createServiceClient()
   const results: { bucket: string; status: 'created' | 'exists' | 'error'; error?: string }[] = []
 

@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
 import { sendPushNotification } from '@/lib/push-notifications'
+import { wrapBrandedEmail } from '@/lib/email-template'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 const TRIGGER_MAP: Record<string, string> = {
@@ -200,7 +201,8 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       if (!contact?.emails?.[0]) break
 
       const subject = (context.emailSubject as string) ?? `Update from GravHub — ${action}`
-      const html = (context.emailBody as string) ?? `<p>Hi ${contact.full_name ?? 'there'},</p><p>This is an automated message regarding ${company}.</p>`
+      const rawHtml = (context.emailBody as string) ?? `<p>Hi ${contact.full_name ?? 'there'},</p><p>This is an automated message regarding ${company}.</p>`
+      const html = await wrapBrandedEmail(rawHtml, 'AUTOMATED NOTIFICATION')
       await sendEmail({ to: contact.emails[0], subject, html })
       break
     }

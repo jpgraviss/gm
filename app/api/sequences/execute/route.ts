@@ -3,6 +3,7 @@ import { sendEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase'
 import { sendViaGmail } from '@/lib/gmail-send'
 import { fireAutomations } from '@/lib/automations-engine'
+import { getSettings, type AppSettings } from '@/lib/settings'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.gravissmarketing.com'
 
 // ─── Merge-field replacement ─────────────────────────────────────────────────
@@ -55,7 +56,7 @@ type HtmlTemplate = 'branded' | 'minimal' | 'plain'
 
 function renderEmailHtml(
   template: HtmlTemplate,
-  opts: { body: string; contactName: string; sequenceName: string; fromName?: string },
+  opts: { body: string; contactName: string; sequenceName: string; fromName?: string; settings: AppSettings },
 ): string {
   switch (template) {
     case 'plain':
@@ -73,18 +74,27 @@ function renderEmailHtml(
 function minimalEmailHtml({
   body,
   contactName,
+  settings,
 }: {
   body: string
   contactName: string
+  settings: AppSettings
 }) {
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#ffffff;font-family:'Helvetica Neue',Arial,sans-serif;">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@400;500;600;700;800&display=swap');</style></head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px;">
     <tr><td style="max-width:600px;margin:0 auto;">
       <p style="margin:0 0 16px;color:#374151;font-size:15px;">Hi ${contactName || 'there'},</p>
       <div style="color:#374151;font-size:15px;line-height:1.7;">${body.replace(/\n/g, '<br>')}</div>
+      <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;">
+        <p style="margin:0;font-size:11px;color:#9ca3af;">
+          &copy; ${new Date().getFullYear()} ${settings.company.name} &middot;
+          <a href="mailto:${settings.email.supportEmail}" style="color:${settings.branding.primaryColor};">${settings.email.supportEmail}</a>
+        </p>
+      </div>
     </td></tr>
   </table>
 </body>
@@ -95,22 +105,25 @@ function brandedEmailHtml({
   body,
   contactName,
   sequenceName,
+  settings,
 }: {
   body: string
   contactName: string
   sequenceName: string
+  settings: AppSettings
 }) {
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Helvetica Neue',Arial,sans-serif;">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@400;500;600;700;800&display=swap');</style></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
     <tr><td align="center">
       <table width="580" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
         <tr>
-          <td style="background:#012b1e;padding:28px 40px;">
-            <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;letter-spacing:0.08em;font-family:Georgia,serif;">GRAVISS MARKETING</h1>
-            <p style="margin:4px 0 0;color:rgba(255,255,255,0.5);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;">${sequenceName}</p>
+          <td style="background:${settings.branding.darkBg};padding:28px 40px;">
+            <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;letter-spacing:0.08em;font-family:'Syncopate',sans-serif;">${settings.company.name.toUpperCase()}</h1>
+            <p style="margin:4px 0 0;color:rgba(255,255,255,0.5);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;font-family:'Syncopate',sans-serif;">${sequenceName}</p>
           </td>
         </tr>
         <tr>
@@ -122,8 +135,8 @@ function brandedEmailHtml({
         <tr>
           <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 40px;text-align:center;">
             <p style="margin:0;font-size:11px;color:#9ca3af;">
-              &copy; ${new Date().getFullYear()} Graviss Marketing &nbsp;&middot;&nbsp;
-              <a href="mailto:info@gravissmarketing.com" style="color:#015035;">info@gravissmarketing.com</a>
+              &copy; ${new Date().getFullYear()} ${settings.company.name} &nbsp;&middot;&nbsp;
+              <a href="mailto:${settings.email.supportEmail}" style="color:${settings.branding.primaryColor};">${settings.email.supportEmail}</a>
             </p>
           </td>
         </tr>
@@ -321,6 +334,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = createServiceClient()
+  const settings = await getSettings()
   const now = new Date()
 
   // Fetch all active enrollments that are due
@@ -479,9 +493,9 @@ export async function POST(req: NextRequest) {
       const bodyText = replaceMergeFields(step.body ?? '', mergeCtx)
 
       // Resolve sender info (step overrides sequence overrides defaults)
-      const fromName = step.fromName ?? seq.from_name ?? 'Graviss Marketing'
-      const fromEmail = step.fromEmail ?? seq.from_email ?? 'noreply@app.gravissmarketing.com'
-      const replyTo = step.replyTo ?? (rep?.email || 'info@gravissmarketing.com')
+      const fromName = step.fromName ?? seq.from_name ?? settings.email.fromName
+      const fromEmail = step.fromEmail ?? seq.from_email ?? settings.email.fromEmail
+      const replyTo = step.replyTo ?? (rep?.email || settings.email.replyTo)
 
       // Resolve HTML template
       const template: HtmlTemplate = step.htmlTemplate ?? 'branded'
@@ -490,6 +504,7 @@ export async function POST(req: NextRequest) {
         contactName: enrollment.contact_name ?? '',
         sequenceName: seq.name,
         fromName,
+        settings,
       })
 
       // ── 8. Append unsubscribe link ─────────────────────────────────────

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import {
   getValidAccessToken,
@@ -7,8 +7,17 @@ import {
   type CalendarSettings,
 } from '@/lib/google-calendar'
 import { encrypt, decrypt } from '@/lib/encryption'
+import { requireRole } from '@/lib/rbac'
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET
+  const authHeader = req.headers.get('authorization')
+  const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`
+  if (!isCron) {
+    const denied = await requireRole(req, 'Team Member')
+    if (denied) return denied
+  }
+
   try {
     const db = createServiceClient()
 

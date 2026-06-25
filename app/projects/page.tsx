@@ -1062,6 +1062,43 @@ export default function ProjectsPage() {
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            {/* Mobile card view */}
+            <div className="md:hidden space-y-3 p-4">
+              {filtered.map(p => (
+                <div key={p.id} onClick={() => setSelected(p)} className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer active:bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold text-sm text-gray-900">{p.company}</span>
+                    <StatusBadge label={p.status} colorClass={projectStatusColors[p.status]} />
+                  </div>
+                  <div className="text-xs text-gray-500 mb-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-400">{serviceTypeIcons[p.serviceType as ServiceTypeKey]}</span>
+                      <span className="text-gray-700">{p.serviceType}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs text-gray-500">Progress</span>
+                      <span className="text-xs font-bold" style={{ color: '#015035' }}>{p.progress}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${p.progress}%`, background: p.progress === 100 ? '#22c55e' : '#015035' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {filtered.length === 0 && (
+                <div className="text-center py-12">
+                  <FolderKanban size={32} className="text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-400">No projects match your search.</p>
+                </div>
+              )}
+            </div>
+            {/* Desktop table view */}
+            <div className="overflow-x-auto hidden md:block">
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -1139,6 +1176,7 @@ export default function ProjectsPage() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

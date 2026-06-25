@@ -847,7 +847,24 @@ export default function RenewalsPage() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Mobile card view */}
+            <div className="md:hidden space-y-3 p-4">
+              {filtered.map(r => (
+                <div key={r.id} onClick={() => setSelected(r)} className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer active:bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold text-sm text-gray-900">{r.company}</span>
+                    <StatusBadge label={r.status} colorClass={renewalStatusColors[r.status]} />
+                  </div>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div>Service: <span className="text-gray-700">{r.serviceType}</span></div>
+                    <div>Expires: <span className="text-gray-700">{formatDate(r.expirationDate)}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table view */}
+            <div className="overflow-x-auto hidden md:block">
               <table className="w-full min-w-[640px]">
                 <thead>
                   <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50/80">
@@ -932,6 +949,7 @@ export default function RenewalsPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           {filtered.length > 0 && (

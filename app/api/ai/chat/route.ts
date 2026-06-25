@@ -878,7 +878,7 @@ Guidelines:
 
       if (result.source === 'none') {
         return NextResponse.json({
-          reply: 'No AI provider is available. Please configure Ollama or set GROQ_API_KEY.',
+          reply: 'AI is not configured. Please set GROQ_API_KEY in your environment variables.',
           source: 'error',
         })
       }
@@ -912,6 +912,7 @@ Guidelines:
     return NextResponse.json({ reply: finalText, source })
   } catch (err) {
     console.error('[ai/chat]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const message = err instanceof Error ? err.message : 'Internal server error'
+    return NextResponse.json({ reply: `AI error: ${message}`, source: 'error' }, { status: 200 })
   }
 }

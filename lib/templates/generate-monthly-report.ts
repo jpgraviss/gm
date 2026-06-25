@@ -1,4 +1,5 @@
 import { renderTemplate, formatDate } from './template-helpers'
+import type { AppSettings } from '@/lib/settings'
 
 export interface MonthlyReportMetrics {
   traffic?: {
@@ -47,10 +48,19 @@ export interface MonthlyReportData {
   changelog: string[]
 }
 
+const BRAND = {
+  primary: '#015035',
+  secondary: '#FFF3EA',
+  accent: '#CC7853',
+  ink: '#1B211D',
+  stone: '#8C8478',
+  darkBg: '#012b1e',
+}
+
 function changeIndicator(current: number, previous: number | undefined): string {
   if (previous === undefined) return ''
   const diff = current - previous
-  if (diff === 0) return '<span style="color:#6b7280;font-size:12px;margin-left:6px;">no change</span>'
+  if (diff === 0) return `<span style="color:${BRAND.stone};font-size:12px;margin-left:6px;">no change</span>`
   const arrow = diff > 0 ? '&#9650;' : '&#9660;'
   const color = diff > 0 ? '#059669' : '#dc2626'
   return `<span style="color:${color};font-size:12px;font-weight:600;margin-left:6px;">${arrow} ${Math.abs(diff).toLocaleString()}</span>`
@@ -64,50 +74,54 @@ function percentChange(current: number, previous: number | undefined): string {
   return `<span style="color:${color};font-size:12px;font-weight:600;margin-left:6px;">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`
 }
 
-function metricCard(label: string, value: string, change: string): string {
+function metricCard(label: string, value: string, change: string, primaryColor: string): string {
   return `<td style="padding:8px;width:33%;vertical-align:top;">
-    <div style="background:#f0fdf4;border-radius:8px;padding:16px;text-align:center;">
-      <p style="margin:0;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">${label}</p>
-      <p style="margin:6px 0 0;font-size:22px;font-weight:700;color:#015035;">${value}${change}</p>
+    <div style="background:${BRAND.secondary};border-radius:8px;padding:16px;text-align:center;">
+      <p style="margin:0;font-size:12px;color:${BRAND.stone};text-transform:uppercase;letter-spacing:0.05em;font-family:'Montserrat',sans-serif;">${label}</p>
+      <p style="margin:6px 0 0;font-size:22px;font-weight:700;color:${primaryColor};font-family:'Montserrat',sans-serif;">${value}${change}</p>
     </div>
   </td>`
 }
 
-function cssBar(label: string, value: number, max: number, color: string = '#015035'): string {
+function cssBar(label: string, value: number, max: number, color: string): string {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0
   return `<tr><td style="padding:6px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       <tr>
-        <td style="width:120px;font-size:13px;color:#374151;vertical-align:middle;">${label}</td>
+        <td style="width:120px;font-size:13px;color:${BRAND.ink};vertical-align:middle;font-family:'Montserrat',sans-serif;">${label}</td>
         <td style="vertical-align:middle;padding:0 12px;">
           <div style="background:#e5e7eb;border-radius:4px;height:14px;overflow:hidden;">
             <div style="background:${color};height:100%;width:${pct}%;border-radius:4px;"></div>
           </div>
         </td>
-        <td style="width:50px;font-size:13px;font-weight:600;color:#1f2937;text-align:right;vertical-align:middle;">${value}</td>
+        <td style="width:50px;font-size:13px;font-weight:600;color:${BRAND.ink};text-align:right;vertical-align:middle;font-family:'Montserrat',sans-serif;">${value}</td>
       </tr>
     </table>
   </td></tr>`
 }
 
-export function generateMonthlyReportHtml(data: MonthlyReportData): string {
+export function generateMonthlyReportHtml(data: MonthlyReportData, settings?: AppSettings): string {
   const { metrics } = data
+  const primaryColor = settings?.branding.primaryColor ?? BRAND.primary
+  const darkBg = settings?.branding.darkBg ?? BRAND.darkBg
+  const companyName = settings?.company.name ?? data.companyName
+  const supportEmail = settings?.email.supportEmail ?? 'info@gravissmarketing.com'
 
   let summaryCards = ''
   if (metrics.traffic) {
-    summaryCards += metricCard('Sessions', metrics.traffic.sessions.toLocaleString(), percentChange(metrics.traffic.sessions, metrics.traffic.previousSessions))
-    summaryCards += metricCard('Users', metrics.traffic.users.toLocaleString(), percentChange(metrics.traffic.users, metrics.traffic.previousUsers))
-    summaryCards += metricCard('Bounce Rate', `${metrics.traffic.bounceRate.toFixed(1)}%`, '')
+    summaryCards += metricCard('Sessions', metrics.traffic.sessions.toLocaleString(), percentChange(metrics.traffic.sessions, metrics.traffic.previousSessions), primaryColor)
+    summaryCards += metricCard('Users', metrics.traffic.users.toLocaleString(), percentChange(metrics.traffic.users, metrics.traffic.previousUsers), primaryColor)
+    summaryCards += metricCard('Bounce Rate', `${metrics.traffic.bounceRate.toFixed(1)}%`, '', primaryColor)
   }
   if (metrics.seo) {
-    summaryCards += metricCard('Clicks', metrics.seo.clicks.toLocaleString(), changeIndicator(metrics.seo.clicks, metrics.seo.previousClicks))
-    summaryCards += metricCard('Impressions', metrics.seo.impressions.toLocaleString(), changeIndicator(metrics.seo.impressions, metrics.seo.previousImpressions))
-    summaryCards += metricCard('Avg Position', metrics.seo.avgPosition.toFixed(1), '')
+    summaryCards += metricCard('Clicks', metrics.seo.clicks.toLocaleString(), changeIndicator(metrics.seo.clicks, metrics.seo.previousClicks), primaryColor)
+    summaryCards += metricCard('Impressions', metrics.seo.impressions.toLocaleString(), changeIndicator(metrics.seo.impressions, metrics.seo.previousImpressions), primaryColor)
+    summaryCards += metricCard('Avg Position', metrics.seo.avgPosition.toFixed(1), '', primaryColor)
   }
   if (metrics.uptime) {
-    summaryCards += metricCard('Uptime', `${metrics.uptime.uptimePercent}%`, '')
-    summaryCards += metricCard('Sites', metrics.uptime.sitesMonitored.toString(), '')
-    summaryCards += metricCard('Incidents', metrics.uptime.incidents.toString(), '')
+    summaryCards += metricCard('Uptime', `${metrics.uptime.uptimePercent}%`, '', primaryColor)
+    summaryCards += metricCard('Sites', metrics.uptime.sitesMonitored.toString(), '', primaryColor)
+    summaryCards += metricCard('Incidents', metrics.uptime.incidents.toString(), '', primaryColor)
   }
 
   let rankingSection = ''
@@ -116,19 +130,19 @@ export function generateMonthlyReportHtml(data: MonthlyReportData): string {
     const bars = metrics.ranking.keywords
       .slice(0, 10)
       .map((k) => {
-        const changeColor = k.change > 0 ? '#059669' : k.change < 0 ? '#dc2626' : '#6b7280'
+        const changeColor = k.change > 0 ? '#059669' : k.change < 0 ? '#dc2626' : BRAND.stone
         const changeText = k.change !== 0 ? ` <span style="color:${changeColor};font-size:11px;">(${k.change > 0 ? '+' : ''}${k.change})</span>` : ''
-        return cssBar(`${k.keyword}${changeText}`, k.position, maxPos)
+        return cssBar(`${k.keyword}${changeText}`, k.position, maxPos, primaryColor)
       })
       .join('')
     rankingSection = `
     <tr><td style="padding:24px 32px 0;">
-      <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#015035;text-transform:uppercase;letter-spacing:0.05em;">Keyword Rankings</p>
+      <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:${primaryColor};text-transform:uppercase;letter-spacing:0.06em;font-family:'Syncopate',sans-serif;">Keyword Rankings</p>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
         <tr>
-          <td style="font-size:12px;color:#6b7280;">Tracked: <strong style="color:#1f2937;">${metrics.ranking.tracked}</strong></td>
-          <td style="font-size:12px;color:#6b7280;text-align:center;">Top 3: <strong style="color:#015035;">${metrics.ranking.top3}</strong></td>
-          <td style="font-size:12px;color:#6b7280;text-align:right;">Top 10: <strong style="color:#015035;">${metrics.ranking.top10}</strong></td>
+          <td style="font-size:12px;color:${BRAND.stone};font-family:'Montserrat',sans-serif;">Tracked: <strong style="color:${BRAND.ink};">${metrics.ranking.tracked}</strong></td>
+          <td style="font-size:12px;color:${BRAND.stone};text-align:center;font-family:'Montserrat',sans-serif;">Top 3: <strong style="color:${primaryColor};">${metrics.ranking.top3}</strong></td>
+          <td style="font-size:12px;color:${BRAND.stone};text-align:right;font-family:'Montserrat',sans-serif;">Top 10: <strong style="color:${primaryColor};">${metrics.ranking.top10}</strong></td>
         </tr>
       </table>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${bars}</table>
@@ -140,12 +154,12 @@ export function generateMonthlyReportHtml(data: MonthlyReportData): string {
     const stars = '&#9733;'.repeat(Math.round(metrics.reputation.averageRating)) + '&#9734;'.repeat(5 - Math.round(metrics.reputation.averageRating))
     reputationSection = `
     <tr><td style="padding:24px 32px 0;">
-      <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#015035;text-transform:uppercase;letter-spacing:0.05em;">Reputation</p>
+      <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:${primaryColor};text-transform:uppercase;letter-spacing:0.06em;font-family:'Syncopate',sans-serif;">Reputation</p>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         <tr>
-          <td style="font-size:14px;color:#374151;">Rating: <span style="color:#f59e0b;font-size:16px;">${stars}</span> <strong>${metrics.reputation.averageRating.toFixed(1)}</strong></td>
-          <td style="font-size:14px;color:#374151;text-align:center;">New Reviews: <strong>${metrics.reputation.newReviews}</strong></td>
-          <td style="font-size:14px;color:#374151;text-align:right;">Total: <strong>${metrics.reputation.totalReviews}</strong>${changeIndicator(metrics.reputation.totalReviews, metrics.reputation.previousTotalReviews)}</td>
+          <td style="font-size:14px;color:${BRAND.ink};font-family:'Montserrat',sans-serif;">Rating: <span style="color:#f59e0b;font-size:16px;">${stars}</span> <strong>${metrics.reputation.averageRating.toFixed(1)}</strong></td>
+          <td style="font-size:14px;color:${BRAND.ink};text-align:center;font-family:'Montserrat',sans-serif;">New Reviews: <strong>${metrics.reputation.newReviews}</strong></td>
+          <td style="font-size:14px;color:${BRAND.ink};text-align:right;font-family:'Montserrat',sans-serif;">Total: <strong>${metrics.reputation.totalReviews}</strong>${changeIndicator(metrics.reputation.totalReviews, metrics.reputation.previousTotalReviews)}</td>
         </tr>
       </table>
     </td></tr>`
@@ -153,34 +167,35 @@ export function generateMonthlyReportHtml(data: MonthlyReportData): string {
 
   const recommendationsHtml = data.recommendations.length
     ? data.recommendations
-        .map((r) => `<tr><td style="padding:4px 0;font-size:14px;color:#374151;"><span style="color:#015035;font-weight:700;margin-right:8px;">&#8226;</span>${r}</td></tr>`)
+        .map((r) => `<tr><td style="padding:4px 0;font-size:14px;color:${BRAND.ink};font-family:'Montserrat',sans-serif;"><span style="color:${BRAND.accent};font-weight:700;margin-right:8px;">&#8226;</span>${r}</td></tr>`)
         .join('')
-    : '<tr><td style="padding:4px 0;font-size:14px;color:#6b7280;">No recommendations this period.</td></tr>'
+    : `<tr><td style="padding:4px 0;font-size:14px;color:${BRAND.stone};font-family:'Montserrat',sans-serif;">No recommendations this period.</td></tr>`
 
   const changelogHtml = data.changelog.length
     ? data.changelog
-        .map((c) => `<tr><td style="padding:4px 0;font-size:14px;color:#374151;"><span style="color:#015035;font-weight:700;margin-right:8px;">&#10003;</span>${c}</td></tr>`)
+        .map((c) => `<tr><td style="padding:4px 0;font-size:14px;color:${BRAND.ink};font-family:'Montserrat',sans-serif;"><span style="color:${primaryColor};font-weight:700;margin-right:8px;">&#10003;</span>${c}</td></tr>`)
         .join('')
-    : '<tr><td style="padding:4px 0;font-size:14px;color:#6b7280;">No changes logged this period.</td></tr>'
+    : `<tr><td style="padding:4px 0;font-size:14px;color:${BRAND.stone};font-family:'Montserrat',sans-serif;">No changes logged this period.</td></tr>`
 
   const html = `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:system-ui,-apple-system,sans-serif;">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@400;500;600;700;800&display=swap');</style></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;">
 <tr><td align="center" style="padding:24px 16px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;border-radius:12px;overflow:hidden;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
 
 <!-- Header -->
-<tr><td style="background:#015035;padding:32px;text-align:center;">
-  <img src="https://app.gravissmarketing.com/logo-white.png" alt="Graviss Marketing" style="height:32px;margin-bottom:16px;" />
-  <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;">Monthly Report</h1>
-  <p style="margin:6px 0 0;font-size:14px;color:#a7f3d0;">{client_name} &mdash; {period_label}</p>
+<tr><td style="background:${darkBg};padding:32px;text-align:center;">
+  <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:0.08em;font-family:'Syncopate',sans-serif;">{company_name}</h1>
+  <p style="margin:6px 0 0;font-size:12px;color:rgba(255,255,255,0.65);letter-spacing:0.04em;font-family:'Syncopate',sans-serif;">MONTHLY REPORT</p>
+  <p style="margin:10px 0 0;font-size:14px;color:${BRAND.secondary};font-family:'Montserrat',sans-serif;">{client_name} - {period_label}</p>
 </td></tr>
 
 <!-- Executive Summary -->
 <tr><td style="background:#ffffff;padding:24px 32px;">
-  <p style="margin:0 0 16px;font-size:13px;font-weight:700;color:#015035;text-transform:uppercase;letter-spacing:0.05em;">Executive Summary</p>
+  <p style="margin:0 0 16px;font-size:14px;font-weight:700;color:${primaryColor};text-transform:uppercase;letter-spacing:0.06em;font-family:'Syncopate',sans-serif;">Executive Summary</p>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
     <tr>${summaryCards}</tr>
   </table>
@@ -194,20 +209,20 @@ ${reputationSection}
 
 <!-- Recommendations -->
 <tr><td style="padding:24px 32px 0;background:#ffffff;">
-  <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#015035;text-transform:uppercase;letter-spacing:0.05em;">Recommendations</p>
+  <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:${primaryColor};text-transform:uppercase;letter-spacing:0.06em;font-family:'Syncopate',sans-serif;">Recommendations</p>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${recommendationsHtml}</table>
 </td></tr>
 
 <!-- Changelog -->
 <tr><td style="padding:24px 32px;background:#ffffff;">
-  <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#015035;text-transform:uppercase;letter-spacing:0.05em;">Changelog</p>
+  <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:${primaryColor};text-transform:uppercase;letter-spacing:0.06em;font-family:'Syncopate',sans-serif;">Changelog</p>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${changelogHtml}</table>
 </td></tr>
 
 <!-- Footer -->
 <tr><td style="background:#f9fafb;padding:20px 32px;text-align:center;border-top:1px solid #e5e7eb;">
-  <p style="margin:0;font-size:12px;color:#9ca3af;">Generated on {generated_date}</p>
-  <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">&copy; {company_name} &middot; All rights reserved</p>
+  <p style="margin:0;font-size:12px;color:${BRAND.stone};font-family:'Montserrat',sans-serif;">Generated on {generated_date}</p>
+  <p style="margin:4px 0 0;font-size:12px;color:${BRAND.stone};font-family:'Montserrat',sans-serif;">&copy; {company_name} &middot; <a href="mailto:${supportEmail}" style="color:${primaryColor};">${supportEmail}</a></p>
 </td></tr>
 
 </table>
@@ -218,7 +233,7 @@ ${reputationSection}
 
   return renderTemplate(html, {
     client_name: data.clientName,
-    company_name: data.companyName,
+    company_name: companyName,
     period_label: data.period.label,
     generated_date: formatDate(new Date()),
   })

@@ -14,25 +14,38 @@ export async function GET(req: NextRequest) {
   const origin = req.nextUrl.origin
 
   if (error) {
-    return NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent(error)}`)
+    const messages: Record<string, string> = {
+      access_denied: 'Calendar access was denied. Please approve all permissions when prompted.',
+      invalid_scope: 'Invalid calendar permissions requested. Contact support.',
+    }
+    const msg = messages[error] || error
+    return NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent(msg)}`)
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(`${origin}/settings/calendar?error=missing_params`)
+    return NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('Missing authorization code. Please try connecting again.')}`)
   }
 
   try {
-    // Decode state
     const { userEmail, userName, slug } = JSON.parse(
       Buffer.from(state, 'base64url').toString('utf-8'),
     )
 
-    // Exchange code for tokens
-    const tokens = await exchangeCodeForTokens(code)
+    let tokens
+    try {
+      tokens = await exchangeCodeForTokens(code)
+    } catch (tokenErr) {
+      console.error('[calendar/callback] token exchange failed:', tokenErr)
+      return NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('Token exchange failed. Check that GOOGLE_CLIENT_SECRET is correct and the redirect URI matches Google Cloud Console.')}`)
+    }
+
+    if (!tokens.refresh_token) {
+      console.error('[calendar/callback] no refresh_token returned - user may need to revoke and reconnect')
+      return NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('No refresh token received. Go to myaccount.google.com/permissions, remove GravHub, then reconnect.')}`)
+    }
 
     const db = createServiceClient()
 
-    // Upsert calendar_settings row
     const { error: dbError } = await db.from('calendar_settings').upsert({
       user_email:           userEmail,
       user_name:            userName,
@@ -43,15 +56,15 @@ export async function GET(req: NextRequest) {
     }, { onConflict: 'user_email' })
 
     if (dbError) {
-      console.error('[calendar/callback GET]', dbError)
-      return NextResponse.redirect(`${origin}/settings/calendar?error=connection_failed`)
+      console.error('[calendar/callback] db upsert failed:', dbError)
+      return NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('Failed to save calendar tokens. Database error - please try again.')}`)
     }
 
     return NextResponse.redirect(`${origin}/settings/calendar?connected=true`)
   } catch (err) {
-    console.error('[calendar/callback GET]', err)
+    console.error('[calendar/callback] unhandled error:', err)
     return NextResponse.redirect(
-      `${origin}/settings/calendar?error=connection_failed`,
+      `${origin}/settings/calendar?error=${encodeURIComponent('Connection failed. Check server logs for details.')}`,
     )
   }
 }

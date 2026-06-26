@@ -73,6 +73,7 @@ export default function CalendarSettingsPage() {
   const [syncingAll, setSyncingAll] = useState(false)
   const [deletingSubId, setDeletingSubId] = useState<string | null>(null)
   const [copiedFeed, setCopiedFeed] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Form state
   const [slug, setSlug]                   = useState(defaultSlug)
@@ -297,6 +298,32 @@ export default function CalendarSettingsPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  async function handleDeleteBookingLink() {
+    if (!user?.email) return
+    if (!confirm('Delete your booking link and all associated bookings? This cannot be undone.')) return
+    setDeleting(true)
+    try {
+      const res = await fetch('/api/calendar/settings', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email }),
+      })
+      if (res.ok) {
+        setSettings(null)
+        setSlug(defaultSlug)
+        setTitle('Book a Call')
+        setDescription('')
+        setDuration(30)
+        setBuffer(15)
+        setTimezone('America/Chicago')
+        setAvailableDays([1, 2, 3, 4, 5])
+        setStart('09:00')
+        setEnd('17:00')
+      }
+    } catch { /* ignore */ }
+    setDeleting(false)
+  }
+
   if (fetching) {
     return (
       <div className="min-h-screen bg-[#f9fafb]">
@@ -430,7 +457,18 @@ export default function CalendarSettingsPage() {
             <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
               <Link2 className="w-4 h-4 text-blue-500" />
             </div>
-            <div className="text-sm font-bold text-gray-900">Your Booking Link</div>
+            <div className="flex-1 text-sm font-bold text-gray-900">Your Booking Link</div>
+            {settings && (
+              <button
+                onClick={handleDeleteBookingLink}
+                disabled={deleting}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                title="Delete booking link"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            )}
           </div>
 
           <div>

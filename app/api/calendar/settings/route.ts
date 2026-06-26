@@ -55,3 +55,22 @@ export async function POST(req: NextRequest) {
   }
   return NextResponse.json(data)
 }
+
+// DELETE /api/calendar/settings — delete a booking link / calendar settings
+// Bookings cascade-delete via FK on calendar_settings(slug)
+export async function DELETE(req: NextRequest) {
+  const { email } = await req.json()
+  if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
+
+  const db = createServiceClient()
+  const { error } = await db
+    .from('calendar_settings')
+    .delete()
+    .eq('user_email', email)
+
+  if (error) {
+    console.error('[calendar/settings DELETE]', error)
+    return NextResponse.json({ error: error?.message || 'Failed to delete calendar settings' }, { status: 500 })
+  }
+  return NextResponse.json({ deleted: true })
+}

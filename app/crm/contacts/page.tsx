@@ -18,7 +18,7 @@ import type { CRMContact, ContactNote, ContactTask, CRMCompany, Deal, Contract, 
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import {
-  X, Phone, Mail, User, Search, Plus, ScrollText,
+  X, Phone, Mail, User, Search, Plus, ScrollText, Filter,
   ChevronRight, ChevronLeft, Linkedin, StickyNote, CheckSquare,
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
@@ -1297,6 +1297,7 @@ export default function ContactsPage() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
   const [showBulkTag, setShowBulkTag] = useState(false)
   const [bulkTagValue, setBulkTagValue] = useState('')
+  const [stageFilter, setStageFilter] = useState<string>('All')
 
   const [sortKey, setSortKey] = useState<string>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -1399,12 +1400,16 @@ export default function ContactsPage() {
     setCreatingContact(false)
   }
 
-  const filtered = localContacts.filter(c =>
-    c.fullName.toLowerCase().includes(search.toLowerCase()) ||
-    c.companyName.toLowerCase().includes(search.toLowerCase()) ||
-    c.title.toLowerCase().includes(search.toLowerCase()) ||
-    c.emails.join(' ').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = localContacts.filter(c => {
+    const matchSearch =
+      c.fullName.toLowerCase().includes(search.toLowerCase()) ||
+      c.companyName.toLowerCase().includes(search.toLowerCase()) ||
+      c.title.toLowerCase().includes(search.toLowerCase()) ||
+      c.emails.join(' ').toLowerCase().includes(search.toLowerCase())
+    const stage = (c.lifecycleStage ?? 'lead')
+    const matchStage = stageFilter === 'All' || stage === stageFilter.toLowerCase()
+    return matchSearch && matchStage
+  })
 
   const allFilteredIds = filtered.map(c => c.id)
   const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id))
@@ -1466,7 +1471,7 @@ export default function ContactsPage() {
     toast(`Tag "${tag}" applied to ${ids.length} contacts`, 'success')
   }
 
-  useEffect(() => { setCurrentPage(1) }, [search])
+  useEffect(() => { setCurrentPage(1) }, [search, stageFilter])
 
   const sorted = [...filtered].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1
@@ -1501,8 +1506,8 @@ export default function ContactsPage() {
       <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" action={{ label: 'New Contact', onClick: () => setCreatingContact(true) }} />
       <div className="p-4 md:p-6 flex-1 flex flex-col bg-[#f8faf9]">
 
-        {/* Search */}
-        <div className="flex items-center gap-3 mb-4">
+        {/* Filters */}
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
           <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 flex-1 max-w-sm">
             <Search size={13} className="text-gray-400" />
             <input
@@ -1511,6 +1516,21 @@ export default function ContactsPage() {
               placeholder="Search contacts, company, title..."
               className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-full"
             />
+          </div>
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+            <Filter size={13} className="text-gray-400 flex-shrink-0" />
+            {(['All', 'Lead', 'Opportunity', 'Client', 'Other'] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setStageFilter(s)}
+                className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors flex-shrink-0 ${
+                  stageFilter === s ? 'text-white' : 'text-gray-500 hover:bg-gray-100'
+                }`}
+                style={stageFilter === s ? { background: '#015035' } : {}}
+              >
+                {s}
+              </button>
+            ))}
           </div>
           <button
             onClick={() => setShowDuplicates(true)}

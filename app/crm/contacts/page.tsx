@@ -23,7 +23,7 @@ import {
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
   PhoneCall, Video, Pencil, Trash2, Upload, Eye, MessageSquare, MousePointerClick,
-  Flame, Thermometer, Snowflake, MessageCircle, Sparkles, Brain, Wand2, GitMerge, Download, Tag,
+  Flame, Thermometer, Snowflake, MessageCircle, Sparkles, Brain, Wand2, GitMerge, Download, Tag, ArrowUpDown,
 } from 'lucide-react'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
 import BulkActionBar from '@/components/ui/BulkActionBar'
@@ -1298,6 +1298,14 @@ export default function ContactsPage() {
   const [showBulkTag, setShowBulkTag] = useState(false)
   const [bulkTagValue, setBulkTagValue] = useState('')
 
+  const [sortKey, setSortKey] = useState<string>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  function handleSort(key: string) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -1460,10 +1468,31 @@ export default function ContactsPage() {
 
   useEffect(() => { setCurrentPage(1) }, [search])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const sorted = [...filtered].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1
+    switch (sortKey) {
+      case 'name': return dir * a.fullName.localeCompare(b.fullName)
+      case 'company': return dir * a.companyName.localeCompare(b.companyName)
+      case 'title': return dir * (a.title ?? '').localeCompare(b.title ?? '')
+      case 'stage': {
+        const as = deals.find(d => d.company === a.companyName && !d.stage.startsWith('Closed'))?.stage ?? ''
+        const bs = deals.find(d => d.company === b.companyName && !d.stage.startsWith('Closed'))?.stage ?? ''
+        return dir * as.localeCompare(bs)
+      }
+      case 'contractValue': {
+        const av = contracts.find(c => c.company === a.companyName)?.value ?? 0
+        const bv = contracts.find(c => c.company === b.companyName)?.value ?? 0
+        return dir * (av - bv)
+      }
+      case 'owner': return dir * a.owner.localeCompare(b.owner)
+      default: return 0
+    }
+  })
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
   const safeCurrentPage = Math.min(currentPage, totalPages)
   const startIndex = (safeCurrentPage - 1) * pageSize
-  const paginatedContacts = filtered.slice(startIndex, startIndex + pageSize)
+  const paginatedContacts = sorted.slice(startIndex, startIndex + pageSize)
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
@@ -1546,12 +1575,25 @@ export default function ContactsPage() {
                     className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
                   />
                 </th>
-                <th className="text-left py-2.5 px-4 font-semibold">Name</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Company</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Title</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Pipeline Stage</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Contract Value</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden xl:table-cell">Owner</th>
+                {[
+                  { key: 'name', label: 'Name', hide: '' },
+                  { key: 'company', label: 'Company', hide: 'hidden sm:table-cell' },
+                  { key: 'title', label: 'Title', hide: 'hidden md:table-cell' },
+                  { key: 'stage', label: 'Pipeline Stage', hide: 'hidden lg:table-cell' },
+                  { key: 'contractValue', label: 'Contract Value', hide: 'hidden lg:table-cell' },
+                  { key: 'owner', label: 'Owner', hide: 'hidden xl:table-cell' },
+                ].map(col => (
+                  <th key={col.key} className={`text-left py-2.5 px-4 font-semibold ${col.hide}`}>
+                    <button onClick={() => handleSort(col.key)} className="flex items-center gap-1 hover:text-gray-600 transition-colors">
+                      {col.label}
+                      {sortKey === col.key ? (
+                        <span className="text-[#015035]">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                      ) : (
+                        <ArrowUpDown size={10} className="opacity-0 group-hover:opacity-100" />
+                      )}
+                    </button>
+                  </th>
+                ))}
                 <th className="text-left py-2.5 px-4 font-semibold">Actions</th>
               </tr>
             </thead>
@@ -1669,7 +1711,7 @@ export default function ContactsPage() {
               <Pagination
                 currentPage={safeCurrentPage}
                 totalPages={totalPages}
-                totalItems={filtered.length}
+                totalItems={sorted.length}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
                 onPageSizeChange={handlePageSizeChange}

@@ -23,7 +23,7 @@ import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
   ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload, BarChart3,
-  Monitor, Loader2, Sparkles, Wand2, Share2, Brain, Download, GitMerge,
+  Monitor, Loader2, Sparkles, Wand2, Share2, Brain, Download, GitMerge, ArrowUpDown,
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
@@ -985,6 +985,14 @@ export default function CompaniesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
 
+  const [sortKey, setSortKey] = useState<string>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  function handleSort(key: string) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -1117,10 +1125,36 @@ export default function CompaniesPage() {
 
   useEffect(() => { setCurrentPage(1) }, [search, statusFilter])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const sorted = [...filtered].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1
+    switch (sortKey) {
+      case 'name': return dir * a.name.localeCompare(b.name)
+      case 'industry': return dir * a.industry.localeCompare(b.industry)
+      case 'status': return dir * a.status.localeCompare(b.status)
+      case 'contacts': {
+        const ac = crmContacts.filter(c => c.companyId === a.id).length
+        const bc = crmContacts.filter(c => c.companyId === b.id).length
+        return dir * (ac - bc)
+      }
+      case 'pipeline': {
+        const av = deals.filter(d => d.company === a.name && !d.stage.startsWith('Closed')).reduce((s, d) => s + d.value, 0)
+        const bv = deals.filter(d => d.company === b.name && !d.stage.startsWith('Closed')).reduce((s, d) => s + d.value, 0)
+        return dir * (av - bv)
+      }
+      case 'contract': {
+        const av = contracts.find(c => c.company === a.name)?.value ?? 0
+        const bv = contracts.find(c => c.company === b.name)?.value ?? 0
+        return dir * (av - bv)
+      }
+      case 'owner': return dir * a.owner.localeCompare(b.owner)
+      default: return 0
+    }
+  })
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
   const safeCurrentPage = Math.min(currentPage, totalPages)
   const startIndex = (safeCurrentPage - 1) * pageSize
-  const paginatedCompanies = filtered.slice(startIndex, startIndex + pageSize)
+  const paginatedCompanies = sorted.slice(startIndex, startIndex + pageSize)
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
@@ -1212,13 +1246,26 @@ export default function CompaniesPage() {
                     className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
                   />
                 </th>
-                <th className="text-left py-2.5 px-4 font-semibold">Company</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Industry</th>
-                <th className="text-left py-2.5 px-4 font-semibold">Status</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Contacts</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Pipeline</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Contract</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden xl:table-cell">Owner</th>
+                {[
+                  { key: 'name', label: 'Company', hide: '' },
+                  { key: 'industry', label: 'Industry', hide: 'hidden sm:table-cell' },
+                  { key: 'status', label: 'Status', hide: '' },
+                  { key: 'contacts', label: 'Contacts', hide: 'hidden md:table-cell' },
+                  { key: 'pipeline', label: 'Pipeline', hide: 'hidden lg:table-cell' },
+                  { key: 'contract', label: 'Contract', hide: 'hidden lg:table-cell' },
+                  { key: 'owner', label: 'Owner', hide: 'hidden xl:table-cell' },
+                ].map(col => (
+                  <th key={col.key} className={`text-left py-2.5 px-4 font-semibold ${col.hide}`}>
+                    <button onClick={() => handleSort(col.key)} className="flex items-center gap-1 hover:text-gray-600 transition-colors">
+                      {col.label}
+                      {sortKey === col.key ? (
+                        <span className="text-[#015035]">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                      ) : (
+                        <ArrowUpDown size={10} className="opacity-0 group-hover:opacity-100" />
+                      )}
+                    </button>
+                  </th>
+                ))}
                 <th className="text-left py-2.5 px-4 font-semibold" />
               </tr>
             </thead>
@@ -1330,7 +1377,7 @@ export default function CompaniesPage() {
               <Pagination
                 currentPage={safeCurrentPage}
                 totalPages={totalPages}
-                totalItems={filtered.length}
+                totalItems={sorted.length}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
                 onPageSizeChange={handlePageSizeChange}

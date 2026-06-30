@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const db = createServiceClient()
   const { data, error } = await db
     .from('team_members')
-    .select('gmail_access_token, gmail_email, gmail_token_expires_at')
+    .select('gmail_access_token, gmail_email, gmail_token_expires_at, gmail_settings')
     .eq('email', email)
     .single()
 
@@ -29,28 +29,41 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     gmailToken: data.gmail_access_token,
     gmailEmail: data.gmail_email,
+    gmailSettings: data.gmail_settings ?? null,
   })
 }
 
-// POST /api/gmail/token — store Gmail token for a team member
+// POST /api/gmail/token — store Gmail token and/or settings for a team member
 export async function POST(req: NextRequest) {
-  const { userEmail, gmailToken, gmailEmail, expiresIn } = await req.json()
-  if (!userEmail || !gmailToken) {
-    return NextResponse.json({ error: 'userEmail and gmailToken are required' }, { status: 400 })
+  const { userEmail, gmailToken, gmailEmail, expiresIn, gmailSettings } = await req.json()
+  if (!userEmail) {
+    return NextResponse.json({ error: 'userEmail is required' }, { status: 400 })
   }
 
   const db = createServiceClient()
-  const expiresAt = expiresIn
-    ? new Date(Date.now() + expiresIn * 1000).toISOString()
-    : new Date(Date.now() + 3600 * 1000).toISOString() // default 1 hour
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const update: Record<string, any> = {}
+
+  if (gmailToken) {
+    const expiresAt = expiresIn
+      ? new Date(Date.now() + expiresIn * 1000).toISOString()
+      : new Date(Date.now() + 3600 * 1000).toISOString()
+    update.gmail_access_token = gmailToken
+    update.gmail_email = gmailEmail ?? null
+    update.gmail_token_expires_at = expiresAt
+  }
+
+  if (gmailSettings !== undefined) {
+    update.gmail_settings = gmailSettings
+  }
+
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+  }
 
   const { error } = await db
     .from('team_members')
-    .update({
-      gmail_access_token: gmailToken,
-      gmail_email: gmailEmail ?? null,
-      gmail_token_expires_at: expiresAt,
-    })
+    .update(update)
     .eq('email', userEmail)
 
   if (error) {

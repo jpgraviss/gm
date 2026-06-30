@@ -9,8 +9,9 @@ import { useToast } from '@/components/ui/Toast'
 import {
   Mail, RefreshCw, X, ChevronDown, Search, Link2,
   Inbox as InboxIcon, AlertCircle, CheckCircle, ExternalLink,
-  Send, Reply, PenSquare,
+  Send, Reply, PenSquare, PenLine,
 } from 'lucide-react'
+import { type EmailSignatureData, generateSignatureHtml } from '@/lib/email-signature'
 
 interface GmailMessage {
   id: string
@@ -88,8 +89,16 @@ export default function InboxPage() {
   const [composeCc, setComposeCc] = useState('')
   const [sending, setSending] = useState(false)
   const [isReply, setIsReply] = useState(false)
+  const [userSignature, setUserSignature] = useState<EmailSignatureData | null>(null)
 
-  useEffect(() => { fetchCrmContacts().then(d => { if (Array.isArray(d)) setCrmContacts(d) }).catch(() => {}) }, [])
+  useEffect(() => {
+    fetchCrmContacts().then(d => { if (Array.isArray(d)) setCrmContacts(d) }).catch(() => {})
+    fetch('/api/team-members').then(r => r.json()).then((members: Array<{ email: string; emailSignature?: EmailSignatureData }>) => {
+      const me = members.find(m => m.email === user?.email)
+      if (me?.emailSignature?.name) setUserSignature(me.emailSignature)
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Load already-logged Gmail activity IDs from the API
   useEffect(() => {
@@ -228,6 +237,11 @@ export default function InboxPage() {
     if (!composeTo.trim() || !composeSubject.trim() || !composeBody.trim()) return
     setSending(true)
     try {
+      let htmlBody = composeBody.replace(/\n/g, '<br/>')
+      const bodyEl = document.querySelector<HTMLTextAreaElement>('[data-compose-body]')
+      if (bodyEl?.dataset.signatureHtml) {
+        htmlBody = htmlBody.replace(/<br\/>---<br\/>$/, '') + bodyEl.dataset.signatureHtml
+      }
       const res = await fetch('/api/gmail/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -235,7 +249,7 @@ export default function InboxPage() {
           userEmail: user?.email ?? gmailEmail,
           to: composeTo.trim(),
           subject: composeSubject.trim(),
-          htmlBody: composeBody.replace(/\n/g, '<br/>'),
+          htmlBody,
           cc: composeCc.trim() || undefined,
         }),
       })
@@ -560,6 +574,7 @@ export default function InboxPage() {
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Message</label>
                 <textarea
+                  data-compose-body
                   value={composeBody}
                   onChange={e => setComposeBody(e.target.value)}
                   rows={8}
@@ -577,6 +592,23 @@ export default function InboxPage() {
                   <Send size={13} />
                   {sending ? 'Sending...' : 'Send Email'}
                 </button>
+                {userSignature && (
+                  <button
+                    onClick={() => {
+                      const sigHtml = generateSignatureHtml(userSignature)
+                      setComposeBody(prev => prev + '\n\n---\n')
+                      const bodyEl = document.querySelector<HTMLTextAreaElement>('[data-compose-body]')
+                      if (bodyEl) {
+                        bodyEl.dataset.signatureHtml = sigHtml
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors"
+                    style={{ borderColor: '#015035', color: '#015035' }}
+                    title="Insert your email signature"
+                  >
+                    <PenLine size={13} /> Signature
+                  </button>
+                )}
                 <button
                   onClick={() => setShowCompose(false)}
                   className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"

@@ -11,8 +11,9 @@ import {
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
   Trash2, X, Eye, EyeOff, AlertTriangle, Mail, LayoutDashboard,
   TrendingUp, Smartphone, Menu, ChevronUp, ChevronDown, RotateCcw, Star,
-  FileText, ArrowUp, ArrowDown, Copy, Clock,
+  FileText, ArrowUp, ArrowDown, Copy, Clock, PenLine,
 } from 'lucide-react'
+import { type EmailSignatureData, DEFAULT_SIGNATURE, generateSignatureHtml } from '@/lib/email-signature'
 import {
   type SystemTemplateName, type SystemEmailTemplate, type TemplateBlock,
   TEMPLATE_LABELS, MERGE_FIELDS, SAMPLE_DATA,
@@ -302,6 +303,9 @@ export default function SettingsPage() {
   const [members, setMembers] = useState(authMembers)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<string | null>(null)
+  const [editTab, setEditTab] = useState<'details' | 'signature'>('details')
+  const [sigDraft, setSigDraft] = useState<EmailSignatureData>(DEFAULT_SIGNATURE)
+  const [sigSaving, setSigSaving] = useState(false)
   const [showTempPw, setShowTempPw] = useState(false)
   const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'Team Member', unit: 'Sales' })
   const [inviteSending, setInviteSending] = useState(false)
@@ -861,40 +865,119 @@ export default function SettingsPage() {
                         </tr>
                         {editingMember === member.id && (
                           <tr key={`edit-${member.id}`} className="bg-blue-50/40 border-b border-blue-100">
-                            <td colSpan={5} className="px-5 py-3">
-                              <div className="flex flex-wrap items-center gap-3">
-                                <div>
-                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
-                                  <select
-                                    defaultValue={member.role}
-                                    onChange={e => setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: e.target.value as typeof member.role } : m))}
-                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
-                                  >
-                                    <option>Team Member</option>
-                                    <option>Department Manager</option>
-                                    <option>Leadership</option>
-                                    <option>Super Admin</option>
-                                    <option>Contractor</option>
-                                    <option>Client</option>
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Unit</label>
-                                  <select
-                                    defaultValue={member.unit}
-                                    onChange={e => setMembers(prev => prev.map(m => m.id === member.id ? { ...m, unit: e.target.value as typeof member.unit } : m))}
-                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
-                                  >
-                                    <option>Sales</option>
-                                    <option>Delivery/Operations</option>
-                                    <option>Billing/Finance</option>
-                                    <option>Leadership/Admin</option>
-                                    <option>Contractors</option>
-                                    <option>Client</option>
-                                  </select>
-                                </div>
-                                <button onClick={() => setEditingMember(null)} className="mt-4 px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>Save</button>
+                            <td colSpan={5} className="px-5 py-4">
+                              <div className="flex gap-2 mb-4">
+                                <button onClick={() => setEditTab('details')} className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${editTab === 'details' ? 'text-white' : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'}`} style={editTab === 'details' ? { background: '#015035' } : {}}>
+                                  Details
+                                </button>
+                                <button onClick={() => { setEditTab('signature'); const existing = (member as unknown as Record<string, unknown>).emailSignature as EmailSignatureData | null; setSigDraft(existing && existing.name ? existing : { ...DEFAULT_SIGNATURE, name: member.name, email: member.email }) }} className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${editTab === 'signature' ? 'text-white' : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'}`} style={editTab === 'signature' ? { background: '#015035' } : {}}>
+                                  <PenLine size={11} /> Email Signature
+                                </button>
                               </div>
+
+                              {editTab === 'details' && (
+                                <div className="flex flex-wrap items-center gap-3">
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
+                                    <select
+                                      defaultValue={member.role}
+                                      onChange={e => setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: e.target.value as typeof member.role } : m))}
+                                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                    >
+                                      <option>Team Member</option>
+                                      <option>Department Manager</option>
+                                      <option>Leadership</option>
+                                      <option>Super Admin</option>
+                                      <option>Contractor</option>
+                                      <option>Client</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Unit</label>
+                                    <select
+                                      defaultValue={member.unit}
+                                      onChange={e => setMembers(prev => prev.map(m => m.id === member.id ? { ...m, unit: e.target.value as typeof member.unit } : m))}
+                                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                    >
+                                      <option>Sales</option>
+                                      <option>Delivery/Operations</option>
+                                      <option>Billing/Finance</option>
+                                      <option>Leadership/Admin</option>
+                                      <option>Contractors</option>
+                                      <option>Client</option>
+                                    </select>
+                                  </div>
+                                  <button onClick={() => setEditingMember(null)} className="mt-4 px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>Save</button>
+                                </div>
+                              )}
+
+                              {editTab === 'signature' && (
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                  <div className="flex flex-col gap-2.5">
+                                    {([
+                                      ['name', 'Full Name', 'Jonathan Graviss'],
+                                      ['title', 'Title', 'CEO & Founder'],
+                                      ['email', 'Email', 'you@gravissmarketing.com'],
+                                      ['phone', 'Phone', '(555) 123-4567'],
+                                      ['website', 'Website', 'gravissmarketing.com'],
+                                      ['linkedIn', 'LinkedIn', 'linkedin.com/in/yourprofile'],
+                                      ['photoUrl', 'Photo URL', 'https://...'],
+                                    ] as const).map(([key, label, placeholder]) => (
+                                      <div key={key}>
+                                        <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">{label}</label>
+                                        <input
+                                          value={sigDraft[key] ?? ''}
+                                          onChange={e => setSigDraft(prev => ({ ...prev, [key]: e.target.value }))}
+                                          placeholder={placeholder}
+                                          className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                        />
+                                      </div>
+                                    ))}
+                                    <div className="flex gap-2 mt-1">
+                                      <button
+                                        disabled={sigSaving}
+                                        onClick={async () => {
+                                          setSigSaving(true)
+                                          try {
+                                            const res = await fetch(`/api/team-members/${member.id}`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ emailSignature: sigDraft }),
+                                            })
+                                            if (res.ok) {
+                                              setMembers(prev => prev.map(m => m.id === member.id ? { ...m, emailSignature: sigDraft } as typeof m : m))
+                                              toast('Signature saved', 'success')
+                                            } else {
+                                              toast('Failed to save signature', 'error')
+                                            }
+                                          } catch { toast('Failed to save signature', 'error') }
+                                          finally { setSigSaving(false) }
+                                        }}
+                                        className="px-4 py-1.5 text-xs font-medium text-white rounded-lg disabled:opacity-50"
+                                        style={{ background: '#015035' }}
+                                      >
+                                        {sigSaving ? 'Saving...' : 'Save Signature'}
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          const html = generateSignatureHtml(sigDraft)
+                                          navigator.clipboard.writeText(html)
+                                          toast('Signature HTML copied', 'success')
+                                        }}
+                                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                                      >
+                                        <Copy size={11} /> Copy HTML
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Live Preview</label>
+                                    <div className="bg-white border border-gray-200 rounded-xl p-4 overflow-auto max-h-[340px]">
+                                      <div dangerouslySetInnerHTML={{ __html: generateSignatureHtml(sigDraft) }} />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         )}

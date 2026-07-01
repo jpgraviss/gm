@@ -45,6 +45,8 @@ const PUBLIC_PREFIXES = [
   '/api/chatbots/',
   '/api/push/subscribe',
   '/api/portal/',
+  '/api/intelligence/track',
+  '/api/intelligence/script',
 ]
 
 function getClientIp(req: NextRequest): string {

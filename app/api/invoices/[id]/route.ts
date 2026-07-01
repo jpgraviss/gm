@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError, INVOICE_STATUSES } from '@/lib/validation'
 
-// PATCH is used by QuickBooks sync to update invoice status/payment data
+// PATCH updates invoice status/payment data
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 

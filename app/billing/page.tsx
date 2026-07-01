@@ -376,7 +376,7 @@ export default function BillingPage() {
                       </p>
                     </div>
                     <span className="text-xs font-semibold text-amber-600 px-2.5 py-1 rounded-full bg-amber-50">
-                      Not yet invoiced in QB
+                      Not yet invoiced
                     </span>
                   </div>
                 ))}

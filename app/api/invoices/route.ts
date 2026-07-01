@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
+import { validate, validationError, INVOICE_STATUSES } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapInvoice(row: any) {
@@ -17,7 +18,6 @@ function mapInvoice(row: any) {
   }
 }
 
-// Read-only — invoice data comes from QuickBooks sync
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const contractId = searchParams.get('contractId')
@@ -41,4 +41,43 @@ export async function GET(req: NextRequest) {
   }
   const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
   return paginatedJson(rows.map(mapInvoice), nextCursor)
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json()
+
+  const result = validate(body, {
+    company:     { required: true, type: 'string', maxLength: 200 },
+    amount:      { required: true, type: 'number', min: 0 },
+    status:      { type: 'string', enum: [...INVOICE_STATUSES] },
+    dueDate:     { type: 'string', maxLength: 30 },
+    serviceType: { type: 'string', maxLength: 100 },
+    contractId:  { type: 'string', maxLength: 100 },
+  })
+  if (!result.valid) return validationError(result.error)
+
+  const today = new Date().toISOString().split('T')[0]
+  const db = createServiceClient()
+  const { data, error } = await db
+    .from('invoices')
+    .insert({
+      id:           `inv-${Date.now()}`,
+      company:      body.company,
+      amount:       body.amount,
+      status:       body.status ?? 'Pending',
+      due_date:     body.dueDate ?? null,
+      issued_date:  today,
+      service_type: body.serviceType ?? 'General',
+      contract_id:  body.contractId ?? null,
+      source:       'manual',
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('[invoices POST]', error)
+    return NextResponse.json({ error: error?.message || 'Failed to create invoice' }, { status: 500 })
+  }
+
+  return NextResponse.json(mapInvoice(data), { status: 201 })
 }

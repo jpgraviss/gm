@@ -302,40 +302,29 @@ export default function AdminPage() {
 
   // Integration health (for system health + integration cards)
   const [integrationHealth, setIntegrationHealth] = useState<{
-    quickbooks: boolean
+    mercury: boolean
     email: boolean
     googleCalendar: boolean
     googleDrive: boolean
-  }>({ quickbooks: false, email: false, googleCalendar: false, googleDrive: false })
+  }>({ mercury: false, email: false, googleCalendar: false, googleDrive: false })
 
-  // QuickBooks
-  const [qbConnected, setQbConnected]   = useState(false)
-  const [qbStatus, setQbStatus]         = useState<{ lastSync: string | null; invoicesSynced: number; paymentsSynced: number; syncErrors: number } | null>(null)
-  const [qbSyncing, setQbSyncing]       = useState(false)
+  // Mercury Banking
+  const [mercuryConnected, setMercuryConnected] = useState(false)
+  const [mercuryAccounts, setMercuryAccounts] = useState<{ name: string; currentBalance: number }[]>([])
 
-  function fetchQBStatus() {
-    fetch('/api/quickbooks/status')
+  function fetchMercuryStatus() {
+    fetch('/api/mercury/accounts')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d?.connected) {
-          setQbConnected(true)
-          setQbStatus({ lastSync: d.lastSync, invoicesSynced: d.invoicesSynced, paymentsSynced: d.paymentsSynced, syncErrors: d.syncErrors })
+        if (d?.accounts?.length) {
+          setMercuryConnected(true)
+          setMercuryAccounts(d.accounts)
+          setIntegrationHealth(prev => ({ ...prev, mercury: true }))
         } else {
-          setQbConnected(false)
-          setQbStatus(null)
+          setMercuryConnected(false)
         }
       })
-      .catch(() => toast('Failed to load QuickBooks status', 'error'))
-  }
-
-  async function handleQBSync() {
-    setQbSyncing(true)
-    try {
-      await fetch('/api/quickbooks/sync', { method: 'POST' })
-      fetchQBStatus()
-    } catch { toast('QuickBooks sync failed', 'error') } finally {
-      setQbSyncing(false)
-    }
+      .catch(() => {})
   }
 
   useEffect(() => {
@@ -347,7 +336,7 @@ export default function AdminPage() {
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setPlatformSettings(data) })
       .catch(() => {})
-    fetchQBStatus()
+    fetchMercuryStatus()
   }, [])
 
   // Fetch KPI metrics from real API endpoints
@@ -388,9 +377,9 @@ export default function AdminPage() {
       .catch(() => {})
 
     // Integration health check
-    fetch('/api/quickbooks/status')
+    fetch('/api/mercury/accounts')
       .then(r => r.ok ? r.json() : null)
-      .then(d => setIntegrationHealth(prev => ({ ...prev, quickbooks: !!d?.connected })))
+      .then(d => setIntegrationHealth(prev => ({ ...prev, mercury: !!(d?.accounts?.length) })))
       .catch(() => {})
 
     fetch('/api/admin/integration-health')
@@ -899,7 +888,7 @@ export default function AdminPage() {
                 { label: 'Pipeline Value', value: formatCurrency(metrics.pipelineValue), color: '#f59e0b', icon: <BarChart3 size={16} /> },
                 { label: 'MRR', value: formatCurrency(metrics.mrr), color: '#8b5cf6', icon: <CreditCard size={16} /> },
                 { label: 'Open Projects', value: metrics.openProjects.toString(), color: '#ec4899', icon: <Activity size={16} /> },
-                { label: 'Integrations', value: `${[integrationHealth.quickbooks, integrationHealth.email, integrationHealth.googleCalendar, integrationHealth.googleDrive].filter(Boolean).length} Active`, color: '#14b8a6', icon: <Zap size={16} /> },
+                { label: 'Integrations', value: `${[integrationHealth.mercury, integrationHealth.email, integrationHealth.googleCalendar, integrationHealth.googleDrive].filter(Boolean).length} Active`, color: '#14b8a6', icon: <Zap size={16} /> },
               ].map(m => (
                 <div key={m.label} className="metric-card">
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-2" style={{ background: `${m.color}18` }}>
@@ -917,12 +906,12 @@ export default function AdminPage() {
                 <Server size={15} style={{ color: '#015035' }} />
                 <h3 className="text-sm font-bold text-gray-800">System Health</h3>
                 <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
-                  {[true, true, integrationHealth.quickbooks, integrationHealth.email, integrationHealth.googleCalendar, integrationHealth.googleDrive].every(Boolean) ? 'ALL SYSTEMS GO' : 'DEGRADED'}
+                  {[true, true, integrationHealth.mercury, integrationHealth.email, integrationHealth.googleCalendar, integrationHealth.googleDrive].every(Boolean) ? 'ALL SYSTEMS GO' : 'DEGRADED'}
                 </span>
               </div>
               <SystemHealthRow label="Authentication" status="ok" detail="Operational" />
               <SystemHealthRow label="Database" status="ok" detail="Healthy" />
-              <SystemHealthRow label="QuickBooks Sync" status={integrationHealth.quickbooks ? 'ok' : 'warn'} detail={integrationHealth.quickbooks ? 'Connected' : 'Not Connected'} />
+              <SystemHealthRow label="Mercury Banking" status={integrationHealth.mercury ? 'ok' : 'warn'} detail={integrationHealth.mercury ? 'Connected' : 'Not Connected'} />
               <SystemHealthRow label="E-Signature" status="ok" detail="Built-in" />
               <SystemHealthRow label="Email Delivery" status={integrationHealth.email ? 'ok' : 'warn'} detail={integrationHealth.email ? 'Active' : 'Not Configured'} />
               <SystemHealthRow label="Google Calendar" status={integrationHealth.googleCalendar ? 'ok' : 'warn'} detail={integrationHealth.googleCalendar ? 'Connected' : 'Not Connected'} />
@@ -1360,22 +1349,21 @@ export default function AdminPage() {
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1.5 text-xs text-gray-500">
                   <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-                  {[integrationHealth.quickbooks, integrationHealth.email, integrationHealth.googleCalendar, integrationHealth.googleDrive].filter(Boolean).length} Connected
+                  {[integrationHealth.mercury, integrationHealth.email, integrationHealth.googleCalendar, integrationHealth.googleDrive].filter(Boolean).length} Connected
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <IntegrationCard
-                name="QuickBooks Online"
-                description="Sync invoices, payments, and revenue data with QuickBooks. Automatic two-way sync for billing records, client accounts, and revenue reporting."
-                status={integrationHealth.quickbooks ? 'connected' : 'disconnected'}
-                logo="QB"
-                lastSync={qbStatus?.lastSync ? new Date(qbStatus.lastSync).toLocaleString() : undefined}
-                actions={['Invoice Sync', 'Payment Sync', 'Client Sync', 'Revenue Reports']}
-                onConnect={() => { window.location.href = '/api/quickbooks/connect' }}
-                onConfigure={() => { router.push('/settings?tab=Billing') }}
-                onRefresh={handleQBSync}
+                name="Mercury Banking"
+                description="Connect your Mercury bank account to view balances, transactions, and cash flow data directly in GravHub."
+                status={integrationHealth.mercury ? 'connected' : 'disconnected'}
+                logo="MR"
+                actions={['Account Balances', 'Transactions', 'Cash Flow', 'Revenue Tracking']}
+                onConnect={() => { window.open('https://app.mercury.com/settings/tokens', '_blank') }}
+                onConfigure={() => { router.push('/settings?tab=Integrations') }}
+                onRefresh={fetchMercuryStatus}
               />
               <IntegrationCard
                 name="Google Calendar"
@@ -1409,49 +1397,41 @@ export default function AdminPage() {
               />
             </div>
 
-            {/* QuickBooks Config Detail */}
+            {/* Mercury Banking Config Detail */}
             <div className="mt-5 bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center font-bold text-blue-700 text-sm">QB</div>
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-sm">MR</div>
                 <div>
-                  <h3 className="text-sm font-bold text-gray-800">QuickBooks Configuration</h3>
-                  {qbConnected ? (
+                  <h3 className="text-sm font-bold text-gray-800">Mercury Banking</h3>
+                  {mercuryConnected ? (
                     <p className="text-xs text-green-600 font-medium">
-                      ● Connected{qbStatus?.lastSync ? ` • Last sync: ${new Date(qbStatus.lastSync).toLocaleString()}` : ' • Syncing automatically'}
+                      ● Connected • {mercuryAccounts.length} account{mercuryAccounts.length !== 1 ? 's' : ''}
                     </p>
                   ) : (
-                    <p className="text-xs text-gray-400 font-medium">● Not connected — <a href="/settings?tab=Billing" className="text-emerald-700 hover:underline">Connect in Settings</a></p>
+                    <p className="text-xs text-gray-400 font-medium">● Not connected — add <code className="bg-gray-100 px-1 rounded text-[11px]">MERCURY_API_KEY</code> to env</p>
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                {[
-                  { label: 'Invoices Synced', value: String(qbStatus?.invoicesSynced ?? 0), icon: <CheckCircle size={13} className="text-green-500" /> },
-                  { label: 'Payments Synced', value: String(qbStatus?.paymentsSynced ?? 0), icon: <CheckCircle size={13} className="text-green-500" /> },
-                  { label: 'Sync Errors',     value: String(qbStatus?.syncErrors ?? 0),     icon: <CheckCircle size={13} className={qbStatus?.syncErrors ? 'text-red-500' : 'text-green-500'} /> },
-                ].map(s => (
-                  <div key={s.label} className="flex items-center gap-2.5 p-3 bg-gray-50 rounded-xl">
-                    {s.icon}
-                    <div>
-                      <p className="text-base font-bold text-gray-900">{s.value}</p>
-                      <p className="text-xs text-gray-500">{s.label}</p>
+              {mercuryConnected && mercuryAccounts.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                  {mercuryAccounts.map(a => (
+                    <div key={a.name} className="flex items-center gap-2.5 p-3 bg-gray-50 rounded-xl">
+                      <CheckCircle size={13} className="text-green-500" />
+                      <div>
+                        <p className="text-base font-bold text-gray-900">${a.currentBalance.toLocaleString()}</p>
+                        <p className="text-xs text-gray-500">{a.name}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
               <div className="flex gap-2">
-                <button onClick={handleQBSync} disabled={!qbConnected || qbSyncing} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg disabled:opacity-50" style={{ background: '#015035' }}>
-                  <RefreshCw size={12} className={qbSyncing ? 'animate-spin' : ''} /> {qbSyncing ? 'Syncing…' : 'Sync Now'}
+                <button onClick={fetchMercuryStatus} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>
+                  <RefreshCw size={12} /> Refresh
                 </button>
-                <a href="/settings?tab=Billing" className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-                  <Settings size={12} /> Settings
+                <a href="/finance" className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <Activity size={12} /> View Finance Hub
                 </a>
-                <button
-                  onClick={() => setTab('audit')}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
-                >
-                  <Activity size={12} /> Sync Log
-                </button>
               </div>
             </div>
 

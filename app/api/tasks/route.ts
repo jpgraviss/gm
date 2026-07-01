@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
 const VALID_STATUSES = ['Pending', 'In Progress', 'Completed']
 const VALID_PRIORITIES = ['High', 'Medium', 'Low']
-const VALID_CATEGORIES = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'General']
+const VALID_CATEGORIES = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'Email', 'General']
 
 export async function POST(req: NextRequest) {
   const body = await req.json()

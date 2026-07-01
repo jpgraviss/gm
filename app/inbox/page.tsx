@@ -9,8 +9,9 @@ import { useToast } from '@/components/ui/Toast'
 import {
   Mail, RefreshCw, X, ChevronDown, Search, Link2,
   Inbox as InboxIcon, AlertCircle, CheckCircle, ExternalLink,
-  Send, Reply, PenSquare, PenLine,
+  Send, Reply, PenSquare, PenLine, CheckSquare, Calendar, Flag,
 } from 'lucide-react'
+import type { AppTaskCategory, TaskPriority } from '@/lib/types'
 import { type EmailSignatureData, generateSignatureHtml } from '@/lib/email-signature'
 
 interface GmailMessage {
@@ -90,12 +91,21 @@ export default function InboxPage() {
   const [sending, setSending] = useState(false)
   const [isReply, setIsReply] = useState(false)
   const [userSignature, setUserSignature] = useState<EmailSignatureData | null>(null)
+  const [teamMemberNames, setTeamMemberNames] = useState<{ id: string; name: string }[]>([])
+  const [taskModal, setTaskModal] = useState(false)
+  const [taskTitle, setTaskTitle] = useState('')
+  const [taskDesc, setTaskDesc] = useState('')
+  const [taskAssignee, setTaskAssignee] = useState('')
+  const [taskDue, setTaskDue] = useState('')
+  const [taskPriority, setTaskPriority] = useState<TaskPriority>('Medium')
+  const [taskSaving, setTaskSaving] = useState(false)
 
   useEffect(() => {
     fetchCrmContacts().then(d => { if (Array.isArray(d)) setCrmContacts(d) }).catch(() => {})
-    fetch('/api/team-members').then(r => r.json()).then((members: Array<{ email: string; emailSignature?: EmailSignatureData }>) => {
+    fetch('/api/team-members').then(r => r.json()).then((members: Array<{ id: string; name: string; email: string; emailSignature?: EmailSignatureData }>) => {
       const me = members.find(m => m.email === user?.email)
       if (me?.emailSignature?.name) setUserSignature(me.emailSignature)
+      setTeamMemberNames(members.map(m => ({ id: m.id, name: m.name })))
     }).catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -294,6 +304,48 @@ export default function InboxPage() {
     setShowCompose(true)
   }
 
+  function openTaskModal() {
+    if (!selected) return
+    const { name: senderName } = parseSender(selected.from)
+    setTaskTitle(`Follow up: ${selected.subject}`)
+    setTaskDesc(`From: ${senderName} (${parseSender(selected.from).email})\nDate: ${selected.date}\n\n${(selected.body || selected.snippet).slice(0, 300)}`)
+    setTaskAssignee(teamMemberNames[0]?.name ?? user?.name ?? '')
+    setTaskDue(new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0])
+    setTaskPriority('Medium')
+    setTaskModal(true)
+  }
+
+  async function saveEmailTask() {
+    if (!selected || !taskTitle.trim()) return
+    setTaskSaving(true)
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: taskTitle.trim(),
+          description: taskDesc.trim() || undefined,
+          category: 'Email' as AppTaskCategory,
+          priority: taskPriority,
+          status: 'Pending',
+          assignedTo: taskAssignee,
+          dueDate: taskDue,
+          linkedId: `gmail_${selected.id}`,
+        }),
+      })
+      if (!res.ok) {
+        toast('Failed to create task', 'error')
+        return
+      }
+      toast('Task created from email', 'success')
+      setTaskModal(false)
+    } catch {
+      toast('Failed to create task', 'error')
+    } finally {
+      setTaskSaving(false)
+    }
+  }
+
   const filteredMessages = messages.filter(m =>
     !search ||
     m.subject.toLowerCase().includes(search.toLowerCase()) ||
@@ -467,6 +519,12 @@ export default function InboxPage() {
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                   >
                     <Reply size={12} /> Reply
+                  </button>
+                  <button
+                    onClick={openTaskModal}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    <CheckSquare size={12} /> Create Task
                   </button>
                   <button
                     onClick={openLogModal}
@@ -691,6 +749,111 @@ export default function InboxPage() {
                 </button>
                 <button
                   onClick={() => setLogModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {taskModal && selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <CheckSquare size={14} /> Create Task from Email
+              </h3>
+              <button onClick={() => setTaskModal(false)} className="p-1 rounded-lg hover:bg-gray-100">
+                <X size={14} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div className="p-3 bg-sky-50 rounded-xl border border-sky-200">
+                <p className="text-xs font-semibold text-sky-800 mb-0.5">{selected.subject}</p>
+                <p className="text-[11px] text-sky-600">{selected.from}</p>
+                <p className="text-[11px] text-sky-500 mt-1 line-clamp-2">{selected.snippet}</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Task Title *</label>
+                <input
+                  value={taskTitle}
+                  onChange={e => setTaskTitle(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
+                <textarea
+                  value={taskDesc}
+                  onChange={e => setTaskDesc(e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Assign To</label>
+                  <div className="relative">
+                    <select
+                      value={taskAssignee}
+                      onChange={e => setTaskAssignee(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-green-700 appearance-none pr-8"
+                    >
+                      {teamMemberNames.map(m => (
+                        <option key={m.id} value={m.name}>{m.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Due Date *</label>
+                  <input
+                    type="date"
+                    value={taskDue}
+                    onChange={e => setTaskDue(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Priority</label>
+                <div className="flex gap-2">
+                  {(['High', 'Medium', 'Low'] as TaskPriority[]).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setTaskPriority(p)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        taskPriority === p
+                          ? p === 'High' ? 'bg-red-100 text-red-700 border border-red-200' : p === 'Medium' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' : 'bg-gray-100 text-gray-600 border border-gray-200'
+                          : 'border border-gray-200 text-gray-400 hover:bg-gray-50'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={saveEmailTask}
+                  disabled={taskSaving || !taskTitle.trim() || !taskDue}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-opacity"
+                  style={{ background: '#015035' }}
+                >
+                  <CheckSquare size={13} />
+                  {taskSaving ? 'Creating...' : 'Create Task'}
+                </button>
+                <button
+                  onClick={() => setTaskModal(false)}
                   className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   Cancel

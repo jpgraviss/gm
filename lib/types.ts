@@ -276,7 +276,7 @@ export interface RevenueMonth {
 
 // ─── Standalone Task (App-wide task management) ──────────────────────────────
 
-export type AppTaskCategory = 'Deal' | 'Contract' | 'Billing' | 'Renewal' | 'Project' | 'Ticket' | 'General'
+export type AppTaskCategory = 'Deal' | 'Contract' | 'Billing' | 'Renewal' | 'Project' | 'Ticket' | 'Email' | 'General'
 export type AppTaskStatus = 'Pending' | 'In Progress' | 'Completed'
 
 export interface AppTask {

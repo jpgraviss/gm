@@ -88,6 +88,9 @@ export async function PATCH(req: NextRequest) {
   if (body.approval_config      !== undefined) updates.approval_config      = body.approval_config
   if (body.gsc_site_url         !== undefined) updates.gsc_site_url         = body.gsc_site_url
   if (body.gsc_last_sync        !== undefined) updates.gsc_last_sync        = body.gsc_last_sync
+  if (body.mercury              !== undefined) updates.mercury              = body.mercury
+  if (body.maverick             !== undefined) updates.maverick             = body.maverick
+  if (body.twilio               !== undefined) updates.twilio               = body.twilio
 
   const { data, error } = await db
     .from('app_settings')

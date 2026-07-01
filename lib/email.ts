@@ -24,7 +24,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
     const from = options.from ?? `${settings.email.fromName} <${settings.email.fromEmail}>`
     const replyTo = options.replyTo ?? settings.email.replyTo
 
-    const { data, error } = await getResend().emails.send({
+    const { data, error } = await (await getResend()).emails.send({
       from,
       replyTo,
       to: Array.isArray(options.to) ? options.to : [options.to],
@@ -70,7 +70,7 @@ export async function sendBatchEmails(emails: BatchEmail[]): Promise<BatchEmailR
   const settings = await getSettings()
   const defaultFrom = `${settings.email.fromName} <${settings.email.fromEmail}>`
   const defaultReplyTo = settings.email.replyTo
-  const resend = getResend()
+  const resend = await getResend()
 
   const allResults: SendEmailResult[] = []
 

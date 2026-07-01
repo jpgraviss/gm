@@ -1,8 +1,26 @@
 const BASE = 'https://api-v1.maverickintelligence.co'
 
-function headers() {
-  const key = process.env.MAVERICK_API_KEY
-  if (!key) throw new Error('MAVERICK_API_KEY not set')
+let _cachedMaverickKey: string | null = null
+
+async function getApiKey(): Promise<string> {
+  if (process.env.MAVERICK_API_KEY) return process.env.MAVERICK_API_KEY
+  if (_cachedMaverickKey) return _cachedMaverickKey
+  try {
+    const { createServiceClient } = await import('@/lib/supabase')
+    const db = createServiceClient()
+    const { data } = await db
+      .from('app_settings')
+      .select('maverick')
+      .eq('id', 'global')
+      .maybeSingle()
+    const key = (data?.maverick as { apiKey?: string })?.apiKey
+    if (key) { _cachedMaverickKey = key; return key }
+  } catch { /* fall through */ }
+  throw new Error('MAVERICK_API_KEY not set')
+}
+
+async function headers() {
+  const key = await getApiKey()
   return { 'X-API-Key': key }
 }
 
@@ -53,7 +71,7 @@ interface PaginatedResponse<T> {
 async function get<T>(path: string, params?: Record<string, string>): Promise<PaginatedResponse<T>> {
   const url = new URL(`${BASE}${path}`)
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
-  const res = await fetch(url.toString(), { headers: headers() })
+  const res = await fetch(url.toString(), { headers: await headers() })
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`Maverick API ${res.status}: ${body}`)
@@ -71,7 +89,7 @@ export async function listPeople(opts?: { limit?: number; cursor?: string; since
 }
 
 export async function getPerson(id: string) {
-  const res = await fetch(`${BASE}/v1/people/${id}`, { headers: headers() })
+  const res = await fetch(`${BASE}/v1/people/${id}`, { headers: await headers() })
   if (!res.ok) throw new Error(`Maverick API ${res.status}`)
   return res.json() as Promise<MaverickPerson>
 }
@@ -82,7 +100,7 @@ export async function getPersonEvents(id: string, opts?: { limit?: number; curso
   if (opts?.cursor) params.cursor = opts.cursor
   const url = new URL(`${BASE}/v1/people/${id}/events`)
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
-  const res = await fetch(url.toString(), { headers: headers() })
+  const res = await fetch(url.toString(), { headers: await headers() })
   if (!res.ok) throw new Error(`Maverick API ${res.status}`)
   return res.json() as Promise<{
     person: { id: string; firstName: string; lastName: string; email: string; company: string }
@@ -99,7 +117,7 @@ export async function listCompanies(opts?: { limit?: number; cursor?: string }) 
 }
 
 export async function getStatistics() {
-  const res = await fetch(`${BASE}/v1/stats`, { headers: headers() })
+  const res = await fetch(`${BASE}/v1/stats`, { headers: await headers() })
   if (!res.ok) throw new Error(`Maverick API ${res.status}`)
   return res.json() as Promise<{ data: MaverickStats }>
 }

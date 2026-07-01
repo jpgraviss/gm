@@ -1,7 +1,19 @@
 const MERCURY_BASE = 'https://api.mercury.com/api/v1'
 
 async function getApiKey(): Promise<string | null> {
-  return process.env.MERCURY_API_KEY || null
+  if (process.env.MERCURY_API_KEY) return process.env.MERCURY_API_KEY
+  try {
+    const { createServiceClient } = await import('@/lib/supabase')
+    const db = createServiceClient()
+    const { data } = await db
+      .from('app_settings')
+      .select('mercury')
+      .eq('id', 'global')
+      .maybeSingle()
+    return (data?.mercury as { apiKey?: string })?.apiKey || null
+  } catch {
+    return null
+  }
 }
 
 async function mercuryFetch(path: string) {

@@ -219,7 +219,7 @@ export async function sendDownAlert(
     </div>
   `
 
-  await getResend().emails.send({
+  await (await getResend()).emails.send({
     from,
     to: site.alert_emails,
     subject: `[DOWN] ${site.company_name} — ${site.url}`,

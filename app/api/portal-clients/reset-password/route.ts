@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Send magic link email
-  const { error: emailError } = await getResend().emails.send({
+  const { error: emailError } = await (await getResend()).emails.send({
     from: `${settings.email.fromName} <${settings.email.fromEmail}>`,
     replyTo: settings.email.replyTo,
     to: [email],

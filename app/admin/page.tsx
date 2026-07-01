@@ -312,6 +312,90 @@ export default function AdminPage() {
   const [mercuryConnected, setMercuryConnected] = useState(false)
   const [mercuryAccounts, setMercuryAccounts] = useState<{ name: string; currentBalance: number }[]>([])
 
+  // API Key Management
+  type IntegrationKey = { key: string; show: boolean; status: 'idle' | 'testing' | 'connected' | 'error'; error: string; saving: boolean }
+  const emptyKey = (): IntegrationKey => ({ key: '', show: false, status: 'idle', error: '', saving: false })
+  const [integrationKeys, setIntegrationKeys] = useState<Record<string, IntegrationKey>>({
+    mercury: emptyKey(),
+    maverick: emptyKey(),
+    resend: emptyKey(),
+    hubspot: emptyKey(),
+    twilio_sid: emptyKey(),
+    twilio_token: emptyKey(),
+    twilio_phone: emptyKey(),
+  })
+
+  function updateKey(id: string, patch: Partial<IntegrationKey>) {
+    setIntegrationKeys(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  }
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return
+        if (d.mercury?.apiKey) updateKey('mercury', { key: d.mercury.apiKey, status: 'connected' })
+        if (d.maverick?.apiKey) updateKey('maverick', { key: d.maverick.apiKey, status: 'connected' })
+        if (d.resend?.apiKey) updateKey('resend', { key: d.resend.apiKey, status: 'connected' })
+        if (d.hubspot?.apiKey) updateKey('hubspot', { key: d.hubspot.apiKey, status: 'connected' })
+        if (d.twilio?.accountSid) updateKey('twilio_sid', { key: d.twilio.accountSid, status: 'connected' })
+        if (d.twilio?.authToken) updateKey('twilio_token', { key: d.twilio.authToken, status: 'connected' })
+        if (d.twilio?.phoneNumber) updateKey('twilio_phone', { key: d.twilio.phoneNumber, status: 'connected' })
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function testIntegration(id: string) {
+    const k = integrationKeys[id]
+    if (!k?.key.trim()) return
+    updateKey(id, { status: 'testing', error: '' })
+    try {
+      let endpoint = ''
+      let payload: Record<string, string> = {}
+      if (id === 'mercury') { endpoint = '/api/integrations/mercury/test'; payload = { apiKey: k.key.trim() } }
+      else if (id === 'maverick') { endpoint = '/api/integrations/maverick/test'; payload = { apiKey: k.key.trim() } }
+      else if (id === 'resend') { endpoint = '/api/integrations/resend/test'; payload = { apiKey: k.key.trim() } }
+      else if (id === 'hubspot') { endpoint = '/api/integrations/hubspot/test'; payload = { apiKey: k.key.trim() } }
+      else return
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const data = await res.json()
+      if (data.connected) {
+        updateKey(id, { status: 'connected' })
+        toast(`${id.charAt(0).toUpperCase() + id.slice(1)} connected`, 'success')
+      } else {
+        updateKey(id, { status: 'error', error: data.error || 'Connection failed' })
+      }
+    } catch {
+      updateKey(id, { status: 'error', error: 'Failed to test connection' })
+    }
+  }
+
+  async function saveIntegrationKey(id: string) {
+    const k = integrationKeys[id]
+    if (!k) return
+    updateKey(id, { saving: true })
+    try {
+      let payload: Record<string, unknown> = {}
+      if (id === 'mercury') payload = { mercury: { apiKey: k.key.trim() } }
+      else if (id === 'maverick') payload = { maverick: { apiKey: k.key.trim() } }
+      else if (id === 'resend') payload = { resend: { apiKey: k.key.trim() } }
+      else if (id === 'hubspot') payload = { hubspot: { apiKey: k.key.trim() } }
+      else if (id.startsWith('twilio_')) {
+        payload = { twilio: {
+          accountSid: integrationKeys.twilio_sid.key.trim(),
+          authToken: integrationKeys.twilio_token.key.trim(),
+          phoneNumber: integrationKeys.twilio_phone.key.trim(),
+        }}
+      }
+      await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      toast('API key saved', 'success')
+    } catch {
+      toast('Failed to save key', 'error')
+    }
+    updateKey(id, { saving: false })
+  }
+
   function fetchMercuryStatus() {
     fetch('/api/mercury/accounts')
       .then(r => r.ok ? r.json() : null)
@@ -1361,8 +1445,8 @@ export default function AdminPage() {
                 status={integrationHealth.mercury ? 'connected' : 'disconnected'}
                 logo="MR"
                 actions={['Account Balances', 'Transactions', 'Cash Flow', 'Revenue Tracking']}
-                onConnect={() => { window.open('https://app.mercury.com/settings/tokens', '_blank') }}
-                onConfigure={() => { router.push('/settings?tab=Integrations') }}
+                onConnect={() => { document.getElementById('api-key-mgmt')?.scrollIntoView({ behavior: 'smooth' }) }}
+                onConfigure={() => { document.getElementById('api-key-mgmt')?.scrollIntoView({ behavior: 'smooth' }) }}
                 onRefresh={fetchMercuryStatus}
               />
               <IntegrationCard
@@ -1397,41 +1481,257 @@ export default function AdminPage() {
               />
             </div>
 
-            {/* Mercury Banking Config Detail */}
-            <div className="mt-5 bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-sm">MR</div>
-                <div>
-                  <h3 className="text-sm font-bold text-gray-800">Mercury Banking</h3>
-                  {mercuryConnected ? (
-                    <p className="text-xs text-green-600 font-medium">
-                      ● Connected • {mercuryAccounts.length} account{mercuryAccounts.length !== 1 ? 's' : ''}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-400 font-medium">● Not connected — add <code className="bg-gray-100 px-1 rounded text-[11px]">MERCURY_API_KEY</code> to env</p>
+            {/* API Key Management */}
+            <div id="api-key-mgmt" className="mt-5 bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <Key size={15} className="text-gray-600" />
+                  <h3 className="text-sm font-bold text-gray-800">API Key Management</h3>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">Add and manage API keys for all integrations. Keys are encrypted and stored securely.</p>
+              </div>
+
+              <div className="divide-y divide-gray-100">
+                {/* Mercury Banking */}
+                <div className="p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-[11px]">MR</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">Mercury Banking</p>
+                      <p className="text-[11px] text-gray-400">Bank account balances, transactions, and cash flow</p>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      integrationKeys.mercury.status === 'connected' ? 'bg-green-100 text-green-700' :
+                      integrationKeys.mercury.status === 'error' ? 'bg-red-100 text-red-700' :
+                      integrationKeys.mercury.status === 'testing' ? 'bg-blue-100 text-blue-700' :
+                      'bg-gray-100 text-gray-500'
+                    }`}>
+                      {integrationKeys.mercury.status === 'connected' ? 'Connected' :
+                       integrationKeys.mercury.status === 'error' ? 'Error' :
+                       integrationKeys.mercury.status === 'testing' ? 'Testing...' : 'Not Set'}
+                    </span>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <div className="relative flex-1">
+                      <input
+                        type={integrationKeys.mercury.show ? 'text' : 'password'}
+                        value={integrationKeys.mercury.key}
+                        onChange={e => updateKey('mercury', { key: e.target.value, status: integrationKeys.mercury.status === 'error' ? 'idle' : integrationKeys.mercury.status })}
+                        placeholder="Mercury API token"
+                        className="w-full px-3 py-2 pr-9 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                      />
+                      <button type="button" onClick={() => updateKey('mercury', { show: !integrationKeys.mercury.show })} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        {integrationKeys.mercury.show ? <EyeOff size={13} /> : <Eye size={13} />}
+                      </button>
+                    </div>
+                    <button onClick={() => testIntegration('mercury')} disabled={!integrationKeys.mercury.key.trim() || integrationKeys.mercury.status === 'testing'} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 disabled:opacity-40 whitespace-nowrap" style={{ background: '#015035' }}>
+                      {integrationKeys.mercury.status === 'testing' && <RefreshCw size={11} className="animate-spin" />}
+                      Test
+                    </button>
+                    <button onClick={() => saveIntegrationKey('mercury')} disabled={!integrationKeys.mercury.key.trim() || integrationKeys.mercury.saving} className="px-3 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-40 whitespace-nowrap">
+                      {integrationKeys.mercury.saving ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                  {integrationKeys.mercury.error && <p className="text-[11px] text-red-500 mt-1.5">{integrationKeys.mercury.error}</p>}
+                  {mercuryConnected && mercuryAccounts.length > 0 && (
+                    <div className="flex gap-2 mt-3">
+                      {mercuryAccounts.map(a => (
+                        <div key={a.name} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-green-50 rounded-lg">
+                          <CheckCircle size={11} className="text-green-500" />
+                          <span className="text-[11px] font-medium text-green-700">{a.name}: ${a.currentBalance.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-              </div>
-              {mercuryConnected && mercuryAccounts.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                  {mercuryAccounts.map(a => (
-                    <div key={a.name} className="flex items-center gap-2.5 p-3 bg-gray-50 rounded-xl">
-                      <CheckCircle size={13} className="text-green-500" />
-                      <div>
-                        <p className="text-base font-bold text-gray-900">${a.currentBalance.toLocaleString()}</p>
-                        <p className="text-xs text-gray-500">{a.name}</p>
+
+                {/* Maverick Intelligence */}
+                <div className="p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-100 flex items-center justify-center font-bold text-violet-700 text-[11px]">MV</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">Maverick Intelligence</p>
+                      <p className="text-[11px] text-gray-400">Website visitor identification and lead intelligence</p>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      integrationKeys.maverick.status === 'connected' ? 'bg-green-100 text-green-700' :
+                      integrationKeys.maverick.status === 'error' ? 'bg-red-100 text-red-700' :
+                      integrationKeys.maverick.status === 'testing' ? 'bg-blue-100 text-blue-700' :
+                      'bg-gray-100 text-gray-500'
+                    }`}>
+                      {integrationKeys.maverick.status === 'connected' ? 'Connected' :
+                       integrationKeys.maverick.status === 'error' ? 'Error' :
+                       integrationKeys.maverick.status === 'testing' ? 'Testing...' : 'Not Set'}
+                    </span>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <div className="relative flex-1">
+                      <input
+                        type={integrationKeys.maverick.show ? 'text' : 'password'}
+                        value={integrationKeys.maverick.key}
+                        onChange={e => updateKey('maverick', { key: e.target.value, status: integrationKeys.maverick.status === 'error' ? 'idle' : integrationKeys.maverick.status })}
+                        placeholder="mk_live_xxxxxxxxxxxx"
+                        className="w-full px-3 py-2 pr-9 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                      />
+                      <button type="button" onClick={() => updateKey('maverick', { show: !integrationKeys.maverick.show })} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        {integrationKeys.maverick.show ? <EyeOff size={13} /> : <Eye size={13} />}
+                      </button>
+                    </div>
+                    <button onClick={() => testIntegration('maverick')} disabled={!integrationKeys.maverick.key.trim() || integrationKeys.maverick.status === 'testing'} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 disabled:opacity-40 whitespace-nowrap" style={{ background: '#015035' }}>
+                      {integrationKeys.maverick.status === 'testing' && <RefreshCw size={11} className="animate-spin" />}
+                      Test
+                    </button>
+                    <button onClick={() => saveIntegrationKey('maverick')} disabled={!integrationKeys.maverick.key.trim() || integrationKeys.maverick.saving} className="px-3 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-40 whitespace-nowrap">
+                      {integrationKeys.maverick.saving ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                  {integrationKeys.maverick.error && <p className="text-[11px] text-red-500 mt-1.5">{integrationKeys.maverick.error}</p>}
+                </div>
+
+                {/* HubSpot CRM */}
+                <div className="p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center font-bold text-orange-700 text-[11px]">HS</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">HubSpot CRM</p>
+                      <p className="text-[11px] text-gray-400">Import contacts, companies, and deals</p>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      integrationKeys.hubspot.status === 'connected' ? 'bg-green-100 text-green-700' :
+                      integrationKeys.hubspot.status === 'error' ? 'bg-red-100 text-red-700' :
+                      integrationKeys.hubspot.status === 'testing' ? 'bg-blue-100 text-blue-700' :
+                      'bg-gray-100 text-gray-500'
+                    }`}>
+                      {integrationKeys.hubspot.status === 'connected' ? 'Connected' :
+                       integrationKeys.hubspot.status === 'error' ? 'Error' :
+                       integrationKeys.hubspot.status === 'testing' ? 'Testing...' : 'Not Set'}
+                    </span>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <div className="relative flex-1">
+                      <input
+                        type={integrationKeys.hubspot.show ? 'text' : 'password'}
+                        value={integrationKeys.hubspot.key}
+                        onChange={e => updateKey('hubspot', { key: e.target.value, status: integrationKeys.hubspot.status === 'error' ? 'idle' : integrationKeys.hubspot.status })}
+                        placeholder="pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                        className="w-full px-3 py-2 pr-9 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                      />
+                      <button type="button" onClick={() => updateKey('hubspot', { show: !integrationKeys.hubspot.show })} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        {integrationKeys.hubspot.show ? <EyeOff size={13} /> : <Eye size={13} />}
+                      </button>
+                    </div>
+                    <button onClick={() => testIntegration('hubspot')} disabled={!integrationKeys.hubspot.key.trim() || integrationKeys.hubspot.status === 'testing'} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 disabled:opacity-40 whitespace-nowrap" style={{ background: '#015035' }}>
+                      {integrationKeys.hubspot.status === 'testing' && <RefreshCw size={11} className="animate-spin" />}
+                      Test
+                    </button>
+                    <button onClick={() => saveIntegrationKey('hubspot')} disabled={!integrationKeys.hubspot.key.trim() || integrationKeys.hubspot.saving} className="px-3 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-40 whitespace-nowrap">
+                      {integrationKeys.hubspot.saving ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                  {integrationKeys.hubspot.error && <p className="text-[11px] text-red-500 mt-1.5">{integrationKeys.hubspot.error}</p>}
+                </div>
+
+                {/* Resend Email */}
+                <div className="p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-sky-50 border border-sky-100 flex items-center justify-center font-bold text-sky-700 text-[11px]">RE</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">Resend Email</p>
+                      <p className="text-[11px] text-gray-400">Transactional emails, sign-in links, and notifications</p>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      integrationKeys.resend.status === 'connected' ? 'bg-green-100 text-green-700' :
+                      integrationKeys.resend.status === 'error' ? 'bg-red-100 text-red-700' :
+                      integrationKeys.resend.status === 'testing' ? 'bg-blue-100 text-blue-700' :
+                      'bg-gray-100 text-gray-500'
+                    }`}>
+                      {integrationKeys.resend.status === 'connected' ? 'Connected' :
+                       integrationKeys.resend.status === 'error' ? 'Error' :
+                       integrationKeys.resend.status === 'testing' ? 'Testing...' : 'Not Set'}
+                    </span>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <div className="relative flex-1">
+                      <input
+                        type={integrationKeys.resend.show ? 'text' : 'password'}
+                        value={integrationKeys.resend.key}
+                        onChange={e => updateKey('resend', { key: e.target.value, status: integrationKeys.resend.status === 'error' ? 'idle' : integrationKeys.resend.status })}
+                        placeholder="re_xxxxxxxxxxxxxxxx"
+                        className="w-full px-3 py-2 pr-9 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                      />
+                      <button type="button" onClick={() => updateKey('resend', { show: !integrationKeys.resend.show })} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        {integrationKeys.resend.show ? <EyeOff size={13} /> : <Eye size={13} />}
+                      </button>
+                    </div>
+                    <button onClick={() => testIntegration('resend')} disabled={!integrationKeys.resend.key.trim() || integrationKeys.resend.status === 'testing'} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 disabled:opacity-40 whitespace-nowrap" style={{ background: '#015035' }}>
+                      {integrationKeys.resend.status === 'testing' && <RefreshCw size={11} className="animate-spin" />}
+                      Test
+                    </button>
+                    <button onClick={() => saveIntegrationKey('resend')} disabled={!integrationKeys.resend.key.trim() || integrationKeys.resend.saving} className="px-3 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-40 whitespace-nowrap">
+                      {integrationKeys.resend.saving ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                  {integrationKeys.resend.error && <p className="text-[11px] text-red-500 mt-1.5">{integrationKeys.resend.error}</p>}
+                </div>
+
+                {/* Twilio SMS */}
+                <div className="p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center font-bold text-red-700 text-[11px]">TW</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">Twilio SMS</p>
+                      <p className="text-[11px] text-gray-400">SMS notifications and two-factor authentication</p>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      integrationKeys.twilio_sid.status === 'connected' ? 'bg-green-100 text-green-700' :
+                      'bg-gray-100 text-gray-500'
+                    }`}>
+                      {integrationKeys.twilio_sid.status === 'connected' ? 'Configured' : 'Not Set'}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex gap-2 items-center">
+                      <label className="text-[11px] font-medium text-gray-500 w-20 flex-shrink-0">Account SID</label>
+                      <input
+                        type="text"
+                        value={integrationKeys.twilio_sid.key}
+                        onChange={e => updateKey('twilio_sid', { key: e.target.value })}
+                        placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                      />
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <label className="text-[11px] font-medium text-gray-500 w-20 flex-shrink-0">Auth Token</label>
+                      <div className="relative flex-1">
+                        <input
+                          type={integrationKeys.twilio_token.show ? 'text' : 'password'}
+                          value={integrationKeys.twilio_token.key}
+                          onChange={e => updateKey('twilio_token', { key: e.target.value })}
+                          placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                          className="w-full px-3 py-2 pr-9 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                        />
+                        <button type="button" onClick={() => updateKey('twilio_token', { show: !integrationKeys.twilio_token.show })} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                          {integrationKeys.twilio_token.show ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
                       </div>
                     </div>
-                  ))}
+                    <div className="flex gap-2 items-center">
+                      <label className="text-[11px] font-medium text-gray-500 w-20 flex-shrink-0">Phone #</label>
+                      <input
+                        type="text"
+                        value={integrationKeys.twilio_phone.key}
+                        onChange={e => updateKey('twilio_phone', { key: e.target.value })}
+                        placeholder="+1XXXXXXXXXX"
+                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <button onClick={() => saveIntegrationKey('twilio_sid')} disabled={integrationKeys.twilio_sid.saving} className="px-3 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-40">
+                        {integrationKeys.twilio_sid.saving ? 'Saving...' : 'Save Twilio Config'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              )}
-              <div className="flex gap-2">
-                <button onClick={fetchMercuryStatus} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>
-                  <RefreshCw size={12} /> Refresh
-                </button>
-                <a href="/finance" className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-                  <Activity size={12} /> View Finance Hub
-                </a>
               </div>
             </div>
 

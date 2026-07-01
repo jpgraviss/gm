@@ -162,12 +162,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const summary = Object.entries(body)
       .map(([k, v]) => `<strong>${k}:</strong> ${String(v)}`)
       .join('<br/>')
-    getResend().emails.send({
+    getResend().then(r => r.emails.send({
       from: 'GravHub <noreply@app.gravissmarketing.com>',
       to: form.notify_emails,
       subject: `New ${form.name} submission`,
       html: `<p>You received a new form submission:</p><p>${summary}</p>`,
-    }).catch((err) => console.error('[forms notify email]', err))
+    })).catch((err) => console.error('[forms notify email]', err))
   }
 
   return NextResponse.json(

@@ -300,7 +300,7 @@ export async function POST(req: NextRequest) {
 </body>
 </html>`
 
-      const resend = getResend()
+      const resend = await getResend()
       await resend.emails.send({
         from: fromEmail,
         replyTo: appSettings.email.replyTo,

@@ -239,6 +239,16 @@ export interface Renewal {
   serviceType: ServiceType
 }
 
+export interface EmailSignatureData {
+  name: string
+  title: string
+  email: string
+  phone: string
+  website: string
+  linkedIn: string
+  photoUrl: string
+}
+
 export interface TeamMember {
   id: string
   name: string
@@ -246,6 +256,7 @@ export interface TeamMember {
   role: MembershipLevel
   unit: OccupationalUnit
   initials: string
+  emailSignature?: EmailSignatureData
 }
 
 export interface ActivityItem {
@@ -265,7 +276,7 @@ export interface RevenueMonth {
 
 // ─── Standalone Task (App-wide task management) ──────────────────────────────
 
-export type AppTaskCategory = 'Deal' | 'Contract' | 'Billing' | 'Renewal' | 'Project' | 'Ticket' | 'General'
+export type AppTaskCategory = 'Deal' | 'Contract' | 'Billing' | 'Renewal' | 'Project' | 'Ticket' | 'Email' | 'General'
 export type AppTaskStatus = 'Pending' | 'In Progress' | 'Completed'
 
 export interface AppTask {

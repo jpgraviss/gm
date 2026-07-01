@@ -76,7 +76,7 @@ export function newBlock(type: EmailBlockType): EmailBlock {
 // ─── Block → HTML rendering ─────────────────────────────────────────────────
 
 function renderTextBlock(content: Record<string, unknown>): string {
-  return `<div style="padding:0 24px;font-family:system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.6;color:#374151;">${content.html ?? ''}</div>`
+  return `<div style="padding:0 24px;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.6;color:#374151;">${content.html ?? ''}</div>`
 }
 
 function renderImageBlock(content: Record<string, unknown>): string {
@@ -99,7 +99,7 @@ function renderButtonBlock(content: Record<string, unknown>): string {
   const align = String(content.align ?? 'center')
   const radius = String(content.borderRadius ?? '8px')
   const padding = String(content.padding ?? '12px 24px')
-  return `<div style="padding:16px 24px;text-align:${align};"><a href="${url}" target="_blank" style="display:inline-block;background:${bg};color:${tc};font-size:16px;font-weight:600;padding:${padding};border-radius:${radius};text-decoration:none;font-family:system-ui,-apple-system,sans-serif;">${text}</a></div>`
+  return `<div style="padding:16px 24px;text-align:${align};"><a href="${url}" target="_blank" style="display:inline-block;background:${bg};color:${tc};font-size:16px;font-weight:600;padding:${padding};border-radius:${radius};text-decoration:none;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">${text}</a></div>`
 }
 
 function renderDividerBlock(content: Record<string, unknown>): string {
@@ -132,7 +132,7 @@ function renderHeaderBlock(content: Record<string, unknown>): string {
   const bg = String(content.bgColor ?? '#015035')
   const tc = String(content.textColor ?? '#ffffff')
   const padding = String(content.padding ?? '32px 24px')
-  return `<div style="background:${bg};color:${tc};padding:${padding};font-family:system-ui,-apple-system,sans-serif;">${content.html ?? ''}</div>`
+  return `<div style="background:${bg};color:${tc};padding:${padding};font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">${content.html ?? ''}</div>`
 }
 
 export function renderBlock(block: EmailBlock): string {
@@ -164,7 +164,7 @@ export function renderEmailHTML(
 ): string {
   const bg = options?.bgColor ?? '#f4f4f5'
   const width = options?.contentWidth ?? '600px'
-  const font = options?.fontFamily ?? "system-ui, -apple-system, 'Segoe UI', sans-serif"
+  const font = options?.fontFamily ?? "'Montserrat', 'Helvetica Neue', Arial, sans-serif"
   const preheader = options?.preheader ?? ''
 
   const body = blocks.map(b => renderBlock(b)).join('\n')
@@ -175,6 +175,7 @@ export function renderEmailHTML(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title></title>
+  <style>@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@400;500;600;700;800&display=swap');</style>
   <!--[if mso]><style>body{font-family:Arial,sans-serif!important}</style><![endif]-->
 </head>
 <body style="margin:0;padding:0;background:${bg};font-family:${font};">

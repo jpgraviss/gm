@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TASK_PRIORITIES } from '@/lib/validation'
 import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
+import { requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTicket(row: any) {
@@ -48,7 +49,59 @@ export async function GET(req: NextRequest) {
   return paginatedJson(rows.map(mapTicket), nextCursor)
 }
 
+async function applyRoutingRules(
+  db: ReturnType<typeof createServiceClient>,
+  company: string,
+  priority: string,
+  serviceType: string,
+): Promise<string | null> {
+  if (priority === 'Urgent' || priority === 'High') {
+    const { data: leader } = await db
+      .from('team_members')
+      .select('name')
+      .eq('unit', 'Leadership')
+      .eq('status', 'active')
+      .limit(1)
+      .maybeSingle()
+    if (leader) return leader.name
+  }
+
+  const { data: rep } = await db
+    .from('deals')
+    .select('assigned_rep')
+    .eq('company', company)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (rep?.assigned_rep) return rep.assigned_rep
+
+  const unitMap: Record<string, string> = {
+    'SEO': 'Delivery/Operations',
+    'Web Design': 'Delivery/Operations',
+    'Social Media': 'Delivery/Operations',
+    'PPC': 'Delivery/Operations',
+    'Billing': 'Billing/Finance',
+    'General': 'Sales',
+  }
+  const unit = unitMap[serviceType]
+  if (unit) {
+    const { data: member } = await db
+      .from('team_members')
+      .select('name')
+      .eq('unit', unit)
+      .eq('status', 'active')
+      .limit(1)
+      .maybeSingle()
+    if (member) return member.name
+  }
+
+  return null
+}
+
 export async function POST(req: NextRequest) {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const result = validate(body, {
     subject: { required: true, type: 'string', maxLength: 500 },
@@ -59,6 +112,17 @@ export async function POST(req: NextRequest) {
   if (!result.valid) return validationError(result.error)
   const today = new Date().toISOString().split('T')[0]
   const db = createServiceClient()
+
+  let assignedTo = body.assignedTo ?? null
+  if (!assignedTo) {
+    assignedTo = await applyRoutingRules(
+      db,
+      body.company ?? '',
+      body.priority ?? 'Medium',
+      body.serviceType ?? 'General',
+    )
+  }
+
   const { data, error } = await db
     .from('tickets')
     .insert({
@@ -72,7 +136,7 @@ export async function POST(req: NextRequest) {
       source:        body.source ?? 'Email',
       service_type:  body.serviceType ?? 'General',
       project_id:    body.projectId ?? null,
-      assigned_to:   body.assignedTo ?? null,
+      assigned_to:   assignedTo,
       tags:          body.tags ?? [],
       messages:      body.messages ?? [],
       created_date:  today,

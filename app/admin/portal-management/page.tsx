@@ -156,6 +156,7 @@ export default function PortalManagementPage() {
   const [expandedServices, setExpandedServices] = useState<Record<string, boolean>>({})
   const [autoSaved, setAutoSaved] = useState<string | null>(null)
   const [autoSaving, setAutoSaving] = useState<string | null>(null)
+  const [deletingPortal, setDeletingPortal] = useState<string | null>(null)
 
   useEffect(() => {
     if (!authLoading && (!user || !user.isAdmin)) {
@@ -306,6 +307,22 @@ export default function PortalManagementPage() {
       ...prev,
       reports: prev.reports.filter((_, i) => i !== idx),
     }))
+  }
+
+  const deletePortal = async (company: string) => {
+    if (!confirm(`Delete the entire portal for "${company}"? This removes all members, configuration, and access. This cannot be undone.`)) return
+    setDeletingPortal(company)
+    try {
+      const res = await fetch(`/api/portal-clients?company=${encodeURIComponent(company)}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete')
+      toast(`Portal for ${company} deleted`, 'success')
+      setCompanies(prev => prev.filter(g => g.company !== company))
+      if (expandedCompany === company) setExpandedCompany(null)
+    } catch {
+      toast('Failed to delete portal', 'error')
+    } finally {
+      setDeletingPortal(null)
+    }
   }
 
   const toggleServiceConfig = (company: string, serviceKey: string, enabled: boolean) => {
@@ -485,20 +502,18 @@ export default function PortalManagementPage() {
                                     <Clock size={10} />
                                     {member.lastLogin === 'Never' ? 'Never' : member.lastLogin}
                                   </div>
-                                  {group.members.length > 1 && (
-                                    <button
-                                      onClick={() => removeMember(member.id)}
-                                      disabled={removingMember === member.id}
-                                      className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                      title="Remove member"
-                                    >
-                                      {removingMember === member.id ? (
-                                        <div className="w-3 h-3 border border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                                      ) : (
-                                        <Trash2 size={12} />
-                                      )}
-                                    </button>
-                                  )}
+                                  <button
+                                    onClick={() => removeMember(member.id)}
+                                    disabled={removingMember === member.id}
+                                    className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                    title="Remove member"
+                                  >
+                                    {removingMember === member.id ? (
+                                      <div className="w-3 h-3 border border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                                    ) : (
+                                      <Trash2 size={12} />
+                                    )}
+                                  </button>
                                 </div>
                               </div>
                             ))}
@@ -798,8 +813,19 @@ export default function PortalManagementPage() {
                         </div>
                       </div>
 
-                      {/* Save */}
-                      <div className="flex justify-end mt-5 pt-4 border-t border-gray-100">
+                      {/* Save / Delete */}
+                      <div className="flex items-center justify-between mt-5 pt-4 border-t border-gray-100">
+                        <button
+                          onClick={() => deletePortal(group.company)}
+                          disabled={deletingPortal === group.company}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 border border-red-200 transition-colors disabled:opacity-50"
+                        >
+                          {deletingPortal === group.company ? (
+                            <><div className="w-3.5 h-3.5 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" /> Deleting...</>
+                          ) : (
+                            <><Trash2 size={14} /> Delete Portal</>
+                          )}
+                        </button>
                         <button
                           onClick={() => saveCompanyConfig(group.company)}
                           disabled={savingCompany === group.company}

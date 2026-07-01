@@ -30,6 +30,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (body.status !== undefined)   update.status = body.status
   if (body.isAdmin !== undefined)  update.is_admin = body.isAdmin
   if (body.initials !== undefined) update.initials = body.initials
+  if (body.emailSignature !== undefined) update.email_signature = body.emailSignature
   const { data, error } = await db.from('team_members').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[team-members/:id PUT]', error)

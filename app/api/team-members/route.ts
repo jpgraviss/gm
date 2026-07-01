@@ -20,6 +20,7 @@ function mapMember(row: any) {
     deletedAt:       row.deleted_at ?? null,
     pendingApproval: row.pending_approval ?? false,
     setupCompleted:  row.setup_completed ?? false,
+    emailSignature:  row.email_signature ?? null,
   }
 }
 

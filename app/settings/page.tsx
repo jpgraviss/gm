@@ -11,8 +11,9 @@ import {
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
   Trash2, X, Eye, EyeOff, AlertTriangle, Mail, LayoutDashboard,
   TrendingUp, Smartphone, Menu, ChevronUp, ChevronDown, RotateCcw, Star,
-  FileText, ArrowUp, ArrowDown, Copy, Clock,
+  FileText, ArrowUp, ArrowDown, Copy, Clock, PenLine,
 } from 'lucide-react'
+import { type EmailSignatureData, DEFAULT_SIGNATURE, generateSignatureHtml } from '@/lib/email-signature'
 import {
   type SystemTemplateName, type SystemEmailTemplate, type TemplateBlock,
   TEMPLATE_LABELS, MERGE_FIELDS, SAMPLE_DATA,
@@ -302,10 +303,30 @@ export default function SettingsPage() {
   const [members, setMembers] = useState(authMembers)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<string | null>(null)
+  const [editTab, setEditTab] = useState<'details' | 'signature'>('details')
+  const [sigDraft, setSigDraft] = useState<EmailSignatureData>(DEFAULT_SIGNATURE)
+  const [sigSaving, setSigSaving] = useState(false)
   const [showTempPw, setShowTempPw] = useState(false)
   const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'Team Member', unit: 'Sales' })
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteError, setInviteError] = useState('')
+
+  // Gmail Settings
+  const [gmailSettingsOpen, setGmailSettingsOpen] = useState(false)
+  const [gmailPrefs, setGmailPrefs] = useState({
+    autoLogSent: true, autoLogInbound: false, trackOpens: false,
+    trackClicks: false, insertSignature: true, notifyOnReply: true, notifyOnOpen: false,
+  })
+  const [gmailPrefsSaving, setGmailPrefsSaving] = useState(false)
+
+  useEffect(() => {
+    if (user?.email) {
+      fetch(`/api/gmail/token?email=${encodeURIComponent(user.email)}`)
+        .then(r => r.json())
+        .then(d => { if (d.gmailSettings) setGmailPrefs(p => ({ ...p, ...d.gmailSettings })) })
+        .catch(() => {})
+    }
+  }, [user?.email])
 
   // Notifications
   const [activityNotifs, setActivityNotifs] = useState<ActivityNotif[]>(ACTIVITY_NOTIF_DEFAULTS)
@@ -861,40 +882,119 @@ export default function SettingsPage() {
                         </tr>
                         {editingMember === member.id && (
                           <tr key={`edit-${member.id}`} className="bg-blue-50/40 border-b border-blue-100">
-                            <td colSpan={5} className="px-5 py-3">
-                              <div className="flex flex-wrap items-center gap-3">
-                                <div>
-                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
-                                  <select
-                                    defaultValue={member.role}
-                                    onChange={e => setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: e.target.value as typeof member.role } : m))}
-                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
-                                  >
-                                    <option>Team Member</option>
-                                    <option>Department Manager</option>
-                                    <option>Leadership</option>
-                                    <option>Super Admin</option>
-                                    <option>Contractor</option>
-                                    <option>Client</option>
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Unit</label>
-                                  <select
-                                    defaultValue={member.unit}
-                                    onChange={e => setMembers(prev => prev.map(m => m.id === member.id ? { ...m, unit: e.target.value as typeof member.unit } : m))}
-                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
-                                  >
-                                    <option>Sales</option>
-                                    <option>Delivery/Operations</option>
-                                    <option>Billing/Finance</option>
-                                    <option>Leadership/Admin</option>
-                                    <option>Contractors</option>
-                                    <option>Client</option>
-                                  </select>
-                                </div>
-                                <button onClick={() => setEditingMember(null)} className="mt-4 px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>Save</button>
+                            <td colSpan={5} className="px-5 py-4">
+                              <div className="flex gap-2 mb-4">
+                                <button onClick={() => setEditTab('details')} className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${editTab === 'details' ? 'text-white' : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'}`} style={editTab === 'details' ? { background: '#015035' } : {}}>
+                                  Details
+                                </button>
+                                <button onClick={() => { setEditTab('signature'); const existing = (member as unknown as Record<string, unknown>).emailSignature as EmailSignatureData | null; setSigDraft(existing && existing.name ? existing : { ...DEFAULT_SIGNATURE, name: member.name, email: member.email }) }} className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${editTab === 'signature' ? 'text-white' : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'}`} style={editTab === 'signature' ? { background: '#015035' } : {}}>
+                                  <PenLine size={11} /> Email Signature
+                                </button>
                               </div>
+
+                              {editTab === 'details' && (
+                                <div className="flex flex-wrap items-center gap-3">
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
+                                    <select
+                                      defaultValue={member.role}
+                                      onChange={e => setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: e.target.value as typeof member.role } : m))}
+                                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                    >
+                                      <option>Team Member</option>
+                                      <option>Department Manager</option>
+                                      <option>Leadership</option>
+                                      <option>Super Admin</option>
+                                      <option>Contractor</option>
+                                      <option>Client</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Unit</label>
+                                    <select
+                                      defaultValue={member.unit}
+                                      onChange={e => setMembers(prev => prev.map(m => m.id === member.id ? { ...m, unit: e.target.value as typeof member.unit } : m))}
+                                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                    >
+                                      <option>Sales</option>
+                                      <option>Delivery/Operations</option>
+                                      <option>Billing/Finance</option>
+                                      <option>Leadership/Admin</option>
+                                      <option>Contractors</option>
+                                      <option>Client</option>
+                                    </select>
+                                  </div>
+                                  <button onClick={() => setEditingMember(null)} className="mt-4 px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>Save</button>
+                                </div>
+                              )}
+
+                              {editTab === 'signature' && (
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                  <div className="flex flex-col gap-2.5">
+                                    {([
+                                      ['name', 'Full Name', 'Jonathan Graviss'],
+                                      ['title', 'Title', 'CEO & Founder'],
+                                      ['email', 'Email', 'you@gravissmarketing.com'],
+                                      ['phone', 'Phone', '(555) 123-4567'],
+                                      ['website', 'Website', 'gravissmarketing.com'],
+                                      ['linkedIn', 'LinkedIn', 'linkedin.com/in/yourprofile'],
+                                      ['photoUrl', 'Photo URL', 'https://...'],
+                                    ] as const).map(([key, label, placeholder]) => (
+                                      <div key={key}>
+                                        <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">{label}</label>
+                                        <input
+                                          value={sigDraft[key] ?? ''}
+                                          onChange={e => setSigDraft(prev => ({ ...prev, [key]: e.target.value }))}
+                                          placeholder={placeholder}
+                                          className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700"
+                                        />
+                                      </div>
+                                    ))}
+                                    <div className="flex gap-2 mt-1">
+                                      <button
+                                        disabled={sigSaving}
+                                        onClick={async () => {
+                                          setSigSaving(true)
+                                          try {
+                                            const res = await fetch(`/api/team-members/${member.id}`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ emailSignature: sigDraft }),
+                                            })
+                                            if (res.ok) {
+                                              setMembers(prev => prev.map(m => m.id === member.id ? { ...m, emailSignature: sigDraft } as typeof m : m))
+                                              toast('Signature saved', 'success')
+                                            } else {
+                                              toast('Failed to save signature', 'error')
+                                            }
+                                          } catch { toast('Failed to save signature', 'error') }
+                                          finally { setSigSaving(false) }
+                                        }}
+                                        className="px-4 py-1.5 text-xs font-medium text-white rounded-lg disabled:opacity-50"
+                                        style={{ background: '#015035' }}
+                                      >
+                                        {sigSaving ? 'Saving...' : 'Save Signature'}
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          const html = generateSignatureHtml(sigDraft)
+                                          navigator.clipboard.writeText(html)
+                                          toast('Signature HTML copied', 'success')
+                                        }}
+                                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                                      >
+                                        <Copy size={11} /> Copy HTML
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Live Preview</label>
+                                    <div className="bg-white border border-gray-200 rounded-xl p-4 overflow-auto max-h-[340px]">
+                                      <div dangerouslySetInnerHTML={{ __html: generateSignatureHtml(sigDraft) }} />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         )}
@@ -1606,25 +1706,152 @@ export default function SettingsPage() {
             <MarketingIntegrationsSection />
 
             <div className="flex flex-col gap-3">
-              {/* Gmail — live connect/disconnect */}
-              <div className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
-                <div className="text-2xl flex-shrink-0">✉️</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800">Gmail</p>
-                  <p className="text-xs text-gray-500">Read your inbox and log emails directly as CRM activities</p>
-                  {gmailEmail && <p className="text-[11px] text-gray-400 mt-0.5">Connected as: {gmailEmail}</p>}
+              {/* Gmail — Connected Inbox (HubSpot-style) */}
+              <div className="rounded-xl border border-gray-200 overflow-hidden">
+                <div className="flex items-center gap-4 p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => setGmailSettingsOpen(!gmailSettingsOpen)}>
+                  <div className="text-2xl flex-shrink-0">✉️</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">Gmail Connected Inbox</p>
+                    <p className="text-xs text-gray-500">Read your inbox, log emails as CRM activities, and send from GravHub</p>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${gmailToken ? 'text-emerald-600' : 'text-gray-400'}`}>
+                      {gmailToken ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+                      {gmailToken ? 'Connected' : 'Not Connected'}
+                    </span>
+                    <ChevronDown size={14} className={`text-gray-400 transition-transform ${gmailSettingsOpen ? 'rotate-180' : ''}`} />
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <span className={`text-[11px] font-semibold hidden sm:flex items-center gap-0.5 ${gmailToken ? 'text-emerald-600' : 'text-gray-400'}`}>
-                    {gmailToken ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
-                    {gmailToken ? 'Connected' : 'Not Connected'}
-                  </span>
-                  {gmailToken ? (
-                    <button onClick={disconnectGmail} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-200 transition-colors">Disconnect</button>
-                  ) : (
-                    <button onClick={connectGmail} className="text-xs font-medium px-3 py-1.5 rounded-lg text-white transition-colors" style={{ background: '#015035' }}>Connect</button>
-                  )}
-                </div>
+
+                {gmailSettingsOpen && (
+                  <div className="border-t border-gray-200 bg-white">
+                    {/* Connected Inbox Status */}
+                    <div className="p-5 border-b border-gray-100">
+                      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Connected Inbox</h4>
+                      {gmailToken && gmailEmail ? (
+                        <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#015035' }}>
+                            <Mail size={16} className="text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-900">{gmailEmail}</p>
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 bg-emerald-500 rounded-full" />
+                              <span className="text-[11px] text-emerald-700">Your inbox is connected.</span>
+                            </div>
+                          </div>
+                          <button onClick={disconnectGmail} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-200 transition-colors flex-shrink-0">Disconnect</button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center bg-gray-200 flex-shrink-0">
+                            <Mail size={16} className="text-gray-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-700">No inbox connected</p>
+                            <p className="text-[11px] text-gray-400">Connect your Gmail to read, send, and log emails from GravHub.</p>
+                          </div>
+                          <button onClick={connectGmail} className="text-xs font-medium px-4 py-2 rounded-lg text-white flex-shrink-0 transition-colors" style={{ background: '#015035' }}>Connect Gmail</button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* GravHub Account */}
+                    {user && (
+                      <div className="p-5 border-b border-gray-100">
+                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">GravHub Account</h4>
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#015035' }}>
+                            <Building size={16} className="text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-700 font-medium">gravissmarketing.com</p>
+                            <p className="text-xs text-gray-500">{user.email}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Log & Track Settings */}
+                    <div className="p-5 border-b border-gray-100">
+                      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Log & Track Settings</h4>
+                      <div className="flex flex-col gap-3">
+                        {([
+                          ['autoLogSent', 'Auto-log sent emails', 'Automatically log emails you send from GravHub as CRM activities'],
+                          ['autoLogInbound', 'Auto-log inbound emails', 'Automatically log incoming emails from known contacts as CRM activities'],
+                          ['trackOpens', 'Track email opens', 'Get notified when recipients open your emails'],
+                          ['trackClicks', 'Track link clicks', 'Get notified when recipients click links in your emails'],
+                          ['insertSignature', 'Auto-insert signature', 'Automatically add your email signature when composing new emails'],
+                        ] as const).map(([key, label, desc]) => (
+                          <div key={key} className="flex items-center justify-between gap-4">
+                            <div>
+                              <p className="text-sm text-gray-800">{label}</p>
+                              <p className="text-[11px] text-gray-400">{desc}</p>
+                            </div>
+                            <button
+                              onClick={() => setGmailPrefs(p => ({ ...p, [key]: !p[key] }))}
+                              className="rounded-full relative flex items-center px-0.5 transition-colors flex-shrink-0"
+                              style={{ background: gmailPrefs[key] ? '#015035' : '#d1d5db', width: '40px', height: '22px' }}
+                            >
+                              <div className="w-4 h-4 bg-white rounded-full shadow-sm transition-transform" style={{ transform: gmailPrefs[key] ? 'translateX(18px)' : 'translateX(0px)' }} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Notification Settings */}
+                    <div className="p-5 border-b border-gray-100">
+                      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Notification Settings</h4>
+                      <div className="flex flex-col gap-3">
+                        {([
+                          ['notifyOnReply', 'Notify on reply', 'Get notified when someone replies to your email'],
+                          ['notifyOnOpen', 'Notify on open', 'Get notified when someone opens your email (requires tracking)'],
+                        ] as const).map(([key, label, desc]) => (
+                          <div key={key} className="flex items-center justify-between gap-4">
+                            <div>
+                              <p className="text-sm text-gray-800">{label}</p>
+                              <p className="text-[11px] text-gray-400">{desc}</p>
+                            </div>
+                            <button
+                              onClick={() => setGmailPrefs(p => ({ ...p, [key]: !p[key] }))}
+                              className="rounded-full relative flex items-center px-0.5 transition-colors flex-shrink-0"
+                              style={{ background: gmailPrefs[key] ? '#015035' : '#d1d5db', width: '40px', height: '22px' }}
+                            >
+                              <div className="w-4 h-4 bg-white rounded-full shadow-sm transition-transform" style={{ transform: gmailPrefs[key] ? 'translateX(18px)' : 'translateX(0px)' }} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Save Settings */}
+                    <div className="p-5 flex items-center justify-between">
+                      <p className="text-[11px] text-gray-400">Settings apply to your account only.</p>
+                      <button
+                        disabled={gmailPrefsSaving}
+                        onClick={async () => {
+                          if (!user?.email) return
+                          setGmailPrefsSaving(true)
+                          try {
+                            const res = await fetch('/api/gmail/token', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ userEmail: user.email, gmailSettings: gmailPrefs }),
+                            })
+                            if (res.ok) toast('Gmail settings saved', 'success')
+                            else toast('Failed to save settings', 'error')
+                          } catch { toast('Failed to save settings', 'error') }
+                          finally { setGmailPrefsSaving(false) }
+                        }}
+                        className="px-4 py-2 rounded-lg text-white text-xs font-semibold disabled:opacity-50 transition-colors"
+                        style={{ background: '#015035' }}
+                      >
+                        {gmailPrefsSaving ? 'Saving...' : 'Save Settings'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {[

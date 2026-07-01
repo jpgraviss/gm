@@ -7,7 +7,7 @@ import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority, TeamMember 
 import {
   CheckSquare, Clock, AlertCircle, CheckCircle2, Plus, X, ChevronRight, ChevronLeft,
   Building2, User, Calendar, Flag, Tag, Trash2, Circle, Repeat, Search,
-  LayoutList, Columns3, Eye,
+  LayoutList, Columns3, Eye, Copy, Mail,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
@@ -18,6 +18,7 @@ const categoryColors: Record<AppTaskCategory, string> = {
   Renewal:  'bg-purple-100 text-purple-700',
   Project:  'bg-indigo-100 text-indigo-700',
   Ticket:   'bg-yellow-100 text-yellow-700',
+  Email:    'bg-sky-100 text-sky-700',
   General:  'bg-gray-100 text-gray-600',
 }
 
@@ -69,6 +70,22 @@ function dueDateLabel(dueDate: string, status: AppTaskStatus) {
   if (isOverdue(dueDate, status)) return { text: `Overdue`, cls: 'text-red-600 font-semibold' }
   if (isDueToday(dueDate, status)) return { text: 'Due Today', cls: 'text-orange-500 font-semibold' }
   return { text: dueDate, cls: 'text-gray-400' }
+}
+
+function copyTaskToClipboard(task: AppTask): string {
+  const lines = [
+    `TASK: ${task.title}`,
+    `Priority: ${task.priority} | Status: ${task.status} | Due: ${task.dueDate}`,
+    `Assigned to: ${task.assignedTo}`,
+    `Category: ${task.category}${task.company ? ` | Company: ${task.company}` : ''}`,
+  ]
+  if (task.description) {
+    lines.push('', task.description)
+  }
+  if (task.linkedId) {
+    lines.push('', `Ref: ${task.linkedId}`)
+  }
+  return lines.join('\n')
 }
 
 function getTaskColumn(task: AppTask): StatusColumn {
@@ -142,7 +159,7 @@ function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
             <div>
               <label className={labelCls}>Category</label>
               <select value={category} onChange={e => setCategory(e.target.value as AppTaskCategory)} className={selectCls}>
-                {(['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'General'] as AppTaskCategory[]).map(c => (
+                {(['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'Email', 'General'] as AppTaskCategory[]).map(c => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
@@ -225,6 +242,7 @@ function TaskPanel({
   onUpdateStatus,
   onUpdate,
   onDelete,
+  onCopy,
   teamMembers,
 }: {
   task: AppTask
@@ -232,6 +250,7 @@ function TaskPanel({
   onUpdateStatus: (id: string, status: AppTaskStatus) => void
   onUpdate: (id: string, updates: Partial<AppTask>) => void
   onDelete: (id: string) => void
+  onCopy: () => void
   teamMembers: TeamMember[]
 }) {
   const [editingTitle, setEditingTitle] = useState(false)
@@ -321,7 +340,7 @@ function TaskPanel({
               <div>
                 <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Category</label>
                 <select value={task.category} onChange={e => onUpdate(task.id, { category: e.target.value as AppTaskCategory })} className={fieldSelect}>
-                  {(['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'General'] as AppTaskCategory[]).map(c => (
+                  {(['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'Email', 'General'] as AppTaskCategory[]).map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
@@ -335,6 +354,12 @@ function TaskPanel({
               <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
                 <Repeat size={12} />
                 <span>Repeats {task.recurrence.frequency} every {task.recurrence.interval} {task.recurrence.frequency === 'daily' ? 'day(s)' : task.recurrence.frequency === 'weekly' ? 'week(s)' : 'month(s)'}</span>
+              </div>
+            )}
+            {task.linkedId?.startsWith('gmail_') && (
+              <div className="flex items-center gap-2 text-xs text-sky-600 bg-sky-50 rounded-lg px-3 py-2">
+                <Mail size={12} />
+                <span>Created from email</span>
               </div>
             )}
           </div>
@@ -373,6 +398,16 @@ function TaskPanel({
               Reopen Task
             </button>
           )}
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(copyTaskToClipboard(task))
+              onCopy()
+            }}
+            className="p-2.5 rounded-xl border border-gray-200 hover:bg-blue-50 hover:border-blue-200 transition-colors"
+            title="Copy task to clipboard"
+          >
+            <Copy size={14} className="text-gray-400" />
+          </button>
           <button onClick={() => { onDelete(task.id); onClose() }} className="p-2.5 rounded-xl border border-gray-200 hover:bg-red-50 hover:border-red-200 transition-colors" title="Delete task">
             <Trash2 size={14} className="text-gray-400 hover:text-red-500" />
           </button>
@@ -382,7 +417,7 @@ function TaskPanel({
   )
 }
 
-function KanbanCard({ task, onClick, onToggleComplete }: { task: AppTask; onClick: () => void; onToggleComplete: () => void }) {
+function KanbanCard({ task, onClick, onToggleComplete, onCopy }: { task: AppTask; onClick: () => void; onToggleComplete: () => void; onCopy: () => void }) {
   const pri = priorityConfig[task.priority]
   const overdue = isOverdue(task.dueDate, task.status)
   const isCompleted = task.status === 'Completed'
@@ -394,7 +429,16 @@ function KanbanCard({ task, onClick, onToggleComplete }: { task: AppTask; onClic
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <p className={`text-sm font-medium leading-snug ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>{task.title}</p>
-        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${pri.badge}`}>{pri.label}</span>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(copyTaskToClipboard(task)); onCopy() }}
+            className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-gray-100 transition-all"
+            title="Copy task"
+          >
+            <Copy size={11} className="text-gray-400" />
+          </button>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${pri.badge}`}>{pri.label}</span>
+        </div>
       </div>
 
       {task.company && (
@@ -420,7 +464,7 @@ function KanbanCard({ task, onClick, onToggleComplete }: { task: AppTask; onClic
   )
 }
 
-function KanbanBoard({ tasks, onSelectTask, onToggleComplete }: { tasks: AppTask[]; onSelectTask: (t: AppTask) => void; onToggleComplete: (id: string) => void }) {
+function KanbanBoard({ tasks, onSelectTask, onToggleComplete, onCopy }: { tasks: AppTask[]; onSelectTask: (t: AppTask) => void; onToggleComplete: (id: string) => void; onCopy: () => void }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
       {STATUS_COLUMNS.map(col => {
@@ -436,7 +480,7 @@ function KanbanBoard({ tasks, onSelectTask, onToggleComplete }: { tasks: AppTask
             </div>
             <div className="flex-1 bg-gray-50/70 rounded-xl p-2.5 flex flex-col gap-2.5 border border-gray-100">
               {columnTasks.map(task => (
-                <KanbanCard key={task.id} task={task} onClick={() => onSelectTask(task)} onToggleComplete={() => onToggleComplete(task.id)} />
+                <KanbanCard key={task.id} task={task} onClick={() => onSelectTask(task)} onToggleComplete={() => onToggleComplete(task.id)} onCopy={onCopy} />
               ))}
               {columnTasks.length === 0 && (
                 <div className="flex-1 flex items-center justify-center py-8">
@@ -527,7 +571,7 @@ function ListView({ tasks, onSelectTask, onToggleComplete }: { tasks: AppTask[];
   )
 }
 
-const categories: AppTaskCategory[] = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'General']
+const categories: AppTaskCategory[] = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'Email', 'General']
 
 export default function TasksPage() {
   const { toast } = useToast()
@@ -708,7 +752,7 @@ export default function TasksPage() {
         </div>
 
         {viewMode === 'kanban' ? (
-          <KanbanBoard tasks={sortedFiltered} onSelectTask={setSelectedTask} onToggleComplete={id => toggleComplete(id)} />
+          <KanbanBoard tasks={sortedFiltered} onSelectTask={setSelectedTask} onToggleComplete={id => toggleComplete(id)} onCopy={() => toast('Task copied to clipboard', 'success')} />
         ) : (
           <ListView tasks={sortedFiltered} onSelectTask={setSelectedTask} onToggleComplete={(id, completed) => toggleComplete(id, completed)} />
         )}
@@ -727,6 +771,7 @@ export default function TasksPage() {
           onUpdateStatus={updateStatus}
           onUpdate={updateTask}
           onDelete={deleteTask}
+          onCopy={() => toast('Task copied to clipboard', 'success')}
           teamMembers={teamMembers}
         />
       )}

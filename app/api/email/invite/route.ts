@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase'
 import { getSettings } from '@/lib/settings'
+import { requireRole } from '@/lib/rbac'
 
 export async function POST(req: NextRequest) {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
+
   try {
     const settings = await getSettings()
     const { name, email, role, unit, invitedBy } = await req.json()

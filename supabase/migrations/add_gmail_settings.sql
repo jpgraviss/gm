@@ -1,0 +1,1 @@
+ALTER TABLE team_members ADD COLUMN IF NOT EXISTS gmail_settings JSONB DEFAULT '{"autoLogSent": true, "autoLogInbound": false, "trackOpens": false, "trackClicks": false, "insertSignature": true, "notifyOnReply": true, "notifyOnOpen": false}'::jsonb;

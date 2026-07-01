@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
+import { requireRole } from '@/lib/rbac'
 
 export async function POST(req: NextRequest) {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   try {
     const settings = await getSettings()
     const { token, signerEmail, signerName, company, value } = await req.json()

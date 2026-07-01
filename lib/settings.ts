@@ -16,6 +16,9 @@ export interface AppSettings {
   branding: {
     primaryColor: string
     secondaryColor: string
+    accentColor: string
+    inkColor: string
+    stoneColor: string
     darkBg: string
     logoText: string
     appName: string
@@ -55,6 +58,9 @@ const DEFAULTS: AppSettings = {
   branding: {
     primaryColor: '#015035',
     secondaryColor: '#FFF3EA',
+    accentColor: '#CC7853',
+    inkColor: '#1B211D',
+    stoneColor: '#8C8478',
     darkBg: '#012b1e',
     logoText: 'GravHub',
     appName: 'GravHub',

@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { sendEmail } from '@/lib/email'
 import { scheduleEmail } from '@/lib/email-scheduler'
+import { getSettings } from '@/lib/settings'
 import { generateMonthlyReportHtml, type MonthlyReportData } from '@/lib/templates/generate-monthly-report'
 
 export async function POST(req: NextRequest) {
@@ -50,7 +51,8 @@ export async function POST(req: NextRequest) {
   }
 
   const reportData = (await reportRes.json()) as MonthlyReportData
-  const html = generateMonthlyReportHtml(reportData)
+  const settings = await getSettings()
+  const html = generateMonthlyReportHtml(reportData, settings)
 
   const companyId = workflow.company_id as string | null
   let recipientEmail: string | null = null

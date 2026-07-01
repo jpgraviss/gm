@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
               "img-src 'self' data: https: blob:",
               "font-src 'self' data: https://fonts.gstatic.com",
-              "connect-src 'self' https://*.supabase.co https://api.resend.com https://oauth2.googleapis.com https://www.googleapis.com https://api.groq.com https://accounts.google.com https://*.sentry.io https://oauth.platform.intuit.com https://sandbox-quickbooks.api.intuit.com https://quickbooks.api.intuit.com",
+              "connect-src 'self' https://*.supabase.co https://api.resend.com https://oauth2.googleapis.com https://www.googleapis.com https://api.groq.com https://accounts.google.com https://*.sentry.io",
               "frame-src https://accounts.google.com",
             ].join('; '),
           },

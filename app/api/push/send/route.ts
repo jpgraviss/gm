@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPushNotification } from '@/lib/push-notifications'
+import { requireRole } from '@/lib/rbac'
 
 export async function POST(req: NextRequest) {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const { userId, title, body: notifBody, url } = body
 

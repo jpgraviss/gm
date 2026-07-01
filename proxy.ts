@@ -24,26 +24,29 @@ function memoryLimited(key: string, max: number, windowMs: number): boolean {
 
 // ── Public routes that don't require authentication ─────────────────────────
 const PUBLIC_PREFIXES = [
-  '/api/auth/google-verify',
-  '/api/auth/health',
+  '/api/auth/',
   '/api/calendar/settings/',
   '/api/calendar/slots',
   '/api/calendar/callback',
+  '/api/calendar/feed/',
   '/api/bookings',
+  '/api/portal-clients/magic-link',
+  '/api/portal-clients/verify-code',
   '/api/portal-clients/reset-password',
-  '/api/quickbooks/callback',
+  '/api/portal-clients/check-approval',
+  '/api/portal-clients/complete-setup',
   '/api/drive/callback',
-  '/api/auth/auto-provision',
-  '/api/auth/profile',
-  '/api/auth/verify-email',
   '/api/signatures/',
-  '/api/email/sign-request',
   '/api/forms/public/',
   '/api/sequences/webhooks',
   '/api/sequences/unsubscribe',
   '/api/unsubscribe/',
-  '/api/portal/insights',
   '/api/track/',
+  '/api/chatbots/',
+  '/api/push/subscribe',
+  '/api/portal/',
+  '/api/intelligence/track',
+  '/api/intelligence/script',
 ]
 
 function getClientIp(req: NextRequest): string {

@@ -11,7 +11,7 @@
 |----------|-------|-------|
 | **Core CRM** (pipeline, contacts, companies, deals) | 100% | All CRUD, drag-drop Kanban, activity logging, AI insights |
 | **Sales** (proposals, contracts) | 100% | Full lifecycle, email sending via Resend, auto-contract creation, PDF export, e-signatures |
-| **Billing** (invoices, QB sync, time→invoice) | 100% | Working QB OAuth, sync, read-only. MRR computed dynamically from contracts. |
+| **Billing** (invoices, time→invoice) | 100% | Native invoicing. MRR computed dynamically from contracts. |
 | **Operations** (projects, tasks, tickets, time tracking, maintenance, renewals) | 100% | Full CRUD on all 6 modules |
 | **Communication** (Gmail inbox, calendar/booking, sequences) | 100% | Gmail read+log works, bookings with email+Meet work, sequences have execution engine + cron scheduler |
 | **Client Portal** | 100% | Project view, billing, tickets, file upload, invoice receipt download all work. |
@@ -19,7 +19,7 @@
 | **Automation Engine** | 100% | Engine built + trigger hooks + daily cron scheduler for time-based triggers (overdue invoices, renewals) |
 | **Error Handling / UX** | 95% | Toast wired to all user-facing errors. Loading spinners on all pages. 3 acceptable silent catches remain (CSS fallback, greeting, JSON parse). |
 | **Database Migrations** | 100% | All migrations applied. Schema fully managed through migrations. |
-| **Security** | 80% | Proxy auth (renamed from middleware for Next 16) + CSRF + encrypted tokens + RLS write policies applied. Sentry DSN not yet configured. Rate limit still in-memory. |
+| **Security** | 90% | API middleware auth + RBAC enforcement on critical routes + CSRF + encrypted tokens + RLS write policies applied. Sentry DSN not yet configured. Rate limit still in-memory. |
 | **CI / Build** | 100% | `next build`, `tsc --noEmit`, `vitest run`, and `eslint` all green. GitHub Actions workflow runs on every PR. |
 
 ---
@@ -77,8 +77,8 @@
 1. **Sentry Error Monitoring** — Create Sentry project and set `NEXT_PUBLIC_SENTRY_DSN` + `SENTRY_AUTH_TOKEN` in Vercel env vars
 2. **Rate Limiting** — Current in-memory rate limiting is per-instance; replace with Redis/Upstash for multi-instance production
 3. **RLS granularity** — Current write policies are blanket `authenticated = true`. Tighten with `owner_id` / `team_id` scoping once ownership model is decided.
-4. **CSP hardening** — Remove `'unsafe-eval'` from `next.config.ts` CSP; needs thorough smoke test against Next/Turbopack runtime.
-5. **Setup passwords** — Replace `JONATHAN_PASSWORD`/`JG_PASSWORD`/`SHIHAB_PASSWORD` env vars with magic-link invite flow.
+4. ~~CSP hardening~~ — Done. `'unsafe-eval'` already removed.
+5. ~~Setup passwords~~ — Done. Password env vars removed; magic-link invite flow in place.
 6. **Vercel Deployment** — Deploy to `app.gravissmarketing.com` with all env vars configured
 7. **Merge to Main** — Merge feature branch to main after final review
 
@@ -100,7 +100,7 @@
 | Testing | Vitest (93 tests passing) |
 | CI | GitHub Actions (`.github/workflows/ci.yml`) |
 | Error Tracking | Sentry (pending DSN) |
-| Integrations | QuickBooks Online, Gmail API, Google Drive |
+| Integrations | Gmail API, Google Drive, Resend |
 
 ---
 

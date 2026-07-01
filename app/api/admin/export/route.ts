@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 const ENTITY_CONFIGS: Record<string, { table: string; columns: string }> = {
   contacts:    { table: 'crm_contacts',  columns: 'id, first_name, last_name, title, company_name, created_at' },
@@ -24,6 +25,9 @@ function toCsvRow(values: string[]): string {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   let body: { entities?: string[] }
   try {
     body = await req.json()

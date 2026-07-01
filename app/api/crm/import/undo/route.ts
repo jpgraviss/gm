@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireRole } from '@/lib/rbac'
 
 const TABLE_MAP: Record<string, string> = {
   contacts: 'crm_contacts',
@@ -8,6 +9,9 @@ const TABLE_MAP: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await requireRole(req, 'Dept Manager')
+  if (denied) return denied
+
   const { importId } = await req.json() as { importId: string }
 
   if (!importId) {

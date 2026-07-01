@@ -18,12 +18,12 @@ import type { CRMContact, ContactNote, ContactTask, CRMCompany, Deal, Contract, 
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import {
-  X, Phone, Mail, User, Search, Plus, ScrollText,
+  X, Phone, Mail, User, Search, Plus, ScrollText, Filter,
   ChevronRight, ChevronLeft, Linkedin, StickyNote, CheckSquare,
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
   PhoneCall, Video, Pencil, Trash2, Upload, Eye, MessageSquare, MousePointerClick,
-  Flame, Thermometer, Snowflake, MessageCircle, Sparkles, Brain, Wand2, GitMerge, Download, Tag,
+  Flame, Thermometer, Snowflake, MessageCircle, Sparkles, Brain, Wand2, GitMerge, Download, Tag, ArrowUpDown,
 } from 'lucide-react'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
 import BulkActionBar from '@/components/ui/BulkActionBar'
@@ -1297,6 +1297,15 @@ export default function ContactsPage() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
   const [showBulkTag, setShowBulkTag] = useState(false)
   const [bulkTagValue, setBulkTagValue] = useState('')
+  const [stageFilter, setStageFilter] = useState<string>('All')
+
+  const [sortKey, setSortKey] = useState<string>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  function handleSort(key: string) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
 
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(() => {
@@ -1391,12 +1400,16 @@ export default function ContactsPage() {
     setCreatingContact(false)
   }
 
-  const filtered = localContacts.filter(c =>
-    c.fullName.toLowerCase().includes(search.toLowerCase()) ||
-    c.companyName.toLowerCase().includes(search.toLowerCase()) ||
-    c.title.toLowerCase().includes(search.toLowerCase()) ||
-    c.emails.join(' ').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = localContacts.filter(c => {
+    const matchSearch =
+      c.fullName.toLowerCase().includes(search.toLowerCase()) ||
+      c.companyName.toLowerCase().includes(search.toLowerCase()) ||
+      c.title.toLowerCase().includes(search.toLowerCase()) ||
+      c.emails.join(' ').toLowerCase().includes(search.toLowerCase())
+    const stage = (c.lifecycleStage ?? 'lead')
+    const matchStage = stageFilter === 'All' || stage === stageFilter.toLowerCase()
+    return matchSearch && matchStage
+  })
 
   const allFilteredIds = filtered.map(c => c.id)
   const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id))
@@ -1458,12 +1471,33 @@ export default function ContactsPage() {
     toast(`Tag "${tag}" applied to ${ids.length} contacts`, 'success')
   }
 
-  useEffect(() => { setCurrentPage(1) }, [search])
+  useEffect(() => { queueMicrotask(() => setCurrentPage(1)) }, [search, stageFilter])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const sorted = [...filtered].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1
+    switch (sortKey) {
+      case 'name': return dir * a.fullName.localeCompare(b.fullName)
+      case 'company': return dir * a.companyName.localeCompare(b.companyName)
+      case 'title': return dir * (a.title ?? '').localeCompare(b.title ?? '')
+      case 'stage': {
+        const as = deals.find(d => d.company === a.companyName && !d.stage.startsWith('Closed'))?.stage ?? ''
+        const bs = deals.find(d => d.company === b.companyName && !d.stage.startsWith('Closed'))?.stage ?? ''
+        return dir * as.localeCompare(bs)
+      }
+      case 'contractValue': {
+        const av = contracts.find(c => c.company === a.companyName)?.value ?? 0
+        const bv = contracts.find(c => c.company === b.companyName)?.value ?? 0
+        return dir * (av - bv)
+      }
+      case 'owner': return dir * a.owner.localeCompare(b.owner)
+      default: return 0
+    }
+  })
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
   const safeCurrentPage = Math.min(currentPage, totalPages)
   const startIndex = (safeCurrentPage - 1) * pageSize
-  const paginatedContacts = filtered.slice(startIndex, startIndex + pageSize)
+  const paginatedContacts = sorted.slice(startIndex, startIndex + pageSize)
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
@@ -1472,8 +1506,8 @@ export default function ContactsPage() {
       <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" action={{ label: 'New Contact', onClick: () => setCreatingContact(true) }} />
       <div className="p-4 md:p-6 flex-1 flex flex-col bg-[#f8faf9]">
 
-        {/* Search */}
-        <div className="flex items-center gap-3 mb-4">
+        {/* Filters */}
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
           <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 flex-1 max-w-sm">
             <Search size={13} className="text-gray-400" />
             <input
@@ -1482,6 +1516,21 @@ export default function ContactsPage() {
               placeholder="Search contacts, company, title..."
               className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-full"
             />
+          </div>
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+            <Filter size={13} className="text-gray-400 flex-shrink-0" />
+            {(['All', 'Lead', 'Opportunity', 'Client', 'Other'] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setStageFilter(s)}
+                className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors flex-shrink-0 ${
+                  stageFilter === s ? 'text-white' : 'text-gray-500 hover:bg-gray-100'
+                }`}
+                style={stageFilter === s ? { background: '#015035' } : {}}
+              >
+                {s}
+              </button>
+            ))}
           </div>
           <button
             onClick={() => setShowDuplicates(true)}
@@ -1546,12 +1595,25 @@ export default function ContactsPage() {
                     className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
                   />
                 </th>
-                <th className="text-left py-2.5 px-4 font-semibold">Name</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden sm:table-cell">Company</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Title</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Pipeline Stage</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden lg:table-cell">Contract Value</th>
-                <th className="text-left py-2.5 px-4 font-semibold hidden xl:table-cell">Owner</th>
+                {[
+                  { key: 'name', label: 'Name', hide: '' },
+                  { key: 'company', label: 'Company', hide: 'hidden sm:table-cell' },
+                  { key: 'title', label: 'Title', hide: 'hidden md:table-cell' },
+                  { key: 'stage', label: 'Pipeline Stage', hide: 'hidden lg:table-cell' },
+                  { key: 'contractValue', label: 'Contract Value', hide: 'hidden lg:table-cell' },
+                  { key: 'owner', label: 'Owner', hide: 'hidden xl:table-cell' },
+                ].map(col => (
+                  <th key={col.key} className={`text-left py-2.5 px-4 font-semibold ${col.hide}`}>
+                    <button onClick={() => handleSort(col.key)} className="flex items-center gap-1 hover:text-gray-600 transition-colors">
+                      {col.label}
+                      {sortKey === col.key ? (
+                        <span className="text-[#015035]">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                      ) : (
+                        <ArrowUpDown size={10} className="opacity-0 group-hover:opacity-100" />
+                      )}
+                    </button>
+                  </th>
+                ))}
                 <th className="text-left py-2.5 px-4 font-semibold">Actions</th>
               </tr>
             </thead>
@@ -1669,7 +1731,7 @@ export default function ContactsPage() {
               <Pagination
                 currentPage={safeCurrentPage}
                 totalPages={totalPages}
-                totalItems={filtered.length}
+                totalItems={sorted.length}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
                 onPageSizeChange={handlePageSizeChange}

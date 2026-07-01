@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireRole } from '@/lib/rbac'
 
 // ── HubSpot-aware field getter ──────────────────────────────────────────────
 // Checks multiple possible column names (HubSpot exports vary by locale/version)
@@ -13,6 +14,9 @@ function get(row: Record<string, any>, ...keys: string[]): string {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await requireRole(req, 'Dept Manager')
+  if (denied) return denied
+
   const { type, rows } = await req.json() as {
     type: 'contacts' | 'companies' | 'deals'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

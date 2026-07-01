@@ -177,16 +177,20 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
   // 2. Try Groq
   const key = groqKey()
   if (key) {
-    const result = await callProvider(
-      'https://api.groq.com/openai/v1/chat/completions',
-      { Authorization: `Bearer ${key}` },
-      model,
-      msgs,
-      openAiTools,
-      maxTokens,
-      timeoutMs,
-    )
-    return { ...result, source: 'groq' }
+    try {
+      const result = await callProvider(
+        'https://api.groq.com/openai/v1/chat/completions',
+        { Authorization: `Bearer ${key}` },
+        model,
+        msgs,
+        openAiTools,
+        maxTokens,
+        timeoutMs,
+      )
+      return { ...result, source: 'groq' }
+    } catch (err) {
+      console.error('[ai-client] Groq call failed, no fallback:', err)
+    }
   }
 
   // 3. No provider configured

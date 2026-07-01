@@ -122,18 +122,18 @@ function renderBlockToHtml(block: TemplateBlock): string {
     case 'logo':
       return '<div style="padding:24px;text-align:center;"><img src="/logo.png" alt="Logo" style="height:40px;" /></div>'
     case 'text':
-      return `<div style="padding:0 24px;font-family:system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.6;color:#374151;">${String(block.content.html ?? '')}</div>`
+      return `<div style="padding:0 24px;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.6;color:#374151;">${String(block.content.html ?? '')}</div>`
     case 'button': {
       const text = String(block.content.text ?? 'Click Here')
       const url = String(block.content.url ?? '#')
       const bg = String(block.content.bgColor ?? '#015035')
       const tc = String(block.content.textColor ?? '#ffffff')
-      return `<div style="padding:16px 24px;text-align:center;"><a href="${url}" target="_blank" style="display:inline-block;background:${bg};color:${tc};font-size:16px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;font-family:system-ui,-apple-system,sans-serif;">${text}</a></div>`
+      return `<div style="padding:16px 24px;text-align:center;"><a href="${url}" target="_blank" style="display:inline-block;background:${bg};color:${tc};font-size:16px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">${text}</a></div>`
     }
     case 'divider':
       return '<div style="padding:16px 24px;"><hr style="border:none;border-top:1px solid #e5e7eb;margin:0;" /></div>'
     case 'footer':
-      return `<div style="padding:16px 24px;text-align:center;font-size:12px;color:#9ca3af;font-family:system-ui,-apple-system,sans-serif;">${String(block.content.text ?? '')}<br/><a href="{action_url}/unsubscribe" style="color:#9ca3af;">Unsubscribe</a></div>`
+      return `<div style="padding:16px 24px;text-align:center;font-size:12px;color:#9ca3af;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">${String(block.content.text ?? '')}<br/><a href="{action_url}/unsubscribe" style="color:#9ca3af;">Unsubscribe</a></div>`
     default:
       return ''
   }
@@ -152,8 +152,9 @@ export function renderTemplateHtml(template: SystemEmailTemplate): string {
   const body = template.blocks.map(renderBlockToHtml).join('\n')
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:system-ui,-apple-system,sans-serif;">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@400;500;600;700;800&display=swap');</style></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;">
 <tr><td align="center" style="padding:24px 16px;">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;">

@@ -127,3 +127,26 @@ export async function POST(req: NextRequest) {
   logAudit({ userName: 'admin', action: 'created_portal_client', module: 'portal', type: 'action', metadata: { email: body.email, company: body.company } })
   return NextResponse.json({ ...mapClient(data), tempPassword }, { status: 201 })
 }
+
+// DELETE /api/portal-clients?company=... — delete all portal clients for a company
+export async function DELETE(req: NextRequest) {
+  const company = req.nextUrl.searchParams.get('company')
+  if (!company) {
+    return NextResponse.json({ error: 'company query parameter is required' }, { status: 400 })
+  }
+
+  const db = createServiceClient()
+  const { data: deleted, error } = await db
+    .from('portal_clients')
+    .delete()
+    .eq('company', company)
+    .select('id, email')
+
+  if (error) {
+    console.error('[portal-clients DELETE company]', error)
+    return NextResponse.json({ error: error?.message || 'Failed to delete portal' }, { status: 500 })
+  }
+
+  logAudit({ userName: 'admin', action: 'deleted_portal_company', module: 'portal', type: 'action', metadata: { company, deletedCount: deleted?.length ?? 0 } })
+  return NextResponse.json({ deleted: deleted?.length ?? 0, company })
+}

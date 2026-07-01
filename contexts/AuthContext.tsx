@@ -302,7 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Fast path: restore from localStorage immediately so UI renders instantly
     const hadCachedUser = tryRestoreGoogleUser()
-    if (hadCachedUser) setLoading(false)
+    if (hadCachedUser) queueMicrotask(() => setLoading(false))
 
     // Background: verify session and refresh profile from server (2s timeout)
     const sessionWithTimeout = Promise.race([

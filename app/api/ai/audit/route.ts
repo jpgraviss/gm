@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chatCompletion } from '@/lib/ai-client'
 import { createServiceClient } from '@/lib/supabase'
+import { getAuditSystemPrompt } from '@/lib/audit-template'
 import type { AuditSectionResult, AuditType } from '@/lib/types'
 
 const AUDIT_SECTIONS: { key: string; label: string; prompt: string }[] = [
@@ -169,33 +170,43 @@ export async function POST(req: NextRequest) {
         ? AUDIT_SECTIONS.filter(s => !s.key.startsWith('seo_'))
         : AUDIT_SECTIONS
 
-    const systemPrompt = `You are a professional website and SEO auditor providing detailed, actionable analysis for a digital marketing agency's clients. Be specific, cite observable patterns from the URL structure and domain, and provide practical recommendations. Always respond with a JSON object containing: { "score": <number 0-100>, "findings": [<string array of 3-5 specific observations>], "recommendations": [<string array of 3-5 actionable improvements>] }. Respond ONLY with the JSON object, no markdown or explanation.`
+    const systemPrompt = getAuditSystemPrompt()
 
     const sectionResults: AuditSectionResult[] = []
+    const MAX_RETRIES = 2
 
     for (const section of sectionsToRun) {
-      const result = await chatCompletion({
-        system: systemPrompt,
-        messages: [{
-          role: 'user',
-          content: `${section.prompt}\n\nWebsite URL: ${url}\n${companyName ? `Company: ${companyName}` : ''}\n\nProvide your analysis as a JSON object with score (0-100), findings (array of strings), and recommendations (array of strings).`,
-        }],
-        maxTokens: 2048,
-        timeoutMs: 45_000,
-      })
+      let lastResult: Awaited<ReturnType<typeof chatCompletion>> | null = null
 
-      if (result.source === 'none') {
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 2000))
+
+        const result = await chatCompletion({
+          system: systemPrompt,
+          messages: [{
+            role: 'user',
+            content: `${section.prompt}\n\nWebsite URL: ${url}\n${companyName ? `Company: ${companyName}` : ''}\n\nProvide your analysis as a JSON object with score (0-100), findings (array of strings), and recommendations (array of strings).`,
+          }],
+          maxTokens: 2048,
+          timeoutMs: 45_000,
+        })
+
+        lastResult = result
+        if (result.source !== 'none') break
+      }
+
+      if (!lastResult || lastResult.source === 'none') {
         sectionResults.push({
           name: section.label,
           score: 0,
           grade: 'F',
-          findings: ['AI provider unavailable'],
-          recommendations: ['Configure AI provider to enable audits'],
+          findings: ['AI analysis could not be completed for this section'],
+          recommendations: ['Please retry the audit or contact support'],
         })
         continue
       }
 
-      sectionResults.push(parseSection(result.text, section.label))
+      sectionResults.push(parseSection(lastResult.text, section.label))
     }
 
     const totalScore = Math.round(sectionResults.reduce((sum, s) => sum + s.score, 0) / sectionResults.length)

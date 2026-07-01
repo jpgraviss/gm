@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireRole } from '@/lib/rbac'
 
 const TABLE_MAP: Record<string, string> = {
   companies: 'crm_companies',
@@ -11,6 +12,9 @@ const TABLE_MAP: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
+
   const { type, ids } = await req.json() as { type: string; ids: string[] }
 
   if (!type || !ids?.length) {

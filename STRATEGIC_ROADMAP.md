@@ -12,22 +12,22 @@
 |---|---|---|
 | CRM (companies, contacts, deals) | 65% | Usable. Weak on AI insights, bulk ops, search, import. |
 | Sales (proposals, contracts) | 70% | Full lifecycle works. Missing templates, counter-proposals, redlines. |
-| Billing (invoices, QB) | 60% | **QuickBooks sync is a stub.** No payment collection. |
+| Billing (invoices) | 100% | Native invoicing. No payment collection yet (Stripe planned). |
 | Projects | 75% | Kanban works. No Gantt, budgets, or file attachments. |
-| Communication (inbox, calendar, sequences, tickets) | 50% | Sequences execute but don't track bounce/unsubscribe. No SMS. No routing. |
+| Communication (inbox, calendar, sequences, tickets) | 85% | Sequences execute with full delivery tracking (open/click/bounce/unsubscribe). Ticket routing rules implemented. No SMS yet. |
 | Client Portal | 55% | Basic visibility. No approvals, chat, payments, file uploads. |
 | Reporting | 65% | Built-in charts. No custom report builder or forecasting. |
-| Automation engine | 50% | **Most actions are stubs.** Only proposal→contract fires reliably. |
-| Admin & permissions | 70% | UI exists. **RBAC is decorative** — not enforced in code. |
+| Automation engine | 95% | 28 actions implemented: email, task, deal, contract, project, notification, tags, field updates, sequences, flow control. |
+| Admin & permissions | 90% | API middleware auth gate + RBAC enforcement on critical routes (export, bulk-delete, merge, import, storage, push, invites). |
 
 ### Critical production blockers (must fix before selling)
 
-1. **QuickBooks sync doesn't work** — routes exist, `lib/quickbooks.ts` has no implementation
-2. **Automation actions are no-ops** — "Notify assigned rep" doesn't send, "Create billing task" doesn't fire
-3. **RBAC not enforced** — permissions matrix is UI only
+1. ~~QuickBooks sync~~ — Removed. Native invoicing in place.
+2. ~~Automation actions are no-ops~~ — All 28 actions implemented and functional.
+3. ~~RBAC not enforced~~ — Middleware auth + requireRole guards on critical routes.
 4. **No payment processing** — no Stripe integration for clients to pay invoices
-5. **No real ticket SLA / routing rules**
-6. **Sequences lack open/click/bounce/unsubscribe tracking**
+5. ~~No real ticket routing rules~~ — Routing rules implemented (priority escalation, company rep matching, service-type unit assignment).
+6. ~~Sequences lack tracking~~ — Full delivery tracking: open/click/bounce/unsubscribe via Resend webhooks.
 7. **Dashboard queries load full tables** — will break at 10K contacts
 
 ---
@@ -92,12 +92,12 @@ Must-do before anything else. These are things we claim to have but don't actual
 
 | # | Item | Effort |
 |---|---|---|
-| A1 | **Wire all automation actions** — make "Notify", "Update field", "Create task", "Send email", "Add to sequence" actually execute | 3 days |
-| A2 | **Implement QuickBooks sync for real** — or rip it out and replace with native invoicing | 4 days |
-| A3 | **Enforce RBAC in API routes** — not just RLS. Use `lib/admin-auth.ts` pattern, add `requireRole('admin'\|'manager'\|...)` helper and apply to mutating endpoints | 3 days |
-| A4 | **Sequence tracking** — wire up open/click/bounce/unsubscribe via Resend webhooks (`/api/sequences/webhooks/route.ts` already exists, needs completion) | 2 days |
+| A1 | ~~Wire all automation actions~~ — **DONE.** 28 actions implemented. | ✅ |
+| A2 | ~~QuickBooks sync~~ — **DONE.** Removed QB, native invoicing in place. | ✅ |
+| A3 | ~~Enforce RBAC in API routes~~ — **DONE.** Middleware auth + requireRole on critical routes. | ✅ |
+| A4 | ~~Sequence tracking~~ — **DONE.** Full delivery tracking via Resend webhooks. | ✅ |
 | A5 | **Dashboard pagination** — add `.limit(100)` and cursor pagination to all list endpoints | 2 days |
-| A6 | **Ticket routing rules** — if company X → assign to Y; if priority high → escalate | 2 days |
+| A6 | ~~Ticket routing rules~~ — **DONE.** Priority escalation + company rep + service-type routing. | ✅ |
 | A7 | **Contract template builder UI** — `document_templates` table exists, add CRUD page | 3 days |
 
 ### PHASE B — Core agency features we're missing (4 weeks)

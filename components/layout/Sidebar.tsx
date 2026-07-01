@@ -13,7 +13,7 @@ import {
   BookOpen, Star, Megaphone, Bot, ChevronDown,
   ScrollText, GraduationCap, Share2, Mail, ClipboardList, Layers,
   CheckSquare, Clock, CalendarDays, CalendarCheck, Wrench, RefreshCw, PackageCheck, Zap,
-  BarChart3, Plug, Search, Activity, FileSearch,
+  BarChart3, Plug, Search, Activity, FileSearch, Radar,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -72,6 +72,7 @@ export const defaultNavigation: NavSection[] = [
       { label: 'Pipeline', href: '/crm/pipeline', icon: <TrendingUp size={16} />, billingVisible: true },
       { label: 'Companies', href: '/crm/companies', icon: <Users size={16} />, billingVisible: true },
       { label: 'Contacts', href: '/crm/contacts', icon: <Users size={16} />, billingVisible: true },
+      { label: 'Intelligence', href: '/intelligence', icon: <Radar size={16} /> },
       { label: 'Sequences', href: '/crm/sequences', icon: <Zap size={16} />, billingVisible: true },
       { label: 'Proposals', href: '/proposals', icon: <FileText size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
       { label: 'Contracts', href: '/contracts', icon: <ScrollText size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },

@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/Toast'
 import {
   Radar, Search, Flame, Building2, Users, Globe, Phone, Mail,
   ExternalLink, ChevronRight, RefreshCw, Eye, MousePointerClick,
-  ArrowUpDown, Linkedin, Clock, TrendingUp, Filter,
+  ArrowUpDown, Clock, TrendingUp, Code, Copy, CheckCircle,
 } from 'lucide-react'
 
 interface Person {
@@ -48,6 +48,38 @@ interface Company {
   visitorCount: number
 }
 
+interface GiVisitor {
+  visitor_id: string
+  email: string | null
+  name: string | null
+  phone: string | null
+  company: string | null
+  ip_address: string | null
+  city: string | null
+  region: string | null
+  country: string | null
+  rdns_company: string | null
+  first_seen: string
+  last_seen: string
+  visit_count: number
+  is_hot_lead: boolean
+  lead_score: number
+  utm_source: string | null
+  utm_medium: string | null
+  utm_campaign: string | null
+}
+
+interface GiEvent {
+  id: number
+  event_type: string
+  url: string | null
+  path: string | null
+  title: string | null
+  time_on_page: number | null
+  scroll_depth: number | null
+  timestamp: string
+}
+
 const FOREST = '#015035'
 const TERRACOTTA = '#CC7853'
 
@@ -73,6 +105,7 @@ function timeAgo(ts: string) {
 
 export default function IntelligencePage() {
   const { toast } = useToast()
+  const [source, setSource] = useState<'maverick' | 'gravintel' | 'setup'>('maverick')
   const [tab, setTab] = useState<'visitors' | 'companies'>('visitors')
   const [people, setPeople] = useState<Person[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
@@ -86,6 +119,12 @@ export default function IntelligencePage() {
   const [refreshing, setRefreshing] = useState(false)
   const [sortKey, setSortKey] = useState<'name' | 'company' | 'visits' | 'traffic'>('visits')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [giVisitors, setGiVisitors] = useState<GiVisitor[]>([])
+  const [giTotal, setGiTotal] = useState(0)
+  const [giSelected, setGiSelected] = useState<GiVisitor | null>(null)
+  const [giEvents, setGiEvents] = useState<GiEvent[]>([])
+  const [giEventsLoading, setGiEventsLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -105,7 +144,27 @@ export default function IntelligencePage() {
     finally { setLoading(false); setRefreshing(false) }
   }, [toast])
 
+  const fetchGiData = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/intelligence/identify?limit=100&search=${encodeURIComponent(search)}`)
+      const data = await res.json()
+      if (data.data) { setGiVisitors(data.data); setGiTotal(data.total ?? 0) }
+    } catch { /* no self-hosted data yet is normal */ }
+  }, [search])
+
   useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { if (source === 'gravintel') fetchGiData() }, [source, fetchGiData])
+
+  async function loadGiEvents(visitor: GiVisitor) {
+    setGiSelected(visitor)
+    setGiEventsLoading(true)
+    try {
+      const res = await fetch(`/api/intelligence/identify?visitor_id=${visitor.visitor_id}`)
+      const data = await res.json()
+      setGiEvents(data.events ?? [])
+    } catch { setGiEvents([]) }
+    finally { setGiEventsLoading(false) }
+  }
 
   async function loadEvents(person: Person) {
     setSelectedPerson(person)
@@ -175,6 +234,198 @@ export default function IntelligencePage() {
           </button>
         </div>
 
+        {/* Source Tabs */}
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5 mb-5 w-fit">
+          {([
+            ['maverick', 'Maverick Data'],
+            ['gravintel', 'GravIntel (Self-Hosted)'],
+            ['setup', 'Setup & Embed'],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setSource(key)}
+              className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${source === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Setup Tab */}
+        {source === 'setup' && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-1" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
+              Tracking Script Setup
+            </h3>
+            <p className="text-xs text-gray-500 mb-5">Add this script to any website to start tracking visitors. When someone clicks an email link with a tracking parameter or submits a form, they become identified.</p>
+
+            <div className="mb-5">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-2">Embed Code</label>
+              <div className="relative">
+                <pre className="bg-gray-900 text-green-400 text-xs p-4 rounded-xl overflow-x-auto font-mono leading-relaxed">
+{`<!-- GravIntel Tracking -->
+<script src="https://app.gravissmarketing.com/api/intelligence/script?site=your-site-id" defer></script>`}
+                </pre>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`<script src="https://app.gravissmarketing.com/api/intelligence/script?site=your-site-id" defer></script>`)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2000)
+                  }}
+                  className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 rounded-md bg-gray-700 text-gray-300 text-[10px] hover:bg-gray-600"
+                >
+                  {copied ? <><CheckCircle size={10} /> Copied</> : <><Copy size={10} /> Copy</>}
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-2">Email Click-Through Identification</label>
+              <p className="text-xs text-gray-500 mb-2">When sending emails from GravHub, append this parameter to any link to identify the visitor:</p>
+              <pre className="bg-gray-50 border border-gray-200 text-xs p-3 rounded-lg font-mono text-gray-700">
+{`https://yoursite.com/page?_gi_eid=recipient@email.com`}
+              </pre>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-2">Manual Identification (JavaScript)</label>
+              <pre className="bg-gray-50 border border-gray-200 text-xs p-3 rounded-lg font-mono text-gray-700">
+{`// Identify a visitor after form fill or login
+GravIntel.identify('user@email.com', { name: 'Jane Doe' });
+
+// Track custom events
+GravIntel.track('pricing_viewed', { plan: 'premium' });`}
+              </pre>
+            </div>
+
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <h4 className="text-xs font-bold text-emerald-800 mb-1">How identification works</h4>
+              <ul className="text-[11px] text-emerald-700 space-y-1">
+                <li>1. Script assigns each visitor a persistent cookie ID</li>
+                <li>2. All page views, clicks, and scrolls are tracked under that ID</li>
+                <li>3. When they click an email link with <code className="bg-emerald-100 px-1 rounded">_gi_eid</code>, their cookie is permanently tied to their email</li>
+                <li>4. Form submissions with email fields auto-identify the visitor</li>
+                <li>5. All past anonymous activity is retroactively linked to their profile</li>
+                <li>6. Lead scoring auto-calculates based on visit frequency and engagement</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* GravIntel Self-Hosted View */}
+        {source === 'gravintel' && (
+          <div className="flex gap-4">
+            <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50">
+                <div className="relative flex-1 max-w-xs">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search visitors..." className="w-full pl-9 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-green-700" />
+                </div>
+                <span className="text-[11px] text-gray-400">{giTotal} visitors tracked</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50">
+                      <th className="text-left py-2.5 px-4 font-semibold">Visitor</th>
+                      <th className="text-left py-2.5 px-4 font-semibold">Company</th>
+                      <th className="text-left py-2.5 px-4 font-semibold">Visits</th>
+                      <th className="text-left py-2.5 px-4 font-semibold">Score</th>
+                      <th className="text-left py-2.5 px-4 font-semibold">Source</th>
+                      <th className="text-left py-2.5 px-4 font-semibold">Last Seen</th>
+                      <th className="py-2.5 px-4 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {giVisitors.length === 0 ? (
+                      <tr><td colSpan={7} className="text-center py-12 text-sm text-gray-400">
+                        No visitors tracked yet. Add the tracking script to your website to start collecting data.
+                      </td></tr>
+                    ) : giVisitors.map(v => (
+                      <tr key={v.visitor_id} onClick={() => loadGiEvents(v)} className={`border-b border-gray-100 last:border-0 cursor-pointer transition-colors ${giSelected?.visitor_id === v.visitor_id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: v.email ? FOREST : '#9ca3af' }}>
+                              {v.name ? v.name[0].toUpperCase() : v.email ? v.email[0].toUpperCase() : '?'}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{v.name ?? v.email ?? <span className="text-gray-400">Anonymous</span>}</p>
+                              {v.email && v.name && <p className="text-[10px] text-gray-400">{v.email}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600">{v.company ?? v.rdns_company ?? '—'}</td>
+                        <td className="py-3 px-4 text-sm font-medium text-gray-900">{v.visit_count}</td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${Math.min(v.lead_score, 100)}%`, background: v.lead_score >= 60 ? '#ef4444' : v.lead_score >= 30 ? TERRACOTTA : FOREST }} />
+                            </div>
+                            <span className="text-[10px] text-gray-500">{v.lead_score}</span>
+                            {v.is_hot_lead && <Flame size={10} className="text-orange-500" />}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          {v.utm_source ? (
+                            <span className="text-[10px] font-medium text-gray-600">{v.utm_source}{v.utm_medium ? ` / ${v.utm_medium}` : ''}</span>
+                          ) : <span className="text-[10px] text-gray-400">direct</span>}
+                        </td>
+                        <td className="py-3 px-4 text-[11px] text-gray-500">{timeAgo(v.last_seen)}</td>
+                        <td className="py-3 px-4"><ChevronRight size={14} className="text-gray-300" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {giSelected && (
+              <div className="w-[320px] flex-shrink-0 bg-white rounded-xl border border-gray-200 overflow-hidden hidden lg:block">
+                <div className="p-4 border-b border-gray-100" style={{ background: '#f8faf9' }}>
+                  <h3 className="text-sm font-bold text-gray-900">{giSelected.name ?? giSelected.email ?? 'Anonymous Visitor'}</h3>
+                  {giSelected.email && <p className="text-xs text-gray-500">{giSelected.email}</p>}
+                  {giSelected.company && <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><Building2 size={10} /> {giSelected.company}</p>}
+                  {giSelected.city && <p className="text-[10px] text-gray-400 mt-1">{[giSelected.city, giSelected.region, giSelected.country].filter(Boolean).join(', ')}</p>}
+                  <div className="flex gap-2 mt-2">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{giSelected.visit_count} visits</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Score: {giSelected.lead_score}</span>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">Activity</h4>
+                  {giEventsLoading ? (
+                    <div className="flex justify-center py-6"><RefreshCw size={14} className="animate-spin text-gray-400" /></div>
+                  ) : giEvents.length === 0 ? (
+                    <p className="text-xs text-gray-400 py-4 text-center">No events</p>
+                  ) : (
+                    <div className="flex flex-col gap-1.5 max-h-[400px] overflow-y-auto">
+                      {giEvents.map(ev => (
+                        <div key={ev.id} className="flex items-start gap-2 p-2 rounded-lg hover:bg-gray-50">
+                          <div className="mt-0.5">
+                            {ev.event_type === 'page_view' ? <Eye size={11} className="text-blue-500" />
+                              : ev.event_type === 'page_leave' ? <Clock size={11} className="text-gray-400" />
+                              : ev.event_type === 'form_submit' ? <Mail size={11} className="text-emerald-500" />
+                              : <MousePointerClick size={11} className="text-purple-500" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] font-medium text-gray-700 truncate">{ev.path ?? ev.url}</p>
+                            <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                              <span>{timeAgo(ev.timestamp)}</span>
+                              {ev.time_on_page != null && <span>{ev.time_on_page}s</span>}
+                              {ev.scroll_depth != null && <span>{ev.scroll_depth}% scroll</span>}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {source === 'maverick' && <>
         {/* Stats Cards */}
         {stats && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
@@ -482,6 +733,7 @@ export default function IntelligencePage() {
             )}
           </div>
         )}
+        </>}
       </div>
     </div>
   )

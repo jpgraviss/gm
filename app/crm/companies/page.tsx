@@ -1123,7 +1123,7 @@ export default function CompaniesPage() {
     }
   }
 
-  useEffect(() => { setCurrentPage(1) }, [search, statusFilter])
+  useEffect(() => { queueMicrotask(() => setCurrentPage(1)) }, [search, statusFilter])
 
   const sorted = [...filtered].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1

@@ -1471,7 +1471,7 @@ export default function ContactsPage() {
     toast(`Tag "${tag}" applied to ${ids.length} contacts`, 'success')
   }
 
-  useEffect(() => { setCurrentPage(1) }, [search, stageFilter])
+  useEffect(() => { queueMicrotask(() => setCurrentPage(1)) }, [search, stageFilter])
 
   const sorted = [...filtered].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1

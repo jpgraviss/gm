@@ -91,7 +91,7 @@ export default function UnsubscribePage() {
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
-      style={{ background: 'linear-gradient(180deg, #f0f2f5 0%, #e6f0ec 100%)' }}
+      style={{ background: 'linear-gradient(180deg, #FFF3EA 0%, #e6f0ec 100%)' }}
     >
       <div className="w-full max-w-lg">
         <div className="text-center mb-8">

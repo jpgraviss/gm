@@ -236,7 +236,7 @@ export default function SetupAccountPage() {
 
   if (validating) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f4f5f7' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#FFF3EA' }}>
         <div className="flex items-center gap-3">
           <Loader2 size={20} className="animate-spin" style={{ color: '#015035' }} />
           <span className="text-sm text-gray-500">Validating setup link...</span>
@@ -247,7 +247,7 @@ export default function SetupAccountPage() {
 
   if (!emailParam) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f4f5f7' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#FFF3EA' }}>
         <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm max-w-md w-full mx-4 text-center">
           <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 bg-red-50">
             <AlertCircle size={24} className="text-red-500" />
@@ -269,7 +269,7 @@ export default function SetupAccountPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#f4f5f7' }}>
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#FFF3EA' }}>
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-3 mb-6">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#015035' }}>

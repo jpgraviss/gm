@@ -1,12 +1,22 @@
 @import "tailwindcss";
 
 @theme {
+  /* Brand palette — Graviss Marketing Brand System v1.0 */
+  --color-brand-forest: #015035;
+  --color-brand-forest-hover: #01673f;
+  --color-brand-forest-light: #e6f0ec;
   --color-brand-green: #015035;
   --color-brand-green-hover: #01673f;
   --color-brand-green-light: #e6f0ec;
+  --color-brand-terracotta: #CC7853;
+  --color-brand-terracotta-hover: #b8694a;
+  --color-brand-cream: #FFF3EA;
   --color-brand-tan: #FFF3EA;
   --color-brand-tan-dark: #f5e6d4;
-  --color-sidebar-bg: #012b1e;
+  --color-brand-deep-pine: #012A1C;
+  --color-brand-ink: #1B211D;
+  --color-brand-stone: #8C8478;
+  --color-sidebar-bg: #012A1C;
   --color-sidebar-hover: #015035;
   --color-sidebar-active: #01673f;
   --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
@@ -21,10 +31,15 @@
 :root {
   --brand-primary: #015035;
   --brand-secondary: #FFF3EA;
+  --brand-accent: #CC7853;
   --brand-green: #015035;
-  --brand-dark: #012b1e;
+  --brand-dark: #012A1C;
   --brand-tan: #FFF3EA;
-  --sidebar-bg: #012b1e;
+  --brand-terracotta: #CC7853;
+  --brand-deep-pine: #012A1C;
+  --brand-ink: #1B211D;
+  --brand-stone: #8C8478;
+  --sidebar-bg: #012A1C;
   --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
   --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.09), 0 8px 28px rgba(0,0,0,0.06);
   --radius-card: 14px;
@@ -36,8 +51,8 @@ html, body {
   margin: 0;
   padding: 0;
   font-family: var(--font-body);
-  background-color: #f0f2f5;
-  color: #1a1a2e;
+  background-color: #FFF3EA;
+  color: #1B211D;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -101,12 +116,12 @@ html, body {
   padding: 10px 16px;
   font-size: 10.5px;
   font-weight: 700;
-  color: #9ca3af;
+  color: var(--brand-stone, #8C8478);
   text-transform: uppercase;
   letter-spacing: 0.09em;
-  border-bottom: 1px solid #f1f3f5;
+  border-bottom: 1px solid #f1ede8;
   white-space: nowrap;
-  background: #fafafa;
+  background: #faf8f5;
 }
 .data-table tbody tr {
   border-bottom: 1px solid #f3f4f6;
@@ -114,8 +129,8 @@ html, body {
   cursor: pointer;
 }
 .data-table tbody tr:last-child { border-bottom: none; }
-.data-table tbody tr:hover { background: #f7fffe; }
-.data-table tbody td { padding: 13px 16px; font-size: 13px; color: #374151; vertical-align: middle; }
+.data-table tbody tr:hover { background: #faf8f5; }
+.data-table tbody td { padding: 13px 16px; font-size: 13px; color: var(--brand-ink, #1B211D); vertical-align: middle; }
 
 /* Status badges */
 .status-badge {
@@ -146,7 +161,7 @@ html, body {
 
 /* Kanban columns */
 .kanban-col {
-  background: #eaecf0;
+  background: #f5ede5;
   border-radius: 12px;
   padding: 12px;
   min-height: 400px;
@@ -169,7 +184,7 @@ html, body {
   transition: all 0.15s;
 }
 .tab-btn.active { background: var(--brand-primary, #015035); color: white; border-color: var(--brand-primary, #015035); }
-.tab-btn:not(.active) { background: white; color: #6b7280; border-color: #e5e7eb; }
+.tab-btn:not(.active) { background: white; color: var(--brand-stone, #8C8478); border-color: #e8e3dd; }
 .tab-btn:not(.active):hover { border-color: var(--brand-primary, #015035); color: var(--brand-primary, #015035); }
 
 /* Filter pills */
@@ -179,10 +194,10 @@ html, body {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  border: 1.5px solid #e5e7eb;
+  border: 1.5px solid #e8e3dd;
   transition: all 0.14s;
   background: white;
-  color: #6b7280;
+  color: var(--brand-stone, #8C8478);
 }
 .filter-pill:hover { border-color: var(--brand-primary, #015035); color: var(--brand-primary, #015035); }
 .filter-pill.active { background: var(--brand-primary, #015035); color: white; border-color: var(--brand-primary, #015035); }

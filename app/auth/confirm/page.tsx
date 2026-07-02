@@ -113,7 +113,7 @@ export default function AuthConfirmPage() {
   }, [router])
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#f4f5f7', fontFamily: 'var(--font-body)' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: '#FFF3EA', fontFamily: 'var(--font-body)' }}>
       <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm max-w-sm w-full text-center">
         {error ? (
           <>

@@ -1329,9 +1329,8 @@ export default function ContactsPage() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/crm/contacts')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalContacts(data) })
+    fetchCrmContacts()
+      .then(data => setLocalContacts(data))
       .catch(() => toast('Failed to load contacts', 'error'))
       .finally(() => setLoading(false))
     fetchCrmCompanies().then(setCrmCompanies)
@@ -1767,7 +1766,7 @@ export default function ContactsPage() {
           defaultType="contacts"
           onClose={() => setShowImport(false)}
           onComplete={() => {
-            fetch('/api/crm/contacts').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalContacts(data) })
+            fetchCrmContacts().then(data => setLocalContacts(data))
           }}
           onShowDuplicates={() => setShowDuplicates(true)}
         />
@@ -1777,7 +1776,7 @@ export default function ContactsPage() {
           type="contacts"
           onClose={() => setShowDuplicates(false)}
           onMergeComplete={() => {
-            fetch('/api/crm/contacts').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalContacts(data) })
+            fetchCrmContacts().then(data => setLocalContacts(data))
           }}
         />
       )}

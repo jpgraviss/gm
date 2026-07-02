@@ -1016,9 +1016,8 @@ export default function CompaniesPage() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/crm/companies')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
+    fetchCrmCompanies()
+      .then(data => setLocalCompanies(data))
       .catch(() => toast('Failed to load companies', 'error'))
       .finally(() => setLoading(false))
     fetchCrmContacts().then(setCrmContacts)
@@ -1422,7 +1421,7 @@ export default function CompaniesPage() {
           defaultType="companies"
           onClose={() => setShowImport(false)}
           onComplete={() => {
-            fetch('/api/crm/companies').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
+            fetchCrmCompanies().then(setLocalCompanies)
           }}
           onShowDuplicates={() => setShowDuplicates(true)}
         />
@@ -1450,7 +1449,7 @@ export default function CompaniesPage() {
           type="companies"
           onClose={() => setShowDuplicates(false)}
           onMergeComplete={() => {
-            fetch('/api/crm/companies').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalCompanies(data) })
+            fetchCrmCompanies().then(setLocalCompanies)
           }}
         />
       )}

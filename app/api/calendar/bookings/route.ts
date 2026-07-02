@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { getValidAccessToken, createGoogleEvent, type CalendarSettings } from '@/lib/google-calendar'
+import { getValidAccessToken, getGoogleBusySlots, createGoogleEvent, type CalendarSettings } from '@/lib/google-calendar'
 import { generateICS } from '@/lib/ics-generator'
 import { getGoogleCalendarLink, getOutlookCalendarLink, getOutlook365CalendarLink } from '@/lib/calendar-links'
 import { getResend } from '@/lib/resend'
@@ -41,6 +41,44 @@ export async function GET(req: NextRequest) {
       .eq('date', date)
       .eq('status', 'confirmed')
 
+    // Fetch imported calendar events (external subscriptions) for the same date
+    const { data: importedEvents } = await db
+      .from('bookings')
+      .select('start_time, end_time')
+      .eq('date', date)
+      .eq('status', 'confirmed')
+
+    // Fetch Google Calendar busy slots
+    let googleBusyMinutes: { start: number; end: number }[] = []
+    try {
+      const { data: allCals } = await db
+        .from('calendar_settings')
+        .select('*')
+        .not('google_refresh_token', 'is', null)
+        .limit(1)
+
+      const cal = allCals?.[0]
+      if (cal) {
+        const accessToken = await getValidAccessToken(cal as CalendarSettings)
+        if (accessToken) {
+          const tz = cal.timezone || 'America/Chicago'
+          const busySlots = await getGoogleBusySlots(accessToken, date, tz)
+          googleBusyMinutes = busySlots.map(b => {
+            const fmt = (iso: string) => {
+              const local = new Intl.DateTimeFormat('en-US', {
+                hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz,
+              }).format(new Date(iso)).replace(/^24/, '00')
+              const [h, m] = local.split(':').map(Number)
+              return h * 60 + m
+            }
+            return { start: fmt(b.start), end: fmt(b.end) }
+          })
+        }
+      }
+    } catch (e) {
+      console.error('[calendar/bookings GET] Google Calendar busy check failed:', e)
+    }
+
     const [startH, startM] = availability.start.split(':').map(Number)
     const [endH, endM] = availability.end.split(':').map(Number)
     const startMinutes = startH * 60 + startM
@@ -59,13 +97,18 @@ export async function GET(req: NextRequest) {
       const slotEndMin = min + duration
       const slotEnd = `${String(Math.floor(slotEndMin / 60)).padStart(2, '0')}:${String(slotEndMin % 60).padStart(2, '0')}`
 
-      const conflict = existingBookings?.some(b => {
-        const [bsh, bsm] = b.start_time.split(':').map(Number)
-        const [beh, bem] = b.end_time.split(':').map(Number)
-        const bStart = bsh * 60 + bsm
-        const bEnd = beh * 60 + bem
-        return min < bEnd && slotEndMin > bStart
-      })
+      const hasBookingConflict = (bookings: { start_time: string; end_time: string }[] | null) =>
+        bookings?.some(b => {
+          const [bsh, bsm] = b.start_time.split(':').map(Number)
+          const [beh, bem] = b.end_time.split(':').map(Number)
+          const bStart = bsh * 60 + bsm
+          const bEnd = beh * 60 + bem
+          return min < bEnd && slotEndMin > bStart
+        })
+
+      const conflict = hasBookingConflict(existingBookings)
+        || hasBookingConflict(importedEvents)
+        || googleBusyMinutes.some(b => min < b.end && slotEndMin > b.start)
 
       if (!conflict) {
         const h = Math.floor(min / 60)
@@ -101,7 +144,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { slug, date, start_time, end_time, guest_name, guest_email, guest_phone, guest_company, notes } = body
+  const { slug, date, start_time, end_time, guest_name, guest_email, guest_phone, guest_company, notes, intake_answers } = body
 
   if (!slug || !date || !start_time || !end_time || !guest_name?.trim() || !guest_email?.trim()) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -145,6 +188,7 @@ export async function POST(req: NextRequest) {
       guest_phone: guest_phone?.trim() || null,
       guest_company: guest_company?.trim() || null,
       notes: notes?.trim() || null,
+      intake_answers: intake_answers ?? {},
       status: 'confirmed',
     })
     .select()

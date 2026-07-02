@@ -6,6 +6,14 @@ import {
   User, Mail, Building2, FileText, ArrowLeft, CalendarDays, Download,
 } from 'lucide-react'
 
+interface IntakeQuestion {
+  id: string
+  label: string
+  type: 'text' | 'textarea' | 'select' | 'checkbox'
+  required: boolean
+  options?: string[]
+}
+
 interface BookingTypeData {
   id: string
   name: string
@@ -16,6 +24,7 @@ interface BookingTypeData {
   color: string
   availability: { days: number[]; start: string; end: string }
   buffer_minutes: number
+  intake_questions?: IntakeQuestion[]
 }
 
 interface TimeSlot { start: string; end: string; label: string }
@@ -148,6 +157,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [honeypot, setHoneypot] = useState('')
+  const [intakeAnswers, setIntakeAnswers] = useState<Record<string, string>>({})
 
   useEffect(() => {
     fetch('/api/calendar/booking-types')
@@ -176,6 +186,8 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     if (!selectedSlot || !selectedDate || !bt) return
     if (honeypot) return
     if (!name.trim() || !email.trim()) { setFormError('Name and email are required.'); return }
+    const requiredMissing = (bt.intake_questions ?? []).filter(q => q.required && !(intakeAnswers[q.id] ?? '').trim())
+    if (requiredMissing.length > 0) { setFormError(`Please answer: ${requiredMissing.map(q => q.label).join(', ')}`); return }
     setFormError('')
     setSubmitting(true)
     try {
@@ -192,6 +204,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           guest_company: company.trim() || undefined,
           guest_phone: phone.trim() || undefined,
           notes: notes.trim() || undefined,
+          intake_answers: Object.keys(intakeAnswers).length > 0 ? intakeAnswers : undefined,
         }),
       })
       const data = await res.json()
@@ -534,6 +547,55 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                     />
                   </div>
                 </div>
+
+                {(s.intake_questions ?? []).length > 0 && (
+                  <div className="border-t border-gray-100 pt-4 mt-2">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Additional Questions</p>
+                    {(s.intake_questions ?? []).map(q => (
+                      <div key={q.id} className="mb-3">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                          {q.label}{q.required && ' *'}
+                        </label>
+                        {q.type === 'textarea' ? (
+                          <textarea
+                            value={intakeAnswers[q.id] ?? ''}
+                            onChange={e => setIntakeAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                            rows={3}
+                            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/30 focus:border-[#015035] resize-none"
+                          />
+                        ) : q.type === 'select' ? (
+                          <select
+                            value={intakeAnswers[q.id] ?? ''}
+                            onChange={e => setIntakeAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#015035]/30 focus:border-[#015035]"
+                          >
+                            <option value="">Select…</option>
+                            {(q.options ?? []).map(opt => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        ) : q.type === 'checkbox' ? (
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={(intakeAnswers[q.id] ?? '') === 'true'}
+                              onChange={e => setIntakeAnswers(prev => ({ ...prev, [q.id]: e.target.checked ? 'true' : 'false' }))}
+                              className="w-4 h-4 rounded border-gray-300 accent-[#015035]"
+                            />
+                            <span className="text-sm text-gray-700">{q.label}</span>
+                          </label>
+                        ) : (
+                          <input
+                            type="text"
+                            value={intakeAnswers[q.id] ?? ''}
+                            onChange={e => setIntakeAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/30 focus:border-[#015035]"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }} aria-hidden="true">
                   <input

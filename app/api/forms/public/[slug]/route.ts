@@ -170,6 +170,48 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     })).catch((err) => console.error('[forms notify email]', err))
   }
 
+  // Respondent confirmation email
+  if (form.send_confirmation) {
+    const contactData = submissionToContact({ fields: form.fields ?? [] }, body)
+    const respondentEmail = contactData.email?.toLowerCase().trim()
+    if (respondentEmail) {
+      const subject = form.confirmation_subject || `Thanks for submitting "${form.name}"`
+      const message = form.confirmation_message || "We've received your submission and will be in touch soon."
+      const firstName = contactData.firstName || ''
+      getResend().then(r => r.emails.send({
+        from: 'Graviss Marketing <noreply@app.gravissmarketing.com>',
+        to: [respondentEmail],
+        subject,
+        html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px">
+          <div style="width:48px;height:48px;border-radius:12px;background:#015035;display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <h1 style="font-size:20px;font-weight:700;color:#1B211D;margin:0 0 8px">${firstName ? `Thanks, ${firstName}!` : 'Thank you!'}</h1>
+          <p style="font-size:14px;color:#4b5563;line-height:1.6;margin:0 0 24px">${message}</p>
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
+          <p style="font-size:11px;color:#9ca3af">&copy; Graviss Marketing</p>
+        </div>`,
+      })).catch((err) => console.error('[forms confirmation email]', err))
+    }
+  }
+
+  // Webhook
+  if (form.webhook_url) {
+    fetch(form.webhook_url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: 'form_submitted',
+        formId: form.id,
+        formName: form.name,
+        submissionId,
+        contactId,
+        data: body,
+        submittedAt: new Date().toISOString(),
+      }),
+    }).catch((err) => console.error('[forms webhook]', err))
+  }
+
   return NextResponse.json(
     {
       success: true,

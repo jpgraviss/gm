@@ -9,22 +9,35 @@ export type FormFieldType =
   | 'textarea'
   | 'select'
   | 'checkbox'
+  | 'multi_select'
   | 'radio'
   | 'number'
   | 'url'
   | 'hidden'
+  | 'date'
+  | 'rating'
+  | 'signature'
+  | 'page_break'
+
+export interface FieldCondition {
+  field: string
+  operator: 'equals' | 'not_equals' | 'contains' | 'is_empty' | 'is_not_empty'
+  value?: string
+}
 
 export interface FormField {
   id: string
   type: FormFieldType
-  name: string            // form field key, e.g. "first_name"
-  label: string           // visible label
+  name: string
+  label: string
   placeholder?: string
   required?: boolean
-  options?: string[]      // for select/radio/checkbox
+  options?: string[]
   defaultValue?: string
   helpText?: string
   mapsTo?: 'first_name' | 'last_name' | 'email' | 'phone' | 'company' | 'notes' | 'custom'
+  ratingMax?: number
+  conditions?: FieldCondition[]
 }
 
 export interface Form {
@@ -50,6 +63,10 @@ export interface Form {
   bgColor: string
   bgTransparent: boolean
   fontFamily: string
+  webhookUrl?: string
+  sendConfirmation: boolean
+  confirmationSubject?: string
+  confirmationMessage?: string
   createdAt: string
   updatedAt: string
 }
@@ -81,11 +98,31 @@ export function slugifyForm(name: string): string {
  * Validate a form submission against the form schema.
  * Returns null if valid, else an error message.
  */
+export function evaluateConditions(
+  conditions: FieldCondition[] | undefined,
+  data: Record<string, unknown>,
+): boolean {
+  if (!conditions || conditions.length === 0) return true
+  return conditions.every(c => {
+    const val = String(data[c.field] ?? '')
+    switch (c.operator) {
+      case 'equals':       return val === (c.value ?? '')
+      case 'not_equals':   return val !== (c.value ?? '')
+      case 'contains':     return val.includes(c.value ?? '')
+      case 'is_empty':     return !val
+      case 'is_not_empty': return !!val
+      default:             return true
+    }
+  })
+}
+
 export function validateSubmission(
   form: Pick<Form, 'fields'>,
   data: Record<string, unknown>,
 ): string | null {
   for (const field of form.fields) {
+    if (field.type === 'page_break') continue
+    if (!evaluateConditions(field.conditions, data)) continue
     const value = data[field.name]
     if (field.required && (value === undefined || value === null || value === '')) {
       return `Field "${field.label}" is required`
@@ -113,6 +150,20 @@ export function validateSubmission(
       if (Number.isNaN(Number(value))) {
         return `Field "${field.label}" must be a number`
       }
+    }
+    if (field.type === 'date' && value) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
+        return `Field "${field.label}" must be a valid date`
+      }
+    }
+    if (field.type === 'rating' && value !== undefined && value !== '') {
+      const n = Number(value)
+      if (Number.isNaN(n) || n < 1 || n > (field.ratingMax ?? 5)) {
+        return `Field "${field.label}" must be a rating between 1 and ${field.ratingMax ?? 5}`
+      }
+    }
+    if (field.type === 'signature' && field.required && !value) {
+      return `Field "${field.label}" requires a signature`
     }
   }
   return null

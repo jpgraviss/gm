@@ -29,6 +29,10 @@ function mapForm(row: any) {
     bgTransparent:   row.bg_transparent ?? false,
     fontFamily:      row.font_family ?? 'system-ui',
     popupConfig:     row.popup_config ?? undefined,
+    webhookUrl:      row.webhook_url ?? undefined,
+    sendConfirmation: row.send_confirmation ?? false,
+    confirmationSubject: row.confirmation_subject ?? undefined,
+    confirmationMessage: row.confirmation_message ?? undefined,
     createdAt:       row.created_at,
     updatedAt:       row.updated_at,
   }
@@ -95,6 +99,10 @@ export async function POST(req: NextRequest) {
       bg_transparent:  body.bgTransparent ?? false,
       font_family:     body.fontFamily ?? 'system-ui',
       popup_config:    body.popupConfig ?? null,
+      webhook_url:     body.webhookUrl ?? null,
+      send_confirmation: body.sendConfirmation ?? false,
+      confirmation_subject: body.confirmationSubject ?? null,
+      confirmation_message: body.confirmationMessage ?? null,
     })
     .select()
     .single()

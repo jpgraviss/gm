@@ -8,7 +8,14 @@ import {
   Plus, X, Trash2, Copy, ExternalLink, FileText, Eye, Pencil,
   Type, Mail, Phone, AlignLeft, ListChecks, CheckSquare, Hash, Link2,
   GripVertical, Code, MousePointerClick, Clock, ArrowUpFromDot, ScrollText, Check,
+  Calendar, Star, PenTool, EyeOff, List, SeparatorHorizontal, Filter,
 } from 'lucide-react'
+
+interface FieldCondition {
+  field: string
+  operator: 'equals' | 'not_equals' | 'contains' | 'is_empty' | 'is_not_empty'
+  value?: string
+}
 
 interface FormField {
   id: string
@@ -20,6 +27,8 @@ interface FormField {
   options?: string[]
   helpText?: string
   mapsTo?: string
+  ratingMax?: number
+  conditions?: FieldCondition[]
 }
 
 interface PopupConfig {
@@ -49,34 +58,52 @@ interface LeadForm {
   bgTransparent?: boolean
   fontFamily?: string
   popupConfig?: PopupConfig
+  webhookUrl?: string
+  sendConfirmation?: boolean
+  confirmationSubject?: string
+  confirmationMessage?: string
   createdAt: string
 }
 
-const FIELD_TYPES: Array<{ type: string; label: string; icon: React.ReactNode; mapsTo?: string }> = [
-  { type: 'text',     label: 'Short text',  icon: <Type size={13} />, mapsTo: 'custom' },
-  { type: 'email',    label: 'Email',       icon: <Mail size={13} />, mapsTo: 'email' },
-  { type: 'phone',    label: 'Phone',       icon: <Phone size={13} />, mapsTo: 'phone' },
-  { type: 'textarea', label: 'Long text',   icon: <AlignLeft size={13} />, mapsTo: 'notes' },
-  { type: 'select',   label: 'Dropdown',    icon: <ListChecks size={13} /> },
-  { type: 'checkbox', label: 'Checkbox',    icon: <CheckSquare size={13} /> },
-  { type: 'number',   label: 'Number',      icon: <Hash size={13} /> },
-  { type: 'url',      label: 'URL',         icon: <Link2 size={13} /> },
+const FIELD_TYPES: Array<{ type: string; label: string; icon: React.ReactNode; mapsTo?: string; group?: string }> = [
+  { type: 'text',         label: 'Short text',    icon: <Type size={13} />,           mapsTo: 'custom', group: 'Basic' },
+  { type: 'email',        label: 'Email',         icon: <Mail size={13} />,           mapsTo: 'email',  group: 'Basic' },
+  { type: 'phone',        label: 'Phone',         icon: <Phone size={13} />,          mapsTo: 'phone',  group: 'Basic' },
+  { type: 'textarea',     label: 'Long text',     icon: <AlignLeft size={13} />,      mapsTo: 'notes',  group: 'Basic' },
+  { type: 'number',       label: 'Number',        icon: <Hash size={13} />,                             group: 'Basic' },
+  { type: 'url',          label: 'URL',           icon: <Link2 size={13} />,                            group: 'Basic' },
+  { type: 'select',       label: 'Dropdown',      icon: <ListChecks size={13} />,                       group: 'Choice' },
+  { type: 'multi_select', label: 'Multi-select',  icon: <List size={13} />,                             group: 'Choice' },
+  { type: 'checkbox',     label: 'Checkbox',      icon: <CheckSquare size={13} />,                      group: 'Choice' },
+  { type: 'date',         label: 'Date',          icon: <Calendar size={13} />,                         group: 'Advanced' },
+  { type: 'rating',       label: 'Rating',        icon: <Star size={13} />,                             group: 'Advanced' },
+  { type: 'signature',    label: 'Signature',     icon: <PenTool size={13} />,                          group: 'Advanced' },
+  { type: 'hidden',       label: 'Hidden',        icon: <EyeOff size={13} />,                           group: 'Advanced' },
+  { type: 'page_break',   label: 'Page break',    icon: <SeparatorHorizontal size={13} />,              group: 'Layout' },
 ]
 
 function newField(type: string, mapsTo?: string): FormField {
   const id = `f-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
   const defaults: Record<string, { label: string; name: string; placeholder?: string }> = {
-    text:     { label: 'First name', name: 'first_name', placeholder: 'First name' },
-    email:    { label: 'Email',      name: 'email',      placeholder: 'email@company.com' },
-    phone:    { label: 'Phone',      name: 'phone',      placeholder: '(555) 123-4567' },
-    textarea: { label: 'Message',    name: 'message',    placeholder: 'Tell us about your project…' },
-    select:   { label: 'Budget',     name: 'budget' },
-    checkbox: { label: 'I agree',    name: 'agree' },
-    number:   { label: 'Number',     name: 'number' },
-    url:      { label: 'Website',    name: 'website',    placeholder: 'https://…' },
+    text:         { label: 'First name', name: 'first_name', placeholder: 'First name' },
+    email:        { label: 'Email',      name: 'email',      placeholder: 'email@company.com' },
+    phone:        { label: 'Phone',      name: 'phone',      placeholder: '(555) 123-4567' },
+    textarea:     { label: 'Message',    name: 'message',    placeholder: 'Tell us about your project…' },
+    select:       { label: 'Budget',     name: 'budget' },
+    multi_select: { label: 'Services',   name: 'services' },
+    checkbox:     { label: 'I agree',    name: 'agree' },
+    number:       { label: 'Number',     name: 'number' },
+    url:          { label: 'Website',    name: 'website',    placeholder: 'https://…' },
+    date:         { label: 'Date',       name: 'date' },
+    rating:       { label: 'Rating',     name: 'rating' },
+    signature:    { label: 'Signature',  name: 'signature' },
+    hidden:       { label: 'Hidden',     name: 'hidden_field' },
+    page_break:   { label: 'Page Break', name: '_page_break' },
   }
   const d = defaults[type] ?? { label: 'Field', name: 'field' }
-  return { id, type, name: d.name, label: d.label, placeholder: d.placeholder, required: false, options: type === 'select' ? ['Option 1', 'Option 2'] : undefined, mapsTo }
+  const options = (type === 'select' || type === 'multi_select') ? ['Option 1', 'Option 2'] : undefined
+  const ratingMax = type === 'rating' ? 5 : undefined
+  return { id, type, name: d.name, label: d.label, placeholder: d.placeholder, required: false, options, mapsTo, ratingMax }
 }
 
 export default function FormsPage() {
@@ -371,11 +398,25 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
                                 {...dragProvided.draggableProps}
                                 className={`p-3 border rounded-xl flex flex-col gap-2 ${snapshot.isDragging ? 'border-emerald-300 bg-emerald-50 shadow-lg' : 'border-gray-200 bg-gray-50/50'}`}
                               >
+                                {f.type === 'page_break' ? (
                                 <div className="flex items-center gap-2">
                                   <div {...dragProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-gray-200 touch-none">
                                     <GripVertical size={14} className="text-gray-400" />
                                   </div>
-                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{f.type}</span>
+                                  <SeparatorHorizontal size={14} className="text-gray-400" />
+                                  <div className="flex-1 border-t border-dashed border-gray-300" />
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Page Break</span>
+                                  <div className="flex-1 border-t border-dashed border-gray-300" />
+                                  <button onClick={() => removeField(f.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              ) : (<>
+                              <div className="flex items-center gap-2">
+                                  <div {...dragProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-gray-200 touch-none">
+                                    <GripVertical size={14} className="text-gray-400" />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{f.type === 'multi_select' ? 'multi' : f.type}</span>
                                   <input
                                     value={f.label}
                                     onChange={e => updateField(f.id, { label: e.target.value })}
@@ -401,19 +442,51 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
                                     placeholder="field_name"
                                     className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none font-mono"
                                   />
-                                  <input
-                                    value={f.placeholder ?? ''}
-                                    onChange={e => updateField(f.id, { placeholder: e.target.value })}
-                                    placeholder="Placeholder text"
-                                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
-                                  />
+                                  {f.type !== 'signature' && (
+                                    <input
+                                      value={f.placeholder ?? ''}
+                                      onChange={e => updateField(f.id, { placeholder: e.target.value })}
+                                      placeholder={f.type === 'hidden' ? 'Default value' : 'Placeholder text'}
+                                      className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                    />
+                                  )}
                                 </div>
-                                {f.type === 'select' && (
+                              </>)}
+                                {(f.type === 'select' || f.type === 'multi_select') && (
                                   <input
                                     value={(f.options ?? []).join(', ')}
                                     onChange={e => updateField(f.id, { options: e.target.value.split(',').map(o => o.trim()).filter(Boolean) })}
                                     placeholder="Option 1, Option 2, Option 3"
                                     className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                  />
+                                )}
+                                {f.type === 'rating' && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-gray-500">Max stars:</span>
+                                    <select
+                                      value={f.ratingMax ?? 5}
+                                      onChange={e => updateField(f.id, { ratingMax: parseInt(e.target.value) })}
+                                      className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                    >
+                                      {[3, 4, 5, 7, 10].map(n => (
+                                        <option key={n} value={n}>{n}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+                                {f.type === 'hidden' && (
+                                  <input
+                                    value={f.placeholder ?? ''}
+                                    onChange={e => updateField(f.id, { placeholder: e.target.value })}
+                                    placeholder="Default value (or use URL params to pre-fill)"
+                                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                  />
+                                )}
+                                {f.type !== 'page_break' && (
+                                  <ConditionEditor
+                                    field={f}
+                                    allFields={draft.fields}
+                                    onUpdate={(conditions) => updateField(f.id, { conditions })}
                                   />
                                 )}
                               </div>
@@ -428,17 +501,26 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
 
                 <div className="mt-3">
                   <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Add field</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                    {FIELD_TYPES.map(t => (
-                      <button
-                        key={t.type}
-                        onClick={() => addField(t.type, t.mapsTo)}
-                        className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-600 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
-                      >
-                        {t.icon} {t.label}
-                      </button>
-                    ))}
-                  </div>
+                  {['Basic', 'Choice', 'Advanced', 'Layout'].map(group => {
+                    const items = FIELD_TYPES.filter(t => t.group === group)
+                    if (items.length === 0) return null
+                    return (
+                      <div key={group} className="mb-2">
+                        <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-1">{group}</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                          {items.map(t => (
+                            <button
+                              key={t.type}
+                              onClick={() => addField(t.type, t.mapsTo)}
+                              className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-600 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
+                            >
+                              {t.icon} {t.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </section>
 
@@ -516,6 +598,56 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
                   </div>
                 </div>
               </section>
+
+              <section>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Integrations</p>
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Webhook URL</label>
+                    <input
+                      value={draft.webhookUrl ?? ''}
+                      onChange={e => setDraft(d => ({ ...d, webhookUrl: e.target.value || undefined }))}
+                      placeholder="https://hooks.zapier.com/... or any URL"
+                      className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Sends a POST with submission data on each response</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={draft.sendConfirmation ?? false}
+                      onChange={e => setDraft(d => ({ ...d, sendConfirmation: e.target.checked }))}
+                      className="w-4 h-4 rounded border-gray-300 text-emerald-600"
+                    />
+                    <label className="text-xs text-gray-600">Send confirmation email to respondent</label>
+                  </div>
+
+                  {draft.sendConfirmation && (
+                    <div className="pl-6 flex flex-col gap-2 border-l-2 border-emerald-200">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Subject line</label>
+                        <input
+                          value={draft.confirmationSubject ?? ''}
+                          onChange={e => setDraft(d => ({ ...d, confirmationSubject: e.target.value || undefined }))}
+                          placeholder={`Thanks for submitting "${draft.name}"`}
+                          className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Message</label>
+                        <textarea
+                          rows={2}
+                          value={draft.confirmationMessage ?? ''}
+                          onChange={e => setDraft(d => ({ ...d, confirmationMessage: e.target.value || undefined }))}
+                          placeholder="We've received your submission and will be in touch soon."
+                          className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
             </>
           )}
 
@@ -542,6 +674,82 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
           </a>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ConditionEditor({ field, allFields, onUpdate }: { field: FormField; allFields: FormField[]; onUpdate: (c: FieldCondition[]) => void }) {
+  const conditions = field.conditions ?? []
+  const otherFields = allFields.filter(f => f.id !== field.id && f.type !== 'page_break' && f.type !== 'hidden')
+
+  if (otherFields.length === 0) return null
+
+  function addCondition() {
+    const first = otherFields[0]
+    onUpdate([...conditions, { field: first.name, operator: 'equals', value: '' }])
+  }
+  function removeCondition(i: number) {
+    onUpdate(conditions.filter((_, idx) => idx !== i))
+  }
+  function updateCondition(i: number, patch: Partial<FieldCondition>) {
+    onUpdate(conditions.map((c, idx) => idx === i ? { ...c, ...patch } : c))
+  }
+
+  return (
+    <div>
+      {conditions.length === 0 ? (
+        <button
+          onClick={addCondition}
+          className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-emerald-600 transition-colors mt-0.5"
+        >
+          <Filter size={10} /> Add condition
+        </button>
+      ) : (
+        <div className="mt-1 p-2 bg-amber-50/50 border border-amber-200/60 rounded-lg">
+          <p className="text-[9px] font-semibold text-amber-700 uppercase tracking-widest mb-1.5">Show when</p>
+          {conditions.map((c, i) => (
+            <div key={i} className="flex items-center gap-1.5 mb-1">
+              <select
+                value={c.field}
+                onChange={e => updateCondition(i, { field: e.target.value })}
+                className="text-[11px] border border-gray-200 rounded px-1.5 py-1 bg-white focus:outline-none max-w-[100px]"
+              >
+                {otherFields.map(f => (
+                  <option key={f.id} value={f.name}>{f.label}</option>
+                ))}
+              </select>
+              <select
+                value={c.operator}
+                onChange={e => updateCondition(i, { operator: e.target.value as FieldCondition['operator'] })}
+                className="text-[11px] border border-gray-200 rounded px-1.5 py-1 bg-white focus:outline-none"
+              >
+                <option value="equals">equals</option>
+                <option value="not_equals">not equals</option>
+                <option value="contains">contains</option>
+                <option value="is_empty">is empty</option>
+                <option value="is_not_empty">is not empty</option>
+              </select>
+              {c.operator !== 'is_empty' && c.operator !== 'is_not_empty' && (
+                <input
+                  value={c.value ?? ''}
+                  onChange={e => updateCondition(i, { value: e.target.value })}
+                  placeholder="value"
+                  className="flex-1 text-[11px] border border-gray-200 rounded px-1.5 py-1 bg-white focus:outline-none"
+                />
+              )}
+              <button onClick={() => removeCondition(i)} className="p-0.5 text-red-400 hover:text-red-600">
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={addCondition}
+            className="text-[10px] text-amber-600 hover:text-amber-700 font-medium mt-0.5"
+          >
+            + Add condition
+          </button>
+        </div>
+      )}
     </div>
   )
 }

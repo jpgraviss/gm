@@ -15,6 +15,14 @@ interface Availability {
   end: string
 }
 
+interface IntakeQuestion {
+  id: string
+  label: string
+  type: 'text' | 'textarea' | 'select' | 'checkbox'
+  required: boolean
+  options?: string[]
+}
+
 interface BookingType {
   id: string
   name: string
@@ -26,6 +34,7 @@ interface BookingType {
   availability: Availability
   buffer_minutes: number
   active: boolean
+  intake_questions: IntakeQuestion[]
   created_at: string
 }
 
@@ -47,6 +56,7 @@ const DEFAULT_TYPE: Omit<BookingType, 'id' | 'slug' | 'created_at'> = {
   availability: { days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' },
   buffer_minutes: 15,
   active: true,
+  intake_questions: [],
 }
 
 function formatTime12(t: string) {
@@ -404,6 +414,91 @@ export default function BookingManagementPage() {
                       }))}
                       className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/30 focus:border-[#015035]"
                     />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Intake Questions</label>
+                  <p className="text-[10px] text-gray-400 mb-2">Custom questions asked when someone books this appointment</p>
+                  <div className="flex flex-col gap-2">
+                    {(editing.intake_questions ?? []).map((q, i) => (
+                      <div key={q.id} className="p-2.5 border border-gray-200 rounded-lg bg-gray-50/50">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <input
+                            value={q.label}
+                            onChange={e => {
+                              const qs = [...(editing.intake_questions ?? [])]
+                              qs[i] = { ...qs[i], label: e.target.value }
+                              setEditing(prev => ({ ...prev, intake_questions: qs }))
+                            }}
+                            placeholder="Question text"
+                            className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                          />
+                          <select
+                            value={q.type}
+                            onChange={e => {
+                              const qs = [...(editing.intake_questions ?? [])]
+                              qs[i] = { ...qs[i], type: e.target.value as IntakeQuestion['type'] }
+                              setEditing(prev => ({ ...prev, intake_questions: qs }))
+                            }}
+                            className="text-[10px] border border-gray-200 rounded px-1.5 py-1.5 bg-white"
+                          >
+                            <option value="text">Short text</option>
+                            <option value="textarea">Long text</option>
+                            <option value="select">Dropdown</option>
+                            <option value="checkbox">Checkbox</option>
+                          </select>
+                          <label className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                            <input
+                              type="checkbox"
+                              checked={q.required}
+                              onChange={e => {
+                                const qs = [...(editing.intake_questions ?? [])]
+                                qs[i] = { ...qs[i], required: e.target.checked }
+                                setEditing(prev => ({ ...prev, intake_questions: qs }))
+                              }}
+                              className="w-3 h-3 rounded"
+                            />
+                            Req
+                          </label>
+                          <button
+                            onClick={() => {
+                              const qs = (editing.intake_questions ?? []).filter((_, idx) => idx !== i)
+                              setEditing(prev => ({ ...prev, intake_questions: qs }))
+                            }}
+                            className="p-1 text-red-400 hover:text-red-600"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                        {q.type === 'select' && (
+                          <input
+                            value={(q.options ?? []).join(', ')}
+                            onChange={e => {
+                              const qs = [...(editing.intake_questions ?? [])]
+                              qs[i] = { ...qs[i], options: e.target.value.split(',').map(o => o.trim()).filter(Boolean) }
+                              setEditing(prev => ({ ...prev, intake_questions: qs }))
+                            }}
+                            placeholder="Option 1, Option 2, Option 3"
+                            className="w-full text-[10px] border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none"
+                          />
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => {
+                        const q: IntakeQuestion = {
+                          id: `iq-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+                          label: '',
+                          type: 'text',
+                          required: false,
+                        }
+                        setEditing(prev => ({ ...prev, intake_questions: [...(prev?.intake_questions ?? []), q] }))
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-[#015035] font-medium hover:underline w-fit"
+                    >
+                      <Plus className="w-3 h-3" /> Add question
+                    </button>
                   </div>
                 </div>
 

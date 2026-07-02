@@ -225,7 +225,7 @@ export default function Sidebar() {
   }, [])
 
   const brandPrimary = settings?.branding.primaryColor ?? '#015035'
-  const brandDarkBg = settings?.branding.darkBg ?? '#012b1e'
+  const brandDarkBg = settings?.branding.darkBg ?? '#012A1C'
   const appName = settings?.branding.appName ?? 'GravHub'
   const companyName = settings?.company.name ?? 'Graviss Marketing'
 

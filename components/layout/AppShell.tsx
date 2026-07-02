@@ -85,7 +85,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
-        style={{ background: '#f4f5f7' }}
+        style={{ background: '#FFF3EA' }}
       >
         <div className="flex flex-col items-center gap-3">
           <div
@@ -144,7 +144,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Main content */}
       <main
         className="flex-1 flex flex-col min-w-0 overflow-x-hidden"
-        style={{ background: '#f4f5f7' }}
+        style={{ background: '#FFF3EA' }}
       >
         <PushNotificationBanner />
         {impersonatedBy && (

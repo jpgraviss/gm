@@ -48,7 +48,7 @@ function VerifyContent() {
   }, [token, router])
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#f4f5f7', fontFamily: 'var(--font-body)' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: '#FFF3EA', fontFamily: 'var(--font-body)' }}>
       <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm max-w-sm w-full text-center">
         {error ? (
           <>
@@ -81,7 +81,7 @@ function VerifyContent() {
 export default function PortalAuthVerifyPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f4f5f7' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#FFF3EA' }}>
         <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
       </div>
     }>

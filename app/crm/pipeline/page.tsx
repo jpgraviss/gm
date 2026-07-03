@@ -914,7 +914,7 @@ export default function PipelinePage() {
   }, [])
 
   const activePipeline = pipelines.find(p => p.id === activePipelineId) ?? pipelines[0]
-  const activeStages = activePipeline.stages
+  const activeStages = activePipeline?.stages ?? []
 
   const reps = ['All', ...ALL_REPS]
   const pipelineDeals = localDeals.filter(d => (d as LocalDeal & { pipelineId?: string }).pipelineId === activePipelineId || (!('pipelineId' in d) && activePipelineId === 'client-acquisition'))

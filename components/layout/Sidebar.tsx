@@ -67,71 +67,76 @@ export const defaultNavigation: NavSection[] = [
     ],
   },
   {
+    section: 'CRM',
+    items: [
+      { label: 'Pipeline',  href: '/crm/pipeline',  icon: <TrendingUp size={16} />,  billingVisible: true },
+      { label: 'Companies',  href: '/crm/companies',  icon: <Users size={16} />,       billingVisible: true },
+      { label: 'Contacts',  href: '/crm/contacts',  icon: <Users size={16} />,       billingVisible: true },
+      { label: 'Proposals',  href: '/proposals',      icon: <FileText size={16} />,    allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Contracts',  href: '/contracts',      icon: <ScrollText size={16} />,  allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Sequences',  href: '/crm/sequences',  icon: <Zap size={16} />,         billingVisible: true },
+    ],
+  },
+  {
     section: 'Sales',
     items: [
-      { label: 'Pipeline', href: '/crm/pipeline', icon: <TrendingUp size={16} />, billingVisible: true },
-      { label: 'Companies', href: '/crm/companies', icon: <Users size={16} />, billingVisible: true },
-      { label: 'Contacts', href: '/crm/contacts', icon: <Users size={16} />, billingVisible: true },
-      { label: 'Intelligence', href: '/intelligence', icon: <Radar size={16} /> },
-      { label: 'Sequences', href: '/crm/sequences', icon: <Zap size={16} />, billingVisible: true },
-      { label: 'Proposals', href: '/proposals', icon: <FileText size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
-      { label: 'Contracts', href: '/contracts', icon: <ScrollText size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
-      { label: 'Enablement', href: '/sales-enablement', icon: <BookOpen size={16} />, allowedUnits: ['Leadership/Admin', 'Sales'] },
-      { label: 'Courses', href: '/courses', icon: <GraduationCap size={16} />, allowedUnits: ['Leadership/Admin', 'Sales'] },
+      { label: 'Enablement', href: '/sales-enablement', icon: <BookOpen size={16} />,     allowedUnits: ['Leadership/Admin', 'Sales'] },
+      { label: 'Courses',    href: '/courses',           icon: <GraduationCap size={16} />, allowedUnits: ['Leadership/Admin', 'Sales'] },
     ],
   },
   {
     section: 'Operations',
     items: [
-      { label: 'Projects', href: '/projects', icon: <FolderKanban size={16} />, contractorVisible: true },
-      { label: 'Tasks', href: '/tasks', icon: <CheckSquare size={16} />, contractorVisible: true, billingVisible: true },
-      { label: 'Time Tracking', href: '/time-tracking', icon: <Clock size={16} />, contractorVisible: true, billingVisible: true },
-      { label: 'Calendar', href: '/calendar', icon: <CalendarDays size={16} /> },
-      { label: 'Booking', href: '/calendar/booking', icon: <CalendarCheck size={16} /> },
-      { label: 'Maintenance', href: '/maintenance', icon: <Wrench size={16} />, contractorVisible: true },
-      { label: 'Renewals', href: '/renewals', icon: <RefreshCw size={16} /> },
-      { label: 'Delivery', href: '/crm/delivery-dashboard', icon: <PackageCheck size={16} /> },
-      { label: 'Automation', href: '/automation', icon: <Zap size={16} />, allowedUnits: ['Leadership/Admin'] },
+      { label: 'Projects',      href: '/projects',                icon: <FolderKanban size={16} />, contractorVisible: true },
+      { label: 'Tasks',         href: '/tasks',                   icon: <CheckSquare size={16} />,  contractorVisible: true, billingVisible: true },
+      { label: 'Time Tracking', href: '/time-tracking',           icon: <Clock size={16} />,        contractorVisible: true, billingVisible: true },
+      { label: 'Calendar',     href: '/calendar',                icon: <CalendarDays size={16} /> },
+      { label: 'Booking',      href: '/calendar/booking',        icon: <CalendarCheck size={16} /> },
+      { label: 'Delivery',     href: '/crm/delivery-dashboard',  icon: <PackageCheck size={16} /> },
+      { label: 'Maintenance',  href: '/maintenance',             icon: <Wrench size={16} />,       contractorVisible: true },
     ],
   },
   {
     section: 'Marketing',
     items: [
-      { label: 'Broadcasts', href: '/marketing', icon: <Mail size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'Social Media', href: '/social', icon: <Share2 size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'Forms', href: '/forms', icon: <ClipboardList size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'Funnels', href: '/funnels', icon: <Layers size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'Rank Tracker', href: '/rank-tracker', icon: <Search size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'Audits', href: '/audits', icon: <FileSearch size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Broadcasts',    href: '/marketing',    icon: <Mail size={16} />,          allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Social Media',  href: '/social',       icon: <Share2 size={16} />,        allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Forms',         href: '/forms',        icon: <ClipboardList size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Funnels',       href: '/funnels',      icon: <Layers size={16} />,        allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Chatbots',      href: '/chatbots',     icon: <Bot size={16} />,           allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Rank Tracker',  href: '/rank-tracker', icon: <Search size={16} />,        allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Audits',        href: '/audits',       icon: <FileSearch size={16} />,    allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
     ],
   },
   {
     section: 'Finance',
     items: [
-      { label: 'Billing', href: '/billing', icon: <CreditCard size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
-      { label: 'Reports', href: '/reports', icon: <BarChart3 size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
-      { label: 'Client Reports', href: '/reports/client', icon: <FileText size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'Integrations', href: '/integrations', icon: <Plug size={16} />, allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'Monitoring', href: '/monitoring', icon: <Activity size={16} />, allowedUnits: ['Leadership/Admin', 'Delivery/Operations'] },
+      { label: 'Billing',  href: '/billing',  icon: <CreditCard size={16} />, allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Renewals', href: '/renewals', icon: <RefreshCw size={16} />,  allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
+      { label: 'Reports',  href: '/reports',  icon: <BarChart3 size={16} />,  allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'], billingVisible: true },
     ],
   },
   {
     section: 'Clients',
     items: [
-      { label: 'Portal',     href: '/portal',     icon: <Globe size={16} />,         billingVisible: true },
-      { label: 'Tickets',    href: '/tickets',    icon: <MessageSquare size={16} />, contractorVisible: true, billingVisible: true },
-      { label: 'Reputation', href: '/reputation', icon: <Star size={16} />,          allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
-      { label: 'Chatbots',   href: '/chatbots',   icon: <Bot size={16} /> },
+      { label: 'Portal',         href: '/portal',         icon: <Globe size={16} />,          billingVisible: true },
+      { label: 'Tickets',        href: '/tickets',        icon: <MessageSquare size={16} />,  contractorVisible: true, billingVisible: true },
+      { label: 'Reputation',     href: '/reputation',     icon: <Star size={16} />,           allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Client Reports', href: '/reports/client', icon: <FileText size={16} />,       allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
     ],
   },
   {
     section: 'System',
     items: [
-      { label: 'Knowledge Base',   href: '/knowledge-base',          icon: <BookOpen size={16} /> },
-      { label: 'Admin',            href: '/admin',                   icon: <ShieldCheck size={16} />, adminOnly: true },
-      { label: 'Portal Management', href: '/admin/portal-management', icon: <Globe size={16} />,       adminOnly: true },
-      { label: 'SOPs',             href: '/admin/sops',              icon: <FileText size={16} />,    adminOnly: true },
-      { label: 'Settings',         href: '/settings',                icon: <Settings size={16} />,    allowedUnits: ['Leadership/Admin'] },
+      { label: 'Intelligence',     href: '/intelligence',              icon: <Radar size={16} />,       allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'Monitoring',       href: '/monitoring',                icon: <Activity size={16} />,    allowedUnits: ['Leadership/Admin', 'Delivery/Operations'] },
+      { label: 'Automation',       href: '/automation',                icon: <Zap size={16} />,         allowedUnits: ['Leadership/Admin'] },
+      { label: 'Knowledge Base',   href: '/knowledge-base',            icon: <BookOpen size={16} /> },
+      { label: 'Integrations',     href: '/integrations',              icon: <Plug size={16} />,        allowedUnits: ['Leadership/Admin'] },
+      { label: 'Admin',            href: '/admin',                     icon: <ShieldCheck size={16} />, adminOnly: true },
+      { label: 'Portal Management', href: '/admin/portal-management',  icon: <Globe size={16} />,       adminOnly: true },
+      { label: 'SOPs',             href: '/admin/sops',                icon: <FileText size={16} />,    adminOnly: true },
+      { label: 'Settings',         href: '/settings',                  icon: <Settings size={16} />,    allowedUnits: ['Leadership/Admin'] },
     ],
   },
 ]
@@ -197,13 +202,16 @@ function applyNavConfig(config: NavConfig): NavSection[] {
     .filter((s): s is NavSection => !!s)
 }
 
-const COLLAPSIBLE_SECTIONS = new Set(['Sales', 'Operations', 'Marketing', 'Finance'])
+const COLLAPSIBLE_SECTIONS = new Set(['CRM', 'Sales', 'Operations', 'Marketing', 'Finance', 'Clients', 'System'])
 
 const sectionIcons: Record<string, React.ReactNode> = {
+  CRM: <Users size={16} />,
   Sales: <TrendingUp size={16} />,
   Operations: <FolderKanban size={16} />,
   Marketing: <Megaphone size={16} />,
   Finance: <CreditCard size={16} />,
+  Clients: <Globe size={16} />,
+  System: <Settings size={16} />,
 }
 
 export default function Sidebar() {

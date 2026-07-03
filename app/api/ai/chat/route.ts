@@ -570,13 +570,35 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
     }
 
     case 'create_contact': {
+      const contactEmails = (input.emails as string[]) || []
+      if (contactEmails.length > 0) {
+        const { data: emailDup } = await db
+          .from('crm_contacts')
+          .select('id, full_name')
+          .overlaps('emails', contactEmails)
+          .limit(1)
+          .maybeSingle()
+        if (emailDup) return `Contact already exists with that email: ${emailDup.full_name} (${emailDup.id})`
+      }
+      const contactFullName = input.full_name as string
+      const contactCompany = (input.company_name as string) || ''
+      if (contactFullName && contactCompany) {
+        const { data: nameDup } = await db
+          .from('crm_contacts')
+          .select('id, full_name')
+          .ilike('full_name', contactFullName)
+          .ilike('company_name', contactCompany)
+          .limit(1)
+          .maybeSingle()
+        if (nameDup) return `Contact already exists: ${nameDup.full_name} (${nameDup.id})`
+      }
       const id = `contact-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       const record = {
         id,
-        full_name: input.full_name as string,
-        company_name: (input.company_name as string) || null,
+        full_name: contactFullName,
+        company_name: contactCompany || null,
         title: (input.title as string) || null,
-        emails: (input.emails as string[]) || [],
+        emails: contactEmails,
         phones: (input.phones as string[]) || [],
         is_primary: (input.is_primary as boolean) ?? false,
         owner: (input.owner as string) || null,

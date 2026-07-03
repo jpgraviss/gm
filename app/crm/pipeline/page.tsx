@@ -31,6 +31,7 @@ interface PipelineStage {
   id: string
   name: string
   color: string
+  probability?: number
 }
 
 interface PipelineConfig {
@@ -57,20 +58,7 @@ const STAGE_COLOR_OPTIONS = [
   '#22c55e', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16',
 ]
 
-const initialPipelines: PipelineConfig[] = [
-  {
-    id: 'sales',
-    name: 'Sales Pipeline',
-    stages: [
-      { id: 'lead',          name: 'Lead',          color: '#9ca3af' },
-      { id: 'qualified',     name: 'Qualified',     color: '#3b82f6' },
-      { id: 'proposal_sent', name: 'Proposal Sent', color: '#f59e0b' },
-      { id: 'contract_sent', name: 'Contract Sent', color: '#f97316' },
-      { id: 'closed_won',    name: 'Closed Won',    color: '#22c55e' },
-      { id: 'closed_lost',   name: 'Closed Lost',   color: '#ef4444' },
-    ],
-  },
-]
+const initialPipelines: PipelineConfig[] = []
 
 // ─── Deal Card ────────────────────────────────────────────────────────────────
 
@@ -884,7 +872,7 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
   const [pipelines, setPipelines] = useState<PipelineConfig[]>(initialPipelines)
-  const [activePipelineId, setActivePipelineId] = useState('sales')
+  const [activePipelineId, setActivePipelineId] = useState('client-acquisition')
   const [localDeals, setLocalDeals] = useState<LocalDeal[]>([])
   const [selectedDeal, setSelectedDeal] = useState<LocalDeal | null>(null)
   const [filterRep, setFilterRep] = useState('All')
@@ -907,14 +895,15 @@ export default function PipelinePage() {
       .then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
       .catch(() => toast('Failed to load deals', 'error'))
       .finally(() => setLoading(false))
-    fetch('/api/settings')
+    fetch('/api/pipelines')
       .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d?.pipelines && Array.isArray(d.pipelines) && d.pipelines.length) {
-          setPipelines(d.pipelines)
+      .then(data => {
+        if (Array.isArray(data) && data.length) {
+          setPipelines(data)
+          setActivePipelineId(data[0].id)
         }
       })
-      .catch(() => toast('Failed to load pipeline settings', 'error'))
+      .catch(() => toast('Failed to load pipelines', 'error'))
     fetchCrmActivities().then(setCrmActivities)
     fetchCrmCompanies().then(setCrmCompanies)
     fetchCrmContacts().then(setCrmContacts)
@@ -925,7 +914,8 @@ export default function PipelinePage() {
   const activeStages = activePipeline.stages
 
   const reps = ['All', ...ALL_REPS]
-  const filteredDeals = filterRep === 'All' ? localDeals : localDeals.filter(d => d.assignedRep === filterRep)
+  const pipelineDeals = localDeals.filter(d => (d as LocalDeal & { pipelineId?: string }).pipelineId === activePipelineId || (!('pipelineId' in d) && activePipelineId === 'client-acquisition'))
+  const filteredDeals = filterRep === 'All' ? pipelineDeals : pipelineDeals.filter(d => d.assignedRep === filterRep)
 
   const openDeals = filteredDeals.filter(d => !d.stage.startsWith('Closed'))
   const totalPipeline = openDeals.reduce((s, d) => s + d.value, 0)
@@ -935,12 +925,10 @@ export default function PipelinePage() {
   function onDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result
     if (!destination || source.droppableId === destination.droppableId) return
-    const newStageName = activeStages.find(s => s.id === destination.droppableId)?.name
-    if (!newStageName) return
-    const stageProbMap: Record<string, number> = { Lead: 20, Qualified: 40, 'Proposal Sent': 60, 'Contract Sent': 80, 'Closed Won': 100, 'Closed Lost': 0 }
-    const newProb = stageProbMap[newStageName]
-    const updates: { stage: string; probability?: number } = { stage: newStageName }
-    if (newProb !== undefined) updates.probability = newProb
+    const targetStage = activeStages.find(s => s.id === destination.droppableId)
+    if (!targetStage) return
+    const updates: { stage: string; probability?: number } = { stage: targetStage.name }
+    if (targetStage.probability !== undefined) updates.probability = targetStage.probability
     setLocalDeals(prev => prev.map(d => d.id === draggableId ? { ...d, ...updates } : d))
     setSelectedDeal(prev => prev?.id === draggableId ? { ...prev, ...updates } : prev)
     fetch(`/api/deals/${draggableId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) }).catch(() => toast('Failed to update deal stage', 'error'))
@@ -957,6 +945,7 @@ export default function PipelinePage() {
       assignedRep: data.assignedRep,
       probability: Number(data.probability) || 20,
       notes: data.notes ? [data.notes] : [],
+      pipelineId: data.pipelineId ?? activePipelineId,
     }
     try {
       const res = await fetch('/api/deals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -969,10 +958,9 @@ export default function PipelinePage() {
   }
 
   function handleAdvanceStage(dealId: string, newStage: string) {
-    const stageProbMap: Record<string, number> = { Lead: 20, Qualified: 40, 'Proposal Sent': 60, 'Contract Sent': 80, 'Closed Won': 100, 'Closed Lost': 0 }
-    const newProb = stageProbMap[newStage]
+    const targetStage = activeStages.find(s => s.name === newStage)
     const updates: { stage: string; probability?: number } = { stage: newStage }
-    if (newProb !== undefined) updates.probability = newProb
+    if (targetStage?.probability !== undefined) updates.probability = targetStage.probability
     setLocalDeals(prev => prev.map(d => d.id === dealId ? { ...d, ...updates } : d))
     setSelectedDeal(prev => prev?.id === dealId ? { ...prev, ...updates } as LocalDeal : prev)
     fetch(`/api/deals/${dealId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) }).catch(() => toast('Failed to advance deal stage', 'error'))
@@ -1068,7 +1056,7 @@ export default function PipelinePage() {
         {/* Toolbar */}
         <div className="flex items-center gap-2 mb-5 flex-wrap">
           <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1 min-w-0">
-            {pipelines.length > 1 && (
+            {pipelines.length > 0 && (
               <select
                 value={activePipelineId}
                 onChange={e => setActivePipelineId(e.target.value)}
@@ -1191,7 +1179,12 @@ export default function PipelinePage() {
       )}
 
       {creatingDeal && (
-        <NewDealPanel onSave={handleNewDeal} onClose={() => setCreatingDeal(false)} />
+        <NewDealPanel
+          onSave={handleNewDeal}
+          onClose={() => setCreatingDeal(false)}
+          stages={activeStages.map(s => ({ name: s.name, probability: s.probability ?? 0 }))}
+          pipelineId={activePipelineId}
+        />
       )}
 
       {showImport && (
@@ -1211,11 +1204,13 @@ export default function PipelinePage() {
           onClose={() => setManagingPipeline(false)}
           onChange={updated => {
             setPipelines(updated)
-            fetch('/api/settings', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ pipelines: updated }),
-            }).catch(() => toast('Failed to save pipeline settings', 'error'))
+            Promise.all(updated.map(p =>
+              fetch('/api/pipelines', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: p.id, name: p.name, stages: p.stages }),
+              })
+            )).catch(() => toast('Failed to save pipeline settings', 'error'))
           }}
         />
       )}

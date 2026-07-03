@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { X, DollarSign, User, Calendar, TrendingUp, ChevronLeft } from 'lucide-react'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import CompanySelect from '@/components/ui/CompanySelect'
-import type { ServiceType, DealStage } from '@/lib/types'
+import type { ServiceType } from '@/lib/types'
 
 export interface NewDealData {
   company: string
@@ -13,17 +13,18 @@ export interface NewDealData {
   contactEmail: string
   contactPhone: string
   serviceType: ServiceType
-  stage: DealStage
+  stage: string
   value: string
   closeDate: string
   assignedRep: string
   probability: string
   notes: string
+  pipelineId?: string
 }
 
 const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
-const STAGES: DealStage[] = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
-const STAGE_PROBS: Record<DealStage, string> = {
+const DEFAULT_STAGES = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
+const DEFAULT_STAGE_PROBS: Record<string, string> = {
   Lead: '20',
   Qualified: '40',
   'Proposal Sent': '60',
@@ -59,10 +60,16 @@ function Select({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectEle
 interface Props {
   onSave: (deal: NewDealData) => void
   onClose: () => void
+  stages?: { name: string; probability: number }[]
+  pipelineId?: string
 }
 
-export default function NewDealPanel({ onSave, onClose }: Props) {
+export default function NewDealPanel({ onSave, onClose, stages, pipelineId }: Props) {
   const REPS = useTeamMembers()
+  const stageNames = stages?.map(s => s.name) ?? DEFAULT_STAGES
+  const stageProbs: Record<string, string> = stages
+    ? Object.fromEntries(stages.map(s => [s.name, String(s.probability)]))
+    : DEFAULT_STAGE_PROBS
   const [form, setForm] = useState<NewDealData>({
     company: '',
     contactName: '',
@@ -70,20 +77,20 @@ export default function NewDealPanel({ onSave, onClose }: Props) {
     contactEmail: '',
     contactPhone: '',
     serviceType: 'Website',
-    stage: 'Lead',
+    stage: stageNames[0] ?? 'Lead',
     value: '',
     closeDate: '',
     assignedRep: REPS[0] ?? '',
-    probability: STAGE_PROBS['Lead'],
+    probability: stageProbs[stageNames[0] ?? 'Lead'] ?? '20',
     notes: '',
+    pipelineId,
   })
-
 
   function set(field: keyof NewDealData, value: string) {
     setForm(prev => ({
       ...prev,
       [field]: value,
-      ...(field === 'stage' ? { probability: STAGE_PROBS[value as DealStage] } : {}),
+      ...(field === 'stage' ? { probability: stageProbs[value] ?? prev.probability } : {}),
     }))
   }
 
@@ -145,7 +152,7 @@ export default function NewDealPanel({ onSave, onClose }: Props) {
             <div>
               <FieldLabel>Stage</FieldLabel>
               <Select value={form.stage} onChange={e => set('stage', e.target.value)}>
-                {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                {stageNames.map(s => <option key={s} value={s}>{s}</option>)}
               </Select>
             </div>
           </div>

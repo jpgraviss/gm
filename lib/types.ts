@@ -1,10 +1,4 @@
-export type DealStage =
-  | 'Lead'
-  | 'Qualified'
-  | 'Proposal Sent'
-  | 'Contract Sent'
-  | 'Closed Won'
-  | 'Closed Lost'
+export type DealStage = string
 
 export type ProposalStatus = 'Draft' | 'Pending Approval' | 'Approved' | 'Sent' | 'Viewed' | 'Accepted' | 'Declined'
 
@@ -114,6 +108,7 @@ export interface Deal {
   probability: number
   notes: string[]
   lastActivity: string
+  pipelineId?: string
 }
 
 export interface ProposalLineItem {

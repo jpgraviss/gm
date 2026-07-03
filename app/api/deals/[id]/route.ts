@@ -18,6 +18,7 @@ function mapDeal(row: any) {
     probability:  row.probability,
     notes:        row.notes ?? [],
     lastActivity: row.last_activity ?? '',
+    pipelineId:   row.pipeline_id ?? 'client-acquisition',
   }
 }
 
@@ -34,6 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.notes !== undefined)       update.notes = body.notes
   if (body.contact !== undefined)     update.contact = body.contact
   if (body.serviceType !== undefined) update.service_type = body.serviceType
+  if (body.pipelineId !== undefined)  update.pipeline_id = body.pipelineId
   update.last_activity = new Date().toISOString().split('T')[0]
   const { data, error } = await db.from('deals').update(update).eq('id', id).select().single()
   if (error) {

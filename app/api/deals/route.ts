@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { validate, validationError, DEAL_STAGES } from '@/lib/validation'
+import { validate, validationError } from '@/lib/validation'
 import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,12 +17,14 @@ function mapDeal(row: any) {
     probability:  row.probability,
     notes:        row.notes ?? [],
     lastActivity: row.last_activity ?? '',
+    pipelineId:   row.pipeline_id ?? 'client-acquisition',
   }
 }
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const stage = searchParams.get('stage')
+  const pipelineId = searchParams.get('pipeline_id')
   const { limit, cursor } = parsePagination(req)
   const db = createServiceClient()
   let query = db
@@ -31,6 +33,7 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(limit + 1)
   if (stage) query = query.eq('stage', stage)
+  if (pipelineId) query = query.eq('pipeline_id', pipelineId)
   if (cursor) query = query.lt('created_at', cursor)
   const { data, error } = await query
   if (error) {
@@ -46,7 +49,7 @@ export async function POST(req: NextRequest) {
 
   const result = validate(body, {
     company:     { required: true, type: 'string', maxLength: 200 },
-    stage:       { type: 'string', enum: [...DEAL_STAGES] },
+    stage:       { type: 'string', maxLength: 100 },
     value:       { type: 'number', min: 0, max: 100_000_000 },
     serviceType: { type: 'string', maxLength: 100 },
     assignedRep: { type: 'string', maxLength: 200 },
@@ -69,6 +72,7 @@ export async function POST(req: NextRequest) {
       probability:  body.probability ?? 0,
       notes:        body.notes ?? [],
       last_activity: new Date().toISOString().split('T')[0],
+      pipeline_id:  body.pipelineId ?? 'client-acquisition',
     })
     .select()
     .single()

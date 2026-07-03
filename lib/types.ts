@@ -206,6 +206,9 @@ export interface Project {
   tasks: Task[]
   notes?: Array<{ id: string; text: string; date: string; author: string }>
   overview?: string
+  sections?: string[]
+  color?: string
+  description?: string
 }
 
 export interface MaintenanceRecord {
@@ -292,6 +295,9 @@ export interface AppTask {
   teamServiceLine?: TeamServiceLine
   recurrence?: { frequency: 'daily' | 'weekly' | 'monthly'; interval: number; endDate?: string } | null
   parentTaskId?: string
+  projectId?: string
+  section?: string
+  sortOrder?: number
 }
 
 // ─── Full CRM Types ──────────────────────────────────────────────────────────

@@ -23,6 +23,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.overview !== undefined)            update.overview = body.overview
   if (body.launchDate !== undefined)           update.launch_date = body.launchDate
   if (body.maintenanceStartDate !== undefined) update.maintenance_start_date = body.maintenanceStartDate
+  if (body.sections !== undefined)             update.sections = body.sections
+  if (body.color !== undefined)                update.color = body.color
+  if (body.description !== undefined)          update.description = body.description
+  if (body.startDate !== undefined)            update.start_date = body.startDate
+  if (body.serviceType !== undefined)          update.service_type = body.serviceType
+  if (body.company !== undefined)              update.company = body.company
   const { data, error } = await db.from('projects').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[projects/:id PATCH]', error)

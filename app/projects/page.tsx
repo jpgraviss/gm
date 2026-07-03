@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import CompanySelect from '@/components/ui/CompanySelect'
 import { projectStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
@@ -881,6 +882,7 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
 }
 
 export default function ProjectsPage() {
+  const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [localProjects, setLocalProjects] = useState<Project[]>([])
@@ -1057,7 +1059,7 @@ export default function ProjectsPage() {
         ) : view === 'grid' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(p => (
-              <ProjectGridCard key={p.id} project={p} onClick={() => setSelected(p)} />
+              <ProjectGridCard key={p.id} project={p} onClick={() => router.push(`/projects/${p.id}`)} />
             ))}
           </div>
         ) : (
@@ -1065,7 +1067,7 @@ export default function ProjectsPage() {
             {/* Mobile card view */}
             <div className="md:hidden space-y-3 p-4">
               {filtered.map(p => (
-                <div key={p.id} onClick={() => setSelected(p)} className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer active:bg-gray-50">
+                <div key={p.id} onClick={() => router.push(`/projects/${p.id}`)} className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer active:bg-gray-50">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold text-sm text-gray-900">{p.company}</span>
                     <StatusBadge label={p.status} colorClass={projectStatusColors[p.status]} />
@@ -1118,7 +1120,7 @@ export default function ProjectsPage() {
                     <tr
                       key={p.id}
                       className="hover:bg-gray-50 cursor-pointer transition-colors group"
-                      onClick={() => setSelected(p)}
+                      onClick={() => router.push(`/projects/${p.id}`)}
                     >
                       <td className="py-3.5 px-4">
                         <p className="text-sm font-semibold text-gray-900">{p.company}</p>

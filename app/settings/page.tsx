@@ -85,18 +85,18 @@ function EditableField({ label, value, onChange, type = 'text' }: { label: strin
 }
 
 const COMPANY_DEFAULTS = {
-  name: 'Graviss Marketing, LLC',
+  name: 'Graviss Marketing',
   industry: 'Marketing Agency',
   email: 'info@gravissmarketing.com',
-  phone: '+1 (830) 326-0320',
+  phone: '+1 (678) 602-0988',
   website: 'www.gravissmarketing.com',
   timezone: 'America/New_York (ET)',
   fiscalYear: 'January 1',
   currency: 'USD ($)',
   street: '',
-  city: 'Kerrville',
-  state: 'Texas',
-  zip: '78028',
+  city: 'Riverview',
+  state: 'Florida',
+  zip: '33578',
 }
 
 type ChannelPref = 'in-app' | 'email+in-app' | 'push' | 'push+email' | 'muted'
@@ -924,7 +924,18 @@ export default function SettingsPage() {
                                       <option>Client</option>
                                     </select>
                                   </div>
-                                  <button onClick={() => setEditingMember(null)} className="mt-4 px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>Save</button>
+                                  <button onClick={() => {
+                                    const m = members.find(mm => mm.id === member.id)
+                                    if (m) {
+                                      fetch(`/api/team-members/${m.id}`, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ role: m.role, unit: m.unit }),
+                                      }).then(r => { if (r.ok) toast('Role updated', 'success'); else toast('Failed to update role', 'error') })
+                                        .catch(() => toast('Failed to update role', 'error'))
+                                    }
+                                    setEditingMember(null)
+                                  }} className="mt-4 px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#015035' }}>Save</button>
                                 </div>
                               )}
 

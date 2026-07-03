@@ -20,6 +20,9 @@ function mapProject(row: any) {
     tasks:                row.tasks ?? [],
     notes:                row.notes ?? [],
     overview:             row.overview ?? '',
+    sections:             row.sections ?? ['To Do', 'In Progress', 'Done'],
+    color:                row.color ?? '#015035',
+    description:          row.description ?? '',
   }
 }
 
@@ -72,6 +75,9 @@ export async function POST(req: NextRequest) {
       tasks:         body.tasks ?? [],
       notes:         body.notes ?? [],
       overview:      body.overview ?? '',
+      sections:      body.sections ?? ['To Do', 'In Progress', 'Done'],
+      color:         body.color ?? '#015035',
+      description:   body.description ?? '',
     })
     .select()
     .single()

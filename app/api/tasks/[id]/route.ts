@@ -16,6 +16,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.company !== undefined)       update.company = body.company
   if (body.completedDate !== undefined) update.completed_date = body.completedDate
   if (body.recurrence !== undefined)    update.recurrence = body.recurrence
+  if (body.projectId !== undefined)     update.project_id = body.projectId
+  if (body.section !== undefined)       update.section = body.section
+  if (body.sortOrder !== undefined)     update.sort_order = body.sortOrder
   const { data, error } = await db.from('app_tasks').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[tasks/:id PATCH]', error)

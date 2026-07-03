@@ -76,12 +76,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Fetch contract details for the email
+    // Fetch contract details for the email and document hash
     const { data: contract } = await db
       .from('contracts')
-      .select('company, value, service_type')
+      .select('company, value, service_type, items, notes, start_date, end_date')
       .eq('id', contractId)
       .single()
+
+    // Generate SHA-256 hash of the contract terms for audit trail
+    const documentHash = contract
+      ? crypto.createHash('sha256').update(JSON.stringify({
+          company: contract.company,
+          value: contract.value,
+          service_type: contract.service_type,
+          items: contract.items,
+          notes: contract.notes,
+          start_date: contract.start_date,
+          end_date: contract.end_date,
+        })).digest('hex')
+      : null
+
+    // Store the document hash on the signature request
+    if (documentHash) {
+      await db
+        .from('signature_requests')
+        .update({ document_hash: documentHash })
+        .eq('id', id)
+    }
 
     // Send signing email
     try {

@@ -28,6 +28,10 @@ function mapForm(row: any) {
     bgTransparent:   row.bg_transparent ?? false,
     fontFamily:      row.font_family ?? 'system-ui',
     popupConfig:     row.popup_config ?? undefined,
+    webhookUrl:      row.webhook_url ?? undefined,
+    sendConfirmation: row.send_confirmation ?? false,
+    confirmationSubject: row.confirmation_subject ?? undefined,
+    confirmationMessage: row.confirmation_message ?? undefined,
     createdAt:       row.created_at,
     updatedAt:       row.updated_at,
   }
@@ -68,6 +72,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.bgTransparent !== undefined)  update.bg_transparent = body.bgTransparent
   if (body.fontFamily !== undefined)     update.font_family = body.fontFamily
   if (body.popupConfig !== undefined)   update.popup_config = body.popupConfig
+  if (body.webhookUrl !== undefined)    update.webhook_url = body.webhookUrl
+  if (body.sendConfirmation !== undefined) update.send_confirmation = body.sendConfirmation
+  if (body.confirmationSubject !== undefined) update.confirmation_subject = body.confirmationSubject
+  if (body.confirmationMessage !== undefined) update.confirmation_message = body.confirmationMessage
 
   const { data, error } = await db.from('forms').update(update).eq('id', id).select().single()
   if (error || !data) {

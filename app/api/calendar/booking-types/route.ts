@@ -24,7 +24,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { name, description, duration_minutes, location, color, availability, buffer_minutes, active, id } = body
+  const { name, description, duration_minutes, location, color, availability, buffer_minutes, active, id, intake_questions } = body
 
   if (!name?.trim()) {
     return NextResponse.json({ error: 'Name is required' }, { status: 400 })
@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
         availability: availability ?? { days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' },
         buffer_minutes: buffer_minutes ?? 15,
         active: active ?? true,
+        intake_questions: intake_questions ?? [],
       })
       .eq('id', id)
       .select()
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
       availability: availability ?? { days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' },
       buffer_minutes: buffer_minutes ?? 15,
       active: active ?? true,
+      intake_questions: intake_questions ?? [],
     })
     .select()
     .single()

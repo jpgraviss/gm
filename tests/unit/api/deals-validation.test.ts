@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { validate, DEAL_STAGES } from '@/lib/validation'
+import { validate } from '@/lib/validation'
 
-// Schema matching the deals route POST validation
 const dealSchema = {
   company:     { required: true, type: 'string' as const, maxLength: 200 },
-  stage:       { type: 'string' as const, enum: [...DEAL_STAGES] },
+  stage:       { type: 'string' as const, maxLength: 100 },
   value:       { type: 'number' as const, min: 0, max: 100_000_000 },
   serviceType: { type: 'string' as const, maxLength: 100 },
   assignedRep: { type: 'string' as const, maxLength: 200 },
@@ -43,17 +42,9 @@ describe('deals route validation', () => {
     expect(result).toEqual({ valid: false, error: 'Missing required field: company' })
   })
 
-  it('rejects invalid stage', () => {
-    const body = { company: `Test Co`, stage: 'InvalidStage' }
-    const result = validate(body, dealSchema)
-    expect(result).toEqual({
-      valid: false,
-      error: `Invalid value for stage: must be one of ${DEAL_STAGES.join(', ')}`,
-    })
-  })
-
-  it('accepts all valid deal stages', () => {
-    for (const stage of DEAL_STAGES) {
+  it('accepts any string stage (dynamic pipelines)', () => {
+    const stages = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost', 'Onboarding', 'Active']
+    for (const stage of stages) {
       const result = validate({ company: 'Test', stage }, dealSchema)
       expect(result.valid).toBe(true)
     }

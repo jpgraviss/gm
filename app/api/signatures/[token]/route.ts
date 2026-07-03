@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import crypto from 'crypto'
+import { logAudit } from '@/lib/audit'
 
 export async function GET(
   _req: NextRequest,
@@ -20,10 +21,10 @@ export async function GET(
       return NextResponse.json({ error: 'Signature request not found' }, { status: 404 })
     }
 
-    // Fetch contract details
+    // Fetch contract details including scope/terms
     const { data: contract } = await db
       .from('contracts')
-      .select('company, value, service_type')
+      .select('company, value, service_type, items, notes, start_date, end_date, billing_cycle, status')
       .eq('id', sigReq.contract_id)
       .single()
 
@@ -39,10 +40,17 @@ export async function GET(
       signerIp: sigReq.signer_ip,
       createdAt: sigReq.created_at,
       expiresAt: sigReq.expires_at,
+      documentHash: sigReq.document_hash,
       contract: contract ? {
         company: contract.company,
         value: contract.value,
         serviceType: contract.service_type,
+        items: contract.items,
+        notes: contract.notes,
+        startDate: contract.start_date,
+        endDate: contract.end_date,
+        billingCycle: contract.billing_cycle,
+        status: contract.status,
       } : null,
     })
   } catch (err) {
@@ -106,6 +114,20 @@ export async function PATCH(
       console.error('[signature PATCH]', updateErr)
       return NextResponse.json({ error: updateErr.message }, { status: 500 })
     }
+
+    // Audit log for signature recording
+    logAudit({
+      userName: signerName || sigReq.signer_name || sigReq.signer_email,
+      action: 'signature_signed',
+      module: 'contracts',
+      type: 'action',
+      metadata: {
+        contractId: sigReq.contract_id,
+        signerEmail: sigReq.signer_email,
+        signerIp,
+        documentHash: sigReq.document_hash || null,
+      },
+    })
 
     // If a client just signed, auto-create an internal signature request
     if (sigReq.type === 'client') {

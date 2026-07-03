@@ -3,6 +3,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 
+interface ContractItem {
+  description?: string
+  name?: string
+  amount?: number
+  quantity?: number
+}
+
 interface SignatureData {
   id: string
   contractId: string
@@ -14,10 +21,17 @@ interface SignatureData {
   signedAt?: string
   createdAt: string
   expiresAt: string
+  documentHash?: string
   contract: {
     company: string
     value: number
     serviceType: string
+    items?: ContractItem[] | null
+    notes?: string | null
+    startDate?: string | null
+    endDate?: string | null
+    billingCycle?: string | null
+    status?: string | null
   } | null
 }
 
@@ -248,7 +262,47 @@ export default function SignPage() {
                   <p className="text-[11px] text-gray-400 mb-0.5">Signer</p>
                   <p className="text-sm text-gray-700">{sigReq.signerEmail}</p>
                 </div>
+                {sigReq.contract.startDate && (
+                  <div>
+                    <p className="text-[11px] text-gray-400 mb-0.5">Start Date</p>
+                    <p className="text-sm text-gray-700">
+                      {new Date(sigReq.contract.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  </div>
+                )}
+                {sigReq.contract.endDate && (
+                  <div>
+                    <p className="text-[11px] text-gray-400 mb-0.5">End Date</p>
+                    <p className="text-sm text-gray-700">
+                      {new Date(sigReq.contract.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  </div>
+                )}
               </div>
+            </div>
+          )}
+
+          {/* Contract scope / line items */}
+          {sigReq?.contract && (Array.isArray(sigReq.contract.items) && sigReq.contract.items.length > 0 || sigReq.contract.notes) && (
+            <div className="p-5 border-b border-gray-100">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Scope of Work</p>
+              {Array.isArray(sigReq.contract.items) && sigReq.contract.items.length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {sigReq.contract.items.map((item: ContractItem, idx: number) => (
+                    <div key={idx} className="flex items-start justify-between text-sm bg-gray-50 rounded-lg px-3 py-2">
+                      <span className="text-gray-700">{item.description || item.name || `Item ${idx + 1}`}</span>
+                      {item.amount != null && (
+                        <span className="text-gray-500 font-medium ml-3 shrink-0">
+                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(item.amount)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {sigReq.contract.notes && (
+                <div className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{sigReq.contract.notes}</div>
+              )}
             </div>
           )}
 

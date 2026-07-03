@@ -44,11 +44,180 @@ const companyStatusColors: Record<CompanyStatus, string> = {
 
 const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned']
 
+// ─── Company Files Tab ───────────────────────────────────────────────────────
+
+interface CompanyFile {
+  id: string
+  name: string
+  url: string
+  content_type: string
+  size_bytes: number
+  category: string
+  notes: string | null
+  file_ext: string
+  created_at: string
+}
+
+const FILE_CATEGORIES = ['contract', 'proposal', 'invoice', 'report', 'other'] as const
+
+function CompanyFilesTab({ companyId }: { companyId: string }) {
+  const { toast } = useToast()
+  const [files, setFiles] = useState<CompanyFile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [filterCategory, setFilterCategory] = useState('all')
+
+  useEffect(() => {
+    fetch(`/api/crm/companies/${companyId}/files`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setFiles(data) })
+      .catch(() => toast('Failed to load files', 'error'))
+      .finally(() => setLoading(false))
+  }, [companyId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const fileList = e.target.files
+    if (!fileList?.length) return
+    setUploading(true)
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i]
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('category', 'other')
+      try {
+        const res = await fetch(`/api/crm/companies/${companyId}/files`, {
+          method: 'POST',
+          body: formData,
+        })
+        if (res.ok) {
+          const saved = await res.json()
+          setFiles(prev => [saved, ...prev])
+        } else {
+          toast(`Failed to upload ${file.name}`, 'error')
+        }
+      } catch {
+        toast(`Failed to upload ${file.name}`, 'error')
+      }
+    }
+    setUploading(false)
+    e.target.value = ''
+  }
+
+  async function handleDelete(fileId: string) {
+    setFiles(prev => prev.filter(f => f.id !== fileId))
+    try {
+      await fetch(`/api/crm/companies/${companyId}/files`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId }),
+      })
+      toast('File deleted', 'success')
+    } catch {
+      toast('Failed to delete file', 'error')
+    }
+  }
+
+  async function handleCategoryChange(fileId: string, category: string) {
+    setFiles(prev => prev.map(f => f.id === fileId ? { ...f, category } : f))
+  }
+
+  function formatSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const extIcons: Record<string, string> = { pdf: 'PDF', doc: 'DOC', docx: 'DOC', xls: 'XLS', xlsx: 'XLS', ppt: 'PPT', pptx: 'PPT', png: 'IMG', jpg: 'IMG', jpeg: 'IMG' }
+
+  const filteredFiles = filterCategory === 'all' ? files : files.filter(f => f.category === filterCategory)
+
+  if (loading) return <div className="flex items-center justify-center py-12"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" /></div>
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          {['all', ...FILE_CATEGORIES].map(cat => (
+            <button
+              key={cat}
+              onClick={() => setFilterCategory(cat)}
+              className={`text-[11px] px-2.5 py-1 rounded-full font-medium capitalize transition-colors ${
+                filterCategory === cat
+                  ? 'bg-[#015035] text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+        <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
+          uploading ? 'bg-gray-100 text-gray-400' : 'bg-[#015035] text-white hover:bg-[#012A1C]'
+        }`}>
+          {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+          <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Upload'}</span>
+          <input type="file" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
+        </label>
+      </div>
+
+      {filteredFiles.length === 0 ? (
+        <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+          <FileText size={28} className="text-gray-300 mx-auto mb-2" />
+          <p className="text-sm text-gray-400 font-medium">No files yet</p>
+          <p className="text-xs text-gray-400 mt-1">Upload contracts, proposals, and other documents</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {filteredFiles.map(file => (
+            <div key={file.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group">
+              <div className="w-10 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-500 flex-shrink-0">
+                {extIcons[file.file_ext] ?? file.file_ext.toUpperCase().slice(0, 3)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <select
+                    value={file.category}
+                    onChange={e => handleCategoryChange(file.id, e.target.value)}
+                    className="text-[10px] font-medium bg-transparent border-none p-0 text-[#015035] focus:outline-none cursor-pointer capitalize"
+                  >
+                    {FILE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <span className="text-[10px] text-gray-400">{formatSize(file.size_bytes)}</span>
+                  <span className="text-[10px] text-gray-400">{new Date(file.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <a
+                  href={file.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 rounded-lg hover:bg-white text-gray-400 hover:text-[#015035]"
+                  title="Download"
+                >
+                  <Download size={13} />
+                </a>
+                <button
+                  onClick={() => handleDelete(file.id)}
+                  className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
+                  title="Delete"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Company Detail Panel ─────────────────────────────────────────────────────
 
 function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, crmContacts, deals, contracts, invoices, projects, crmActivities }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void; onOpenIntegrations?: () => void; crmContacts: CRMContact[]; deals: Deal[]; contracts: Contract[]; invoices: Invoice[]; projects: Project[]; crmActivities: CRMActivity[] }) {
   const { toast } = useToast()
-  const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'activity'>('overview')
+  const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'files' | 'activity'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
   const [creatingProposal, setCreatingProposal] = useState(false)
@@ -238,7 +407,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
 
         {/* Tabs */}
         <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
-          {(['overview', 'contacts', 'deals', 'contracts', 'activity'] as const).map(t => (
+          {(['overview', 'contacts', 'deals', 'contracts', 'files', 'activity'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}>{t}</button>
           ))}
         </div>
@@ -700,6 +869,11 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                 <p className="text-sm text-gray-400 text-center py-8">No contracts found for this company.</p>
               )}
             </div>
+          )}
+
+          {/* ── Files ── */}
+          {tab === 'files' && (
+            <CompanyFilesTab companyId={company.id} />
           )}
 
           {/* ── Activity ── */}

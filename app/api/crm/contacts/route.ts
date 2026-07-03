@@ -68,6 +68,42 @@ export async function POST(req: NextRequest) {
   if (!result.valid) return validationError(result.error)
 
   const db = createServiceClient()
+
+  const emails: string[] = body.emails ?? []
+  const fullName = body.fullName ?? `${body.firstName} ${body.lastName}`
+
+  if (emails.length > 0) {
+    const { data: emailMatch } = await db
+      .from('crm_contacts')
+      .select('id, full_name, emails')
+      .overlaps('emails', emails)
+      .limit(1)
+      .maybeSingle()
+    if (emailMatch) {
+      return NextResponse.json(
+        { error: `A contact with this email already exists: ${emailMatch.full_name}` },
+        { status: 409 },
+      )
+    }
+  }
+
+  const companyName = body.companyName ?? ''
+  if (fullName && companyName) {
+    const { data: nameMatch } = await db
+      .from('crm_contacts')
+      .select('id, full_name')
+      .ilike('full_name', fullName)
+      .ilike('company_name', companyName)
+      .limit(1)
+      .maybeSingle()
+    if (nameMatch) {
+      return NextResponse.json(
+        { error: `A contact named "${nameMatch.full_name}" already exists at this company` },
+        { status: 409 },
+      )
+    }
+  }
+
   const { data, error } = await db
     .from('crm_contacts')
     .insert({
@@ -76,9 +112,9 @@ export async function POST(req: NextRequest) {
       company_name:    body.companyName ?? '',
       first_name:      body.firstName,
       last_name:       body.lastName,
-      full_name:       body.fullName ?? `${body.firstName} ${body.lastName}`,
+      full_name:       fullName,
       title:           body.title ?? null,
-      emails:          body.emails ?? [],
+      emails:          emails,
       phones:          body.phones ?? [],
       linked_in:       body.linkedIn ?? null,
       website:         body.website ?? null,

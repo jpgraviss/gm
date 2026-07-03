@@ -413,7 +413,11 @@ export default function SignPage() {
           {/* Terms + submit */}
           <div className="p-5">
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-              By signing below, I agree to the terms of this contract.
+              By signing below, I agree to the terms of this contract. I consent to conducting this transaction electronically
+              pursuant to the Electronic Signatures in Global and National Commerce Act (E-SIGN Act) and the Uniform Electronic
+              Transactions Act (UETA). I acknowledge receipt of the document and agree to use an electronic signature. See our{' '}
+              <a href="/privacy" className="text-[#015035] underline">Privacy Policy</a> and{' '}
+              <a href="/terms" className="text-[#015035] underline">Terms of Service</a>.
             </p>
             {error && (
               <div className="mb-3 p-2.5 rounded-lg bg-red-50 text-xs text-red-600 font-medium">
@@ -434,6 +438,11 @@ export default function SignPage() {
         {/* Footer */}
         <p className="text-center text-[11px] text-gray-400 mt-6">
           Powered by Graviss Marketing &middot; Secure E-Signature
+        </p>
+        <p className="text-center text-[10px] text-gray-400 mt-1">
+          <a href="/privacy" className="text-gray-400 underline hover:text-gray-500">Privacy Policy</a>
+          {' · '}
+          <a href="/terms" className="text-gray-400 underline hover:text-gray-500">Terms of Service</a>
         </p>
       </div>
     </div>

@@ -457,6 +457,11 @@ export default function ProposalViewPage() {
           <p style={{ fontSize: 11, color: COLORS.stone, letterSpacing: '0.04em' }}>
             Powered by <span style={{ fontWeight: 600, color: COLORS.forestGreen }}>Graviss Marketing</span>
           </p>
+          <p style={{ fontSize: 10, color: COLORS.stone, marginTop: 6 }}>
+            <a href="/privacy" style={{ color: COLORS.stone, textDecoration: 'underline' }}>Privacy Policy</a>
+            {' · '}
+            <a href="/terms" style={{ color: COLORS.stone, textDecoration: 'underline' }}>Terms of Service</a>
+          </p>
         </footer>
       </main>
     </div>

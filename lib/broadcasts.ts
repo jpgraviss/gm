@@ -101,7 +101,8 @@ export function wrapWithFooter(html: string, unsubscribeUrl: string, footerNote 
   <tr><td align="center">
     <p style="margin:0;font-size:11px;color:#9ca3af;line-height:1.6;">
       ${footerNote ? `${footerNote}<br/>` : ''}
-      Don't want these updates? <a href="${unsubscribeUrl}" style="color:#015035;text-decoration:underline;">Unsubscribe</a>
+      Don't want these updates? <a href="${unsubscribeUrl}" style="color:#015035;text-decoration:underline;">Unsubscribe</a> · <a href="/privacy" style="color:#9ca3af;text-decoration:underline;font-size:10px;">Privacy Policy</a>
+      <br/><span style="font-size:10px;color:#9ca3af;">Graviss Marketing · 4235 Hillsboro Pike, Nashville, TN 37215</span>
     </p>
   </td></tr>
 </table>`

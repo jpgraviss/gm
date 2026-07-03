@@ -19,6 +19,8 @@ function mapDeal(row: any) {
     notes:        row.notes ?? [],
     lastActivity: row.last_activity ?? '',
     pipelineId:   row.pipeline_id ?? 'client-acquisition',
+    companyId:    row.company_id ?? null,
+    contactId:    row.contact_id ?? null,
   }
 }
 
@@ -36,6 +38,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.contact !== undefined)     update.contact = body.contact
   if (body.serviceType !== undefined) update.service_type = body.serviceType
   if (body.pipelineId !== undefined)  update.pipeline_id = body.pipelineId
+  if (body.companyId !== undefined)   update.company_id = body.companyId
+  if (body.contactId !== undefined)   update.contact_id = body.contactId
+  if (body.company !== undefined)     update.company = body.company
   update.last_activity = new Date().toISOString().split('T')[0]
   const { data, error } = await db.from('deals').update(update).eq('id', id).select().single()
   if (error) {

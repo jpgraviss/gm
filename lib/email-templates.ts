@@ -133,7 +133,7 @@ function renderBlockToHtml(block: TemplateBlock): string {
     case 'divider':
       return '<div style="padding:16px 24px;"><hr style="border:none;border-top:1px solid #e5e7eb;margin:0;" /></div>'
     case 'footer':
-      return `<div style="padding:16px 24px;text-align:center;font-size:12px;color:#9ca3af;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">${String(block.content.text ?? '')}<br/><a href="{action_url}/unsubscribe" style="color:#9ca3af;">Unsubscribe</a></div>`
+      return `<div style="padding:16px 24px;text-align:center;font-size:12px;color:#9ca3af;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">${String(block.content.text ?? '')}<br/><a href="{action_url}/unsubscribe" style="color:#9ca3af;">Unsubscribe</a> · <a href="{action_url}/privacy" style="color:#9ca3af;">Privacy Policy</a><br/><span style="font-size:10px;">Graviss Marketing · 4235 Hillsboro Pike, Nashville, TN 37215</span></div>`
     default:
       return ''
   }

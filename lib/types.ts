@@ -109,6 +109,8 @@ export interface Deal {
   notes: string[]
   lastActivity: string
   pipelineId?: string
+  companyId?: string | null
+  contactId?: string | null
 }
 
 export interface ProposalLineItem {

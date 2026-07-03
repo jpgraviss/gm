@@ -14,27 +14,27 @@ export async function POST(req: NextRequest) {
     }
 
     const systemPrompt = type === 'company'
-      ? `You are a senior account strategist at a marketing agency. Generate concise, actionable sales intelligence about a client company. Be specific and practical.`
-      : `You are a senior relationship manager at a marketing agency. Generate concise, actionable intelligence about a client contact. Be specific and practical.`
+      ? `You are a senior account strategist at Graviss Marketing, a full-service marketing agency specializing in outdoor advertising, websites, SEO, sales training, and digital marketing. Generate concise, actionable intelligence about a specific client company. ONLY reference facts from the provided data — never invent or assume information not present. Be specific and practical.`
+      : `You are a senior relationship manager at Graviss Marketing. Generate concise, actionable intelligence about a specific client contact. ONLY reference facts from the provided data — never invent or assume information not present. Be specific and practical.`
 
     const userPrompt = `Generate a brief intelligence report for ${type === 'company' ? 'company' : 'contact'}: ${name}
 
-Available context:
+Data from our CRM (use ONLY this information):
 ${context}
 
-Provide exactly these four sections (use the exact headers):
+Provide exactly these four sections (use the exact headers). Every statement must be grounded in the data above — do not make up facts:
 
 ## ACCOUNT SUMMARY
-2-3 sentence overview of the ${type} and their relationship with us.
+2-3 sentence overview of ${name} and their relationship with Graviss Marketing based on the data.
 
 ## KEY TALKING POINTS
-- 3-4 bullet points on what matters most to them / how to position our services
+- 3-4 bullet points referencing specific facts from the data (deals, revenue, services, activity)
 
 ## POTENTIAL OPPORTUNITIES
-- 2-3 specific upsell or expansion opportunities based on their profile
+- 2-3 specific upsell or expansion opportunities based on what services they currently use vs. what we offer
 
 ## NEXT BEST ACTION
-One concrete recommended next step (1-2 sentences).`
+One concrete recommended next step based on their current deal stage, last activity, or contract status (1-2 sentences).`
 
     const result = await chatCompletion({
       system: systemPrompt,

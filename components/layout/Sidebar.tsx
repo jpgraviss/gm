@@ -133,10 +133,8 @@ export const defaultNavigation: NavSection[] = [
       { label: 'Automation',       href: '/automation',                icon: <Zap size={16} />,         allowedUnits: ['Leadership/Admin'] },
       { label: 'Knowledge Base',   href: '/knowledge-base',            icon: <BookOpen size={16} /> },
       { label: 'Integrations',     href: '/integrations',              icon: <Plug size={16} />,        allowedUnits: ['Leadership/Admin'] },
-      { label: 'Admin',            href: '/admin',                     icon: <ShieldCheck size={16} />, adminOnly: true },
       { label: 'Portal Management', href: '/admin/portal-management',  icon: <Globe size={16} />,       adminOnly: true },
       { label: 'SOPs',             href: '/admin/sops',                icon: <FileText size={16} />,    adminOnly: true },
-      { label: 'Settings',         href: '/settings',                  icon: <Settings size={16} />,    allowedUnits: ['Leadership/Admin'] },
     ],
   },
 ]
@@ -374,6 +372,40 @@ export default function Sidebar() {
           )
         })}
       </nav>
+
+      {/* Pinned: Admin & Settings */}
+      <div className="px-2 py-2 border-t border-white/[0.08] flex-shrink-0 flex flex-col gap-0.5">
+        {user?.isAdmin && (
+          <Link
+            href="/admin"
+            onClick={closeSidebar}
+            title="Admin"
+            className={`sidebar-nav-item ${pathname.startsWith('/admin') && !pathname.startsWith('/admin/portal') && !pathname.startsWith('/admin/sops') ? 'active' : ''} justify-start`}
+          >
+            <span className={`flex-shrink-0 ${pathname.startsWith('/admin') && !pathname.startsWith('/admin/portal') && !pathname.startsWith('/admin/sops') ? 'text-white' : 'text-white/50'}`}>
+              <ShieldCheck size={16} />
+            </span>
+            <span className="flex-1 text-[13px] whitespace-nowrap overflow-hidden lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
+              Admin
+            </span>
+          </Link>
+        )}
+        {(!user || user.isAdmin || user.unit === 'Leadership/Admin') && (
+          <Link
+            href="/settings"
+            onClick={closeSidebar}
+            title="Settings"
+            className={`sidebar-nav-item ${pathname.startsWith('/settings') ? 'active' : ''} justify-start`}
+          >
+            <span className={`flex-shrink-0 ${pathname.startsWith('/settings') ? 'text-white' : 'text-white/50'}`}>
+              <Settings size={16} />
+            </span>
+            <span className="flex-1 text-[13px] whitespace-nowrap overflow-hidden lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
+              Settings
+            </span>
+          </Link>
+        )}
+      </div>
 
       {/* User footer */}
       <div className="px-2 py-3 border-t border-white/[0.08] flex-shrink-0">

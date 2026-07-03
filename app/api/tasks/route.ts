@@ -20,6 +20,9 @@ function mapTask(row: any) {
     teamServiceLine: row.team_service_line ?? undefined,
     recurrence:      row.recurrence ?? null,
     parentTaskId:    row.parent_task_id ?? undefined,
+    projectId:       row.project_id ?? undefined,
+    section:         row.section ?? undefined,
+    sortOrder:       row.sort_order ?? 0,
   }
 }
 
@@ -27,15 +30,17 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const status     = searchParams.get('status')
   const assignedTo = searchParams.get('assignedTo')
+  const projectId  = searchParams.get('projectId')
   const { limit, cursor } = parsePagination(req)
   const db = createServiceClient()
   let query = db
     .from('app_tasks')
     .select('*')
-    .order('created_at', { ascending: false })
+    .order(projectId ? 'sort_order' : 'created_at', { ascending: projectId ? true : false })
     .limit(limit + 1)
   if (status)     query = query.eq('status', status)
   if (assignedTo) query = query.eq('assigned_to', assignedTo)
+  if (projectId)  query = query.eq('project_id', projectId)
   if (cursor) query = query.lt('created_at', cursor)
   const { data, error } = await query
   if (error) {
@@ -87,6 +92,9 @@ export async function POST(req: NextRequest) {
       team_service_line: body.teamServiceLine ?? null,
       recurrence:        body.recurrence ?? null,
       parent_task_id:    body.parentTaskId ?? null,
+      project_id:        body.projectId ?? null,
+      section:           body.section ?? null,
+      sort_order:        body.sortOrder ?? 0,
     })
     .select()
     .single()

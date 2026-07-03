@@ -1,87 +1,117 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 
+const DEFAULT_PIPELINES = [
+  {
+    id: 'client-acquisition',
+    name: 'Client Acquisition',
+    stages: [
+      { id: 'ca-0', name: 'Lead', color: '#9ca3af', probability: 10 },
+      { id: 'ca-1', name: 'Qualified', color: '#3b82f6', probability: 25 },
+      { id: 'ca-2', name: 'Proposal Sent', color: '#f59e0b', probability: 50 },
+      { id: 'ca-3', name: 'Contract Sent', color: '#f97316', probability: 75 },
+      { id: 'ca-4', name: 'Closed Won', color: '#22c55e', probability: 100 },
+      { id: 'ca-5', name: 'Closed Lost', color: '#ef4444', probability: 0 },
+    ],
+  },
+  {
+    id: 'clients',
+    name: 'Clients',
+    stages: [
+      { id: 'cl-0', name: 'Onboarding', color: '#3b82f6', probability: 100 },
+      { id: 'cl-1', name: 'Active', color: '#22c55e', probability: 100 },
+      { id: 'cl-2', name: 'At Risk', color: '#f59e0b', probability: 50 },
+      { id: 'cl-3', name: 'Churned', color: '#ef4444', probability: 0 },
+    ],
+  },
+  {
+    id: 'contract-archive',
+    name: 'Contract Archive',
+    stages: [
+      { id: 'ar-0', name: 'Draft', color: '#9ca3af', probability: 0 },
+      { id: 'ar-1', name: 'Sent', color: '#3b82f6', probability: 0 },
+      { id: 'ar-2', name: 'Signed', color: '#22c55e', probability: 100 },
+      { id: 'ar-3', name: 'Expired', color: '#ef4444', probability: 0 },
+    ],
+  },
+]
+
+interface PipelineStage {
+  id: string
+  name: string
+  color: string
+  probability?: number
+}
+
+interface Pipeline {
+  id: string
+  name: string
+  stages: PipelineStage[]
+}
+
 export async function GET() {
   const db = createServiceClient()
-  const { data: pipelines, error: pErr } = await db
-    .from('pipelines')
-    .select('*')
-    .eq('active', true)
-    .order('display_order')
+  const { data } = await db
+    .from('app_settings')
+    .select('pipelines')
+    .eq('id', 'global')
+    .maybeSingle()
 
-  if (pErr) {
-    console.error('[pipelines GET]', pErr)
-    return NextResponse.json({ error: pErr.message }, { status: 500 })
+  const stored = data?.pipelines as Pipeline[] | null
+  if (Array.isArray(stored) && stored.length > 0) {
+    return NextResponse.json(stored)
   }
 
-  const { data: stages, error: sErr } = await db
-    .from('pipeline_stages')
-    .select('*')
-    .order('display_order')
-
-  if (sErr) {
-    console.error('[pipelines GET stages]', sErr)
-    return NextResponse.json({ error: sErr.message }, { status: 500 })
-  }
-
-  const result = (pipelines ?? []).map(p => ({
-    id: p.id,
-    name: p.name,
-    description: p.description,
-    stages: (stages ?? [])
-      .filter(s => s.pipeline_id === p.id)
-      .map(s => ({
-        id: s.id,
-        name: s.name,
-        color: s.color,
-        probability: s.probability,
-        displayOrder: s.display_order,
-      })),
-  }))
-
-  return NextResponse.json(result)
+  return NextResponse.json(DEFAULT_PIPELINES)
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { id, name, description, stages } = body
 
+  if (Array.isArray(body)) {
+    const db = createServiceClient()
+    const { error } = await db
+      .from('app_settings')
+      .upsert({ id: 'global', pipelines: body, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+    if (error) {
+      console.error('[pipelines POST batch]', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    return NextResponse.json(body, { status: 201 })
+  }
+
+  const { id, name, stages } = body
   if (!name?.trim()) {
     return NextResponse.json({ error: 'Name is required' }, { status: 400 })
   }
 
   const db = createServiceClient()
+  const { data: settings } = await db
+    .from('app_settings')
+    .select('pipelines')
+    .eq('id', 'global')
+    .maybeSingle()
+
+  const existing = (settings?.pipelines as Pipeline[] | null) ?? DEFAULT_PIPELINES
   const pipelineId = id || `pipeline-${Date.now()}`
-
-  const { error: pErr } = await db
-    .from('pipelines')
-    .upsert({
-      id: pipelineId,
-      name: name.trim(),
-      description: description?.trim() || null,
-      display_order: body.displayOrder ?? 0,
-    })
-
-  if (pErr) {
-    console.error('[pipelines POST]', pErr)
-    return NextResponse.json({ error: pErr.message }, { status: 500 })
+  const newPipeline: Pipeline = {
+    id: pipelineId,
+    name: name.trim(),
+    stages: Array.isArray(stages) ? stages : [],
   }
 
-  if (Array.isArray(stages)) {
-    await db.from('pipeline_stages').delete().eq('pipeline_id', pipelineId)
-    const stageRows = stages.map((s: { id?: string; name: string; color?: string; probability?: number }, i: number) => ({
-      id: s.id || `${pipelineId}-stage-${i}`,
-      pipeline_id: pipelineId,
-      name: s.name,
-      color: s.color ?? '#015035',
-      probability: s.probability ?? 0,
-      display_order: i,
-    }))
-    const { error: sErr } = await db.from('pipeline_stages').insert(stageRows)
-    if (sErr) {
-      console.error('[pipelines POST stages]', sErr)
-      return NextResponse.json({ error: sErr.message }, { status: 500 })
-    }
+  const idx = existing.findIndex(p => p.id === pipelineId)
+  const updated = idx >= 0
+    ? existing.map(p => p.id === pipelineId ? newPipeline : p)
+    : [...existing, newPipeline]
+
+  const { error } = await db
+    .from('app_settings')
+    .upsert({ id: 'global', pipelines: updated, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+
+  if (error) {
+    console.error('[pipelines POST]', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   return NextResponse.json({ id: pipelineId, name: name.trim() }, { status: 201 })

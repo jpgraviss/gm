@@ -177,16 +177,19 @@ function DealPanel({
     stage: deal.stage,
     serviceType: deal.serviceType,
   })
+  const dealAny = deal as LocalDeal & { companyId?: string; contactId?: string }
+  const company = dealAny.companyId
+    ? crmCompanies.find(c => c.id === dealAny.companyId)
+    : crmCompanies.find(c => c.name === deal.company)
   const [localActivities, setLocalActivities] = useState(
-    () => (crmActivities ?? []).filter(a => a.companyId === (crmCompanies ?? []).find(c => c.name === deal.company)?.id).slice(0, 8)
+    () => (crmActivities ?? []).filter(a => a.companyId === company?.id).slice(0, 8)
   )
 
-  const company = crmCompanies.find(c => c.name === deal.company)
-  const linkedContacts = crmContacts.filter(c => c.companyName === deal.company)
+  const linkedContacts = company
+    ? crmContacts.filter(c => c.companyId === company.id)
+    : crmContacts.filter(c => c.companyName === deal.company)
   const linkedContract = contracts.find(c => c.company === deal.company)
-  const contactTasks = crmContacts
-    .filter(c => c.companyName === deal.company)
-    .flatMap(c => c.contactTasks ?? [])
+  const contactTasks = linkedContacts.flatMap(c => c.contactTasks ?? [])
 
   const currentStageIdx = pipelineStages.findIndex(s => s.name === deal.stage)
   const nextStage = currentStageIdx >= 0 && currentStageIdx < pipelineStages.length - 1

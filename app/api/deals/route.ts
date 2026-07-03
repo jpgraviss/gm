@@ -18,6 +18,8 @@ function mapDeal(row: any) {
     notes:        row.notes ?? [],
     lastActivity: row.last_activity ?? '',
     pipelineId:   row.pipeline_id ?? 'client-acquisition',
+    companyId:    row.company_id ?? null,
+    contactId:    row.contact_id ?? null,
   }
 }
 
@@ -73,6 +75,8 @@ export async function POST(req: NextRequest) {
       notes:        body.notes ?? [],
       last_activity: new Date().toISOString().split('T')[0],
       pipeline_id:  body.pipelineId ?? 'client-acquisition',
+      company_id:   body.companyId ?? null,
+      contact_id:   body.contactId ?? null,
     })
     .select()
     .single()

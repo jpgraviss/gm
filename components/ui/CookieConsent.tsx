@@ -6,6 +6,11 @@ import { Cookie, X } from 'lucide-react'
 type ConsentValue = 'accepted' | 'declined'
 
 const STORAGE_KEY = 'gravhub_cookie_consent'
+const COOKIE_NAME = 'gravhub_cookie_consent'
+
+function setCookie(value: string) {
+  document.cookie = `${COOKIE_NAME}=${value};path=/;max-age=${365 * 86400};SameSite=Lax`
+}
 
 export function getCookieConsent(): ConsentValue | null {
   if (typeof window === 'undefined') return null
@@ -24,11 +29,13 @@ export default function CookieConsent() {
 
   function accept() {
     localStorage.setItem(STORAGE_KEY, 'accepted')
+    setCookie('accepted')
     setVisible(false)
   }
 
   function decline() {
     localStorage.setItem(STORAGE_KEY, 'declined')
+    setCookie('declined')
     setVisible(false)
   }
 
@@ -45,7 +52,8 @@ export default function CookieConsent() {
           <div className="flex-1 min-w-0">
             <p className="text-white text-sm font-semibold mb-1">We use cookies</p>
             <p className="text-white/70 text-xs leading-relaxed">
-              We use cookies and similar technologies to enhance your experience, analyze site traffic, and serve personalized content. By clicking &quot;Accept All&quot; you consent to our use of cookies.
+              We use cookies and similar technologies to enhance your experience, analyze site traffic, and serve personalized content. By clicking &quot;Accept All&quot; you consent to our use of cookies. See our{' '}
+              <a href="/privacy" className="text-white/90 underline hover:text-white">Privacy Policy</a>.
             </p>
             <div className="flex items-center gap-2 mt-3">
               <button

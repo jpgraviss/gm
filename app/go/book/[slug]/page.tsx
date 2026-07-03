@@ -378,6 +378,11 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           <div className="mt-6 pt-4 border-t border-gray-100">
             <div className="text-xs text-gray-400">Powered by</div>
             <div className="text-xs font-bold text-[#015035] tracking-widest mt-0.5">GRAVISS MARKETING</div>
+            <div className="text-[10px] text-gray-400 mt-1">
+              <a href="/privacy" className="text-gray-400 underline hover:text-gray-500">Privacy Policy</a>
+              {' · '}
+              <a href="/terms" className="text-gray-400 underline hover:text-gray-500">Terms of Service</a>
+            </div>
           </div>
         </div>
       </div>
@@ -614,6 +619,11 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                   </p>
                 )}
 
+                <p className="text-[10px] text-gray-400 leading-relaxed">
+                  By booking, you agree to our{' '}
+                  <a href="/privacy" className="text-gray-500 underline">Privacy Policy</a>.
+                </p>
+
                 <button
                   type="submit"
                   disabled={submitting}
@@ -634,6 +644,13 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
               </div>
             </form>
           )}
+          <div className="text-center mt-4">
+            <span className="text-[10px] text-gray-400">
+              <a href="/privacy" className="text-gray-400 underline hover:text-gray-500">Privacy Policy</a>
+              {' · '}
+              <a href="/terms" className="text-gray-400 underline hover:text-gray-500">Terms of Service</a>
+            </span>
+          </div>
         </div>
       </div>
     </div>

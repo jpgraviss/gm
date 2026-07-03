@@ -562,6 +562,11 @@ export default function PublicFormPage() {
             <p style={{ fontSize: 12, color: '#ef4444', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: 8, padding: '8px 12px' }}>{error}</p>
           )}
 
+          <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 8, lineHeight: 1.5 }}>
+            By submitting this form, you agree to our{' '}
+            <a href="/privacy" style={{ color: '#6b7280', textDecoration: 'underline' }}>Privacy Policy</a>.
+          </p>
+
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             {isMultiPage && currentPage > 0 && (
               <button
@@ -591,6 +596,11 @@ export default function PublicFormPage() {
             )}
           </div>
         </form>
+        <p style={{ textAlign: 'center', fontSize: 10, color: '#9ca3af', marginTop: 16 }}>
+          <a href="/privacy" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</a>
+          {' · '}
+          <a href="/terms" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Terms of Service</a>
+        </p>
       </div>
     </div>
   )

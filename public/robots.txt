@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /privacy
+Allow: /terms
+
+Disallow: /api/
+Disallow: /sign/
+Disallow: /portal/
+Disallow: /proposal/
+Disallow: /client
+Disallow: /crm/
+Disallow: /admin/
+Disallow: /go/
+Disallow: /book/

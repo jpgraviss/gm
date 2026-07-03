@@ -337,6 +337,11 @@ export default function UnsubscribePage() {
         <p className="text-center text-xs text-gray-400 mt-6">
           &copy; {new Date().getFullYear()} Graviss Marketing. All rights reserved.
         </p>
+        <p className="text-center text-[10px] text-gray-400 mt-1">
+          <a href="/privacy" className="text-gray-400 underline hover:text-gray-500">Privacy Policy</a>
+          {' · '}
+          <a href="/terms" className="text-gray-400 underline hover:text-gray-500">Terms of Service</a>
+        </p>
       </div>
     </div>
   )

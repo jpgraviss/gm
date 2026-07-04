@@ -13,7 +13,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const db = createServiceClient()
 
   const { data: seq, error: seqErr } = await db
-    .from('email_sequences')
+    .from('sequences')
     .select('id, name, steps, send_via, from_name, from_email')
     .eq('id', id)
     .single()

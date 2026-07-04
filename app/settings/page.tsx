@@ -1865,37 +1865,49 @@ export default function SettingsPage() {
                 )}
               </div>
 
+              {/*
+                Built-in capabilities and not-yet-available integrations. These are
+                informational only — the real, connectable integrations (Google
+                Marketing, Meta, Gmail, HubSpot, Google Business Profile) each have
+                their own live sections below. We don't render fake "Connect" buttons.
+              */}
               {[
-                { name: 'Google Workspace', description: 'Single sign-on and calendar integration', status: 'connected', statusLabel: 'Active', icon: '🔵', action: 'Manage' },
-                { name: 'DocuSign', description: 'E-signature workflow for proposals and contracts', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
-                { name: 'Slack', description: 'Team notifications for deals and project updates', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
-                { name: 'Stripe', description: 'Accept online invoice payments from clients', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
-                { name: 'Zapier', description: 'Connect GravHub to 5,000+ apps with automations', status: 'not_connected', statusLabel: 'Not Connected', icon: '⚪', action: 'Connect' },
+                { name: 'E-Signature', description: 'Built in — proposals and contracts sign natively in GravHub. No DocuSign needed.', builtIn: true },
+                { name: 'Slack', description: 'Team notifications for deals and project updates', builtIn: false },
+                { name: 'Stripe', description: 'Accept online invoice payments from clients', builtIn: false },
+                { name: 'Zapier', description: 'Connect GravHub to 5,000+ apps with automations', builtIn: false },
               ].map(integration => (
-                <div key={integration.name} className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
-                  <div className="text-2xl flex-shrink-0">{integration.icon}</div>
+                <div key={integration.name} className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50">
+                  <div className="text-2xl flex-shrink-0">{integration.builtIn ? '🟢' : '⚪'}</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-800">{integration.name}</p>
                     <p className="text-xs text-gray-500">{integration.description}</p>
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    <span className={`text-[11px] font-semibold hidden sm:flex items-center gap-0.5 ${integration.status === 'connected' ? 'text-emerald-600' : 'text-gray-400'}`}>
-                      {integration.status === 'connected' ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
-                      {integration.statusLabel}
-                    </span>
-                    <button
-                      className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
-                        integration.status === 'connected'
-                          ? 'border border-gray-200 text-gray-600 hover:bg-gray-200'
-                          : 'text-white'
-                      }`}
-                      style={integration.status !== 'connected' ? { background: '#015035' } : undefined}
-                    >
-                      {integration.action}
-                    </button>
+                    {integration.builtIn ? (
+                      <span className="text-[11px] font-semibold flex items-center gap-0.5 text-emerald-600">
+                        <CheckCircle size={12} /> Built in
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-gray-100 text-gray-400 border border-gray-200">
+                        Not available yet
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
+
+              {/* Email deliverability (SPF/DKIM DNS setup) */}
+              <a href="/settings/email-auth" className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
+                <div className="text-2xl flex-shrink-0">✉️</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800">Email Authentication</p>
+                  <p className="text-xs text-gray-500">Set up SPF, DKIM & DMARC DNS records for reliable email delivery</p>
+                </div>
+                <span className="text-xs font-medium px-3 py-1.5 rounded-lg text-white flex-shrink-0" style={{ background: '#015035' }}>
+                  Configure
+                </span>
+              </a>
             </div>
 
             <HubSpotIntegrationSection />

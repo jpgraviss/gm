@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { mapPost } from '@/lib/social-media'
+import { mapPost, type SocialPlatform } from '@/lib/social-media'
+import { publishToPlatform } from '@/lib/social-publish'
 import { logAudit } from '@/lib/audit'
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -14,24 +15,47 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: `Post is already ${post.status}` }, { status: 400 })
   }
 
+  const platforms = (post.platforms as SocialPlatform[]) ?? []
+  if (platforms.length === 0) {
+    return NextResponse.json({ error: 'Post has no target platforms' }, { status: 400 })
+  }
+
   // Mark as publishing
   await db.from('social_posts').update({ status: 'publishing', updated_at: new Date().toISOString() }).eq('id', id)
 
-  // Placeholder: log publish attempt per platform.
-  // Real API calls (Facebook, LinkedIn, etc.) will replace this once approved.
+  // Publish to each platform, collecting real ids and per-platform errors.
   const platformPostIds: Record<string, string> = {}
-  for (const platform of (post.platforms as string[])) {
-    console.log(`[social-posts publish] Publishing to ${platform} for post ${id} — pending API connection`)
-    platformPostIds[platform] = 'pending_api_connection'
+  const platformErrors: Record<string, string> = {}
+
+  const input = {
+    content: post.content ?? '',
+    hashtags: (post.hashtags as string[]) ?? [],
+    mediaUrls: (post.media_urls as string[]) ?? [],
+    linkUrl: post.link_url ?? undefined,
   }
 
-  // Mark as published with placeholder IDs
+  for (const platform of platforms) {
+    try {
+      const { platformPostId } = await publishToPlatform(platform, input)
+      platformPostIds[platform] = platformPostId
+    } catch (err) {
+      platformErrors[platform] = err instanceof Error ? err.message : 'Unknown error'
+    }
+  }
+
+  const anySucceeded = Object.keys(platformPostIds).length > 0
+  const allSucceeded = anySucceeded && Object.keys(platformErrors).length === 0
+  // published if at least one platform accepted it (partial success keeps the
+  // errors visible); failed only when every platform rejected it.
+  const status = anySucceeded ? 'published' : 'failed'
+
   const { data: updated, error } = await db
     .from('social_posts')
     .update({
-      status: 'published',
-      published_at: new Date().toISOString(),
+      status,
+      published_at: anySucceeded ? new Date().toISOString() : null,
       platform_post_ids: platformPostIds,
+      platform_errors: platformErrors,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
@@ -49,8 +73,17 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     action: 'published_social_post',
     module: 'social_media',
     type: 'action',
-    metadata: { postId: id, platforms: post.platforms, platformPostIds },
+    metadata: { postId: id, platforms, platformPostIds, platformErrors },
   })
 
-  return NextResponse.json(mapPost(updated))
+  // Surface a 502 when nothing published so the client can show the failure
+  // rather than a false "Published".
+  if (!anySucceeded) {
+    return NextResponse.json(
+      { ...mapPost(updated), error: 'All platforms failed to publish' },
+      { status: 502 },
+    )
+  }
+
+  return NextResponse.json({ ...mapPost(updated), partial: !allSucceeded })
 }

@@ -1,10 +1,18 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
-import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download } from 'lucide-react'
+import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download, DollarSign as RevenueIcon, HeartPulse, Megaphone, ArrowRight } from 'lucide-react'
+
+const DEEP_DIVE_REPORTS = [
+  { href: '/reports/revenue',   label: 'Revenue',   icon: <RevenueIcon size={15} />, desc: 'Detailed revenue breakdown' },
+  { href: '/reports/team',      label: 'Team',      icon: <Users size={15} />,       desc: 'Per-rep performance' },
+  { href: '/reports/health',    label: 'Health',    icon: <HeartPulse size={15} />,  desc: 'Client health & churn risk' },
+  { href: '/reports/marketing', label: 'Marketing', icon: <Megaphone size={15} />,   desc: 'Campaign & channel metrics' },
+]
 import type { Deal, Invoice, Project, Renewal, RevenueMonth, MaintenanceRecord, TeamMember } from '@/lib/types'
 import { fetchTeamMembers } from '@/lib/supabase'
 
@@ -195,6 +203,23 @@ export default function ReportsPage() {
           <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
             <Download size={12} /> Export CSV
           </button>
+        </div>
+
+        {/* Deep-dive reports */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+          {DEEP_DIVE_REPORTS.map(r => (
+            <Link key={r.href} href={r.href}
+              className="group flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white hover:border-emerald-600 hover:shadow-sm transition-all">
+              <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#01503515', color: '#015035' }}>
+                {r.icon}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-800">{r.label}</p>
+                <p className="text-[11px] text-gray-400 truncate">{r.desc}</p>
+              </div>
+              <ArrowRight size={14} className="text-gray-300 group-hover:text-emerald-600 transition-colors flex-shrink-0" />
+            </Link>
+          ))}
         </div>
 
         {/* Top KPIs */}

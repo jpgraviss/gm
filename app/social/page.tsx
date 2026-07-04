@@ -7,7 +7,7 @@ import { formatDate } from '@/lib/utils'
 import { PLATFORM_META, type SocialPlatform, type PostStatus } from '@/lib/social-media'
 import {
   Calendar, List, ChevronLeft, ChevronRight, X, Send, Clock, Check,
-  AlertTriangle, Trash2, Eye, Pencil, Plus, Loader2, Wand2,
+  AlertTriangle, Trash2, Eye, Pencil, Plus, Loader2, Wand2, Link2,
 } from 'lucide-react'
 
 interface SocialPost {
@@ -68,6 +68,7 @@ export default function SocialMediaPage() {
   const [clientFilter, setClientFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<PostStatus | 'all'>('all')
   const [composing, setComposing] = useState<SocialPost | null | 'new'>(null)
+  const [showConnections, setShowConnections] = useState(false)
 
   // Calendar state
   const now = new Date()
@@ -95,6 +96,18 @@ export default function SocialMediaPage() {
       .then(data => { if (Array.isArray(data)) setClients(data) })
       .catch(() => {})
   }, [])
+
+  // Surface LinkedIn OAuth callback result
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('li_ok')) {
+      toast('LinkedIn connected', 'success')
+      window.history.replaceState({}, '', '/social')
+    } else if (params.get('li_err')) {
+      toast(`LinkedIn connection failed: ${params.get('li_err')}`, 'error')
+      window.history.replaceState({}, '', '/social')
+    }
+  }, [toast])
 
   const filtered = useMemo(() => posts, [posts])
 
@@ -166,8 +179,19 @@ export default function SocialMediaPage() {
     if (!confirm('Publish this post now?')) return
     try {
       const res = await fetch(`/api/social-posts/${id}/publish`, { method: 'POST' })
-      if (!res.ok) { toast('Failed to publish', 'error'); return }
-      toast('Published', 'success')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast(data?.error || 'Failed to publish — check platform connections', 'error')
+        setComposing(null)
+        loadPosts()
+        return
+      }
+      if (data?.partial) {
+        const failed = Object.keys(data?.platformErrors ?? {})
+        toast(`Published, but ${failed.join(', ')} failed`, 'error')
+      } else {
+        toast('Published', 'success')
+      }
       setComposing(null)
       loadPosts()
     } catch { toast('Failed to publish', 'error') }
@@ -199,6 +223,7 @@ export default function SocialMediaPage() {
           </div>
 
           <div className="flex gap-1 ml-auto">
+            <button onClick={() => setShowConnections(true)} className="px-3 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 text-xs font-medium flex items-center gap-1.5"><Link2 size={14} /> Connections</button>
             <button onClick={() => setView('calendar')} className={`p-2 rounded-lg ${view === 'calendar' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}><Calendar size={14} /></button>
             <button onClick={() => setView('list')} className={`p-2 rounded-lg ${view === 'list' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}><List size={14} /></button>
           </div>
@@ -292,7 +317,132 @@ export default function SocialMediaPage() {
           onPublish={publishPost}
         />
       )}
+
+      {showConnections && <SocialConnectionsModal onClose={() => setShowConnections(false)} />}
     </>
+  )
+}
+
+// ─── Social connections modal ──────────────────────────────────────────────
+
+interface ConnStatus { platform: SocialPlatform; connected: boolean; accountLabel: string | null }
+interface AvailAccount { platform: SocialPlatform; externalId: string; label: string; token?: string }
+
+function SocialConnectionsModal({ onClose }: { onClose: () => void }) {
+  const { toast } = useToast()
+  const [statuses, setStatuses] = useState<ConnStatus[]>([])
+  const [loading, setLoading] = useState(true)
+  const [picker, setPicker] = useState<{ platform: SocialPlatform; accounts: AvailAccount[] } | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    fetch('/api/social/connections')
+      .then(r => (r.ok ? r.json() : []))
+      .then(d => { if (Array.isArray(d)) setStatuses(d) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  // Discover selectable accounts for a platform, then show the picker.
+  async function choose(platform: SocialPlatform) {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/social/connections/available?platform=${platform}`)
+      const data = await res.json()
+      if (!res.ok) { toast(data?.error || 'Connect the platform first', 'error'); return }
+      if (!Array.isArray(data) || data.length === 0) { toast('No accounts found for this platform', 'error'); return }
+      setPicker({ platform, accounts: data })
+    } catch { toast('Failed to load accounts', 'error') }
+    finally { setBusy(false) }
+  }
+
+  async function save(acc: AvailAccount) {
+    setBusy(true)
+    try {
+      const res = await fetch('/api/social/connections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: acc.platform, externalId: acc.externalId, accountLabel: acc.label, token: acc.token }),
+      })
+      if (!res.ok) { toast('Failed to save connection', 'error'); return }
+      toast('Connected', 'success')
+      setPicker(null)
+      load()
+    } catch { toast('Failed to save connection', 'error') }
+    finally { setBusy(false) }
+  }
+
+  async function disconnect(platform: SocialPlatform) {
+    if (platform === 'linkedin') {
+      await fetch('/api/integrations/linkedin/disconnect', { method: 'POST' }).catch(() => {})
+    } else {
+      await fetch(`/api/social/connections?platform=${platform}`, { method: 'DELETE' }).catch(() => {})
+    }
+    toast('Disconnected', 'success')
+    load()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4" style={{ background: '#012b1e' }}>
+          <h2 className="text-white font-bold text-sm">Social Connections</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10"><X size={16} className="text-white/70" /></button>
+        </div>
+
+        <div className="p-5 flex flex-col gap-3">
+          <p className="text-xs text-gray-500">
+            Connect the account each platform publishes to. Google Business works today; Facebook,
+            Instagram, and LinkedIn require completing each platform&rsquo;s app review before posts go live.
+          </p>
+
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin" style={{ color: '#015035' }} /></div>
+          ) : picker ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold text-gray-700">Select a {PLATFORM_META[picker.platform].label} account:</p>
+              {picker.accounts.map(acc => (
+                <button key={acc.externalId} disabled={busy} onClick={() => save(acc)}
+                  className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-left disabled:opacity-50">
+                  <span className="text-sm text-gray-800">{acc.label}</span>
+                  <Check size={14} className="text-emerald-600" />
+                </button>
+              ))}
+              <button onClick={() => setPicker(null)} className="text-xs text-gray-500 mt-1 self-start hover:underline">← Back</button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {statuses.map(s => (
+                <div key={s.platform} className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-100 bg-gray-50">
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: PLATFORM_META[s.platform].color }}>
+                    {PLATFORM_META[s.platform].icon}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">{PLATFORM_META[s.platform].label}</p>
+                    <p className="text-[11px] text-gray-500 truncate">{s.connected ? s.accountLabel : 'Not connected'}</p>
+                  </div>
+                  {s.connected ? (
+                    <button onClick={() => disconnect(s.platform)} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Disconnect</button>
+                  ) : s.platform === 'linkedin' ? (
+                    <a href="/api/integrations/linkedin/connect" className="text-xs font-medium px-3 py-1.5 rounded-lg text-white" style={{ background: '#015035' }}>Connect</a>
+                  ) : (
+                    <button disabled={busy} onClick={() => choose(s.platform)} className="text-xs font-medium px-3 py-1.5 rounded-lg text-white disabled:opacity-50" style={{ background: '#015035' }}>
+                      {s.platform === 'google_business' ? 'Select location' : 'Select account'}
+                    </button>
+                  )}
+                </div>
+              ))}
+              <p className="text-[11px] text-gray-400 mt-1">
+                Facebook/Instagram accounts come from your connected Meta account (Settings → Integrations).
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 

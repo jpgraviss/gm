@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/components/ui/Toast'
 import {
   ArrowLeft, Save, ChevronDown, Plus, MoreHorizontal,
-  Zap, Mail, MessageSquare, Hash, User, Briefcase, Tag,
+  Zap, Mail, User, Briefcase, Tag,
   Clock, GitBranch, Bell, ListTodo, Activity, Trash2,
   X, Play, Pause, ZoomIn, ZoomOut, Maximize2,
   FileText, CheckCircle, ChevronRight, Check, AlertCircle, Loader2,
@@ -48,8 +48,9 @@ const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: s
     label: 'Communication',
     actions: [
       { value: 'send_email',     label: 'Send Email',       icon: <Mail size={18} />,          description: 'Send an automated email' },
-      { value: 'send_sms',       label: 'Send SMS',         icon: <MessageSquare size={18} />, description: 'Send an SMS message' },
-      { value: 'slack_message',  label: 'Slack Message',    icon: <Hash size={18} />,          description: 'Post to a Slack channel' },
+      // Send SMS / Slack Message are intentionally omitted: the automation engine
+      // has no handler for them yet, so offering them would create steps that
+      // silently do nothing. Re-add once lib/automations-engine.ts implements them.
     ],
   },
   {

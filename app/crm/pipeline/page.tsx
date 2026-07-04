@@ -103,7 +103,11 @@ function DealCard({
                 <p className="text-xs text-gray-400 mt-0.5">{deal.contact.name}</p>
               </div>
             </div>
-            <StatusBadge label={deal.serviceType} colorClass={serviceTypeColors[deal.serviceType] ?? 'bg-gray-100 text-gray-600'} />
+            <div className="flex flex-wrap gap-1 justify-end">
+              {(deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]).map(st => (
+                <StatusBadge key={st} label={st} colorClass={serviceTypeColors[st] ?? 'bg-gray-100 text-gray-600'} />
+              ))}
+            </div>
           </div>
           <div className="flex items-center justify-between mt-3">
             <span className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
@@ -170,12 +174,13 @@ function DealPanel({
   const [creatingProposal, setCreatingProposal] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<'deal' | 'company' | null>(null)
   const [editing, setEditing] = useState(false)
+  const dealServiceTypes = deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]
   const [editForm, setEditForm] = useState({
     value: String(deal.value),
     probability: String(deal.probability),
     closeDate: deal.closeDate,
     stage: deal.stage,
-    serviceType: deal.serviceType,
+    serviceTypes: dealServiceTypes as string[],
   })
   const dealAny = deal as LocalDeal & { companyId?: string; contactId?: string }
   const company = dealAny.companyId
@@ -202,12 +207,14 @@ function DealPanel({
 
   function handleSaveDealEdit() {
     if (!onUpdateDeal) return
+    const selectedTypes = editForm.serviceTypes.length > 0 ? editForm.serviceTypes : ['General']
     const updates: Partial<LocalDeal> = {
       value: parseFloat(editForm.value) || 0,
       probability: parseInt(editForm.probability) || 0,
       closeDate: editForm.closeDate,
       stage: editForm.stage,
-      serviceType: editForm.serviceType as LocalDeal['serviceType'],
+      serviceType: selectedTypes[0] as LocalDeal['serviceType'],
+      serviceTypes: selectedTypes as LocalDeal['serviceTypes'],
     }
     onUpdateDeal(deal.id, updates)
     setEditing(false)
@@ -248,7 +255,9 @@ function DealPanel({
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full text-white" style={{ background: stageColor }}>
                   {deal.stage}
                 </span>
-                <StatusBadge label={deal.serviceType} colorClass={serviceTypeColors[deal.serviceType] ?? 'bg-gray-100 text-gray-600'} />
+                {(deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]).map(st => (
+                  <StatusBadge key={st} label={st} colorClass={serviceTypeColors[st] ?? 'bg-gray-100 text-gray-600'} />
+                ))}
               </div>
               <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-heading)' }}>
                 {deal.company}
@@ -258,7 +267,7 @@ function DealPanel({
             <div className="flex items-center gap-1">
               {onUpdateDeal && (
                 <button
-                  onClick={() => { setEditing(e => !e); setEditForm({ value: String(deal.value), probability: String(deal.probability), closeDate: deal.closeDate, stage: deal.stage, serviceType: deal.serviceType }) }}
+                  onClick={() => { setEditing(e => !e); setEditForm({ value: String(deal.value), probability: String(deal.probability), closeDate: deal.closeDate, stage: deal.stage, serviceTypes: (deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]) as string[] }) }}
                   className="p-2 rounded-lg hover:bg-gray-50"
                   title="Edit deal"
                 >
@@ -938,12 +947,16 @@ export default function PipelinePage() {
   }
 
   async function handleNewDeal(data: NewDealData) {
+    const serviceTypes = data.serviceTypes && data.serviceTypes.length > 0
+      ? data.serviceTypes
+      : [data.serviceType]
     const payload = {
       company: data.company,
       contact: { id: `contact-${Date.now()}`, name: data.contactName, email: data.contactEmail, phone: data.contactPhone, title: data.contactTitle },
       stage: data.stage,
       value: Number(data.value) || 0,
-      serviceType: data.serviceType,
+      serviceType: serviceTypes[0],
+      serviceTypes,
       closeDate: data.closeDate,
       assignedRep: data.assignedRep,
       probability: Number(data.probability) || 20,

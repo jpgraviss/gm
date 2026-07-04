@@ -15,7 +15,7 @@ const SERVICE_TYPES = [
   'Email Marketing', 'Content Creation', 'Sales Training', 'Marketing Strategy',
 ] as const
 
-const STEP_NAMES = [
+const DEFAULT_STEP_NAMES = [
   'Contract Signed',
   'Invoice & Payment',
   'Welcome Email',
@@ -52,9 +52,11 @@ interface Project {
   name: string
 }
 
-function getStepPhase(step: number): 'onboarding' | 'active' | 'delivery' {
-  if (step <= 3) return 'onboarding'
-  if (step <= 6) return 'active'
+function getStepPhase(step: number, totalSteps: number = 8): 'onboarding' | 'active' | 'delivery' {
+  const third = Math.ceil(totalSteps / 3)
+  const twoThirds = Math.ceil((totalSteps * 2) / 3)
+  if (step <= third) return 'onboarding'
+  if (step <= twoThirds) return 'active'
   return 'delivery'
 }
 
@@ -62,9 +64,9 @@ function isWorkflowCompleted(w: Workflow): boolean {
   return w.steps.every(s => s.status === 'completed')
 }
 
-function getWorkflowCategory(w: Workflow): FilterTab {
+function getWorkflowCategory(w: Workflow, totalSteps: number = 8): FilterTab {
   if (isWorkflowCompleted(w)) return 'Completed'
-  const phase = getStepPhase(w.currentStep)
+  const phase = getStepPhase(w.currentStep, totalSteps)
   if (phase === 'onboarding') return 'Onboarding'
   if (phase === 'active') return 'Active'
   return 'Delivery'
@@ -262,6 +264,7 @@ export default function DeliveryDashboardPage() {
   const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<FilterTab>('All')
+  const [serviceFilter, setServiceFilter] = useState<string>('All')
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
@@ -273,8 +276,19 @@ export default function DeliveryDashboardPage() {
   const [sendModalScheduleTime, setSendModalScheduleTime] = useState('08:00')
   const [sendModalRecurring, setSendModalRecurring] = useState('none')
   const [sendModalMode, setSendModalMode] = useState<'now' | 'schedule'>('now')
+  const [stepNames, setStepNames] = useState<string[]>(DEFAULT_STEP_NAMES)
 
   useEffect(() => {
+    // Fetch configurable delivery steps from settings
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.delivery_steps && Array.isArray(d.delivery_steps) && d.delivery_steps.length > 0) {
+          setStepNames(d.delivery_steps)
+        }
+      })
+      .catch(() => {})
+
     fetch('/api/delivery/workflows')
       .then(r => r.ok ? r.json() : [])
       .then((data: Workflow[]) => { if (Array.isArray(data)) setWorkflows(data) })
@@ -282,17 +296,23 @@ export default function DeliveryDashboardPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const totalSteps = stepNames.length
+
+  // Compute service types present in workflows for filter tabs
+  const activeServiceTypes = Array.from(new Set(workflows.map(w => w.service))).sort()
+
   const kpis = {
     total: workflows.length,
-    onboarding: workflows.filter(w => !isWorkflowCompleted(w) && getStepPhase(w.currentStep) === 'onboarding').length,
-    active: workflows.filter(w => !isWorkflowCompleted(w) && getStepPhase(w.currentStep) === 'active').length,
-    delivery: workflows.filter(w => !isWorkflowCompleted(w) && getStepPhase(w.currentStep) === 'delivery').length,
+    onboarding: workflows.filter(w => !isWorkflowCompleted(w) && getStepPhase(w.currentStep, totalSteps) === 'onboarding').length,
+    active: workflows.filter(w => !isWorkflowCompleted(w) && getStepPhase(w.currentStep, totalSteps) === 'active').length,
+    delivery: workflows.filter(w => !isWorkflowCompleted(w) && getStepPhase(w.currentStep, totalSteps) === 'delivery').length,
     completed: workflows.filter(w => isWorkflowCompleted(w)).length,
   }
 
   const filtered = workflows
     .filter(w => {
-      if (activeTab !== 'All' && getWorkflowCategory(w) !== activeTab) return false
+      if (activeTab !== 'All' && getWorkflowCategory(w, totalSteps) !== activeTab) return false
+      if (serviceFilter !== 'All' && w.service !== serviceFilter) return false
       if (searchQuery && !w.company.toLowerCase().includes(searchQuery.toLowerCase())) return false
       return true
     })
@@ -313,7 +333,7 @@ export default function DeliveryDashboardPage() {
       const updatedSteps = nextPending
         ? newSteps.map(s => s.step === nextPending.step ? { ...s, status: 'in_progress' as const } : s)
         : newSteps
-      const newCurrent = nextPending ? nextPending.step : 8
+      const newCurrent = nextPending ? nextPending.step : totalSteps
       return { ...w, steps: updatedSteps, currentStep: newCurrent, lastUpdated: new Date().toISOString().split('T')[0] }
     }))
     fetch(`/api/delivery/workflows/${workflowId}/steps/${stepNum}`, {
@@ -364,7 +384,7 @@ export default function DeliveryDashboardPage() {
       service: data.service,
       projectId: data.projectId,
       currentStep: 1,
-      steps: STEP_NAMES.map((name, i) => ({
+      steps: stepNames.map((name, i) => ({
         step: i + 1,
         name,
         status: i === 0 ? 'in_progress' as const : 'pending' as const,
@@ -381,6 +401,33 @@ export default function DeliveryDashboardPage() {
     }).catch(() => toast('Failed to create workflow', 'error'))
   }
 
+  function handleSkipStep(workflowId: string) {
+    setWorkflows(prev => prev.map(w => {
+      if (w.id !== workflowId) return w
+      const currentIdx = w.steps.findIndex(s => s.step === w.currentStep)
+      if (currentIdx === -1) return w
+      const newSteps = w.steps.map((s, i) => {
+        if (i === currentIdx) return { ...s, status: 'completed' as const, completedDate: new Date().toISOString().split('T')[0] }
+        if (i === currentIdx + 1) return { ...s, status: 'in_progress' as const }
+        return s
+      })
+      const nextStep = currentIdx + 1 < w.steps.length ? w.steps[currentIdx + 1].step : totalSteps
+      return { ...w, steps: newSteps, currentStep: nextStep, lastUpdated: new Date().toISOString().split('T')[0] }
+    }))
+    fetch(`/api/delivery/workflows/${workflowId}/skip`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(() => toast('Failed to skip step', 'error'))
+  }
+
+  function handleRemoveWorkflow(workflowId: string) {
+    setWorkflows(prev => prev.filter(w => w.id !== workflowId))
+    fetch(`/api/delivery/workflows/${workflowId}`, {
+      method: 'DELETE',
+    }).catch(() => toast('Failed to remove workflow', 'error'))
+    toast('Workflow removed from pipeline', 'success')
+  }
+
   function toggleSort(field: 'company' | 'lastUpdated') {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortField(field); setSortDir('asc') }
@@ -389,7 +436,7 @@ export default function DeliveryDashboardPage() {
   if (loading) {
     return (
       <>
-        <Header title="Delivery Dashboard" subtitle="8-Step Client Delivery System" />
+        <Header title="Delivery Dashboard" subtitle={`${stepNames.length}-Step Client Delivery System`} />
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
         </div>
@@ -401,7 +448,7 @@ export default function DeliveryDashboardPage() {
     <>
       <Header
         title="Delivery Dashboard"
-        subtitle="8-Step Client Delivery System"
+        subtitle={`${stepNames.length}-Step Client Delivery System`}
         action={{ label: 'New Workflow', onClick: () => setShowNewModal(true) }}
       />
       <NewClientModal open={showNewClientModal} onClose={() => setShowNewClientModal(false)} />
@@ -416,13 +463,17 @@ export default function DeliveryDashboardPage() {
           </button>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
-          {[
-            { label: 'Total Workflows', value: kpis.total, color: '#374151' },
-            { label: 'Step 1–3 (Onboarding)', value: kpis.onboarding, color: '#3b82f6' },
-            { label: 'Step 4–6 (Active)', value: kpis.active, color: '#f59e0b' },
-            { label: 'Step 7–8 (Delivery)', value: kpis.delivery, color: '#8b5cf6' },
-            { label: 'Completed', value: kpis.completed, color: '#015035' },
-          ].map(k => (
+          {(() => {
+            const third = Math.ceil(totalSteps / 3)
+            const twoThirds = Math.ceil((totalSteps * 2) / 3)
+            return [
+              { label: 'Total Workflows', value: kpis.total, color: '#374151' },
+              { label: `Step 1–${third} (Onboarding)`, value: kpis.onboarding, color: '#3b82f6' },
+              { label: `Step ${third + 1}–${twoThirds} (Active)`, value: kpis.active, color: '#f59e0b' },
+              { label: `Step ${twoThirds + 1}–${totalSteps} (Delivery)`, value: kpis.delivery, color: '#8b5cf6' },
+              { label: 'Completed', value: kpis.completed, color: '#015035' },
+            ]
+          })().map(k => (
             <div key={k.label} className="metric-card">
               <p className="text-2xl font-bold" style={{ fontFamily: 'var(--font-heading)', color: k.color }}>{k.value}</p>
               <p className="text-[11px] text-gray-500 font-medium mt-1">{k.label}</p>

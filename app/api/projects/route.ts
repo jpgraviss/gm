@@ -11,6 +11,7 @@ function mapProject(row: any) {
     company:              row.company,
     companyId:            row.company_id || null,
     serviceType:          row.service_type,
+    serviceTypes:         row.service_types ?? [],
     status:               row.status,
     startDate:            row.start_date ?? '',
     launchDate:           row.launch_date ?? '',
@@ -59,6 +60,10 @@ export async function POST(req: NextRequest) {
     overview: { type: 'string', maxLength: 5000 },
   })
   if (!result.valid) return validationError(result.error)
+
+  const serviceTypes: string[] = Array.isArray(body.serviceTypes) && body.serviceTypes.length > 0
+    ? body.serviceTypes
+    : body.serviceType ? [body.serviceType] : ['General']
   const db = createServiceClient()
   const { data, error } = await db
     .from('projects')
@@ -67,7 +72,8 @@ export async function POST(req: NextRequest) {
       contract_id:   body.contractId || null,
       company:       body.company,
       company_id:    body.companyId || null,
-      service_type:  body.serviceType ?? 'General',
+      service_type:  serviceTypes[0] ?? 'General',
+      service_types: serviceTypes,
       status:        body.status ?? 'Not Started',
       start_date:    body.startDate ?? null,
       launch_date:   body.launchDate ?? null,

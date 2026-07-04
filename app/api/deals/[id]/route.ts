@@ -13,6 +13,7 @@ function mapDeal(row: any) {
     stage:        row.stage,
     value:        row.value,
     serviceType:  row.service_type,
+    serviceTypes: row.service_types ?? [],
     closeDate:    row.close_date ?? '',
     assignedRep:  row.assigned_rep,
     probability:  row.probability,
@@ -37,6 +38,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.notes !== undefined)       update.notes = body.notes
   if (body.contact !== undefined)     update.contact = body.contact
   if (body.serviceType !== undefined) update.service_type = body.serviceType
+  if (body.serviceTypes !== undefined) {
+    update.service_types = body.serviceTypes
+    update.service_type = body.serviceTypes[0] ?? body.serviceType ?? 'General'
+  }
   if (body.pipelineId !== undefined)  update.pipeline_id = body.pipelineId
   if (body.companyId !== undefined)   update.company_id = body.companyId
   if (body.contactId !== undefined)   update.contact_id = body.contactId

@@ -12,6 +12,7 @@ function mapDeal(row: any) {
     stage:        row.stage,
     value:        row.value,
     serviceType:  row.service_type,
+    serviceTypes: row.service_types ?? [],
     closeDate:    row.close_date ?? '',
     assignedRep:  row.assigned_rep,
     probability:  row.probability,
@@ -59,6 +60,9 @@ export async function POST(req: NextRequest) {
   })
   if (!result.valid) return validationError(result.error)
 
+  const serviceTypes: string[] = Array.isArray(body.serviceTypes) && body.serviceTypes.length > 0
+    ? body.serviceTypes
+    : body.serviceType ? [body.serviceType] : ['General']
   const db = createServiceClient()
   const { data, error } = await db
     .from('deals')
@@ -68,7 +72,8 @@ export async function POST(req: NextRequest) {
       contact:      body.contact ?? null,
       stage:        body.stage ?? 'Lead',
       value:        body.value ?? 0,
-      service_type: body.serviceType ?? 'General',
+      service_type: serviceTypes[0] ?? 'General',
+      service_types: serviceTypes,
       close_date:   body.closeDate ?? null,
       assigned_rep: body.assignedRep ?? '',
       probability:  body.probability ?? 0,

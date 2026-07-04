@@ -104,6 +104,7 @@ export interface Deal {
   stage: DealStage
   value: number
   serviceType: ServiceType
+  serviceTypes?: ServiceType[]
   closeDate: string
   assignedRep: string
   probability: number
@@ -201,6 +202,7 @@ export interface Project {
   contractId: string
   company: string
   serviceType: ServiceType
+  serviceTypes?: ServiceType[]
   status: ProjectStatus
   startDate: string
   launchDate: string

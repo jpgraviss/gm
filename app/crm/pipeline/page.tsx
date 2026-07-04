@@ -1109,12 +1109,12 @@ export default function PipelinePage() {
 
         {/* Kanban Board */}
         {mounted ? <DragDropContext onDragEnd={onDragEnd}>
-          <div className="flex gap-3 overflow-x-auto flex-1 min-h-0 items-stretch">
+          <div className="flex gap-3 overflow-x-auto flex-1 min-h-0 pb-2">
             {activeStages.map(stage => {
               const stageDeals = filteredDeals.filter(d => d.stage === stage.name)
               const stageTotal = stageDeals.reduce((s, d) => s + d.value, 0)
               return (
-                <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col min-h-0 bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 280 }}>
+                <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col min-h-0 bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 340, maxHeight: 'calc(100vh - 280px)' }}>
                   <div className="flex items-center justify-between mb-2 px-1 pb-2 border-b border-gray-100 flex-shrink-0">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
@@ -1162,9 +1162,9 @@ export default function PipelinePage() {
             })}
           </div>
         </DragDropContext> : (
-          <div className="flex gap-3 overflow-x-auto flex-1 min-h-0 items-stretch">
+          <div className="flex gap-3 overflow-x-auto flex-1 min-h-0 pb-2">
             {activeStages.map(stage => (
-              <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 280 }}>
+              <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col min-h-0 bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 340, maxHeight: 'calc(100vh - 280px)' }}>
                 <div className="flex items-center gap-2 mb-3 px-1 flex-shrink-0">
                   <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
                   <span className="text-xs font-semibold text-gray-700">{stage.name}</span>

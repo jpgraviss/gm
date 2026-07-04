@@ -5,7 +5,8 @@ import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import {
   Activity, X, Trash2, RefreshCw, Pause, Play, Pencil, Globe, AlertCircle,
-  CheckCircle2, Clock,
+  CheckCircle2, Clock, Shield, ShieldAlert, Puzzle, Palette, ChevronDown,
+  ChevronUp, AlertTriangle, Lock,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ interface MonitoredSite {
   lastDownAt: string | null
   responseTimeMs: number | null
   uptime30d: number | null
+  isWordPress?: boolean
 }
 
 interface UptimeCheckRow {
@@ -43,6 +45,20 @@ interface SiteDetail extends MonitoredSite {
 interface CompanyOption {
   id: string
   name: string
+}
+
+interface WPData {
+  checked: boolean
+  isWordPress: boolean
+  wpVersion: string | null
+  siteTitle: string | null
+  plugins: Array<{ name: string; slug: string; version: string; status: string; updateAvailable: boolean; newVersion?: string }>
+  themes: Array<{ name: string; slug: string; version: string; active: boolean }>
+  coreUpdateAvailable: boolean
+  securityHeaders: Record<string, boolean>
+  loginPageExposed: boolean
+  xmlRpcEnabled: boolean
+  checkedAt: string | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -83,6 +99,8 @@ function formatUptime(pct: number | null): string {
   if (pct == null) return '—'
   return `${pct.toFixed(2)}%`
 }
+
+const FOREST = '#015035'
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -229,6 +247,12 @@ export default function MonitoringPage() {
     }
   }
 
+  // Summary stats
+  const upCount = sites.filter(s => s.status === 'up').length
+  const downCount = sites.filter(s => s.status === 'down').length
+  const degradedCount = sites.filter(s => s.status === 'degraded').length
+  const wpCount = sites.filter(s => s.isWordPress).length
+
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
   }
@@ -237,10 +261,52 @@ export default function MonitoringPage() {
     <>
       <Header
         title="Website Monitoring"
-        subtitle="Uptime checks for client sites"
+        subtitle="Uptime & WordPress health for client sites"
         action={{ label: 'Add Site', onClick: () => setShowAdd(true) }}
       />
       <div className="page-content">
+        {/* Summary KPIs */}
+        {sites.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-emerald-100">
+                <CheckCircle2 size={18} className="text-emerald-700" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{upCount}</p>
+                <p className="text-[11px] text-gray-500">Sites Up</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-red-100">
+                <AlertCircle size={18} className="text-red-700" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{downCount}</p>
+                <p className="text-[11px] text-gray-500">Down</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-amber-100">
+                <AlertTriangle size={18} className="text-amber-700" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{degradedCount}</p>
+                <p className="text-[11px] text-gray-500">Degraded</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#e0f0ea' }}>
+                <Globe size={18} style={{ color: FOREST }} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{wpCount}</p>
+                <p className="text-[11px] text-gray-500">WordPress</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {sites.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
             <Activity size={28} className="text-gray-300 mx-auto mb-3" />
@@ -249,7 +315,7 @@ export default function MonitoringPage() {
             <button
               onClick={() => setShowAdd(true)}
               className="px-4 py-2 rounded-xl text-white text-sm font-semibold"
-              style={{ background: '#015035' }}
+              style={{ background: FOREST }}
             >
               Add Site
             </button>
@@ -277,7 +343,12 @@ export default function MonitoringPage() {
                         <Globe size={15} className="text-emerald-700" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{site.companyName}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{site.companyName}</p>
+                          {site.isWordPress && (
+                            <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">WP</span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500 truncate">{site.url}</p>
                       </div>
                     </div>
@@ -430,7 +501,7 @@ function AddSiteModal({
           <button
             onClick={submit}
             className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90"
-            style={{ background: '#015035' }}
+            style={{ background: FOREST }}
           >
             Add Monitor
           </button>
@@ -465,10 +536,15 @@ function SiteDetailPanel({
   onDelete: () => void
   onSave: (patch: { companyName: string; url: string; alertEmails: string[] }) => void
 }) {
+  const { toast } = useToast()
   const [editing, setEditing] = useState(false)
   const [draftName, setDraftName] = useState('')
   const [draftUrl, setDraftUrl] = useState('')
   const [draftEmails, setDraftEmails] = useState('')
+  const [detailTab, setDetailTab] = useState<'uptime' | 'wordpress'>('uptime')
+  const [wpData, setWpData] = useState<WPData | null>(null)
+  const [wpLoading, setWpLoading] = useState(false)
+  const [wpChecking, setWpChecking] = useState(false)
 
   useEffect(() => {
     if (detail) {
@@ -480,8 +556,42 @@ function SiteDetailPanel({
       setDraftEmails((detail.alertEmails ?? []).join(', '))
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditing(false)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDetailTab('uptime')
+      loadWPData(detail.id)
     }
-  }, [detail])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.id])
+
+  async function loadWPData(siteId: string) {
+    setWpLoading(true)
+    try {
+      const res = await fetch(`/api/monitored-sites/${siteId}/wordpress`)
+      if (res.ok) {
+        const data = await res.json()
+        setWpData(data)
+      }
+    } catch { /* non-fatal */ }
+    finally { setWpLoading(false) }
+  }
+
+  async function runWPCheck() {
+    if (!detail) return
+    setWpChecking(true)
+    try {
+      const res = await fetch(`/api/monitored-sites/${detail.id}/wordpress`, { method: 'POST' })
+      if (!res.ok) {
+        toast('WordPress check failed', 'error')
+        return
+      }
+      toast('WordPress check complete', 'success')
+      await loadWPData(detail.id)
+    } catch {
+      toast('WordPress check failed', 'error')
+    } finally {
+      setWpChecking(false)
+    }
+  }
 
   function commitEdit() {
     onSave({
@@ -500,7 +610,12 @@ function SiteDetailPanel({
       <div className="pointer-events-auto bg-white h-full shadow-2xl flex flex-col border-l border-gray-200 w-full sm:w-[min(680px,100vw)] overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100" style={{ background: '#012b1e' }}>
           <div className="min-w-0">
-            <h2 className="text-white font-bold text-sm truncate">{detail?.companyName ?? 'Loading…'}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-white font-bold text-sm truncate">{detail?.companyName ?? 'Loading…'}</h2>
+              {detail?.isWordPress && (
+                <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">WP</span>
+              )}
+            </div>
             <p className="text-white/60 text-xs truncate">{detail?.url}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0"><X size={16} className="text-white/70" /></button>
@@ -512,114 +627,119 @@ function SiteDetailPanel({
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
-              {/* Status row */}
-              <div className="grid grid-cols-3 gap-3">
-                <Stat
-                  label="Status"
-                  value={colors?.label ?? '—'}
-                  valueClass={colors?.text ?? 'text-gray-700'}
-                  icon={detail.status === 'up'
-                    ? <CheckCircle2 size={14} className="text-emerald-600" />
-                    : detail.status === 'down'
-                      ? <AlertCircle size={14} className="text-red-600" />
-                      : <Activity size={14} className="text-amber-600" />}
-                />
-                <Stat label="30d Uptime" value={formatUptime(detail.uptime30d)} />
-                <Stat label="Response" value={formatResponse(detail.responseTimeMs)} />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <Stat label="Last Check" value={formatRelative(detail.lastCheckAt)} icon={<Clock size={14} className="text-gray-400" />} />
-                <Stat label="Last Up" value={formatRelative(detail.lastUpAt)} />
-                <Stat label="Last Down" value={formatRelative(detail.lastDownAt)} />
-              </div>
+            {/* Tab Switcher */}
+            <div className="flex border-b border-gray-100">
+              <button
+                onClick={() => setDetailTab('uptime')}
+                className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${detailTab === 'uptime' ? 'text-emerald-700 border-b-2 border-emerald-700' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                <Activity size={13} className="inline mr-1 mb-0.5" />
+                Uptime
+              </button>
+              <button
+                onClick={() => setDetailTab('wordpress')}
+                className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${detailTab === 'wordpress' ? 'text-emerald-700 border-b-2 border-emerald-700' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                <Globe size={13} className="inline mr-1 mb-0.5" />
+                WordPress
+              </button>
+            </div>
 
-              {/* Edit section */}
-              <section>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Settings</label>
-                  <button
-                    onClick={() => setEditing(e => !e)}
-                    className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
-                  >
-                    <Pencil size={11} /> {editing ? 'Cancel' : 'Edit'}
-                  </button>
+            {detailTab === 'uptime' ? (
+              <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
+                <div className="grid grid-cols-3 gap-3">
+                  <StatCard
+                    label="Status"
+                    value={colors?.label ?? '—'}
+                    valueClass={colors?.text ?? 'text-gray-700'}
+                    icon={detail.status === 'up'
+                      ? <CheckCircle2 size={14} className="text-emerald-600" />
+                      : detail.status === 'down'
+                        ? <AlertCircle size={14} className="text-red-600" />
+                        : <Activity size={14} className="text-amber-600" />}
+                  />
+                  <StatCard label="30d Uptime" value={formatUptime(detail.uptime30d)} />
+                  <StatCard label="Response" value={formatResponse(detail.responseTimeMs)} />
                 </div>
-                {editing ? (
-                  <div className="flex flex-col gap-3">
-                    <input
-                      value={draftName}
-                      onChange={e => setDraftName(e.target.value)}
-                      placeholder="Company name"
-                      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <input
-                      value={draftUrl}
-                      onChange={e => setDraftUrl(e.target.value)}
-                      placeholder="https://client-site.com"
-                      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <input
-                      value={draftEmails}
-                      onChange={e => setDraftEmails(e.target.value)}
-                      placeholder="alerts@company.com"
-                      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
+                <div className="grid grid-cols-3 gap-3">
+                  <StatCard label="Last Check" value={formatRelative(detail.lastCheckAt)} icon={<Clock size={14} className="text-gray-400" />} />
+                  <StatCard label="Last Up" value={formatRelative(detail.lastUpAt)} />
+                  <StatCard label="Last Down" value={formatRelative(detail.lastDownAt)} />
+                </div>
+
+                <section>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Settings</label>
                     <button
-                      onClick={commitEdit}
-                      className="self-start px-4 py-2 rounded-xl text-white text-xs font-semibold"
-                      style={{ background: '#015035' }}
+                      onClick={() => setEditing(e => !e)}
+                      className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
                     >
-                      Save
+                      <Pencil size={11} /> {editing ? 'Cancel' : 'Edit'}
                     </button>
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-1 text-sm text-gray-700">
-                    <div><span className="text-xs text-gray-500">Alerts:</span> {(detail.alertEmails ?? []).join(', ') || '—'}</div>
-                    <div><span className="text-xs text-gray-500">Interval:</span> every {detail.checkIntervalMinutes} min</div>
-                  </div>
-                )}
-              </section>
+                  {editing ? (
+                    <div className="flex flex-col gap-3">
+                      <input value={draftName} onChange={e => setDraftName(e.target.value)} placeholder="Company name" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                      <input value={draftUrl} onChange={e => setDraftUrl(e.target.value)} placeholder="https://client-site.com" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                      <input value={draftEmails} onChange={e => setDraftEmails(e.target.value)} placeholder="alerts@company.com" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                      <button onClick={commitEdit} className="self-start px-4 py-2 rounded-xl text-white text-xs font-semibold" style={{ background: FOREST }}>Save</button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1 text-sm text-gray-700">
+                      <div><span className="text-xs text-gray-500">Alerts:</span> {(detail.alertEmails ?? []).join(', ') || '—'}</div>
+                      <div><span className="text-xs text-gray-500">Interval:</span> every {detail.checkIntervalMinutes} min</div>
+                    </div>
+                  )}
+                </section>
 
-              {/* Recent checks */}
-              <section>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Recent Checks</label>
-                <div className="bg-gray-50 rounded-xl overflow-hidden">
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                    <div className="col-span-4">Time</div>
-                    <div className="col-span-2">Status</div>
-                    <div className="col-span-2">Code</div>
-                    <div className="col-span-2">Time</div>
-                    <div className="col-span-2">Error</div>
-                  </div>
-                  <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
-                    {detail.recentChecks.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-xs text-gray-400">No checks yet</div>
-                    ) : (
-                      detail.recentChecks.map(c => (
-                        <div key={c.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-xs text-gray-700 bg-white">
-                          <div className="col-span-4 text-gray-500">{new Date(c.checkedAt).toLocaleString()}</div>
-                          <div className="col-span-2">
-                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${c.up ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                              {c.up ? 'up' : 'down'}
-                            </span>
+                <section>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Recent Checks</label>
+                  <div className="bg-gray-50 rounded-xl overflow-hidden">
+                    <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      <div className="col-span-4">Time</div>
+                      <div className="col-span-2">Status</div>
+                      <div className="col-span-2">Code</div>
+                      <div className="col-span-2">Time</div>
+                      <div className="col-span-2">Error</div>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
+                      {detail.recentChecks.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-xs text-gray-400">No checks yet</div>
+                      ) : (
+                        detail.recentChecks.map(c => (
+                          <div key={c.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-xs text-gray-700 bg-white">
+                            <div className="col-span-4 text-gray-500">{new Date(c.checkedAt).toLocaleString()}</div>
+                            <div className="col-span-2">
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${c.up ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                                {c.up ? 'up' : 'down'}
+                              </span>
+                            </div>
+                            <div className="col-span-2">{c.statusCode ?? '—'}</div>
+                            <div className="col-span-2">{formatResponse(c.responseTimeMs)}</div>
+                            <div className="col-span-2 truncate text-red-600" title={c.errorMessage ?? ''}>{c.errorMessage ?? ''}</div>
                           </div>
-                          <div className="col-span-2">{c.statusCode ?? '—'}</div>
-                          <div className="col-span-2">{formatResponse(c.responseTimeMs)}</div>
-                          <div className="col-span-2 truncate text-red-600" title={c.errorMessage ?? ''}>{c.errorMessage ?? ''}</div>
-                        </div>
-                      ))
-                    )}
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              </section>
-            </div>
+                </section>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
+                <WordPressTab
+                  wpData={wpData}
+                  wpLoading={wpLoading}
+                  wpChecking={wpChecking}
+                  onRunCheck={runWPCheck}
+                />
+              </div>
+            )}
 
             <div className="p-4 border-t border-gray-100 flex gap-2">
               <button
                 onClick={onRunCheck}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-1.5"
-                style={{ background: '#015035' }}
+                style={{ background: FOREST }}
               >
                 <RefreshCw size={13} /> Run Check
               </button>
@@ -644,7 +764,207 @@ function SiteDetailPanel({
   )
 }
 
-function Stat({
+// ─── WordPress Tab ────────────────────────────────────────────────────────────
+
+function WordPressTab({
+  wpData,
+  wpLoading,
+  wpChecking,
+  onRunCheck,
+}: {
+  wpData: WPData | null
+  wpLoading: boolean
+  wpChecking: boolean
+  onRunCheck: () => void
+}) {
+  const [pluginsOpen, setPluginsOpen] = useState(true)
+  const [themesOpen, setThemesOpen] = useState(false)
+
+  if (wpLoading) {
+    return <div className="flex items-center justify-center py-12"><RefreshCw size={16} className="animate-spin text-gray-400" /></div>
+  }
+
+  if (!wpData?.checked) {
+    return (
+      <div className="text-center py-12">
+        <Globe size={32} className="text-gray-300 mx-auto mb-3" />
+        <p className="text-sm font-medium text-gray-600 mb-1">No WordPress check yet</p>
+        <p className="text-xs text-gray-400 mb-4">Run a check to detect if this site is WordPress and scan for plugins, themes, and security issues.</p>
+        <button
+          onClick={onRunCheck}
+          disabled={wpChecking}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+          style={{ background: FOREST }}
+        >
+          <RefreshCw size={13} className={wpChecking ? 'animate-spin' : ''} />
+          {wpChecking ? 'Checking…' : 'Run WordPress Check'}
+        </button>
+      </div>
+    )
+  }
+
+  if (!wpData.isWordPress) {
+    return (
+      <div className="text-center py-12">
+        <Globe size={32} className="text-gray-300 mx-auto mb-3" />
+        <p className="text-sm font-medium text-gray-600 mb-1">Not a WordPress site</p>
+        <p className="text-xs text-gray-400 mb-4">This site doesn&apos;t appear to be running WordPress.</p>
+        <button
+          onClick={onRunCheck}
+          disabled={wpChecking}
+          className="text-xs text-emerald-700 hover:text-emerald-800 font-medium flex items-center gap-1 mx-auto"
+        >
+          <RefreshCw size={11} className={wpChecking ? 'animate-spin' : ''} /> Re-check
+        </button>
+      </div>
+    )
+  }
+
+  const updatesNeeded = wpData.plugins.filter(p => p.updateAvailable).length
+  const securityScore = Object.values(wpData.securityHeaders).filter(Boolean).length
+  const securityTotal = Object.keys(wpData.securityHeaders).length
+  const securityIssues: string[] = []
+  if (wpData.loginPageExposed) securityIssues.push('Login page exposed')
+  if (wpData.xmlRpcEnabled) securityIssues.push('XML-RPC enabled')
+  if (securityScore < securityTotal) securityIssues.push(`${securityTotal - securityScore} missing security headers`)
+
+  return (
+    <>
+      {/* WP Summary */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard
+          label="WP Version"
+          value={wpData.wpVersion ?? 'Hidden'}
+          icon={<Globe size={14} style={{ color: FOREST }} />}
+        />
+        <StatCard
+          label="Plugin Updates"
+          value={updatesNeeded > 0 ? `${updatesNeeded} needed` : 'Up to date'}
+          valueClass={updatesNeeded > 0 ? 'text-amber-600' : 'text-emerald-700'}
+          icon={<Puzzle size={14} className={updatesNeeded > 0 ? 'text-amber-500' : 'text-emerald-600'} />}
+        />
+        <StatCard
+          label="Security"
+          value={securityIssues.length > 0 ? `${securityIssues.length} issues` : 'Good'}
+          valueClass={securityIssues.length > 0 ? 'text-amber-600' : 'text-emerald-700'}
+          icon={securityIssues.length > 0 ? <ShieldAlert size={14} className="text-amber-500" /> : <Shield size={14} className="text-emerald-600" />}
+        />
+      </div>
+
+      {/* Last checked */}
+      {wpData.checkedAt && (
+        <p className="text-[11px] text-gray-400 flex items-center gap-1">
+          <Clock size={10} /> Last checked {formatRelative(wpData.checkedAt)}
+          <button onClick={onRunCheck} disabled={wpChecking} className="ml-2 text-emerald-700 hover:text-emerald-800 font-medium">
+            {wpChecking ? 'Checking…' : 'Re-check'}
+          </button>
+        </p>
+      )}
+
+      {/* Security Issues */}
+      {securityIssues.length > 0 && (
+        <section>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Security Issues</label>
+          <div className="flex flex-col gap-1.5">
+            {wpData.loginPageExposed && (
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-100">
+                <Lock size={13} className="text-amber-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-amber-800">Login page is publicly accessible</p>
+                  <p className="text-[10px] text-amber-600">Consider hiding /wp-login.php or adding 2FA</p>
+                </div>
+              </div>
+            )}
+            {wpData.xmlRpcEnabled && (
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-100">
+                <ShieldAlert size={13} className="text-amber-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-amber-800">XML-RPC is enabled</p>
+                  <p className="text-[10px] text-amber-600">Disable to prevent brute-force and DDoS amplification attacks</p>
+                </div>
+              </div>
+            )}
+            {Object.entries(wpData.securityHeaders).map(([header, present]) => !present && (
+              <div key={header} className="flex items-center gap-2 p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+                <AlertTriangle size={13} className="text-gray-400 flex-shrink-0" />
+                <p className="text-xs text-gray-600">Missing header: <code className="text-[10px] bg-gray-100 px-1 rounded">{header}</code></p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Plugins */}
+      {wpData.plugins.length > 0 && (
+        <section>
+          <button onClick={() => setPluginsOpen(o => !o)} className="flex items-center justify-between w-full mb-2">
+            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide cursor-pointer">
+              Plugins ({wpData.plugins.length})
+            </label>
+            {pluginsOpen ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+          </button>
+          {pluginsOpen && (
+            <div className="flex flex-col gap-1">
+              {wpData.plugins.map(p => (
+                <div key={p.slug} className="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Puzzle size={13} className={p.status === 'active' ? 'text-emerald-600' : 'text-gray-400'} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-gray-800 truncate">{p.name}</p>
+                      <p className="text-[10px] text-gray-400">v{p.version} · {p.status}</p>
+                    </div>
+                  </div>
+                  {p.updateAvailable && (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 flex-shrink-0">
+                      Update → {p.newVersion}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Themes */}
+      {wpData.themes.length > 0 && (
+        <section>
+          <button onClick={() => setThemesOpen(o => !o)} className="flex items-center justify-between w-full mb-2">
+            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide cursor-pointer">
+              Themes ({wpData.themes.length})
+            </label>
+            {themesOpen ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+          </button>
+          {themesOpen && (
+            <div className="flex flex-col gap-1">
+              {wpData.themes.map(t => (
+                <div key={t.slug} className="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <Palette size={13} className={t.active ? 'text-emerald-600' : 'text-gray-400'} />
+                    <div>
+                      <p className="text-xs font-medium text-gray-800">{t.name}</p>
+                      <p className="text-[10px] text-gray-400">v{t.version} · {t.active ? 'Active' : 'Inactive'}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* No plugins/themes (unauthenticated) */}
+      {wpData.plugins.length === 0 && wpData.themes.length === 0 && (
+        <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+          <p className="text-xs font-medium text-blue-800 mb-1">Plugin & theme details require authentication</p>
+          <p className="text-[11px] text-blue-600">Add WordPress Application Password credentials in the site settings to see installed plugins and themes with update status.</p>
+        </div>
+      )}
+    </>
+  )
+}
+
+function StatCard({
   label,
   value,
   valueClass,

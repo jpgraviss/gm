@@ -7,6 +7,7 @@ import {
   Radar, Search, Flame, Building2, Users, Globe, Phone, Mail,
   ExternalLink, ChevronRight, RefreshCw, Eye, MousePointerClick,
   ArrowUpDown, Clock, TrendingUp, Code, Copy, CheckCircle,
+  UserPlus, Zap, Filter, BarChart3, Target,
 } from 'lucide-react'
 
 interface Person {
@@ -177,6 +178,13 @@ export default function IntelligencePage() {
     finally { setEventsLoading(false) }
   }
 
+  // Filter counts
+  const hotCount = people.filter(p => p.isHotLead).length
+  const organicCount = people.filter(p => p.trafficType === 'organic').length
+  const paidCount = people.filter(p => p.trafficType === 'paid').length
+  const directCount = people.filter(p => p.trafficType === 'direct').length
+  const referralCount = people.filter(p => p.trafficType === 'referral').length
+
   const filtered = people
     .filter(p => {
       if (filter === 'hot') return p.isHotLead
@@ -201,6 +209,8 @@ export default function IntelligencePage() {
       return 0
     })
 
+  const hotLeads = people.filter(p => p.isHotLead).sort((a, b) => b.visitCount - a.visitCount).slice(0, 5)
+
   function handleSort(key: typeof sortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(key); setSortDir('desc') }
@@ -220,7 +230,7 @@ export default function IntelligencePage() {
               <h1 className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
                 Intelligence
               </h1>
-              <p className="text-xs text-gray-500">Website visitor identification powered by Maverick</p>
+              <p className="text-xs text-gray-500">Website visitor identification & lead intelligence</p>
             </div>
           </div>
           <button
@@ -237,15 +247,16 @@ export default function IntelligencePage() {
         {/* Source Tabs */}
         <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5 mb-5 w-fit">
           {([
-            ['maverick', 'Maverick Data'],
-            ['gravintel', 'GravIntel (Self-Hosted)'],
-            ['setup', 'Setup & Embed'],
-          ] as const).map(([key, label]) => (
+            ['maverick', 'Maverick Data', Zap],
+            ['gravintel', 'GravIntel (Self-Hosted)', Target],
+            ['setup', 'Setup & Embed', Code],
+          ] as const).map(([key, label, Icon]) => (
             <button
               key={key}
               onClick={() => setSource(key)}
-              className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${source === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${source === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
+              <Icon size={12} />
               {label}
             </button>
           ))}
@@ -428,33 +439,79 @@ GravIntel.track('pricing_viewed', { plan: 'premium' });`}
         {source === 'maverick' && <>
         {/* Stats Cards */}
         {stats && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-emerald-100">
-                <Users size={18} className="text-emerald-700" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-emerald-100">
+                  <Users size={16} className="text-emerald-700" />
+                </div>
+                <p className="text-[11px] text-gray-500 font-medium">Identified Visitors</p>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalPeople.toLocaleString()}</p>
-                <p className="text-[11px] text-gray-500">Identified Visitors</p>
-              </div>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalPeople.toLocaleString()}</p>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-blue-100">
-                <Building2 size={18} className="text-blue-700" />
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-100">
+                  <Building2 size={16} className="text-blue-700" />
+                </div>
+                <p className="text-[11px] text-gray-500 font-medium">Companies</p>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalCompanies.toLocaleString()}</p>
-                <p className="text-[11px] text-gray-500">Companies Detected</p>
-              </div>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalCompanies.toLocaleString()}</p>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#FFF3EA' }}>
-                <TrendingUp size={18} style={{ color: TERRACOTTA }} />
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#FFF3EA' }}>
+                  <TrendingUp size={16} style={{ color: TERRACOTTA }} />
+                </div>
+                <p className="text-[11px] text-gray-500 font-medium">Events (30d)</p>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.recentEvents.toLocaleString()}</p>
-                <p className="text-[11px] text-gray-500">Events (30 days)</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.recentEvents.toLocaleString()}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-orange-100">
+                  <Flame size={16} className="text-orange-600" />
+                </div>
+                <p className="text-[11px] text-gray-500 font-medium">Hot Leads</p>
               </div>
+              <p className="text-2xl font-bold text-gray-900">{hotCount}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Hot Leads Spotlight */}
+        {hotLeads.length > 0 && filter !== 'hot' && (
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Flame size={14} className="text-orange-500" />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Hot Leads</h3>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-1">
+              {hotLeads.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => loadEvents(p)}
+                  className="flex-shrink-0 w-48 bg-white rounded-xl border border-orange-100 p-3 hover:shadow-md transition-all text-left group"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    {p.profileImageUrl ? (
+                      <img src={p.profileImageUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: FOREST }}>
+                        {p.firstName?.[0]}{p.lastName?.[0]}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{p.firstName} {p.lastName}</p>
+                      {p.title && <p className="text-[10px] text-gray-400 truncate">{p.title}</p>}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-500">{p.company ?? '—'}</span>
+                    <span className="text-[10px] font-medium text-orange-600">{p.visitCount} visits</span>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -466,9 +523,9 @@ GravIntel.track('pricing_viewed', { plan: 'premium' });`}
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
               >
-                {t === 'visitors' ? 'Visitors' : 'Companies'}
+                {t === 'visitors' ? <><Users size={12} /> Visitors</> : <><Building2 size={12} /> Companies</>}
               </button>
             ))}
           </div>
@@ -484,21 +541,22 @@ GravIntel.track('pricing_viewed', { plan: 'premium' });`}
           {tab === 'visitors' && (
             <div className="flex gap-1 flex-wrap">
               {([
-                ['all', 'All'],
-                ['hot', 'Hot Leads'],
-                ['organic', 'Organic'],
-                ['paid', 'Paid'],
-                ['direct', 'Direct'],
-                ['referral', 'Referral'],
-              ] as const).map(([key, label]) => (
+                ['all', 'All', people.length],
+                ['hot', 'Hot Leads', hotCount],
+                ['organic', 'Organic', organicCount],
+                ['paid', 'Paid', paidCount],
+                ['direct', 'Direct', directCount],
+                ['referral', 'Referral', referralCount],
+              ] as const).map(([key, label, count]) => (
                 <button
                   key={key}
                   onClick={() => setFilter(key)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${filter === key ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${filter === key ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                   style={filter === key ? { background: FOREST } : {}}
                 >
-                  {key === 'hot' && <Flame size={10} className="inline mr-0.5 mb-0.5" />}
+                  {key === 'hot' && <Flame size={10} className={`${filter === key ? 'text-white' : ''}`} />}
                   {label}
+                  <span className={`text-[9px] ${filter === key ? 'text-white/70' : 'text-gray-400'}`}>{count}</span>
                 </button>
               ))}
             </div>
@@ -672,7 +730,7 @@ GravIntel.track('pricing_viewed', { plan: 'premium' });`}
                       {selectedPerson.company && <p className="text-xs text-gray-500 flex items-center gap-1"><Building2 size={10} /> {selectedPerson.company}</p>}
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${trafficBadge(selectedPerson.trafficType)}`}>
                       {selectedPerson.trafficType ?? 'unknown'}
                     </span>
@@ -682,23 +740,65 @@ GravIntel.track('pricing_viewed', { plan: 'premium' });`}
                   </div>
                 </div>
 
+                {/* Quick Actions */}
+                <div className="px-4 pt-3 pb-2 border-b border-gray-100 flex gap-2">
+                  {selectedPerson.businessEmail && (
+                    <a
+                      href={`mailto:${selectedPerson.businessEmail}`}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-medium hover:bg-emerald-100"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <Mail size={11} /> Email
+                    </a>
+                  )}
+                  {selectedPerson.phone && (
+                    <a
+                      href={`tel:${selectedPerson.phone}`}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-[11px] font-medium hover:bg-blue-100"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <Phone size={11} /> Call
+                    </a>
+                  )}
+                  <a
+                    href={`/crm?search=${encodeURIComponent(selectedPerson.email || `${selectedPerson.firstName} ${selectedPerson.lastName}`)}`}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-[11px] font-medium hover:bg-gray-200"
+                  >
+                    <UserPlus size={11} /> CRM
+                  </a>
+                </div>
+
                 <div className="p-4 border-b border-gray-100">
                   <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">Contact Info</h4>
                   <div className="flex flex-col gap-1.5">
                     {selectedPerson.businessEmail && (
-                      <a href={`mailto:${selectedPerson.businessEmail}`} className="flex items-center gap-2 text-xs text-gray-700 hover:text-blue-600">
-                        <Mail size={12} className="text-gray-400" /> {selectedPerson.businessEmail}
-                      </a>
+                      <div className="flex items-center gap-2 text-xs text-gray-700 group">
+                        <Mail size={12} className="text-gray-400" />
+                        <span className="flex-1 truncate">{selectedPerson.businessEmail}</span>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(selectedPerson.businessEmail!); toast('Copied', 'success') }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Copy size={10} className="text-gray-400 hover:text-gray-600" />
+                        </button>
+                      </div>
                     )}
                     {selectedPerson.personalEmail && selectedPerson.personalEmail !== selectedPerson.businessEmail && (
-                      <a href={`mailto:${selectedPerson.personalEmail}`} className="flex items-center gap-2 text-xs text-gray-500 hover:text-blue-600">
-                        <Mail size={12} className="text-gray-300" /> {selectedPerson.personalEmail}
-                      </a>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 group">
+                        <Mail size={12} className="text-gray-300" />
+                        <span className="flex-1 truncate">{selectedPerson.personalEmail}</span>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(selectedPerson.personalEmail!); toast('Copied', 'success') }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Copy size={10} className="text-gray-400 hover:text-gray-600" />
+                        </button>
+                      </div>
                     )}
                     {selectedPerson.phone && (
-                      <a href={`tel:${selectedPerson.phone}`} className="flex items-center gap-2 text-xs text-gray-700 hover:text-blue-600">
+                      <div className="flex items-center gap-2 text-xs text-gray-700">
                         <Phone size={12} className="text-gray-400" /> {selectedPerson.phone}
-                      </a>
+                      </div>
                     )}
                   </div>
                 </div>

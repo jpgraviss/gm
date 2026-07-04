@@ -7,6 +7,7 @@ import { fetchContracts, fetchRevenueByMonth } from '@/lib/supabase'
 import { formatCurrency, invoiceStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import type { Invoice, InvoiceStatus, Contract, RevenueMonth } from '@/lib/types'
+import { computeMRR } from '@/lib/metrics'
 import {
   DollarSign, AlertCircle, CheckCircle, Clock, Send, RefreshCw,
   X, ExternalLink, ScrollText, Calendar,
@@ -231,9 +232,7 @@ export default function BillingPage() {
     overdue: localInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + i.amount, 0),
     collected: localInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0),
     outstanding: localInvoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0),
-    mrr: contracts
-      .filter(c => ['Fully Executed', 'Active'].includes(c.status) && c.duration > 0)
-      .reduce((sum, c) => sum + c.value / c.duration, 0),
+    mrr: computeMRR(contracts),
   }
 
   // Revenue by service breakdown (computed from invoices — all service types)

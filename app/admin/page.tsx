@@ -15,6 +15,7 @@ import {
 // data loaded from API
 import { useToast } from '@/components/ui/Toast'
 import { formatCurrency } from '@/lib/utils'
+import { computeMRR } from '@/lib/metrics'
 import NewClientModal from '@/components/admin/NewClientModal'
 
 type AdminTab = 'overview' | 'users' | 'integrations' | 'permissions' | 'config' | 'audit'
@@ -428,12 +429,10 @@ export default function AdminPage() {
     // Active contracts + MRR
     fetch('/api/contracts')
       .then(r => r.ok ? r.json() : [])
-      .then((contracts: { status?: string; billing_structure?: string; value?: number }[]) => {
+      .then((contracts: { status?: string; billingStructure?: string; value?: number }[]) => {
         if (!Array.isArray(contracts)) return
         const active = contracts.filter(c => c.status === 'Fully Executed' || c.status === 'Active').length
-        const mrr = contracts
-          .filter(c => c.billing_structure === 'Monthly Retainer' && (c.status === 'Fully Executed' || c.status === 'Active'))
-          .reduce((sum, c) => sum + (c.value || 0), 0)
+        const mrr = computeMRR(contracts)
         setMetrics(prev => ({ ...prev, activeContracts: active, mrr }))
       })
       .catch(() => {})

@@ -9,6 +9,7 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
 import NewAddendumPanel, { type NewAddendumFormData } from '@/components/crm/NewAddendumPanel'
 import type { Contract, ContractStatus, Invoice, Project, Proposal, SignatureRequest } from '@/lib/types'
+import { computeMRR } from '@/lib/metrics'
 import {
   X, CheckCircle, Clock, AlertCircle, ScrollText, Calendar, DollarSign, User,
   ExternalLink, FileText, FolderKanban, Send, RefreshCw, Shield, Plus, FilePlus2,
@@ -938,9 +939,8 @@ export default function ContractsPage() {
 
   const totalContracts = localContracts.length
   const activeCount = localContracts.filter(c => c.status === 'Fully Executed').length
-  const totalMRR = localContracts
-    .filter(c => c.status === 'Fully Executed')
-    .reduce((sum, c) => sum + (c.duration > 0 ? c.value / c.duration : 0), 0)
+  // MRR: value normalized to monthly by billing structure (see lib/metrics).
+  const totalMRR = computeMRR(localContracts)
   const pendingSig = localContracts.filter(c => ['Sent', 'Viewed', 'Signed by Client', 'Countersign Needed'].includes(c.status)).length
 
   const kpis = [

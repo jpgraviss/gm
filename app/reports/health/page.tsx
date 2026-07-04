@@ -6,7 +6,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import type { Deal, Renewal, Invoice, CRMCompany } from '@/lib/types'
 
-type DateRange = '30D' | '90D' | '12M'
+type DateRange = '30D' | '90D' | '12M' | 'Custom'
 type HealthFilter = 'All' | 'Green' | 'Yellow' | 'Red'
 
 interface TicketRow {
@@ -107,6 +107,8 @@ export default function ClientHealthPage() {
   const [renewals, setRenewals] = useState<Renewal[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [tickets, setTickets] = useState<TicketRow[]>([])
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -126,29 +128,37 @@ export default function ClientHealthPage() {
   }, [])
 
   const clientHealth = useMemo(() => {
-    const now = new Date()
-    const cutoff = new Date(now)
-    if (dateRange === '30D') cutoff.setDate(cutoff.getDate() - 30)
-    else if (dateRange === '90D') cutoff.setDate(cutoff.getDate() - 90)
-    else cutoff.setFullYear(cutoff.getFullYear() - 1)
-    const cutoffISO = cutoff.toISOString()
+    let cutoffISO: string
+    let endISO: string
+    if (dateRange === 'Custom') {
+      cutoffISO = customStart || '1970-01-01'
+      endISO = customEnd ? customEnd + 'T23:59:59.999Z' : new Date().toISOString()
+    } else {
+      const now = new Date()
+      const cutoff = new Date(now)
+      if (dateRange === '30D') cutoff.setDate(cutoff.getDate() - 30)
+      else if (dateRange === '90D') cutoff.setDate(cutoff.getDate() - 90)
+      else cutoff.setFullYear(cutoff.getFullYear() - 1)
+      cutoffISO = cutoff.toISOString()
+      endISO = now.toISOString()
+    }
 
     const filteredDeals = deals.filter(d => {
       const date = d.closeDate || d.lastActivity
-      return !date || date >= cutoffISO
+      return !date || (date >= cutoffISO && date <= endISO)
     })
     const filteredInvoices = invoices.filter(i => {
-      return !i.issuedDate || i.issuedDate >= cutoffISO
+      return !i.issuedDate || (i.issuedDate >= cutoffISO && i.issuedDate <= endISO)
     })
     const filteredTickets = tickets.filter(t => {
-      return !t.created_at || t.created_at >= cutoffISO
+      return !t.created_at || (t.created_at >= cutoffISO && t.created_at <= endISO)
     })
 
     return companies
       .filter(c => c.status === 'Active Client' || c.status === 'Partner')
       .map(c => computeHealth(c, filteredDeals, renewals, filteredInvoices, filteredTickets))
       .sort((a, b) => a.healthScore - b.healthScore)
-  }, [companies, deals, renewals, invoices, tickets, dateRange])
+  }, [companies, deals, renewals, invoices, tickets, dateRange, customStart, customEnd])
 
   const filtered = healthFilter === 'All' ? clientHealth : clientHealth.filter(c => c.healthLabel === healthFilter)
 
@@ -175,7 +185,7 @@ export default function ClientHealthPage() {
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Period:</span>
             <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
-              {(['30D', '90D', '12M'] as DateRange[]).map(r => (
+              {(['30D', '90D', '12M', 'Custom'] as DateRange[]).map(r => (
                 <button
                   key={r}
                   onClick={() => setDateRange(r)}
@@ -186,6 +196,13 @@ export default function ClientHealthPage() {
                 </button>
               ))}
             </div>
+            {dateRange === 'Custom' && (
+              <div className="flex items-center gap-1.5">
+                <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
+                <span className="text-xs text-gray-400">to</span>
+                <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Status:</span>

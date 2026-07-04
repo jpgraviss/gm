@@ -6,7 +6,7 @@ import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import type { Deal, Invoice, RevenueMonth } from '@/lib/types'
 
-type DateRange = '3M' | '6M' | '12M'
+type DateRange = '3M' | '6M' | '12M' | 'Custom'
 
 const STAGE_WEIGHTS: Record<string, number> = {
   Lead: 0.1,
@@ -24,6 +24,8 @@ export default function RevenueReportPage() {
   const [deals, setDeals] = useState<Deal[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [revenueByMonth, setRevenueByMonth] = useState<RevenueMonth[]>([])
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -38,13 +40,37 @@ export default function RevenueReportPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const cutoffISO = useMemo(() => {
+    if (dateRange === 'Custom') {
+      return {
+        start: customStart || '1970-01-01',
+        end: customEnd ? customEnd + 'T23:59:59.999Z' : new Date().toISOString(),
+      }
+    }
+    const end = new Date()
+    const start = new Date()
+    if (dateRange === '3M') start.setMonth(start.getMonth() - 3)
+    else if (dateRange === '6M') start.setMonth(start.getMonth() - 6)
+    else start.setFullYear(start.getFullYear() - 1)
+    return { start: start.toISOString(), end: end.toISOString() }
+  }, [dateRange, customStart, customEnd])
+
+  const filteredDeals = useMemo(() => deals.filter(d => {
+    const date = d.closeDate || d.lastActivity
+    return !date || (date >= cutoffISO.start && date <= cutoffISO.end)
+  }), [deals, cutoffISO])
+
+  const filteredInvoices = useMemo(() => invoices.filter(i => {
+    return !i.issuedDate || (i.issuedDate >= cutoffISO.start && i.issuedDate <= cutoffISO.end)
+  }), [invoices, cutoffISO])
+
   const monthsToShow = dateRange === '3M' ? 3 : dateRange === '6M' ? 6 : revenueByMonth.length
   const visibleMonths = revenueByMonth.slice(-monthsToShow)
   const maxRevenue = Math.max(...visibleMonths.map(r => r.revenue), 1)
 
   const pipelineForecast = useMemo(() => {
     const stages: Record<string, { count: number; value: number; weighted: number }> = {}
-    deals.filter(d => d.stage !== 'Closed Lost').forEach(d => {
+    filteredDeals.filter(d => d.stage !== 'Closed Lost').forEach(d => {
       if (!stages[d.stage]) stages[d.stage] = { count: 0, value: 0, weighted: 0 }
       stages[d.stage].count++
       stages[d.stage].value += d.value
@@ -53,18 +79,18 @@ export default function RevenueReportPage() {
     return Object.entries(stages)
       .map(([stage, data]) => ({ stage, ...data }))
       .sort((a, b) => (STAGE_WEIGHTS[b.stage] ?? 0) - (STAGE_WEIGHTS[a.stage] ?? 0))
-  }, [deals])
+  }, [filteredDeals])
 
   const totalWeighted = pipelineForecast.reduce((s, p) => s + p.weighted, 0)
-  const closedWon = deals.filter(d => d.stage === 'Closed Won')
+  const closedWon = filteredDeals.filter(d => d.stage === 'Closed Won')
   const closedWonTotal = closedWon.reduce((s, d) => s + d.value, 0)
-  const collected = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0)
+  const collected = filteredInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0)
 
   const topDeals = useMemo(() => {
-    return [...deals]
+    return [...filteredDeals]
       .sort((a, b) => b.value - a.value)
       .slice(0, 10)
-  }, [deals])
+  }, [filteredDeals])
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
@@ -72,10 +98,10 @@ export default function RevenueReportPage() {
     <>
       <Header title="Revenue Report" subtitle="Revenue trends, pipeline forecast, and top deals" />
       <div className="page-content">
-        <div className="flex items-center gap-2 mb-5">
+        <div className="flex flex-wrap items-center gap-2 mb-5">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Period:</span>
           <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
-            {(['3M', '6M', '12M'] as DateRange[]).map(r => (
+            {(['3M', '6M', '12M', 'Custom'] as DateRange[]).map(r => (
               <button
                 key={r}
                 onClick={() => setDateRange(r)}
@@ -86,6 +112,13 @@ export default function RevenueReportPage() {
               </button>
             ))}
           </div>
+          {dateRange === 'Custom' && (
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
+              <span className="text-xs text-gray-400">to</span>
+              <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

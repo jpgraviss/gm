@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { randomBytes } from 'crypto'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { createServiceClient } from '@/lib/supabase'
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { name, email } = body as { name?: string; email?: string }
+  const { name, email, companyName: reqCompanyName } = body as {
+    name?: string
+    email?: string
+    companyName?: string
+  }
 
   if (!name?.trim() || !email?.trim()) {
     return NextResponse.json(
@@ -15,12 +20,12 @@ export async function POST(req: NextRequest) {
   }
 
   const settings = await getSettings()
-  const companyName = settings.company.name
+  const companyName = reqCompanyName?.trim() || settings.company.name
 
-  // Try to get Google review link from app_settings
+  // Get Google review URL from app_settings
   let googleReviewUrl: string | null = null
+  const db = createServiceClient()
   try {
-    const db = createServiceClient()
     const { data } = await db
       .from('app_settings')
       .select('google_reviews')
@@ -32,22 +37,39 @@ export async function POST(req: NextRequest) {
       googleReviewUrl?: string
     } | null
 
-    // Use stored review URL, or construct one from location name
     if (config?.googleReviewUrl) {
       googleReviewUrl = config.googleReviewUrl
-    } else if (config?.locationName) {
-      // GBP location names look like "accounts/xxx/locations/xxx"
-      // We can't derive a review URL from that, but we note it's configured
-      googleReviewUrl = null
     }
   } catch {
-    // Non-fatal — we'll send the email without a review link
+    // Non-fatal
   }
 
+  // Generate a unique token for this review request
+  const token = randomBytes(24).toString('base64url')
+
+  // Store the review request in the database
+  const { error: insertErr } = await db.from('review_requests').insert({
+    token,
+    customer_name: name.trim(),
+    customer_email: email.trim(),
+    company_name: companyName,
+    google_review_url: googleReviewUrl,
+    status: 'pending',
+  })
+
+  if (insertErr) {
+    console.error('[reputation/send-request] insert error:', insertErr)
+    return NextResponse.json(
+      { error: 'Failed to create review request' },
+      { status: 500 },
+    )
+  }
+
+  // Build the review link pointing to the public review page
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get('host')}`
+  const reviewPageUrl = `${baseUrl}/go/review/${token}`
+
   const firstName = name.trim().split(' ')[0]
-  const reviewLink = googleReviewUrl
-    ? `<a href="${googleReviewUrl}" style="display:inline-block;padding:14px 32px;background-color:#015035;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:16px;">Leave a Google Review</a>`
-    : `<a href="https://www.google.com/search?q=${encodeURIComponent(companyName)}+reviews" style="display:inline-block;padding:14px 32px;background-color:#015035;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:16px;">Leave a Google Review</a>`
 
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;">
@@ -59,7 +81,7 @@ export async function POST(req: NextRequest) {
         If you have a moment, we&rsquo;d love to hear about your experience. Your feedback helps us improve and helps others find us too.
       </p>
       <div style="text-align:center;margin:32px 0;">
-        ${reviewLink}
+        <a href="${reviewPageUrl}" style="display:inline-block;padding:14px 32px;background-color:#015035;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:16px;">Share Your Experience</a>
       </div>
       <p style="color:#4a4a4a;font-size:16px;line-height:1.6;margin-top:24px;">
         Thank you for your time &mdash; it means a lot to us!
@@ -89,5 +111,5 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  return NextResponse.json({ success: true, id: result.id })
+  return NextResponse.json({ success: true, id: result.id, token })
 }

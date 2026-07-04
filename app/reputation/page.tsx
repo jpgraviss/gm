@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
-type ReviewSource = 'Google' | 'Yelp' | 'Facebook' | 'Manual'
+type ReviewSource = 'Google' | 'Yelp' | 'Facebook' | 'Manual' | 'Internal'
 type ReviewStatus = 'pending' | 'responded'
 type FilterTab = 'all' | 'positive' | 'neutral' | 'negative' | 'needs_response'
 
@@ -27,6 +27,7 @@ interface Review {
   status: ReviewStatus
   google_review_id?: string | null
   location_name?: string | null
+  company_name?: string | null
 }
 
 const SOURCE_COLORS: Record<ReviewSource, { bg: string; text: string }> = {
@@ -34,6 +35,7 @@ const SOURCE_COLORS: Record<ReviewSource, { bg: string; text: string }> = {
   Yelp: { bg: '#fff1f0', text: '#d32323' },
   Facebook: { bg: '#eef2ff', text: '#1877f2' },
   Manual: { bg: '#f3f4f6', text: '#6b7280' },
+  Internal: { bg: '#fef3c7', text: '#92400e' },
 }
 
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
@@ -96,6 +98,9 @@ export default function ReputationPage() {
   const [requestModalOpen, setRequestModalOpen] = useState(false)
   const [requestEmail, setRequestEmail] = useState('')
   const [requestName, setRequestName] = useState('')
+  const [requestCompany, setRequestCompany] = useState('')
+
+  const [selectedCompany, setSelectedCompany] = useState<string>('all')
 
   const [syncing, setSyncing] = useState(false)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
@@ -107,6 +112,7 @@ export default function ReputationPage() {
   const [addRating, setAddRating] = useState(5)
   const [addText, setAddText] = useState('')
   const [addDate, setAddDate] = useState(new Date().toISOString().slice(0, 10))
+  const [addCompany, setAddCompany] = useState('')
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [sendingRequest, setSendingRequest] = useState(false)
   const { toast } = useToast()
@@ -162,6 +168,7 @@ export default function ReputationPage() {
           rating: addRating,
           text: addText.trim(),
           date: new Date(addDate).toISOString(),
+          company_name: addCompany.trim() || undefined,
         }),
       })
       if (res.ok) {
@@ -173,6 +180,7 @@ export default function ReputationPage() {
         setAddText('')
         setAddDate(new Date().toISOString().slice(0, 10))
         setAddSource('Google')
+        setAddCompany('')
       }
     } finally {
       setAddSubmitting(false)
@@ -189,6 +197,7 @@ export default function ReputationPage() {
         body: JSON.stringify({
           name: requestName.trim(),
           email: requestEmail.trim(),
+          companyName: requestCompany.trim() || undefined,
         }),
       })
       const data = await res.json()
@@ -200,6 +209,7 @@ export default function ReputationPage() {
       setRequestModalOpen(false)
       setRequestName('')
       setRequestEmail('')
+      setRequestCompany('')
     } catch {
       toast('Failed to send review request', 'error')
     } finally {
@@ -207,8 +217,21 @@ export default function ReputationPage() {
     }
   }
 
+  const companyNames = useMemo(() => {
+    const names = new Set<string>()
+    reviews.forEach((r) => {
+      if (r.company_name) names.add(r.company_name)
+    })
+    return Array.from(names).sort()
+  }, [reviews])
+
   const filtered = useMemo(() => {
     let result = [...reviews]
+
+    // Per-client filter
+    if (selectedCompany !== 'all') {
+      result = result.filter((r) => r.company_name === selectedCompany)
+    }
 
     if (activeTab === 'positive') result = result.filter((r) => r.rating >= 4)
     else if (activeTab === 'neutral') result = result.filter((r) => r.rating === 3)
@@ -225,7 +248,7 @@ export default function ReputationPage() {
     }
 
     return result
-  }, [reviews, activeTab, search])
+  }, [reviews, activeTab, search, selectedCompany])
 
   const stats = useMemo(() => {
     if (reviews.length === 0) return { avg: 0, total: 0, thisMonth: 0, responseRate: 0 }
@@ -340,6 +363,33 @@ export default function ReputationPage() {
           </div>
         </div>
 
+        {/* Client Filter */}
+        {companyNames.length > 0 && (
+          <div className="flex items-center gap-3">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+              Filter by Client
+            </label>
+            <select
+              value={selectedCompany}
+              onChange={(e) => setSelectedCompany(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035] bg-white min-w-[200px]"
+            >
+              <option value="all">All Clients</option>
+              {companyNames.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+            {selectedCompany !== 'all' && (
+              <button
+                onClick={() => setSelectedCompany('all')}
+                className="text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
+
         {/* KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {kpis.map((kpi) => (
@@ -395,7 +445,7 @@ export default function ReputationPage() {
                 <span>Sources</span>
               </div>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
-                {(['Google', 'Yelp', 'Facebook', 'Manual'] as ReviewSource[]).map((src) => {
+                {(['Google', 'Yelp', 'Facebook', 'Manual', 'Internal'] as ReviewSource[]).map((src) => {
                   const srcCount = reviews.filter((r) => r.source === src).length
                   if (srcCount === 0) return null
                   const c = SOURCE_COLORS[src]
@@ -621,8 +671,18 @@ export default function ReputationPage() {
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Company / Client <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  type="text"
+                  value={requestCompany}
+                  onChange={(e) => setRequestCompany(e.target.value)}
+                  placeholder="Acme Corp"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
+                />
+              </div>
               <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-500 leading-relaxed">
-                A personalized email will be sent with a direct link to leave a Google review. The email uses the &ldquo;Happy Client Follow-Up&rdquo; template.
+                A personalized email will be sent with a link to rate their experience. Customers rating 4-5 stars are redirected to leave a Google review. Lower ratings go to a private feedback form.
               </div>
             </div>
             <div className="p-5 border-t border-gray-100 flex items-center justify-end gap-2">
@@ -682,6 +742,16 @@ export default function ReputationPage() {
                   value={addName}
                   onChange={(e) => setAddName(e.target.value)}
                   placeholder="Jane Doe"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Company / Client <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  type="text"
+                  value={addCompany}
+                  onChange={(e) => setAddCompany(e.target.value)}
+                  placeholder="Acme Corp"
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
                 />
               </div>

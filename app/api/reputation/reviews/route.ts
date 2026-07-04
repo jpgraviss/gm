@@ -38,12 +38,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (body.action === 'add_review') {
-    const { source, reviewer_name, rating, text, date } = body as {
+    const { source, reviewer_name, rating, text, date, company_name } = body as {
       source: string
       reviewer_name: string
       rating: number
       text: string
       date: string
+      company_name?: string
     }
     if (!source || !reviewer_name || !rating) {
       return NextResponse.json({ error: 'source, reviewer_name, and rating are required' }, { status: 400 })
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
         response: null,
         response_date: null,
         status: 'pending',
+        company_name: company_name || null,
       })
       .select()
       .single()

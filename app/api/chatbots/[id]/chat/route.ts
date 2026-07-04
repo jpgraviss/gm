@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { chatCompletion } from '@/lib/ai-client'
 
+interface KnowledgeItem {
+  id: string
+  type: 'qa' | 'document' | 'url'
+  question?: string
+  answer?: string
+  title?: string
+  content?: string
+  url?: string
+  description?: string
+}
+
 interface ConversationMessage {
   role: 'user' | 'assistant'
   content: string
@@ -68,7 +79,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     existingMessages.push(userMsg)
 
-    const systemPrompt = buildSystemPrompt(chatbot.system_prompt, chatbot.knowledge)
+    const knowledgeItems = (chatbot.settings as Record<string, unknown>)?.knowledge_items as KnowledgeItem[] | undefined
+    const systemPrompt = buildSystemPrompt(chatbot.system_prompt, chatbot.knowledge, knowledgeItems)
     const chatMessages = existingMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
     const result = await chatCompletion({
@@ -112,11 +124,41 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
-function buildSystemPrompt(prompt: string, knowledge: string | null): string {
+function buildSystemPrompt(prompt: string, knowledge: string | null, knowledgeItems?: KnowledgeItem[]): string {
   let full = prompt || 'You are a helpful assistant.'
+
   if (knowledge) {
     full += `\n\nUse the following knowledge base to answer questions accurately:\n\n${knowledge}`
   }
+
+  if (knowledgeItems && knowledgeItems.length > 0) {
+    const qaPairs = knowledgeItems.filter(i => i.type === 'qa')
+    const docs = knowledgeItems.filter(i => i.type === 'document')
+    const urls = knowledgeItems.filter(i => i.type === 'url')
+
+    if (qaPairs.length > 0) {
+      full += '\n\n## Frequently Asked Questions\n'
+      for (const qa of qaPairs) {
+        full += `\nQ: ${qa.question}\nA: ${qa.answer}\n`
+      }
+    }
+
+    if (docs.length > 0) {
+      full += '\n\n## Reference Documents\n'
+      for (const doc of docs) {
+        full += `\n### ${doc.title}\n${doc.content}\n`
+      }
+    }
+
+    if (urls.length > 0) {
+      full += '\n\n## Reference Links\n'
+      for (const u of urls) {
+        full += `\n- ${u.url}${u.description ? ` - ${u.description}` : ''}`
+      }
+      full += '\n'
+    }
+  }
+
   full += '\n\nKeep responses concise and helpful. If you don\'t know the answer, say so and suggest contacting the team directly.'
   return full
 }

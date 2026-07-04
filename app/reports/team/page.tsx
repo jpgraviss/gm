@@ -4,9 +4,11 @@ import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import { fetchTeamMembers } from '@/lib/supabase'
-import type { TeamMember, AppTask, TimeEntry } from '@/lib/types'
+import { formatCurrency } from '@/lib/utils'
+import { computeMRR, contractMonthlyValue, RECURRING_STATUSES } from '@/lib/metrics'
+import type { TeamMember, AppTask, TimeEntry, Contract, Deal } from '@/lib/types'
 
-type DateRange = '7D' | '30D' | '90D'
+type DateRange = '7D' | '30D' | '90D' | 'Custom'
 
 interface TicketRow {
   id: string
@@ -25,6 +27,10 @@ export default function TeamProductivityPage() {
   const [tasks, setTasks] = useState<AppTask[]>([])
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
   const [tickets, setTickets] = useState<TicketRow[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -32,31 +38,53 @@ export default function TeamProductivityPage() {
       fetch('/api/tasks').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
       fetch('/api/time-entries').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
       fetch('/api/tickets').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
-    ]).then(([tm, t, te, tk]) => {
+      fetch('/api/contracts').then(r => r.ok ? r.json() : []),
+      fetch('/api/deals').then(r => r.ok ? r.json() : []),
+    ]).then(([tm, t, te, tk, con, dl]) => {
       if (Array.isArray(tm)) setTeamMembers(tm)
       if (Array.isArray(t)) setTasks(t)
       if (Array.isArray(te)) setTimeEntries(te)
       if (Array.isArray(tk)) setTickets(tk)
+      if (Array.isArray(con)) setContracts(con)
+      if (Array.isArray(dl)) setDeals(dl)
     }).catch(() => toast('Failed to load team data', 'error'))
       .finally(() => setLoading(false))
   }, [])
 
   const cutoffDate = useMemo(() => {
+    if (dateRange === 'Custom') return customStart || '1970-01-01'
     const d = new Date()
     if (dateRange === '7D') d.setDate(d.getDate() - 7)
     else if (dateRange === '30D') d.setDate(d.getDate() - 30)
     else d.setDate(d.getDate() - 90)
     return d.toISOString()
-  }, [dateRange])
+  }, [dateRange, customStart])
+
+  const cutoffEnd = useMemo(() => {
+    if (dateRange === 'Custom' && customEnd) return customEnd + 'T23:59:59.999Z'
+    return new Date().toISOString()
+  }, [dateRange, customEnd])
 
   const memberStats = useMemo(() => {
     return teamMembers.map(m => {
       const memberTasks = tasks.filter(t => t.assignedTo === m.name)
-      const completedTasks = memberTasks.filter(t => t.status === 'Completed' && (t.completedDate ?? '') >= cutoffDate)
-      const memberTime = timeEntries.filter(t => t.teamMember === m.name && t.date >= cutoffDate)
+      const completedTasks = memberTasks.filter(t => t.status === 'Completed' && (t.completedDate ?? '') >= cutoffDate && (t.completedDate ?? '') <= cutoffEnd)
+      const memberTime = timeEntries.filter(t => t.teamMember === m.name && t.date >= cutoffDate && t.date <= cutoffEnd)
       const totalHours = memberTime.reduce((s, t) => s + t.hours + t.minutes / 60, 0)
       const memberTickets = tickets.filter(t => t.assignee === m.name)
       const resolvedTickets = memberTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed')
+
+      // Revenue: deals where this member is the assigned rep, within date range
+      const memberDeals = deals.filter(d => d.assignedRep === m.name && d.stage === 'Closed Won')
+      const filteredMemberDeals = memberDeals.filter(d => {
+        const date = d.closeDate || d.lastActivity
+        return !date || (date >= cutoffDate && date <= cutoffEnd)
+      })
+      const dealRevenue = filteredMemberDeals.reduce((s, d) => s + d.value, 0)
+
+      // MRR: contracts where this member is the assigned rep
+      const memberContracts = contracts.filter(c => c.assignedRep === m.name && RECURRING_STATUSES.includes(c.status))
+      const memberMRR = memberContracts.reduce((s, c) => s + contractMonthlyValue(c), 0)
 
       return {
         id: m.id,
@@ -68,10 +96,12 @@ export default function TeamProductivityPage() {
         hoursTracked: Math.round(totalHours * 10) / 10,
         ticketsResolved: resolvedTickets.length,
         totalTickets: memberTickets.length,
+        dealRevenue,
+        memberMRR,
         score: completedTasks.length * 3 + Math.round(totalHours) + resolvedTickets.length * 2,
       }
     }).sort((a, b) => b.score - a.score)
-  }, [teamMembers, tasks, timeEntries, tickets, cutoffDate])
+  }, [teamMembers, tasks, timeEntries, tickets, contracts, deals, cutoffDate, cutoffEnd])
 
   const filteredStats = selectedMember === 'All' ? memberStats : memberStats.filter(m => m.name === selectedMember)
   const maxScore = Math.max(...memberStats.map(m => m.score), 1)
@@ -103,7 +133,7 @@ export default function TeamProductivityPage() {
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Period:</span>
             <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
-              {(['7D', '30D', '90D'] as DateRange[]).map(r => (
+              {(['7D', '30D', '90D', 'Custom'] as DateRange[]).map(r => (
                 <button
                   key={r}
                   onClick={() => setDateRange(r)}
@@ -114,6 +144,13 @@ export default function TeamProductivityPage() {
                 </button>
               ))}
             </div>
+            {dateRange === 'Custom' && (
+              <div className="flex items-center gap-1.5">
+                <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
+                <span className="text-xs text-gray-400">to</span>
+                <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Member:</span>
@@ -130,12 +167,14 @@ export default function TeamProductivityPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
           {[
             { label: 'Tasks Completed', value: filteredStats.reduce((s, m) => s + m.tasksCompleted, 0).toString(), color: '#015035' },
             { label: 'Hours Tracked', value: filteredStats.reduce((s, m) => s + m.hoursTracked, 0).toFixed(1), color: '#3b82f6' },
             { label: 'Tickets Resolved', value: filteredStats.reduce((s, m) => s + m.ticketsResolved, 0).toString(), color: '#22c55e' },
-            { label: 'Team Members', value: teamMembers.length.toString(), color: '#8b5cf6' },
+            { label: 'Deal Revenue', value: formatCurrency(filteredStats.reduce((s, m) => s + m.dealRevenue, 0)), color: '#f59e0b' },
+            { label: 'Team MRR', value: formatCurrency(filteredStats.reduce((s, m) => s + m.memberMRR, 0)), color: '#8b5cf6' },
+            { label: 'Team Members', value: teamMembers.length.toString(), color: '#9ca3af' },
           ].map(m => (
             <div key={m.label} className="kpi-card">
               <p className="text-2xl font-bold text-gray-900 mb-0.5 tracking-tight">{m.value}</p>
@@ -174,13 +213,15 @@ export default function TeamProductivityPage() {
           <div className="metric-card">
             <h3 className="font-semibold text-gray-800 text-sm mb-4">Per-Member Metrics</h3>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[380px]">
+              <table className="w-full min-w-[520px]">
                 <thead>
                   <tr className="text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100">
                     <th className="text-left pb-2 font-semibold">Member</th>
                     <th className="text-right pb-2 font-semibold">Tasks</th>
                     <th className="text-right pb-2 font-semibold">Hours</th>
                     <th className="text-right pb-2 font-semibold">Tickets</th>
+                    <th className="text-right pb-2 font-semibold">Deal Rev</th>
+                    <th className="text-right pb-2 font-semibold">MRR</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -197,11 +238,59 @@ export default function TeamProductivityPage() {
                       <td className="py-2 text-sm text-right font-semibold text-gray-700">{m.tasksCompleted}/{m.totalTasks}</td>
                       <td className="py-2 text-sm text-right font-semibold text-gray-700">{m.hoursTracked}h</td>
                       <td className="py-2 text-sm text-right font-semibold text-gray-700">{m.ticketsResolved}/{m.totalTickets}</td>
+                      <td className="py-2 text-sm text-right font-bold" style={{ color: '#015035' }}>{formatCurrency(m.dealRevenue)}</td>
+                      <td className="py-2 text-sm text-right font-bold" style={{ color: '#8b5cf6' }}>{formatCurrency(m.memberMRR)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+
+        <div className="metric-card mb-6">
+          <h3 className="font-semibold text-gray-800 text-sm mb-4">Per-Member Revenue Breakdown</h3>
+          <div className="flex flex-col gap-3">
+            {filteredStats
+              .filter(m => m.dealRevenue > 0 || m.memberMRR > 0)
+              .sort((a, b) => (b.dealRevenue + b.memberMRR * 12) - (a.dealRevenue + a.memberMRR * 12))
+              .map(m => {
+                const totalAnnual = m.dealRevenue + m.memberMRR * 12
+                const maxAnnual = Math.max(...filteredStats.map(s => s.dealRevenue + s.memberMRR * 12), 1)
+                return (
+                  <div key={m.id} className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 w-28 flex-shrink-0">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: '#015035' }}>
+                        {m.initials}
+                      </div>
+                      <span className="text-xs font-medium text-gray-800 truncate">{m.name}</span>
+                    </div>
+                    <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden flex">
+                      <div
+                        className="h-full"
+                        style={{ width: `${maxAnnual > 0 ? (m.dealRevenue / maxAnnual) * 100 : 0}%`, background: '#015035' }}
+                        title={`Deal revenue: ${formatCurrency(m.dealRevenue)}`}
+                      />
+                      <div
+                        className="h-full"
+                        style={{ width: `${maxAnnual > 0 ? ((m.memberMRR * 12) / maxAnnual) * 100 : 0}%`, background: '#8b5cf6' }}
+                        title={`Recurring (annualized): ${formatCurrency(m.memberMRR * 12)}`}
+                      />
+                    </div>
+                    <div className="flex-shrink-0 text-right w-28">
+                      <span className="text-xs font-bold text-gray-800">{formatCurrency(totalAnnual)}</span>
+                      <span className="text-[10px] text-gray-400 ml-1">total</span>
+                    </div>
+                  </div>
+                )
+              })}
+            {filteredStats.filter(m => m.dealRevenue > 0 || m.memberMRR > 0).length === 0 && (
+              <p className="text-xs text-gray-400 text-center py-4">No revenue attributed to team members in this period</p>
+            )}
+          </div>
+          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100 justify-center">
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ background: '#015035' }} /><span className="text-[10px] text-gray-500">Deal Revenue</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ background: '#8b5cf6' }} /><span className="text-[10px] text-gray-500">Recurring (Annualized)</span></div>
           </div>
         </div>
 

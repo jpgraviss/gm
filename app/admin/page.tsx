@@ -18,7 +18,7 @@ import { formatCurrency } from '@/lib/utils'
 import { computeMRR } from '@/lib/metrics'
 import NewClientModal from '@/components/admin/NewClientModal'
 
-type AdminTab = 'overview' | 'users' | 'integrations' | 'permissions' | 'config' | 'audit'
+type AdminTab = 'overview' | 'users' | 'integrations' | 'permissions' | 'config' | 'audit' | 'data-audit'
 
 const tabList: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
   { id: 'overview', label: 'Overview', icon: <Activity size={14} /> },
@@ -27,6 +27,7 @@ const tabList: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
   { id: 'permissions', label: 'Permissions', icon: <FileKey size={14} /> },
   { id: 'config', label: 'Platform Config', icon: <Settings size={14} /> },
   { id: 'audit', label: 'Audit Log', icon: <ScrollText size={14} /> },
+  { id: 'data-audit', label: 'Data Audit', icon: <Database size={14} /> },
 ]
 
 const membershipColors: Record<string, string> = {
@@ -177,6 +178,133 @@ function IntegrationCard({
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+interface AuditData {
+  totals: Record<string, number>
+  issues: {
+    contactsMissingEmail: { id: string; name: string }[]
+    contactsMissingCompany: { id: string; name: string; companyName: string }[]
+    companiesNoContacts: { id: string; name: string }[]
+    dealsMissingCompanyId: { id: string; company: string }[]
+    contractsMissingCompanyId: { id: string; company: string }[]
+    invoicesMissingCompanyId: { id: string; company: string }[]
+    projectsMissingCompanyId: { id: string; company: string }[]
+    orphanCompanyNames: string[]
+  }
+  scores: Record<string, number>
+}
+
+function DataAuditPanel() {
+  const [data, setData] = useState<AuditData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [fixing, setFixing] = useState(false)
+  const { toast } = useToast()
+
+  const load = async () => {
+    setLoading(true)
+    const res = await fetch('/api/admin/data-audit')
+    if (res.ok) setData(await res.json())
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
+
+  const fixOrphans = async () => {
+    if (!data?.issues.orphanCompanyNames.length) return
+    setFixing(true)
+    const res = await fetch('/api/admin/data-audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'create_missing_companies', names: data.issues.orphanCompanyNames }),
+    })
+    if (res.ok) { const r = await res.json(); toast(`Created ${r.created} companies`); load() }
+    setFixing(false)
+  }
+
+  const backfill = async () => {
+    setFixing(true)
+    const res = await fetch('/api/admin/data-audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'backfill_company_ids' }),
+    })
+    if (res.ok) { const r = await res.json(); toast(`Linked records: ${JSON.stringify(r.updated)}`); load() }
+    setFixing(false)
+  }
+
+  const scoreColor = (s: number) => s >= 90 ? 'text-green-600' : s >= 70 ? 'text-yellow-600' : 'text-red-600'
+  const scoreBg = (s: number) => s >= 90 ? 'bg-green-50 border-green-200' : s >= 70 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'
+
+  if (loading) return <div className="text-center py-12 text-gray-400">Loading audit data...</div>
+  if (!data) return <div className="text-center py-12 text-red-500">Failed to load audit data</div>
+
+  return (
+    <div className="space-y-5">
+      {/* Scores */}
+      <div className="grid grid-cols-4 gap-4">
+        {['overall', 'contacts', 'deals', 'contracts'].map(key => (
+          <div key={key} className={`rounded-xl border p-4 text-center ${scoreBg(data.scores[key] ?? 0)}`}>
+            <div className={`text-2xl font-bold ${scoreColor(data.scores[key] ?? 0)}`}>{data.scores[key] ?? 0}%</div>
+            <div className="text-xs text-gray-500 mt-1 capitalize">{key} Quality</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Totals */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 className="text-sm font-bold text-gray-800 mb-3">Record Totals</h3>
+        <div className="grid grid-cols-6 gap-3">
+          {Object.entries(data.totals).map(([k, v]) => (
+            <div key={k} className="text-center p-3 bg-gray-50 rounded-lg">
+              <div className="text-lg font-bold text-gray-800">{v}</div>
+              <div className="text-xs text-gray-500 capitalize">{k}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Issues */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-gray-800">Data Issues</h3>
+          <div className="flex gap-2">
+            {data.issues.orphanCompanyNames.length > 0 && (
+              <button onClick={fixOrphans} disabled={fixing} className="px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#015035', opacity: fixing ? 0.5 : 1 }}>
+                Create {data.issues.orphanCompanyNames.length} Missing Companies
+              </button>
+            )}
+            <button onClick={backfill} disabled={fixing} className="px-3 py-1.5 text-xs font-medium text-white rounded-lg" style={{ background: '#015035', opacity: fixing ? 0.5 : 1 }}>
+              Backfill Company IDs
+            </button>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {([
+            ['Contacts Missing Email', data.issues.contactsMissingEmail],
+            ['Contacts Missing Company Link', data.issues.contactsMissingCompany],
+            ['Companies With No Contacts', data.issues.companiesNoContacts],
+            ['Deals Missing Company ID', data.issues.dealsMissingCompanyId],
+            ['Contracts Missing Company ID', data.issues.contractsMissingCompanyId],
+            ['Invoices Missing Company ID', data.issues.invoicesMissingCompanyId],
+            ['Projects Missing Company ID', data.issues.projectsMissingCompanyId],
+            ['Orphan Company Names', data.issues.orphanCompanyNames],
+          ] as [string, unknown[]][]).map(([label, items]) => (
+            <div key={label} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+              <span className="text-sm text-gray-700">{label}</span>
+              <span className={`text-sm font-semibold ${items.length > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {items.length === 0 ? '✓ None' : items.length}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button onClick={load} className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50">
+        <RefreshCw size={12} /> Refresh Audit
+      </button>
     </div>
   )
 }
@@ -1904,6 +2032,7 @@ export default function AdminPage() {
               <div className="flex items-center gap-2 mb-4">
                 <Lock size={15} style={{ color: '#015035' }} />
                 <h3 className="text-sm font-bold text-gray-800">Security Settings</h3>
+                <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full ml-auto">(Coming Soon)</span>
               </div>
               <div className="flex flex-col gap-3">
                 {[
@@ -1921,7 +2050,7 @@ export default function AdminPage() {
                     </div>
                     <div className="flex items-center gap-1.5 ml-4">
                       <span className="text-xs text-gray-600 font-medium">{s.value}</span>
-                      <Pencil size={11} className="text-gray-300 hover:text-blue-500 cursor-pointer flex-shrink-0" />
+                      <Lock size={11} className="text-gray-300 flex-shrink-0" />
                     </div>
                   </div>
                 ))}
@@ -1932,6 +2061,8 @@ export default function AdminPage() {
         })()}
 
         {/* ── AUDIT LOG ── */}
+        {tab === 'data-audit' && <DataAuditPanel />}
+
         {tab === 'audit' && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">

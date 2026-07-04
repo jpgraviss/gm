@@ -13,8 +13,9 @@ const DEEP_DIVE_REPORTS = [
   { href: '/reports/health',    label: 'Health',    icon: <HeartPulse size={15} />,  desc: 'Client health & churn risk' },
   { href: '/reports/marketing', label: 'Marketing', icon: <Megaphone size={15} />,   desc: 'Campaign & channel metrics' },
 ]
-import type { Deal, Invoice, Project, Renewal, RevenueMonth, MaintenanceRecord, TeamMember } from '@/lib/types'
+import type { Deal, Invoice, Project, Renewal, RevenueMonth, MaintenanceRecord, TeamMember, Contract } from '@/lib/types'
 import { fetchTeamMembers } from '@/lib/supabase'
+import { computeMRR, computeARR } from '@/lib/metrics'
 
 type DateRange = '3M' | '6M' | '12M'
 type RepFilter = 'All' | string
@@ -52,6 +53,7 @@ export default function ReportsPage() {
   const [revenueByMonth, setRevenueByMonth] = useState<RevenueMonth[]>([])
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -62,7 +64,8 @@ export default function ReportsPage() {
       fetch('/api/dashboard').then(r => r.ok ? r.json() : null).then(d => d?.revenueByMonth ?? []),
       fetch('/api/maintenance').then(r => r.ok ? r.json() : []),
       fetchTeamMembers(),
-    ]).then(([d, i, p, r, rev, m, tm]) => {
+      fetch('/api/contracts').then(r => r.ok ? r.json() : []),
+    ]).then(([d, i, p, r, rev, m, tm, con]) => {
       if (Array.isArray(d)) setDeals(d)
       if (Array.isArray(i)) setInvoices(i)
       if (Array.isArray(p)) setProjects(p)
@@ -70,6 +73,7 @@ export default function ReportsPage() {
       if (Array.isArray(rev)) setRevenueByMonth(rev)
       if (Array.isArray(m)) setMaintenance(m)
       if (Array.isArray(tm)) setTeamMembers(tm)
+      if (Array.isArray(con)) setContracts(con)
     }).catch(() => toast('Failed to load report data', 'error'))
       .finally(() => setLoading(false))
   }, [])
@@ -112,10 +116,9 @@ export default function ReportsPage() {
   const churnRate = (activeMaintenance + cancelledMaintenance) > 0
     ? Math.round((cancelledMaintenance / (activeMaintenance + cancelledMaintenance)) * 100)
     : 0
-  const currentMRR = activeMaintenance > 0
-    ? maintenance.filter(m => m.status === 'Active').reduce((s, m) => s + m.monthlyFee, 0)
-    : 0
-  const prevMonthMRR = revenueByMonth.length >= 2 ? revenueByMonth[revenueByMonth.length - 2].recurring : 0
+  // MRR/ARR from active recurring contracts (see lib/metrics)
+  const mrr = computeMRR(contracts)
+  const arr = computeARR(contracts)
   const mrrGrowth = revenueByMonth.length >= 2
     ? Math.round(((revenueByMonth[revenueByMonth.length - 1].revenue - revenueByMonth[revenueByMonth.length - 2].revenue) / Math.max(1, revenueByMonth[revenueByMonth.length - 2].revenue)) * 100)
     : 0
@@ -229,7 +232,7 @@ export default function ReportsPage() {
             { label: 'Avg Deal Size',     value: formatCurrency(avgDealSize),   icon: <DollarSign size={16} />, color: '#015035', sub: 'Closed won' },
             { label: 'Revenue Collected', value: formatCurrency(collected),     icon: <CheckCircle size={16} />,color: '#22c55e', sub: 'All invoices' },
             { label: 'Outstanding',       value: formatCurrency(outstanding),   icon: <DollarSign size={16} />, color: '#f59e0b', sub: 'Pending + overdue' },
-            { label: 'ARR',              value: formatCurrency(collected * 12),  icon: <RefreshCw size={16} />,  color: '#8b5cf6', sub: 'Annual recurring' },
+            { label: 'ARR',              value: formatCurrency(arr),  icon: <RefreshCw size={16} />,  color: '#8b5cf6', sub: `${formatCurrency(mrr)}/mo recurring` },
             { label: 'Renewal Rate',     value: `${renewalRate}%`,              icon: <Users size={16} />,      color: '#ec4899', sub: renewals.length > 0 ? `${renewals.filter(r => r.status === 'Renewed').length}/${renewals.length} renewals` : 'No renewals yet' },
           ].map(m => (
             <div key={m.label} className="kpi-card" style={{ '--kpi-accent': m.color } as React.CSSProperties}>

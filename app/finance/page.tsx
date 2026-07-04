@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import Link from 'next/link'
+import { computeMRR } from '@/lib/metrics'
 import {
   CreditCard, BarChart3, DollarSign, FileBarChart, Plug,
   Activity, ArrowRight, Users, Landmark, RefreshCw,
@@ -73,9 +74,7 @@ export default function FinanceHub() {
       .finally(() => setMercuryLoading(false))
   }, [])
 
-  const mrr = contracts
-    .filter(c => c.status === 'Fully Executed' && c.billingStructure === 'Monthly')
-    .reduce((sum, c) => sum + (c.value ?? 0), 0)
+  const mrr = computeMRR(contracts)
 
   const totalBalance = mercuryAccounts.reduce((sum, a) => sum + (a.currentBalance ?? 0), 0)
 

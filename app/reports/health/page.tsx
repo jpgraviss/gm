@@ -126,11 +126,29 @@ export default function ClientHealthPage() {
   }, [])
 
   const clientHealth = useMemo(() => {
+    const now = new Date()
+    const cutoff = new Date(now)
+    if (dateRange === '30D') cutoff.setDate(cutoff.getDate() - 30)
+    else if (dateRange === '90D') cutoff.setDate(cutoff.getDate() - 90)
+    else cutoff.setFullYear(cutoff.getFullYear() - 1)
+    const cutoffISO = cutoff.toISOString()
+
+    const filteredDeals = deals.filter(d => {
+      const date = d.closeDate || d.lastActivity
+      return !date || date >= cutoffISO
+    })
+    const filteredInvoices = invoices.filter(i => {
+      return !i.issuedDate || i.issuedDate >= cutoffISO
+    })
+    const filteredTickets = tickets.filter(t => {
+      return !t.created_at || t.created_at >= cutoffISO
+    })
+
     return companies
       .filter(c => c.status === 'Active Client' || c.status === 'Partner')
-      .map(c => computeHealth(c, deals, renewals, invoices, tickets))
+      .map(c => computeHealth(c, filteredDeals, renewals, filteredInvoices, filteredTickets))
       .sort((a, b) => a.healthScore - b.healthScore)
-  }, [companies, deals, renewals, invoices, tickets])
+  }, [companies, deals, renewals, invoices, tickets, dateRange])
 
   const filtered = healthFilter === 'All' ? clientHealth : clientHealth.filter(c => c.healthLabel === healthFilter)
 

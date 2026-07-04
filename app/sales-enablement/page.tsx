@@ -485,6 +485,7 @@ export default function SalesEnablementPage() {
 
   async function applyTemplate(tmpl: SalesTemplate) {
     try {
+      await navigator.clipboard.writeText(tmpl.content)
       const res = await fetch(`/api/sales-templates/${tmpl.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -493,7 +494,7 @@ export default function SalesEnablementPage() {
       if (!res.ok) throw new Error('Failed to track template usage')
       const updated = await res.json()
       setTemplates(prev => prev.map(t => (t.id === tmpl.id ? updated : t)))
-      toast('Template copied — usage tracked', 'success')
+      toast('Template copied to clipboard', 'success')
     } catch (e) {
       toast((e as Error).message, 'error')
     }

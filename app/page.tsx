@@ -279,7 +279,7 @@ function RevenueChart({ data }: { data: RevenueMonth[] }) {
           <div className="w-full">
             <div
               className="w-full rounded-t-md group-hover:opacity-85 transition-opacity"
-              style={{ height: `${((d.revenue - d.recurring) / max) * 112}px`, background: '#015035' }}
+              style={{ height: `${Math.max(0, (d.revenue - d.recurring) / max) * 112}px`, background: '#015035' }}
               title={`One-time: ${formatCurrency(d.revenue - d.recurring)}`}
             />
             <div
@@ -317,9 +317,18 @@ interface DashboardData {
     activeClients: number
     openDeals: number
     pipelineValue: number
-    monthlyRevenue: number
+    totalCollected: number
     overdueInvoices: number
     upcomingRenewals: number
+    totalInvoiced: number
+    totalOverdue: number
+    totalPending: number
+    winRate: number
+    avgDealSize: number
+    totalDealValue: number
+    deals30d: number
+    contracts30d: number
+    invoices30d: number
   }
   recentDeals: Array<{ id: string; company: string; stage: string; value: number; serviceType: string; lastActivity: string }>
   recentContracts: Array<{ id: string; company: string; status: string; value: number; renewalDate: string; serviceType: string }>
@@ -330,7 +339,7 @@ interface DashboardData {
 }
 
 const emptyData: DashboardData = {
-  metrics: { activeClients: 0, openDeals: 0, pipelineValue: 0, monthlyRevenue: 0, overdueInvoices: 0, upcomingRenewals: 0 },
+  metrics: { activeClients: 0, openDeals: 0, pipelineValue: 0, totalCollected: 0, overdueInvoices: 0, upcomingRenewals: 0, totalInvoiced: 0, totalOverdue: 0, totalPending: 0, winRate: 0, avgDealSize: 0, totalDealValue: 0, deals30d: 0, contracts30d: 0, invoices30d: 0 },
   recentDeals: [],
   recentContracts: [],
   recentInvoices: [],
@@ -383,7 +392,7 @@ function LiveClock() {
   const h12      = h % 12 || 12
   const mm       = String(m).padStart(2, '0')
   const ss       = String(s).padStart(2, '0')
-  const suffix   = date === 1 ? 'st' : date === 2 ? 'nd' : date === 3 ? 'rd' : 'th'
+  const suffix   = (date >= 11 && date <= 13) ? 'th' : date % 10 === 1 ? 'st' : date % 10 === 2 ? 'nd' : date % 10 === 3 ? 'rd' : 'th'
 
   return (
     <div
@@ -636,18 +645,14 @@ function ViewSelector({ view, setView, views }: { view: DashboardView; setView: 
 
 function SalesView({ data }: { data: DashboardData }) {
   const m = data.metrics
-  const closedWon = data.recentDeals.filter(d => d.stage === 'Closed Won')
-  const totalDealValue = data.recentDeals.reduce((s, d) => s + d.value, 0)
-  const avgDealSize = data.recentDeals.length > 0 ? totalDealValue / data.recentDeals.length : 0
-  const winRate = data.recentDeals.length > 0 ? Math.round((closedWon.length / data.recentDeals.length) * 100) : 0
 
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         <KpiCard label="Pipeline Value" value={formatCurrency(m.pipelineValue)}  icon={<TrendingUp size={17} />}  accent="#3b82f6"  sub="Active deals"    href="/crm/pipeline" />
         <KpiCard label="Open Deals"     value={String(m.openDeals)}             icon={<Target size={17} />}      accent="#8b5cf6"  sub="In progress"     href="/crm/pipeline" />
-        <KpiCard label="Win Rate"       value={`${winRate}%`}                   icon={<CheckCircle size={17} />} accent="#22c55e"  sub={`${closedWon.length} closed won`} />
-        <KpiCard label="Avg Deal"       value={formatCurrency(avgDealSize)}     icon={<DollarSign size={17} />}  accent="#015035"  sub="Average value" />
+        <KpiCard label="Win Rate"       value={`${m.winRate}%`}                 icon={<CheckCircle size={17} />} accent="#22c55e"  sub="Of decided deals" />
+        <KpiCard label="Avg Deal"       value={formatCurrency(m.avgDealSize)}   icon={<DollarSign size={17} />}  accent="#015035"  sub="Closed won avg" />
         <KpiCard label="Proposals"      value={String(data.recentContracts.filter(c => c.status === 'Draft' || c.status === 'Sent').length)} icon={<FileText size={17} />} accent="#f59e0b" sub="Pending" href="/proposals" />
         <KpiCard label="Renewals"       value={String(m.upcomingRenewals)}      icon={<RefreshCw size={17} />}   accent="#ef4444"  sub="Due in 60d"      href="/renewals" />
       </div>
@@ -724,9 +729,9 @@ function SalesView({ data }: { data: DashboardData }) {
           </div>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: 'Deals Created', value: data.recentDeals.length, color: '#3b82f6' },
-              { label: 'Contracts', value: data.recentContracts.length, color: '#015035' },
-              { label: 'Invoices', value: data.recentInvoices.length, color: '#22c55e' },
+              { label: 'Deals Created', value: data.metrics.deals30d, color: '#3b82f6' },
+              { label: 'Contracts', value: data.metrics.contracts30d, color: '#015035' },
+              { label: 'Invoices', value: data.metrics.invoices30d, color: '#22c55e' },
             ].map(s => (
               <div key={s.label} className="text-center p-3 bg-gray-50 rounded-xl">
                 <p className="text-xl font-bold" style={{ color: s.color }}>{s.value}</p>
@@ -874,22 +879,18 @@ function OperationsView() {
 // ─── Billing Dashboard ──────────────────────────────────────────────────────
 
 function BillingView({ data }: { data: DashboardData }) {
-  const paidInvoices = data.recentInvoices.filter(i => i.status === 'Paid')
+  const m = data.metrics
   const overdueInvoices = data.recentInvoices.filter(i => i.status === 'Overdue')
-  const pendingInvoices = data.recentInvoices.filter(i => i.status === 'Sent' || i.status === 'Viewed')
-  const totalPaid = paidInvoices.reduce((s, i) => s + i.amount, 0)
-  const totalOverdue = overdueInvoices.reduce((s, i) => s + i.amount, 0)
-  const totalPending = pendingInvoices.reduce((s, i) => s + i.amount, 0)
 
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <KpiCard label="Collected"       value={formatCurrency(data.metrics.monthlyRevenue)} icon={<DollarSign size={17} />}   accent="#22c55e"  sub="Total paid"       href="/billing" />
-        <KpiCard label="Overdue"         value={formatCurrency(totalOverdue)}                icon={<AlertCircle size={17} />}  accent="#ef4444"  sub={`${overdueInvoices.length} invoices`} href="/billing" />
-        <KpiCard label="Pending"         value={formatCurrency(totalPending)}                icon={<Clock size={17} />}        accent="#f59e0b"  sub={`${pendingInvoices.length} awaiting`} href="/billing" />
-        <KpiCard label="Active Clients"  value={String(data.metrics.activeClients)}          icon={<Users size={17} />}        accent="#015035"  sub="With contracts"   href="/contracts" />
-        <KpiCard label="Total Invoiced"  value={formatCurrency(data.recentInvoices.reduce((s, i) => s + i.amount, 0))} icon={<FileText size={17} />} accent="#8b5cf6" sub="All invoices" href="/billing" />
-        <KpiCard label="Renewals (60d)"  value={String(data.metrics.upcomingRenewals)}       icon={<RefreshCw size={17} />}    accent="#3b82f6"  sub="Coming up"        href="/renewals" />
+        <KpiCard label="Collected"       value={formatCurrency(m.totalCollected)}   icon={<DollarSign size={17} />}   accent="#22c55e"  sub="Total paid"       href="/billing" />
+        <KpiCard label="Overdue"         value={formatCurrency(m.totalOverdue)}     icon={<AlertCircle size={17} />}  accent="#ef4444"  sub={`${m.overdueInvoices} invoices`} href="/billing" />
+        <KpiCard label="Pending"         value={formatCurrency(m.totalPending)}     icon={<Clock size={17} />}        accent="#f59e0b"  sub="Awaiting payment" href="/billing" />
+        <KpiCard label="Active Clients"  value={String(m.activeClients)}            icon={<Users size={17} />}        accent="#015035"  sub="With contracts"   href="/contracts" />
+        <KpiCard label="Total Invoiced"  value={formatCurrency(m.totalInvoiced)}    icon={<FileText size={17} />}     accent="#8b5cf6"  sub="All invoices"     href="/billing" />
+        <KpiCard label="Renewals (60d)"  value={String(m.upcomingRenewals)}         icon={<RefreshCw size={17} />}    accent="#3b82f6"  sub="Coming up"        href="/renewals" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1157,7 +1158,7 @@ function ExecutiveView({ data, user }: { data: DashboardData; user: { name: stri
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         <KpiCard label="Pipeline"       value={formatCurrency(m.pipelineValue)}  icon={<TrendingUp size={17} />}   accent="#3b82f6"  sub="Active deals"        href="/crm/pipeline" />
         <KpiCard label="Active Clients" value={String(m.activeClients)}          icon={<CheckCircle size={17} />}  accent="#015035"  sub="Executed contracts"  href="/contracts" />
-        <KpiCard label="Collected"      value={formatCurrency(m.monthlyRevenue)} icon={<DollarSign size={17} />}   accent="#22c55e"  sub="Payments received"   href="/billing" />
+        <KpiCard label="Collected"      value={formatCurrency(m.totalCollected)} icon={<DollarSign size={17} />}   accent="#22c55e"  sub="Payments received"   href="/billing" />
         <KpiCard label="Open Deals"     value={String(m.openDeals)}              icon={<RefreshCw size={17} />}    accent="#8b5cf6"  sub="In pipeline"         href="/crm/pipeline" />
         <KpiCard label="Overdue"        value={String(m.overdueInvoices)}        icon={<FolderKanban size={17} />} accent="#f59e0b"  sub="Invoices overdue"    href="/billing" />
         <KpiCard label="Renewals (60d)" value={String(m.upcomingRenewals)}       icon={<Calendar size={17} />}     accent="#ef4444"  sub="Due soon"            href="/renewals" />

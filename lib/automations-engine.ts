@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
 import { sendPushNotification } from '@/lib/push-notifications'
 import { wrapBrandedEmail } from '@/lib/email-template'
+import { contractMonthlyValue } from '@/lib/metrics'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 const TRIGGER_MAP: Record<string, string> = {
@@ -520,10 +521,15 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         .from('contracts')
         .select('value, billing_structure, status')
         .eq('status', 'Fully Executed')
-      const totalRevenue = (contracts ?? []).reduce((s: number, c: { value: number | null }) => s + (Number(c.value) || 0), 0)
+      const totalRevenue = (contracts ?? []).reduce((s: number, c: { value: number | null; billing_structure: string | null }) =>
+        s + contractMonthlyValue({ value: Number(c.value) || 0, billingStructure: c.billing_structure ?? '' }), 0)
       const recurring = (contracts ?? [])
-        .filter((c: { billing_structure: string | null }) => c.billing_structure === 'Monthly' || c.billing_structure === 'Monthly Retainer')
-        .reduce((s: number, c: { value: number | null }) => s + (Number(c.value) || 0), 0)
+        .filter((c: { billing_structure: string | null }) => {
+          const bs = (c.billing_structure ?? '').toLowerCase()
+          return !bs.includes('one') && !bs.includes('milestone') && !bs.includes('project')
+        })
+        .reduce((s: number, c: { value: number | null; billing_structure: string | null }) =>
+          s + contractMonthlyValue({ value: Number(c.value) || 0, billingStructure: c.billing_structure ?? '' }), 0)
       await db.from('revenue_months').upsert(
         { month: monthKey, revenue: totalRevenue, recurring },
         { onConflict: 'month' }

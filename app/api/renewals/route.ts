@@ -5,6 +5,9 @@ import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRenewal(row: any) {
+  const daysUntilExpiry = row.expiration_date
+    ? Math.ceil((new Date(row.expiration_date).getTime() - Date.now()) / 86400000)
+    : row.days_until_expiry ?? 0
   return {
     id:              row.id,
     company:         row.company,
@@ -13,8 +16,9 @@ function mapRenewal(row: any) {
     renewalValue:    row.renewal_value,
     assignedRep:     row.assigned_rep,
     status:          row.status,
-    daysUntilExpiry: row.days_until_expiry,
+    daysUntilExpiry,
     serviceType:     row.service_type,
+    proposalData:    row.proposal_data ?? null,
   }
 }
 

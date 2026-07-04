@@ -2300,15 +2300,50 @@ export default function AdminPage() {
             </div>
             <div className="px-5 pb-5 flex gap-2">
               <button
-                onClick={() => {
-                  const backup = JSON.stringify({ exportedAt: new Date().toISOString(), exportedBy: user?.name, modules: ['users', 'contacts', 'proposals', 'contracts', 'invoices', 'projects'] }, null, 2)
-                  const blob = new Blob([backup], { type: 'application/json' })
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url; a.download = `gravhub-backup-${Date.now()}.json`
-                  a.click(); URL.revokeObjectURL(url)
-                  setBackupDone(true)
-                  setTimeout(() => { setBackupDone(false); setShowBackupModal(false) }, 2000)
+                onClick={async () => {
+                  try {
+                    const [usersRes, contactsRes, proposalsRes, contractsRes, invoicesRes, projectsRes, dealsRes] = await Promise.all([
+                      fetch('/api/team-members?include_inactive=true'),
+                      fetch('/api/crm/contacts'),
+                      fetch('/api/proposals'),
+                      fetch('/api/contracts'),
+                      fetch('/api/invoices'),
+                      fetch('/api/projects'),
+                      fetch('/api/deals'),
+                    ])
+                    const [usersData, contactsData, proposalsData, contractsData, invoicesData, projectsData, dealsData] = await Promise.all([
+                      usersRes.ok ? usersRes.json() : [],
+                      contactsRes.ok ? contactsRes.json() : [],
+                      proposalsRes.ok ? proposalsRes.json() : [],
+                      contractsRes.ok ? contractsRes.json() : [],
+                      invoicesRes.ok ? invoicesRes.json() : [],
+                      projectsRes.ok ? projectsRes.json() : [],
+                      dealsRes.ok ? dealsRes.json() : [],
+                    ])
+                    const backup = JSON.stringify({
+                      exportedAt: new Date().toISOString(),
+                      exportedBy: user?.name,
+                      modules: ['users', 'contacts', 'proposals', 'contracts', 'invoices', 'projects', 'deals'],
+                      data: {
+                        users: usersData,
+                        contacts: contactsData,
+                        proposals: proposalsData,
+                        contracts: contractsData,
+                        invoices: invoicesData,
+                        projects: projectsData,
+                        deals: dealsData,
+                      },
+                    }, null, 2)
+                    const blob = new Blob([backup], { type: 'application/json' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url; a.download = `gravhub-backup-${Date.now()}.json`
+                    a.click(); URL.revokeObjectURL(url)
+                    setBackupDone(true)
+                    setTimeout(() => { setBackupDone(false); setShowBackupModal(false) }, 2000)
+                  } catch {
+                    toast('Failed to generate backup', 'error')
+                  }
                 }}
                 className="flex-1 py-2.5 text-white text-sm font-semibold rounded-xl"
                 style={{ background: '#015035' }}

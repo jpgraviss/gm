@@ -19,6 +19,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.expirationDate !== undefined)  update.expiration_date = body.expirationDate
   if (body.daysUntilExpiry !== undefined) update.days_until_expiry = body.daysUntilExpiry
   if (body.assignedRep !== undefined)     update.assigned_rep = body.assignedRep
+  if (body.proposalData !== undefined)   update.proposal_data = body.proposalData
   const { data, error } = await db.from('renewals').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[renewals/:id PATCH]', error)

@@ -43,6 +43,7 @@ interface Addendum {
 function ContractPanel({
   contract, onClose, onUpdateStatus, addendums, onAddAddendum, onUpdateAddendumStatus,
   invoices, projects, proposals, signatures, onRequestSignature, onSignInternally,
+  onUpdateInvoice,
 }: {
   contract: Contract
   onClose: () => void
@@ -56,7 +57,9 @@ function ContractPanel({
   signatures: SignatureRequest[]
   onRequestSignature: (contractId: string, email: string, name: string, type: 'client' | 'internal') => void
   onSignInternally: (contractId: string) => void
+  onUpdateInvoice: (id: string, updates: Partial<Invoice>) => void
 }) {
+  const { toast } = useToast()
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'project' | 'addendums'>('overview')
   const [showAddForm, setShowAddForm] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -64,6 +67,47 @@ function ContractPanel({
   const [showSigModal, setShowSigModal] = useState(false)
   const [sigEmail, setSigEmail] = useState('')
   const [sigName, setSigName] = useState('')
+
+  const handleInvoiceAction = async (inv: Invoice) => {
+    const isOverdue = inv.status === 'Overdue'
+    const isPending = inv.status === 'Pending'
+
+    try {
+      if (isOverdue) {
+        // Send Reminder — update status stays Overdue, just notify
+        const res = await fetch(`/api/invoices/${inv.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Overdue' }),
+        })
+        if (!res.ok) throw new Error('Failed to send reminder')
+        toast(`Payment reminder noted for ${inv.id.toUpperCase()}`, 'success')
+      } else if (isPending) {
+        // Send Invoice — mark as Sent
+        const res = await fetch(`/api/invoices/${inv.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Sent' }),
+        })
+        if (!res.ok) throw new Error('Failed to send invoice')
+        onUpdateInvoice(inv.id, { status: 'Sent' })
+        toast(`${inv.id.toUpperCase()} marked as Sent`, 'success')
+      } else {
+        // Mark Paid
+        const today = new Date().toISOString().split('T')[0]
+        const res = await fetch(`/api/invoices/${inv.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Paid', paidDate: today }),
+        })
+        if (!res.ok) throw new Error('Failed to mark invoice as paid')
+        onUpdateInvoice(inv.id, { status: 'Paid', paidDate: today })
+        toast(`${inv.id.toUpperCase()} marked as Paid`, 'success')
+      }
+    } catch {
+      toast('Failed to update invoice. Please try again.', 'error')
+    }
+  }
 
   const contractAddendums = addendums.filter(a => a.contractId === contract.id)
   const contractSigs = signatures.filter(s => s.contractId === contract.id)
@@ -304,7 +348,10 @@ function ContractPanel({
                           <span>Due: <span className={isOverdue ? 'text-red-600 font-semibold' : ''}>{formatDate(inv.dueDate)}</span></span>
                           {inv.paidDate && <span className="text-emerald-600">Paid {formatDate(inv.paidDate)}</span>}
                           {!isPaid && (
-                            <button className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 transition-colors">
+                            <button
+                              className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                              onClick={() => handleInvoiceAction(inv)}
+                            >
                               {isOverdue ? 'Send Reminder' : inv.status === 'Pending' ? 'Send Invoice' : 'Mark Paid'}
                             </button>
                           )}
@@ -1164,6 +1211,9 @@ export default function ContractsPage() {
           signatures={signatures}
           onRequestSignature={requestSignature}
           onSignInternally={signInternally}
+          onUpdateInvoice={(id, updates) => {
+            setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, ...updates } : inv))
+          }}
         />
       )}
       {creatingContract && (
@@ -1181,7 +1231,7 @@ export default function ContractsPage() {
           selectedCount={selectedIds.size}
           onDeselectAll={() => setSelectedIds(new Set())}
           actions={[
-            { label: 'Export', icon: <Download size={13} />, onClick: () => {} },
+            { label: 'Export', icon: <Download size={13} />, onClick: () => toast('Export coming soon', 'info') },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />

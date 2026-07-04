@@ -212,6 +212,7 @@ create table if not exists public.renewals (
   status            text not null default 'Upcoming',
   days_until_expiry integer not null default 0,
   service_type      text not null default 'General',
+  proposal_data     jsonb,
   created_at        timestamptz not null default now()
 );
 

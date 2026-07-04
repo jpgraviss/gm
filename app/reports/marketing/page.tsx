@@ -54,7 +54,21 @@ export default function MarketingAnalyticsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const sentBroadcasts = useMemo(() => broadcasts.filter(b => b.status === 'sent' || b.totalSent > 0), [broadcasts])
+  const sentBroadcasts = useMemo(() => {
+    const now = new Date()
+    const cutoff = new Date(now)
+    if (dateRange === '30D') cutoff.setDate(cutoff.getDate() - 30)
+    else if (dateRange === '90D') cutoff.setDate(cutoff.getDate() - 90)
+    else cutoff.setFullYear(cutoff.getFullYear() - 1)
+    const cutoffISO = cutoff.toISOString()
+
+    return broadcasts
+      .filter(b => b.status === 'sent' || b.totalSent > 0)
+      .filter(b => {
+        const date = b.sentAt || b.createdAt
+        return !date || date >= cutoffISO
+      })
+  }, [broadcasts, dateRange])
 
   const totals = useMemo(() => {
     const sent = sentBroadcasts.reduce((s, b) => s + b.totalSent, 0)

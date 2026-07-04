@@ -3,6 +3,7 @@ import { Montserrat, Syncopate } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { UIProvider } from '@/contexts/UIContext'
+import { ThemeProvider } from '@/contexts/ThemeContext'
 import { ToastProvider } from '@/components/ui/Toast'
 import { SettingsProvider } from '@/lib/useSettings'
 import AppShell from '@/components/layout/AppShell'
@@ -33,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${montserrat.variable} ${syncopate.variable}`}>
+    <html lang="en" className={`${montserrat.variable} ${syncopate.variable}`} suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#015035" />
@@ -46,16 +47,18 @@ export default function RootLayout({
       </head>
       <body>
         <AuthProvider>
-          <UIProvider>
-            <ToastProvider>
-              <SettingsProvider>
-                <AppShell>
-                  {children}
-                </AppShell>
-                <CookieConsent />
-              </SettingsProvider>
-            </ToastProvider>
-          </UIProvider>
+          <ThemeProvider>
+            <UIProvider>
+              <ToastProvider>
+                <SettingsProvider>
+                  <AppShell>
+                    {children}
+                  </AppShell>
+                  <CookieConsent />
+                </SettingsProvider>
+              </ToastProvider>
+            </UIProvider>
+          </ThemeProvider>
         </AuthProvider>
       </body>
     </html>

@@ -18,6 +18,7 @@ function mapRenewal(row: any) {
     status:          row.status,
     daysUntilExpiry,
     serviceType:     row.service_type,
+    proposalData:    row.proposal_data ?? null,
   }
 }
 

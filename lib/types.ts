@@ -227,6 +227,14 @@ export interface MaintenanceRecord {
   documents?: AttachedDocument[]
 }
 
+export interface RenewalProposalData {
+  newMonthlyRate: number
+  contractMonths: number
+  setupFee: number
+  notes: string
+  increasePercent: number
+}
+
 export interface Renewal {
   id: string
   company: string
@@ -237,6 +245,7 @@ export interface Renewal {
   status: RenewalStatus
   daysUntilExpiry: number
   serviceType: ServiceType
+  proposalData?: RenewalProposalData | null
 }
 
 export interface EmailSignatureData {

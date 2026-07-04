@@ -84,7 +84,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
-        style={{ background: '#FFF3EA' }}
+        style={{ background: 'var(--page-bg)' }}
       >
         <div className="flex flex-col items-center gap-3">
           <div
@@ -111,7 +111,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Client users — no sidebar, bare shell
   if (user.userType === 'client') {
     return (
-      <main className="flex min-h-screen flex-col" style={{ background: '#f8fafc' }}>
+      <main className="flex min-h-screen flex-col" style={{ background: 'var(--page-bg)' }}>
         {children}
       </main>
     )
@@ -143,7 +143,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Main content */}
       <main
         className="flex-1 flex flex-col min-w-0 overflow-x-hidden"
-        style={{ background: '#FFF3EA' }}
+        style={{ background: 'var(--page-bg)' }}
       >
         <PushNotificationBanner />
         {impersonatedBy && (

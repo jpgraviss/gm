@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import CompanySelect from '@/components/ui/CompanySelect'
 import StatusBadge from '@/components/ui/StatusBadge'
-import type { Renewal, Contract, CRMContact, Proposal } from '@/lib/types'
+import type { Renewal, RenewalProposalData, Contract, CRMContact, Proposal } from '@/lib/types'
 import {
   X, AlertTriangle, Clock, CheckCircle, Calendar, DollarSign,
   ChevronRight, User, FileText, TrendingUp, Mail, Phone,
@@ -63,7 +63,7 @@ function RenewalProposalSidebar({
 }: {
   renewal: Renewal
   onClose: () => void
-  onSave: (renewalId: string) => void
+  onSave: (renewalId: string, proposalData: RenewalProposalData) => void
   contracts: Contract[]
 }) {
   const contract = contracts.find(c => c.id === renewal.contractId || c.company === renewal.company)
@@ -239,7 +239,13 @@ function RenewalProposalSidebar({
 
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
           <button
-            onClick={() => onSave(renewal.id)}
+            onClick={() => onSave(renewal.id, {
+              newMonthlyRate: newMonthly,
+              contractMonths: months,
+              setupFee: includeSetup ? setupFee : 0,
+              notes,
+              increasePercent,
+            })}
             className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90"
             style={{ background: '#015035' }}
           >
@@ -1020,9 +1026,21 @@ export default function RenewalsPage() {
         <RenewalProposalSidebar
           renewal={renewalProposalFor}
           onClose={() => setRenewalProposalFor(null)}
-          onSave={renewalId => {
-            setLocalRenewals(prev => prev.map(r => r.id === renewalId ? { ...r, status: 'In Progress' as const } : r))
-            fetch(`/api/renewals/${renewalId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'In Progress' }) }).catch(() => toast('Failed to save renewal proposal', 'error'))
+          onSave={(renewalId, proposalData) => {
+            setLocalRenewals(prev => prev.map(r => r.id === renewalId ? { ...r, status: 'In Progress' as const, proposalData } : r))
+            fetch(`/api/renewals/${renewalId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'In Progress', proposalData }),
+            })
+              .then(res => {
+                if (res.ok) {
+                  toast('Renewal proposal saved', 'success')
+                } else {
+                  toast('Failed to save renewal proposal', 'error')
+                }
+              })
+              .catch(() => toast('Failed to save renewal proposal', 'error'))
             setRenewalProposalFor(null)
           }}
           contracts={contracts}

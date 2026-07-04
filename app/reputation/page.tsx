@@ -6,8 +6,9 @@ import Link from 'next/link'
 import {
   Star, Search, MessageSquare, Send, X, ChevronDown,
   TrendingUp, BarChart3, Clock, CheckCircle2, ExternalLink,
-  RefreshCw, Plus, Settings,
+  RefreshCw, Plus, Settings, Loader2,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 type ReviewSource = 'Google' | 'Yelp' | 'Facebook' | 'Manual'
 type ReviewStatus = 'pending' | 'responded'
@@ -107,6 +108,8 @@ export default function ReputationPage() {
   const [addText, setAddText] = useState('')
   const [addDate, setAddDate] = useState(new Date().toISOString().slice(0, 10))
   const [addSubmitting, setAddSubmitting] = useState(false)
+  const [sendingRequest, setSendingRequest] = useState(false)
+  const { toast } = useToast()
 
   useEffect(() => {
     fetch('/api/reputation/reviews')
@@ -173,6 +176,34 @@ export default function ReputationPage() {
       }
     } finally {
       setAddSubmitting(false)
+    }
+  }
+
+  async function handleSendRequest() {
+    if (!requestName.trim() || !requestEmail.trim()) return
+    setSendingRequest(true)
+    try {
+      const res = await fetch('/api/reputation/send-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: requestName.trim(),
+          email: requestEmail.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to send review request', 'error')
+        return
+      }
+      toast(`Review request sent to ${requestEmail.trim()}`, 'success')
+      setRequestModalOpen(false)
+      setRequestName('')
+      setRequestEmail('')
+    } catch {
+      toast('Failed to send review request', 'error')
+    } finally {
+      setSendingRequest(false)
     }
   }
 
@@ -602,17 +633,13 @@ export default function ReputationPage() {
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  setRequestModalOpen(false)
-                  setRequestName('')
-                  setRequestEmail('')
-                }}
-                disabled={!requestEmail.trim() || !requestName.trim()}
+                onClick={handleSendRequest}
+                disabled={!requestEmail.trim() || !requestName.trim() || sendingRequest}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
                 style={{ background: '#015035' }}
               >
-                <Send size={13} />
-                Send Request
+                {sendingRequest ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                {sendingRequest ? 'Sending...' : 'Send Request'}
               </button>
             </div>
           </div>

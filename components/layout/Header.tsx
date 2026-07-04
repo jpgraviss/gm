@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Bell, Search, Plus, Menu, X, LogOut, ShieldCheck, User, CheckCircle2, AlertCircle, FileText, DollarSign, RefreshCw, MessageSquare } from 'lucide-react'
+import { Bell, Search, Plus, Menu, X, LogOut, ShieldCheck, User, CheckCircle2, AlertCircle, FileText, DollarSign, RefreshCw, MessageSquare, Moon, Sun } from 'lucide-react'
 import { useUI } from '@/contexts/UIContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useTheme } from '@/contexts/ThemeContext'
 import Link from 'next/link'
 
 // ─── Notifications data ───────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ interface HeaderProps {
 export default function Header({ title, subtitle, action }: HeaderProps) {
   const { toggleSidebar } = useUI()
   const { user, logout } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -81,6 +83,15 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
           className="md:hidden p-2 rounded-lg hover:bg-gray-50 transition-colors"
         >
           <Search size={16} className="text-gray-500" />
+        </button>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          className="p-2 rounded-lg hover:bg-gray-50 transition-colors"
+          title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+        >
+          {theme === 'light' ? <Moon size={16} className="text-gray-500" /> : <Sun size={16} className="text-gray-400" />}
         </button>
 
         {/* Notifications */}

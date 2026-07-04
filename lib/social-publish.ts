@@ -18,7 +18,8 @@ import { createServiceClient } from '@/lib/supabase'
 import { decrypt } from '@/lib/encryption'
 import { DEFAULT_WORKSPACE_ID } from '@/lib/workspace'
 import { gbpFetch } from '@/lib/google-business-profile'
-import { appendHashtags, truncateForPlatform, type SocialPlatform } from '@/lib/social-media'
+import { appendHashtags, truncateForPlatform, mapPost, type SocialPlatform, type SocialPost } from '@/lib/social-media'
+import { logAudit } from '@/lib/audit'
 
 const META_API_VERSION = 'v21.0'
 const META_GRAPH_BASE = `https://graph.facebook.com/${META_API_VERSION}`
@@ -262,4 +263,87 @@ export async function publishToPlatform(
     default:
       throw new Error(`Unsupported platform: ${platform}`)
   }
+}
+
+export interface PublishPostResult {
+  post: SocialPost | null
+  anySucceeded: boolean
+  partial: boolean
+  /** Set when the post can't be published (not found / already published). */
+  reason?: 'not_found' | 'already_done' | 'no_platforms' | 'db_error'
+  error?: string
+}
+
+/**
+ * Publish a single social_posts row across all its target platforms. Shared by
+ * the manual publish route and the scheduled cron dispatcher so both take the
+ * exact same code path (real API calls, honest per-platform status).
+ */
+export async function publishSocialPost(id: string): Promise<PublishPostResult> {
+  const db = createServiceClient()
+
+  const { data: post } = await db.from('social_posts').select('*').eq('id', id).single()
+  if (!post) return { post: null, anySucceeded: false, partial: false, reason: 'not_found' }
+
+  if (post.status === 'published' || post.status === 'publishing') {
+    return { post: mapPost(post), anySucceeded: false, partial: false, reason: 'already_done' }
+  }
+
+  const platforms = (post.platforms as SocialPlatform[]) ?? []
+  if (platforms.length === 0) {
+    return { post: mapPost(post), anySucceeded: false, partial: false, reason: 'no_platforms' }
+  }
+
+  await db.from('social_posts').update({ status: 'publishing', updated_at: new Date().toISOString() }).eq('id', id)
+
+  const platformPostIds: Record<string, string> = {}
+  const platformErrors: Record<string, string> = {}
+  const input: PublishInput = {
+    content: post.content ?? '',
+    hashtags: (post.hashtags as string[]) ?? [],
+    mediaUrls: (post.media_urls as string[]) ?? [],
+    linkUrl: post.link_url ?? undefined,
+  }
+
+  for (const platform of platforms) {
+    try {
+      const { platformPostId } = await publishToPlatform(platform, input)
+      platformPostIds[platform] = platformPostId
+    } catch (err) {
+      platformErrors[platform] = err instanceof Error ? err.message : 'Unknown error'
+    }
+  }
+
+  const anySucceeded = Object.keys(platformPostIds).length > 0
+  const partial = anySucceeded && Object.keys(platformErrors).length > 0
+  const status = anySucceeded ? 'published' : 'failed'
+
+  const { data: updated, error } = await db
+    .from('social_posts')
+    .update({
+      status,
+      published_at: anySucceeded ? new Date().toISOString() : null,
+      platform_post_ids: platformPostIds,
+      platform_errors: platformErrors,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('[publishSocialPost]', error)
+    await db.from('social_posts').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', id)
+    return { post: mapPost(post), anySucceeded: false, partial: false, reason: 'db_error', error: error.message }
+  }
+
+  logAudit({
+    userName: 'system',
+    action: 'published_social_post',
+    module: 'social_media',
+    type: 'action',
+    metadata: { postId: id, platforms, platformPostIds, platformErrors },
+  })
+
+  return { post: mapPost(updated), anySucceeded, partial }
 }

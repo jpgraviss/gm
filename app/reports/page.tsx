@@ -35,7 +35,7 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
   return (
     <div className="flex items-center gap-2 flex-1">
       <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${(value / max) * 100}%`, background: color }} />
+        <div className="h-full rounded-full" style={{ width: `${max > 0 ? (value / max) * 100 : 0}%`, background: color }} />
       </div>
     </div>
   )
@@ -360,7 +360,7 @@ export default function ReportsPage() {
             <h3 className="font-semibold text-gray-800 text-sm mb-4">Operational Metrics</h3>
             <div className="flex flex-col gap-3">
               {[
-                { label: 'Projects Delivered', value: `${completedProjects}/${projects.length}`, bar: completedProjects / projects.length, color: '#22c55e' },
+                { label: 'Projects Delivered', value: `${completedProjects}/${projects.length}`, bar: projects.length > 0 ? completedProjects / projects.length : 0, color: '#22c55e' },
                 { label: 'Collection Rate', value: `${collectionRate}%`, bar: collectionRate / 100, color: '#015035' },
                 { label: 'Avg Project Time', value: avgProjectDays > 0 ? `${avgProjectDays} days` : '—', bar: Math.min(avgProjectDays / 90, 1), color: '#3b82f6' },
                 { label: 'Active Maintenance', value: `${activeMaintenance}`, bar: Math.min(activeMaintenance / 20, 1), color: '#f59e0b' },

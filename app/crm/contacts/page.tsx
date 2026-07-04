@@ -1781,7 +1781,7 @@ export default function ContactsPage() {
           selectedCount={selectedIds.size}
           onDeselectAll={() => setSelectedIds(new Set())}
           actions={[
-            { label: 'Export', icon: <Download size={13} />, onClick: () => {} },
+            { label: 'Export', icon: <Download size={13} />, onClick: () => toast('Export coming soon', 'info') },
             { label: 'Tag', icon: <Tag size={13} />, onClick: () => setShowBulkTag(true) },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}

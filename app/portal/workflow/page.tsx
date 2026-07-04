@@ -306,7 +306,7 @@ export default function PortalWorkflowPage() {
   }, [company])
 
   const completedCount = workflow?.steps.filter(s => s.status === 'completed').length ?? 0
-  const progressPct = workflow ? Math.round((completedCount / workflow.steps.length) * 100) : 0
+  const progressPct = workflow && workflow.steps.length > 0 ? Math.round((completedCount / workflow.steps.length) * 100) : 0
 
   if (loading) {
     return (

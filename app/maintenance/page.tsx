@@ -57,7 +57,7 @@ function AddRecordPanel({
     const s = new Date(form.startDate)
     const e = new Date(form.endDate)
     if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return 0
-    return Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24 * 30.44))
+    return Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24 * 30.4375))
   }, [form.startDate, form.endDate])
 
   const defaultCancellationFee = (parseFloat(form.monthlyFee) || 0) * 3
@@ -238,13 +238,16 @@ function MaintenancePanel({
   const relatedInvoices = invoices.filter(i => i.company === record.company)
 
   const startDate = new Date(record.startDate)
-  const endDate = new Date(startDate)
-  endDate.setMonth(endDate.getMonth() + record.contractDuration)
+  const endDate = record.endDate ? new Date(record.endDate) : (() => {
+    const d = new Date(startDate)
+    d.setMonth(d.getMonth() + record.contractDuration)
+    return d
+  })()
   const today = new Date()
   const totalMs = endDate.getTime() - startDate.getTime()
   const elapsedMs = today.getTime() - startDate.getTime()
-  const pctElapsed = Math.max(0, Math.min(100, Math.round((elapsedMs / totalMs) * 100)))
-  const monthsRemaining = Math.max(0, Math.round((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30)))
+  const pctElapsed = totalMs > 0 ? Math.max(0, Math.min(100, Math.round((elapsedMs / totalMs) * 100))) : 0
+  const monthsRemaining = Math.max(0, Math.round((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)))
   const annualValue = record.monthlyFee * 12
   const isPendingCancel = record.status === 'Pending Cancellation'
 

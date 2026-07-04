@@ -1181,7 +1181,7 @@ export default function ContractsPage() {
           selectedCount={selectedIds.size}
           onDeselectAll={() => setSelectedIds(new Set())}
           actions={[
-            { label: 'Export', icon: <Download size={13} />, onClick: () => {} },
+            { label: 'Export', icon: <Download size={13} />, onClick: () => toast('Export coming soon', 'info') },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />

@@ -80,7 +80,7 @@ function formatShortDate(d: string) {
 
 function ProgressBar({ steps }: { steps: WorkflowStep[] }) {
   const completed = steps.filter(s => s.status === 'completed').length
-  const pct = Math.round((completed / steps.length) * 100)
+  const pct = steps.length > 0 ? Math.round((completed / steps.length) * 100) : 0
   return (
     <div className="flex items-center gap-2">
       <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">

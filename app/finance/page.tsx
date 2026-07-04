@@ -42,13 +42,13 @@ export default function FinanceHub() {
   const [mercuryTxns, setMercuryTxns] = useState<MercuryTransaction[]>([])
   const [mercuryLoading, setMercuryLoading] = useState(true)
   const [mercuryError, setMercuryError] = useState('')
-  const [dashData, setDashData] = useState<{ pipelineValue: number; monthlyRevenue: number; overdueInvoices: number; activeClients: number } | null>(null)
+  const [dashData, setDashData] = useState<{ totalCollected: number; overdueInvoices: number; activeClients: number } | null>(null)
   const [contracts, setContracts] = useState<{ value: number; status: string; billingStructure: string }[]>([])
 
   useEffect(() => {
     fetch('/api/dashboard')
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setDashData(d) })
+      .then(d => { if (d?.metrics) setDashData(d.metrics) })
       .catch(() => {})
 
     fetch('/api/contracts?limit=200')
@@ -79,7 +79,7 @@ export default function FinanceHub() {
   const totalBalance = mercuryAccounts.reduce((sum, a) => sum + (a.currentBalance ?? 0), 0)
 
   const KPI_ITEMS = [
-    { label: 'Revenue This Month', value: dashData ? fmt(dashData.monthlyRevenue) : '—', icon: <DollarSign size={16} />, color: '#015035' },
+    { label: 'Total Collected', value: dashData ? fmt(dashData.totalCollected) : '—', icon: <DollarSign size={16} />, color: '#015035' },
     { label: 'Overdue Invoices', value: dashData ? String(dashData.overdueInvoices) : '—', icon: <CreditCard size={16} />, color: '#ef4444' },
     { label: 'MRR', value: mrr ? fmt(mrr) : '—', icon: <BarChart3 size={16} />, color: '#3b82f6' },
     { label: 'Active Clients', value: dashData ? String(dashData.activeClients) : '—', icon: <Users size={16} />, color: '#22c55e' },

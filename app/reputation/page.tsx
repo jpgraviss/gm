@@ -249,7 +249,7 @@ export default function ReputationPage() {
   const kpis = [
     { label: 'Average Rating', value: stats.avg.toFixed(1), icon: <Star size={18} />, color: '#f59e0b', sub: <StarRating rating={Math.round(stats.avg)} size={12} /> },
     { label: 'Total Reviews', value: stats.total.toString(), icon: <BarChart3 size={18} />, color: '#015035', sub: 'Across all platforms' },
-    { label: 'Reviews This Month', value: stats.thisMonth.toString(), icon: <TrendingUp size={18} />, color: '#3b82f6', sub: 'May 2026' },
+    { label: 'Reviews This Month', value: stats.thisMonth.toString(), icon: <TrendingUp size={18} />, color: '#3b82f6', sub: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) },
     { label: 'Response Rate', value: `${stats.responseRate}%`, icon: <MessageSquare size={18} />, color: '#8b5cf6', sub: `${reviews.filter((r) => r.status === 'responded').length} of ${stats.total} responded` },
   ]
 

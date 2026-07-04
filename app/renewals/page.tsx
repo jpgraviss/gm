@@ -73,10 +73,10 @@ function RenewalProposalSidebar({
   const [includeSetup, setIncludeSetup] = useState(false)
   const [setupFee, setSetupFee] = useState(0)
 
-  const baseMonthly = renewal.renewalValue / 12
+  const baseMonthly = contract ? contract.value : renewal.renewalValue
   const newMonthly = Math.round(baseMonthly * (1 + increasePercent / 100))
-  const newAnnual = newMonthly * months
-  const totalWithSetup = newAnnual + setupFee
+  const newContractTotal = newMonthly * months
+  const totalWithSetup = newContractTotal + setupFee
   const difference = newMonthly - baseMonthly
 
   return (
@@ -100,8 +100,8 @@ function RenewalProposalSidebar({
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: 'Service', value: renewal.serviceType },
-                { label: 'Current Annual', value: formatCurrency(renewal.renewalValue) },
                 { label: 'Current Monthly', value: formatCurrency(Math.round(baseMonthly)) },
+                { label: 'Current Annual', value: formatCurrency(Math.round(baseMonthly * 12)) },
                 { label: 'Expires', value: formatDate(renewal.expirationDate) },
               ].map(f => (
                 <div key={f.label} className="bg-white rounded-lg p-2.5 border border-gray-100">

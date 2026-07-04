@@ -1028,7 +1028,7 @@ export default function PipelinePage() {
         action={{ label: 'New Deal', onClick: () => setCreatingDeal(true) }}
       />
       <NewClientModal open={showNewClientModal} onClose={() => setShowNewClientModal(false)} />
-      <div className="p-4 md:p-6 flex-1 flex flex-col bg-[#f8faf9] min-h-0 overflow-hidden">
+      <div className="p-4 md:p-6 flex-1 flex flex-col bg-[#faf9f6] min-h-0 overflow-hidden">
         {/* Pipeline summary + toolbar */}
         <div className="flex-shrink-0 mb-4">
           <div className="flex items-center justify-between mb-4">

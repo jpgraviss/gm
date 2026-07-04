@@ -112,6 +112,7 @@ export default function ReputationPage() {
   const [addRating, setAddRating] = useState(5)
   const [addText, setAddText] = useState('')
   const [addDate, setAddDate] = useState(new Date().toISOString().slice(0, 10))
+  const [addCompany, setAddCompany] = useState('')
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [sendingRequest, setSendingRequest] = useState(false)
   const { toast } = useToast()
@@ -167,6 +168,7 @@ export default function ReputationPage() {
           rating: addRating,
           text: addText.trim(),
           date: new Date(addDate).toISOString(),
+          company_name: addCompany.trim() || undefined,
         }),
       })
       if (res.ok) {
@@ -178,6 +180,7 @@ export default function ReputationPage() {
         setAddText('')
         setAddDate(new Date().toISOString().slice(0, 10))
         setAddSource('Google')
+        setAddCompany('')
       }
     } finally {
       setAddSubmitting(false)
@@ -668,8 +671,18 @@ export default function ReputationPage() {
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Company / Client <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  type="text"
+                  value={requestCompany}
+                  onChange={(e) => setRequestCompany(e.target.value)}
+                  placeholder="Acme Corp"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
+                />
+              </div>
               <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-500 leading-relaxed">
-                A personalized email will be sent with a direct link to leave a Google review. The email uses the &ldquo;Happy Client Follow-Up&rdquo; template.
+                A personalized email will be sent with a link to rate their experience. Customers rating 4-5 stars are redirected to leave a Google review. Lower ratings go to a private feedback form.
               </div>
             </div>
             <div className="p-5 border-t border-gray-100 flex items-center justify-end gap-2">
@@ -729,6 +742,16 @@ export default function ReputationPage() {
                   value={addName}
                   onChange={(e) => setAddName(e.target.value)}
                   placeholder="Jane Doe"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Company / Client <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  type="text"
+                  value={addCompany}
+                  onChange={(e) => setAddCompany(e.target.value)}
+                  placeholder="Acme Corp"
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
                 />
               </div>

@@ -30,6 +30,7 @@ export type ContractStatus =
   | 'Countersign Needed'
   | 'Fully Executed'
   | 'Expired'
+  | 'Terminated'
 
 export type InvoiceStatus = 'Pending' | 'Sent' | 'Overdue' | 'Paid' | 'Cancelled'
 
@@ -103,6 +104,7 @@ export interface Deal {
   stage: DealStage
   value: number
   serviceType: ServiceType
+  serviceTypes?: ServiceType[]
   closeDate: string
   assignedRep: string
   probability: number
@@ -161,6 +163,9 @@ export interface Contract {
   serviceType: ServiceType
   clientSigned?: string
   internalSigned?: string
+  terminatedReason?: string
+  terminatedDate?: string
+  companyId?: string | null
 }
 
 export interface Invoice {
@@ -173,6 +178,7 @@ export interface Invoice {
   issuedDate: string
   paidDate?: string
   serviceType: ServiceType
+  companyId?: string | null
 }
 
 export interface Milestone {
@@ -196,6 +202,7 @@ export interface Project {
   contractId: string
   company: string
   serviceType: ServiceType
+  serviceTypes?: ServiceType[]
   status: ProjectStatus
   startDate: string
   launchDate: string
@@ -209,6 +216,7 @@ export interface Project {
   sections?: string[]
   color?: string
   description?: string
+  companyId?: string | null
 }
 
 export interface MaintenanceRecord {
@@ -225,6 +233,8 @@ export interface MaintenanceRecord {
   status: MaintenanceStatus
   nextBillingDate: string
   documents?: AttachedDocument[]
+  companyId?: string | null
+  contractId?: string
 }
 
 export interface RenewalProposalData {
@@ -246,6 +256,7 @@ export interface Renewal {
   daysUntilExpiry: number
   serviceType: ServiceType
   proposalData?: RenewalProposalData | null
+  companyId?: string | null
 }
 
 export interface EmailSignatureData {
@@ -307,6 +318,7 @@ export interface AppTask {
   projectId?: string
   section?: string
   sortOrder?: number
+  companyId?: string | null
 }
 
 // ─── Full CRM Types ──────────────────────────────────────────────────────────

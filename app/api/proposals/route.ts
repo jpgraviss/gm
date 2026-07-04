@@ -8,6 +8,7 @@ function mapProposal(row: any) {
   return {
     id:                         row.id,
     dealId:                     row.deal_id ?? '',
+    companyId:                  row.company_id || null,
     company:                    row.company,
     status:                     row.status,
     value:                      row.value,
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
     .insert({
       id:            body.id ?? `p-${Date.now()}`,
       deal_id:       body.dealId ?? null,
+      company_id:    body.companyId ?? null,
       company:       body.company,
       status:        body.status ?? 'Draft',
       value:         body.value ?? 0,

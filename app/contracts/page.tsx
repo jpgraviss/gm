@@ -20,7 +20,7 @@ import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 
 const allStatuses: ContractStatus[] = [
-  'Draft', 'Sent', 'Viewed', 'Signed by Client', 'Countersign Needed', 'Fully Executed', 'Expired',
+  'Draft', 'Sent', 'Viewed', 'Signed by Client', 'Countersign Needed', 'Fully Executed', 'Expired', 'Terminated',
 ]
 
 interface Addendum {
@@ -43,7 +43,7 @@ interface Addendum {
 function ContractPanel({
   contract, onClose, onUpdateStatus, addendums, onAddAddendum, onUpdateAddendumStatus,
   invoices, projects, proposals, signatures, onRequestSignature, onSignInternally,
-  onUpdateInvoice,
+  onTerminate, onUpdateInvoice,
 }: {
   contract: Contract
   onClose: () => void
@@ -57,10 +57,13 @@ function ContractPanel({
   signatures: SignatureRequest[]
   onRequestSignature: (contractId: string, email: string, name: string, type: 'client' | 'internal') => void
   onSignInternally: (contractId: string) => void
+  onTerminate: (id: string, reason: string) => void
   onUpdateInvoice: (id: string, updates: Partial<Invoice>) => void
 }) {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'project' | 'addendums'>('overview')
+  const [showTerminateConfirm, setShowTerminateConfirm] = useState(false)
+  const [terminateReasonInput, setTerminateReasonInput] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newDesc, setNewDesc] = useState('')
@@ -163,6 +166,22 @@ function ContractPanel({
             <StatusBadge label={contract.serviceType} colorClass={serviceTypeColors[contract.serviceType]} />
           </div>
         </div>
+
+        {/* Terminated banner */}
+        {contract.status === 'Terminated' && (
+          <div className="flex-shrink-0 px-5 py-3 bg-red-50 border-b border-red-100">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertCircle size={14} className="text-red-600 flex-shrink-0" />
+              <span className="text-xs font-bold text-red-800">Contract Terminated</span>
+              {contract.terminatedDate && (
+                <span className="text-[10px] text-red-500 ml-auto">{formatDate(contract.terminatedDate)}</span>
+              )}
+            </div>
+            {contract.terminatedReason && (
+              <p className="text-[11px] text-red-700 leading-relaxed ml-[22px]">{contract.terminatedReason}</p>
+            )}
+          </div>
+        )}
 
         {/* Quick stats */}
         <div className="flex-shrink-0 grid grid-cols-3 border-b border-gray-100 divide-x divide-gray-100">
@@ -643,11 +662,64 @@ function ContractPanel({
               Go to Billing →
             </Link>
           )}
+          {contract.status !== 'Terminated' && contract.status !== 'Expired' && (
+            <button
+              onClick={() => setShowTerminateConfirm(true)}
+              className="px-3 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors"
+            >
+              Terminate
+            </button>
+          )}
           <button onClick={onClose} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors">
             Close
           </button>
         </div>
       </div>
+
+      {/* Terminate contract modal */}
+      {showTerminateConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowTerminateConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-900">Terminate Contract</h3>
+              <button onClick={() => setShowTerminateConfirm(false)} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
+                <X size={14} className="text-gray-400" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">
+              This will mark <span className="font-semibold text-gray-700">{contract.company}</span> as terminated. This contract will be moved to the Terminated view.
+            </p>
+            <div className="mb-4">
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Reason (optional)</label>
+              <textarea
+                value={terminateReasonInput}
+                onChange={e => setTerminateReasonInput(e.target.value)}
+                placeholder="e.g. Client requested cancellation, non-payment, etc."
+                rows={3}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500/30 resize-none bg-white"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  onTerminate(contract.id, terminateReasonInput.trim())
+                  setShowTerminateConfirm(false)
+                  setTerminateReasonInput('')
+                }}
+                className="flex-1 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              >
+                Terminate Contract
+              </button>
+              <button
+                onClick={() => { setShowTerminateConfirm(false); setTerminateReasonInput('') }}
+                className="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Signature request modal */}
       {showSigModal && (
@@ -711,6 +783,8 @@ function ContractPanel({
   )
 }
 
+type ViewFilter = 'Active' | 'Terminated' | 'All'
+const viewTabs: ViewFilter[] = ['Active', 'Terminated', 'All']
 const filterTabs: Array<ContractStatus | 'All'> = ['All', 'Draft', 'Sent', 'Fully Executed', 'Expired']
 
 export default function ContractsPage() {
@@ -729,6 +803,9 @@ export default function ContractsPage() {
   const [loading, setLoading] = useState(true)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  const [viewFilter, setViewFilter] = useState<ViewFilter>('Active')
+  const [showTerminateModal, setShowTerminateModal] = useState(false)
+  const [terminateReason, setTerminateReason] = useState('')
 
   useEffect(() => {
     fetch('/api/contracts')
@@ -906,6 +983,37 @@ export default function ContractsPage() {
     }
   }
 
+  async function terminateContract(id: string, reason: string) {
+    const terminatedDate = new Date().toISOString()
+    const patchData = {
+      status: 'Terminated' as ContractStatus,
+      terminatedReason: reason || undefined,
+      terminatedDate,
+    }
+
+    setLocalContracts(prev => prev.map(c => c.id === id ? { ...c, ...patchData } : c))
+    setSelected(prev => {
+      if (!prev || prev.id !== id) return prev
+      return { ...prev, ...patchData }
+    })
+
+    try {
+      const res = await fetch(`/api/contracts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patchData),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        toast(err.error || 'Failed to terminate contract', 'error')
+        return
+      }
+      toast('Contract terminated', 'success')
+    } catch {
+      toast('Failed to terminate contract', 'error')
+    }
+  }
+
   async function handleNewContract(data: NewContractFormData) {
     const startDate = data.startDate
     const renewalDate = (() => {
@@ -944,7 +1052,12 @@ export default function ContractsPage() {
     }
   }
 
-  const byStatus = statusFilter === 'All' ? localContracts : localContracts.filter(c => c.status === statusFilter)
+  const byView = viewFilter === 'Active'
+    ? localContracts.filter(c => c.status !== 'Terminated')
+    : viewFilter === 'Terminated'
+      ? localContracts.filter(c => c.status === 'Terminated')
+      : localContracts
+  const byStatus = statusFilter === 'All' ? byView : byView.filter(c => c.status === statusFilter)
   const filtered = searchQuery
     ? byStatus.filter(c => c.company.toLowerCase().includes(searchQuery.toLowerCase()))
     : byStatus
@@ -1020,7 +1133,37 @@ export default function ContractsPage() {
 
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
           <div className="px-5 py-4 border-b border-gray-100">
+            {/* View tabs: Active / Terminated / All */}
+            <div className="flex items-center gap-1 mb-3 border-b border-gray-100 pb-3">
+              {viewTabs.map(tab => {
+                const count = tab === 'Active'
+                  ? localContracts.filter(c => c.status !== 'Terminated').length
+                  : tab === 'Terminated'
+                    ? localContracts.filter(c => c.status === 'Terminated').length
+                    : localContracts.length
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => { setViewFilter(tab); setStatusFilter('All') }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                      viewFilter === tab
+                        ? tab === 'Terminated'
+                          ? 'bg-red-100 text-red-800'
+                          : 'text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`}
+                    style={viewFilter === tab && tab !== 'Terminated' ? { background: '#015035' } : undefined}
+                  >
+                    {tab}
+                    <span className={`ml-1.5 text-[10px] ${viewFilter === tab ? (tab === 'Terminated' ? 'text-red-600' : 'text-white/70') : 'text-gray-400'}`}>
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {viewFilter !== 'Terminated' && (
               <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
                 {filterTabs.map(tab => (
                   <button
@@ -1036,12 +1179,13 @@ export default function ContractsPage() {
                     {tab}
                     {tab !== 'All' && (
                       <span className={`ml-1.5 text-[10px] ${statusFilter === tab ? 'text-white/70' : 'text-gray-400'}`}>
-                        {localContracts.filter(c => c.status === tab).length}
+                        {byView.filter(c => c.status === tab).length}
                       </span>
                     )}
                   </button>
                 ))}
               </div>
+              )}
               <div className="flex items-center gap-2">
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -1162,6 +1306,12 @@ export default function ContractsPage() {
                             <span className="hidden xl:inline">Executed</span>
                           </span>
                         )}
+                        {c.status === 'Terminated' && (
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-red-600 px-2 py-1">
+                            <AlertCircle size={13} />
+                            <span className="hidden xl:inline">Terminated</span>
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1211,6 +1361,7 @@ export default function ContractsPage() {
           signatures={signatures}
           onRequestSignature={requestSignature}
           onSignInternally={signInternally}
+          onTerminate={terminateContract}
           onUpdateInvoice={(id, updates) => {
             setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, ...updates } : inv))
           }}

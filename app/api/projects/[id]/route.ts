@@ -4,6 +4,31 @@ import { validate, validationError, PROJECT_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapProject(row: any) {
+  return {
+    id:                   row.id,
+    contractId:           row.contract_id ?? '',
+    company:              row.company,
+    companyId:            row.company_id || null,
+    serviceType:          row.service_type,
+    serviceTypes:         row.service_types ?? [],
+    status:               row.status,
+    startDate:            row.start_date ?? '',
+    launchDate:           row.launch_date ?? '',
+    maintenanceStartDate: row.maintenance_start_date ?? undefined,
+    assignedTeam:         row.assigned_team ?? [],
+    progress:             row.progress ?? 0,
+    milestones:           row.milestones ?? [],
+    tasks:                row.tasks ?? [],
+    notes:                row.notes ?? [],
+    overview:             row.overview ?? '',
+    sections:             row.sections ?? ['To Do', 'In Progress', 'Done'],
+    color:                row.color ?? '#015035',
+    description:          row.description ?? '',
+  }
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const body = await req.json()
@@ -28,13 +53,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.description !== undefined)          update.description = body.description
   if (body.startDate !== undefined)            update.start_date = body.startDate
   if (body.serviceType !== undefined)          update.service_type = body.serviceType
+  if (body.serviceTypes !== undefined) {
+    update.service_types = body.serviceTypes
+    update.service_type = body.serviceTypes[0] ?? body.serviceType ?? 'General'
+  }
   if (body.company !== undefined)              update.company = body.company
+  if (body.companyId !== undefined)            update.company_id = body.companyId
   const { data, error } = await db.from('projects').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[projects/:id PATCH]', error)
     return NextResponse.json({ error: error?.message || 'Failed to update project' }, { status: 500 })
   }
-  return NextResponse.json(data)
+  return NextResponse.json(mapProject(data))
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

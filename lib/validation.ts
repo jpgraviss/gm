@@ -67,7 +67,7 @@ export const SLUG_PATTERN = /^[a-z0-9-]+$/
 
 export const DEAL_STAGES = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost'] as const
 export const PROPOSAL_STATUSES = ['Draft', 'Pending Approval', 'Approved', 'Sent', 'Viewed', 'Accepted', 'Declined'] as const
-export const CONTRACT_STATUSES = ['Draft', 'Sent', 'Viewed', 'Signed by Client', 'Countersign Needed', 'Fully Executed', 'Expired'] as const
+export const CONTRACT_STATUSES = ['Draft', 'Sent', 'Viewed', 'Signed by Client', 'Countersign Needed', 'Fully Executed', 'Expired', 'Terminated'] as const
 export const INVOICE_STATUSES = ['Pending', 'Sent', 'Paid', 'Overdue', 'Cancelled'] as const
 export const PROJECT_STATUSES = ['Not Started', 'In Progress', 'Awaiting Client', 'Completed', 'Launched', 'In Maintenance'] as const
 export const TASK_PRIORITIES = ['High', 'Medium', 'Low'] as const

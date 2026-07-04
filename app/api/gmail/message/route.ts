@@ -9,42 +9,46 @@ function decodeBase64Url(str: string): string {
   }
 }
 
-function extractBody(payload: GmailPayload): string {
-  if (!payload) return ''
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+}
 
-  // Plain text preferred, then html
+function extractBody(payload: GmailPayload): { text: string; html: string } {
+  if (!payload) return { text: '', html: '' }
+
+  // Plain text only
   if (payload.mimeType === 'text/plain' && payload.body?.data) {
-    return decodeBase64Url(payload.body.data)
+    return { text: decodeBase64Url(payload.body.data), html: '' }
   }
+  // HTML only
   if (payload.mimeType === 'text/html' && payload.body?.data) {
-    // Strip basic HTML tags
-    return decodeBase64Url(payload.body.data)
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
+    const rawHtml = decodeBase64Url(payload.body.data)
+    return { text: stripHtml(rawHtml), html: rawHtml }
   }
 
-  // Multipart — recurse into parts
+  // Multipart — prefer returning both text and html when available
   if (payload.parts) {
     const textPart = payload.parts.find(p => p.mimeType === 'text/plain')
-    if (textPart?.body?.data) return decodeBase64Url(textPart.body.data)
-
     const htmlPart = payload.parts.find(p => p.mimeType === 'text/html')
-    if (htmlPart?.body?.data) {
-      return decodeBase64Url(htmlPart.body.data)
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
+
+    const text = textPart?.body?.data ? decodeBase64Url(textPart.body.data) : ''
+    const html = htmlPart?.body?.data ? decodeBase64Url(htmlPart.body.data) : ''
+
+    if (text || html) {
+      return {
+        text: text || stripHtml(html),
+        html,
+      }
     }
 
     // Nested multipart
     for (const part of payload.parts) {
       const nested = extractBody(part)
-      if (nested) return nested
+      if (nested.text || nested.html) return nested
     }
   }
 
-  return ''
+  return { text: '', html: '' }
 }
 
 interface GmailPayload {
@@ -87,7 +91,7 @@ export async function POST(req: NextRequest) {
       headers[h.name.toLowerCase()] = h.value
     }
 
-    const body = extractBody(msg.payload ?? {})
+    const { text, html } = extractBody(msg.payload ?? {})
 
     return NextResponse.json({
       id: msg.id,
@@ -99,7 +103,8 @@ export async function POST(req: NextRequest) {
       subject: headers['subject'] ?? '(no subject)',
       date: headers['date'] ?? '',
       internalDate: msg.internalDate ?? '',
-      body,
+      body: text,
+      bodyHtml: html || undefined,
     })
   } catch (err) {
     console.error('[gmail/message]', err)

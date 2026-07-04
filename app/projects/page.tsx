@@ -85,9 +85,13 @@ function ProjectGridCard({ project, onClick }: { project: Project; onClick: () =
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1 min-w-0 pr-3">
           <p className="text-sm font-bold text-gray-900 leading-tight truncate">{project.company}</p>
-          <div className="flex items-center gap-1.5 mt-1.5">
-            <span className="text-gray-400">{serviceTypeIcons[project.serviceType as ServiceTypeKey]}</span>
-            <span className="text-xs text-gray-500">{project.serviceType}</span>
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            {(project.serviceTypes && project.serviceTypes.length > 0 ? project.serviceTypes : [project.serviceType]).map((st, i) => (
+              <span key={i} className="flex items-center gap-1">
+                <span className="text-gray-400">{serviceTypeIcons[st as ServiceTypeKey]}</span>
+                <span className="text-xs text-gray-500">{st}</span>
+              </span>
+            ))}
           </div>
         </div>
         <StatusBadge label={project.status} colorClass={projectStatusColors[project.status]} />
@@ -252,7 +256,9 @@ function ProjectDetailPanel({
               </h2>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <StatusBadge label={project.status} colorClass={projectStatusColors[project.status]} />
-                <StatusBadge label={project.serviceType} colorClass={serviceTypeColors[project.serviceType]} />
+                {(project.serviceTypes && project.serviceTypes.length > 0 ? project.serviceTypes : [project.serviceType]).map((st, i) => (
+                  <StatusBadge key={i} label={st} colorClass={serviceTypeColors[st]} />
+                ))}
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -948,7 +954,8 @@ export default function ProjectsPage() {
       const q = searchQuery.toLowerCase()
       result = result.filter(p =>
         p.company.toLowerCase().includes(q) ||
-        p.serviceType.toLowerCase().includes(q)
+        p.serviceType.toLowerCase().includes(q) ||
+        (p.serviceTypes ?? []).some(st => st.toLowerCase().includes(q))
       )
     }
 
@@ -1073,9 +1080,13 @@ export default function ProjectsPage() {
                     <StatusBadge label={p.status} colorClass={projectStatusColors[p.status]} />
                   </div>
                   <div className="text-xs text-gray-500 mb-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-gray-400">{serviceTypeIcons[p.serviceType as ServiceTypeKey]}</span>
-                      <span className="text-gray-700">{p.serviceType}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {(p.serviceTypes && p.serviceTypes.length > 0 ? p.serviceTypes : [p.serviceType]).map((st, i) => (
+                        <span key={i} className="flex items-center gap-1">
+                          <span className="text-gray-400">{serviceTypeIcons[st as ServiceTypeKey]}</span>
+                          <span className="text-gray-700">{st}</span>
+                        </span>
+                      ))}
                     </div>
                   </div>
                   <div>
@@ -1129,9 +1140,13 @@ export default function ProjectsPage() {
                         )}
                       </td>
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-gray-400">{serviceTypeIcons[p.serviceType as ServiceTypeKey]}</span>
-                          <span className="text-sm text-gray-600">{p.serviceType}</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {(p.serviceTypes && p.serviceTypes.length > 0 ? p.serviceTypes : [p.serviceType]).map((st, i) => (
+                            <span key={i} className="flex items-center gap-1">
+                              <span className="text-gray-400">{serviceTypeIcons[st as ServiceTypeKey]}</span>
+                              <span className="text-sm text-gray-600">{st}</span>
+                            </span>
+                          ))}
                         </div>
                       </td>
                       <td className="py-3.5 px-4">

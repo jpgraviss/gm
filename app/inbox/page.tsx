@@ -28,6 +28,7 @@ interface GmailMessage {
 
 interface GmailMessageFull extends GmailMessage {
   body: string
+  bodyHtml?: string
 }
 
 interface LoggedActivity {
@@ -557,6 +558,19 @@ export default function InboxPage() {
                   <div className="flex items-center gap-2 text-sm text-gray-400">
                     <RefreshCw size={14} className="animate-spin" /> Loading…
                   </div>
+                ) : selected.bodyHtml ? (
+                  <iframe
+                    srcDoc={selected.bodyHtml}
+                    sandbox="allow-same-origin"
+                    className="w-full border-0"
+                    style={{ minHeight: '400px' }}
+                    onLoad={(e) => {
+                      const iframe = e.target as HTMLIFrameElement;
+                      if (iframe.contentDocument) {
+                        iframe.style.height = iframe.contentDocument.documentElement.scrollHeight + 'px';
+                      }
+                    }}
+                  />
                 ) : (
                   <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">
                     {selected.body || selected.snippet}

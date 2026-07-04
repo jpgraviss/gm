@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import { fetchTeamMembers } from '@/lib/supabase'
-import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority, TeamMember } from '@/lib/types'
+import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority, TeamMember, TeamServiceLine } from '@/lib/types'
 import {
   CheckSquare, Clock, AlertCircle, CheckCircle2, Plus, X, ChevronRight, ChevronLeft,
   Building2, User, Calendar, Flag, Tag, Trash2, Circle, Repeat, Search,
@@ -582,6 +582,10 @@ export default function TasksPage() {
   const [selectedTask, setSelectedTask] = useState<AppTask | null>(null)
   const [creatingTask, setCreatingTask] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [filterServiceLine, setFilterServiceLine] = useState<TeamServiceLine | 'All'>('All')
+  const [filterPriority, setFilterPriority] = useState<TaskPriority | 'All'>('All')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [loading, setLoading] = useState(true)
 
@@ -659,6 +663,10 @@ export default function TasksPage() {
       if (col !== filterTab) return false
     }
     if (filterAssignee !== 'All' && t.assignedTo !== filterAssignee) return false
+    if (filterServiceLine !== 'All' && t.teamServiceLine !== filterServiceLine) return false
+    if (filterPriority !== 'All' && t.priority !== filterPriority) return false
+    if (filterDateFrom && t.dueDate < filterDateFrom) return false
+    if (filterDateTo && t.dueDate > filterDateTo) return false
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
       if (!t.title.toLowerCase().includes(q) && !(t.company ?? '').toLowerCase().includes(q)) return false
@@ -731,7 +739,7 @@ export default function TasksPage() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-3">
           <div className="relative flex-1">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -749,6 +757,54 @@ export default function TasksPage() {
             <option value="All">All Assignees</option>
             {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
           </select>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-5">
+          <select
+            value={filterServiceLine}
+            onChange={e => setFilterServiceLine(e.target.value as TeamServiceLine | 'All')}
+            className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 bg-white min-w-[160px]"
+          >
+            <option value="All">All Service Lines</option>
+            {(['Website', 'Development', 'SEO', 'Social Media', 'Marketing', 'Email Marketing', 'Content', 'Design', 'General'] as TeamServiceLine[]).map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <select
+            value={filterPriority}
+            onChange={e => setFilterPriority(e.target.value as TaskPriority | 'All')}
+            className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 bg-white min-w-[130px]"
+          >
+            <option value="All">All Priorities</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={filterDateFrom}
+              onChange={e => setFilterDateFrom(e.target.value)}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 bg-white"
+              title="Due date from"
+            />
+            <span className="text-xs text-gray-400 flex-shrink-0">to</span>
+            <input
+              type="date"
+              value={filterDateTo}
+              onChange={e => setFilterDateTo(e.target.value)}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 bg-white"
+              title="Due date to"
+            />
+          </div>
+          {(filterServiceLine !== 'All' || filterPriority !== 'All' || filterDateFrom || filterDateTo) && (
+            <button
+              onClick={() => { setFilterServiceLine('All'); setFilterPriority('All'); setFilterDateFrom(''); setFilterDateTo('') }}
+              className="text-xs text-gray-500 hover:text-gray-700 font-medium flex items-center gap-1 flex-shrink-0"
+            >
+              <X size={12} /> Clear filters
+            </button>
+          )}
         </div>
 
         {viewMode === 'kanban' ? (

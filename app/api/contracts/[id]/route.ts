@@ -7,12 +7,12 @@ import { requireRole } from '@/lib/rbac'
 
 // Valid status transitions — keys are current status, values are allowed next statuses
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  'Draft':              ['Sent', 'Expired'],
-  'Sent':               ['Viewed', 'Signed by Client', 'Expired'],
-  'Viewed':             ['Signed by Client', 'Expired'],
-  'Signed by Client':   ['Countersign Needed', 'Fully Executed', 'Expired'],
-  'Countersign Needed': ['Fully Executed', 'Expired'],
-  'Fully Executed':     ['Expired'],
+  'Draft':              ['Sent', 'Expired', 'Terminated'],
+  'Sent':               ['Viewed', 'Signed by Client', 'Expired', 'Terminated'],
+  'Viewed':             ['Signed by Client', 'Expired', 'Terminated'],
+  'Signed by Client':   ['Countersign Needed', 'Fully Executed', 'Expired', 'Terminated'],
+  'Countersign Needed': ['Fully Executed', 'Expired', 'Terminated'],
+  'Fully Executed':     ['Expired', 'Terminated'],
   'Expired':            ['Draft'],
 }
 
@@ -21,6 +21,7 @@ function mapContract(row: any) {
   return {
     id:               row.id,
     proposalId:       row.proposal_id ?? undefined,
+    companyId:        row.company_id || null,
     company:          row.company,
     status:           row.status,
     value:            row.value,
@@ -32,6 +33,8 @@ function mapContract(row: any) {
     serviceType:      row.service_type,
     clientSigned:     row.client_signed ?? undefined,
     internalSigned:   row.internal_signed ?? undefined,
+    terminatedReason: row.terminated_reason ?? undefined,
+    terminatedDate:   row.terminated_date ?? undefined,
   }
 }
 
@@ -52,6 +55,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     clientSigned:     { type: 'string', maxLength: 30 },
     internalSigned:   { type: 'string', maxLength: 30 },
     renewalDate:      { type: 'string', maxLength: 30 },
+    terminatedReason: { type: 'string', maxLength: 1000 },
+    terminatedDate:   { type: 'string', maxLength: 30 },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -86,6 +91,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.assignedRep !== undefined)       update.assigned_rep = body.assignedRep
   if (body.billingStructure !== undefined)  update.billing_structure = body.billingStructure
   if (body.renewalDate !== undefined)       update.renewal_date = body.renewalDate
+  if (body.terminatedReason !== undefined)  update.terminated_reason = body.terminatedReason
+  if (body.terminatedDate !== undefined)    update.terminated_date = body.terminatedDate
+  if (body.companyId !== undefined)         update.company_id = body.companyId
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })

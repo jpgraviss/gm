@@ -22,6 +22,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.tags !== undefined)       update.tags = body.tags
   if (body.messages !== undefined)   update.messages = body.messages
   if (body.linkedTaskId !== undefined) update.linked_task_id = body.linkedTaskId
+  if (body.companyId !== undefined)    update.company_id = body.companyId
   const { data, error } = await db.from('tickets').update(update).eq('id', id).select().single()
   if (error) {
     console.error('[tickets PATCH]', error)

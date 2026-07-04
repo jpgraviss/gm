@@ -13,10 +13,11 @@ import {
   X, AlertTriangle, Clock, CheckCircle, Calendar, DollarSign,
   ChevronRight, User, FileText, TrendingUp, Mail, Phone,
   RefreshCw, AlertCircle, Plus, Minus, Bell, Search, Inbox,
+  Archive,
 } from 'lucide-react'
 import Link from 'next/link'
 
-type FilterTab = 'all' | 'upcoming30' | 'upcoming60' | 'overdue' | 'renewed'
+type FilterTab = 'active' | 'upcoming30' | 'upcoming60' | 'overdue' | 'archived' | 'all'
 
 function UrgencyBar({ days }: { days: number }) {
   const pct = Math.max(0, Math.min(100, (days / 90) * 100))
@@ -658,7 +659,7 @@ export default function RenewalsPage() {
   const [contracts, setContracts] = useState<Contract[]>([])
   const [crmContacts, setCrmContacts] = useState<CRMContact[]>([])
   const [proposals, setProposals] = useState<Proposal[]>([])
-  const [activeTab, setActiveTab] = useState<FilterTab>('all')
+  const [activeTab, setActiveTab] = useState<FilterTab>('active')
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
@@ -697,17 +698,22 @@ export default function RenewalsPage() {
     }
 
     switch (activeTab) {
+      case 'active':
+        list = list.filter(r => r.status === 'Upcoming' || r.status === 'In Progress')
+        break
       case 'upcoming30':
-        list = list.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 30 && r.status !== 'Renewed')
+        list = list.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 30 && r.status !== 'Renewed' && r.status !== 'Churned')
         break
       case 'upcoming60':
-        list = list.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 60 && r.status !== 'Renewed')
+        list = list.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 60 && r.status !== 'Renewed' && r.status !== 'Churned')
         break
       case 'overdue':
-        list = list.filter(r => r.daysUntilExpiry <= 0 && r.status !== 'Renewed')
+        list = list.filter(r => r.daysUntilExpiry <= 0 && r.status !== 'Renewed' && r.status !== 'Churned')
         break
-      case 'renewed':
-        list = list.filter(r => r.status === 'Renewed')
+      case 'archived':
+        list = list.filter(r => r.status === 'Renewed' || r.status === 'Churned')
+        break
+      case 'all':
         break
     }
 
@@ -715,11 +721,12 @@ export default function RenewalsPage() {
   }, [localRenewals, activeTab, searchQuery])
 
   const tabCounts = useMemo(() => ({
+    active: localRenewals.filter(r => r.status === 'Upcoming' || r.status === 'In Progress').length,
+    upcoming30: localRenewals.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 30 && r.status !== 'Renewed' && r.status !== 'Churned').length,
+    upcoming60: localRenewals.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 60 && r.status !== 'Renewed' && r.status !== 'Churned').length,
+    overdue: localRenewals.filter(r => r.daysUntilExpiry <= 0 && r.status !== 'Renewed' && r.status !== 'Churned').length,
+    archived: localRenewals.filter(r => r.status === 'Renewed' || r.status === 'Churned').length,
     all: localRenewals.length,
-    upcoming30: localRenewals.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 30 && r.status !== 'Renewed').length,
-    upcoming60: localRenewals.filter(r => r.daysUntilExpiry > 0 && r.daysUntilExpiry <= 60 && r.status !== 'Renewed').length,
-    overdue: localRenewals.filter(r => r.daysUntilExpiry <= 0 && r.status !== 'Renewed').length,
-    renewed: localRenewals.filter(r => r.status === 'Renewed').length,
   }), [localRenewals])
 
   function startRenewal(id: string) {
@@ -729,6 +736,20 @@ export default function RenewalsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'In Progress' }),
     }).catch(() => toast('Failed to start renewal', 'error'))
+  }
+
+  function archiveRenewal(id: string) {
+    setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: 'Renewed' as const } : r))
+    fetch(`/api/renewals/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Renewed' }),
+    })
+      .then(res => {
+        if (res.ok) toast('Renewal archived', 'success')
+        else toast('Failed to archive renewal', 'error')
+      })
+      .catch(() => toast('Failed to archive renewal', 'error'))
   }
 
   async function logRenewal(data: LogRenewalPayload) {
@@ -752,11 +773,12 @@ export default function RenewalsPage() {
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   const FILTER_TABS: { key: FilterTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'all', label: 'All', icon: <RefreshCw size={13} /> },
+    { key: 'active', label: 'Active', icon: <RefreshCw size={13} /> },
     { key: 'upcoming30', label: '30 Days', icon: <AlertTriangle size={13} /> },
     { key: 'upcoming60', label: '60 Days', icon: <Clock size={13} /> },
     { key: 'overdue', label: 'Overdue', icon: <AlertCircle size={13} /> },
-    { key: 'renewed', label: 'Renewed', icon: <CheckCircle size={13} /> },
+    { key: 'archived', label: 'Archived', icon: <Archive size={13} /> },
+    { key: 'all', label: 'All', icon: <Inbox size={13} /> },
   ]
 
   return (
@@ -838,8 +860,8 @@ export default function RenewalsPage() {
                   ? `No renewals match "${searchQuery}". Try a different search term.`
                   : activeTab === 'overdue'
                   ? 'No overdue renewals right now. Great job staying on top of things!'
-                  : activeTab === 'renewed'
-                  ? 'No renewals completed yet this period.'
+                  : activeTab === 'archived'
+                  ? 'No archived renewals yet. Renewed and churned contracts will appear here.'
                   : 'No renewals match the selected filter.'}
               </p>
               {searchQuery && (
@@ -928,27 +950,52 @@ export default function RenewalsPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1.5">
                         {r.status === 'Upcoming' && (
-                          <button
-                            onClick={() => startRenewal(r.id)}
-                            className="text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md hover:bg-blue-100 transition-colors"
-                          >
-                            Start
-                          </button>
+                          <>
+                            <button
+                              onClick={() => startRenewal(r.id)}
+                              className="text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md hover:bg-blue-100 transition-colors"
+                            >
+                              Start
+                            </button>
+                            <button
+                              onClick={() => archiveRenewal(r.id)}
+                              className="text-xs font-medium text-gray-500 bg-gray-50 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors"
+                              title="Archive this renewal"
+                            >
+                              <Archive size={11} />
+                            </button>
+                          </>
                         )}
                         {r.status === 'In Progress' && (
-                          <button
-                            onClick={() => setRenewalProposalFor(r)}
-                            className="text-xs font-medium text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md hover:bg-orange-100 transition-colors"
-                          >
-                            Propose
-                          </button>
+                          <>
+                            <button
+                              onClick={() => setRenewalProposalFor(r)}
+                              className="text-xs font-medium text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md hover:bg-orange-100 transition-colors"
+                            >
+                              Propose
+                            </button>
+                            <button
+                              onClick={() => archiveRenewal(r.id)}
+                              className="text-xs font-medium text-gray-500 bg-gray-50 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors"
+                              title="Archive this renewal"
+                            >
+                              <Archive size={11} />
+                            </button>
+                          </>
                         )}
                         {r.status === 'Renewed' && (
                           <span className="text-xs text-emerald-600 flex items-center gap-1">
                             <CheckCircle size={11} /> Done
                           </span>
                         )}
+                        {r.status === 'Churned' && (
+                          <span className="text-xs text-red-500 flex items-center gap-1">
+                            <AlertCircle size={11} /> Churned
+                          </span>
+                        )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -962,7 +1009,7 @@ export default function RenewalsPage() {
             <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/60 flex items-center justify-between">
               <p className="text-xs text-gray-400">
                 {filtered.length} renewal{filtered.length !== 1 ? 's' : ''}
-                {activeTab !== 'all' || searchQuery ? ' matching filters' : ' total'}
+                {activeTab !== 'all' || searchQuery ? ' matching filters' : ''}
               </p>
               <div className="flex items-center gap-3 text-xs text-gray-400">
                 <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-red-500" /> Overdue / Critical</div>

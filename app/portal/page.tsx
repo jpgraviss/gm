@@ -81,7 +81,7 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
-      <div className="w-full max-w-md flex flex-col shadow-2xl pointer-events-auto" style={{ background: '#f8fafc' }}>
+      <div className="w-full max-w-md flex flex-col shadow-2xl pointer-events-auto" style={{ background: 'var(--page-bg)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0" style={{ background: '#012b1e' }}>
           <h2 className="text-sm font-bold text-white">Add Client to Portal</h2>
@@ -260,7 +260,7 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: '#f8fafc' }}>
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--page-bg)' }}>
 
       {/* Admin preview banner */}
       <div className="flex items-center justify-between gap-2 flex-wrap px-4 py-2 text-xs font-semibold text-amber-800 bg-amber-100 border-b border-amber-300 flex-shrink-0">
@@ -925,7 +925,7 @@ function ManageClientPanel({ client, onClose }: { client: PortalClient; onClose:
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
       <div className="flex-1 pointer-events-auto" onClick={onClose} />
-      <div className="w-full max-w-md flex flex-col shadow-2xl pointer-events-auto" style={{ background: '#f8fafc' }}>
+      <div className="w-full max-w-md flex flex-col shadow-2xl pointer-events-auto" style={{ background: 'var(--page-bg)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0" style={{ background: '#012b1e' }}>
           <div>

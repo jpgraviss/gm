@@ -11,6 +11,7 @@ function mapRenewal(row: any) {
   return {
     id:              row.id,
     company:         row.company,
+    companyId:       row.company_id || null,
     contractId:      row.contract_id ?? '',
     expirationDate:  row.expiration_date ?? '',
     renewalValue:    row.renewal_value,
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
     .insert({
       id:               `ren-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       company:          body.company,
+      company_id:       body.companyId || null,
       contract_id:      body.contractId ?? null,
       expiration_date:  body.expirationDate ?? null,
       renewal_value:    body.renewalValue ?? 0,

@@ -8,6 +8,7 @@ function mapRecord(row: any) {
   return {
     id:                 row.id,
     company:            row.company,
+    companyId:          row.company_id || null,
     serviceType:        row.service_type,
     startDate:          row.start_date ?? '',
     endDate:            row.end_date ?? undefined,
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
     .insert({
       id:                  `maint-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       company:             body.company,
+      company_id:          body.companyId || null,
       service_type:        body.serviceType ?? 'Website',
       start_date:          body.startDate ?? null,
       end_date:            body.endDate ?? null,

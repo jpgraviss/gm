@@ -43,7 +43,7 @@ export default function PortalPreviewPage() {
 
   if (!company) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f8fafc' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--page-bg)' }}>
         <div className="text-center">
           <Eye size={32} className="mx-auto text-gray-300 mb-3" />
           <p className="text-sm font-medium text-gray-500">No company specified</p>

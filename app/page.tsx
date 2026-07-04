@@ -430,19 +430,38 @@ interface ContractorTask { id: string; title: string; status: string; assignee: 
 function ContractorDashboard({ userName }: { userName: string }) {
   const { toast } = useToast()
   const [projects, setProjects] = useState<ContractorProject[]>([])
-  const [tickets, setTickets] = useState<ContractorTicket[]>([])
   const [tasks, setTasks] = useState<ContractorTask[]>([])
+  const [hoursThisWeek, setHoursThisWeek] = useState<number>(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Calculate current week bounds (Mon-Sun)
+    const now = new Date()
+    const dayOfWeek = now.getDay() // 0 = Sunday
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7))
+    monday.setHours(0, 0, 0, 0)
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    sunday.setHours(23, 59, 59, 999)
+    const weekStart = monday.toISOString().split('T')[0]
+    const weekEnd = sunday.toISOString().split('T')[0]
+
     Promise.all([
       fetch('/api/projects').then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch('/api/tickets').then(r => r.ok ? r.json() : []).catch(() => []),
       fetch('/api/tasks').then(r => r.ok ? r.json() : []).catch(() => []),
-    ]).then(([p, t, tk]) => {
+      fetch(`/api/time-entries?weekStart=${weekStart}&weekEnd=${weekEnd}&limit=500`).then(r => r.ok ? r.json() : []).catch(() => []),
+    ]).then(([p, tk, te]) => {
       if (Array.isArray(p)) setProjects(p)
-      if (Array.isArray(t)) setTickets(t)
       if (Array.isArray(tk)) setTasks(tk)
+      if (Array.isArray(te)) {
+        const total = te.reduce(
+          (sum: number, e: { hours?: number; minutes?: number }) =>
+            sum + (e.hours ?? 0) + (e.minutes ?? 0) / 60,
+          0,
+        )
+        setHoursThisWeek(Math.round(total * 10) / 10)
+      }
     }).catch(() => toast('Failed to load dashboard data', 'error'))
       .finally(() => setLoading(false))
   }, [])
@@ -450,116 +469,51 @@ function ContractorDashboard({ userName }: { userName: string }) {
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
 
   const activeProjects = projects.filter(p => !['Completed', 'Cancelled'].includes(p.status))
-  const openTickets = tickets.filter(t => !['Closed', 'Resolved'].includes(t.status))
   const pendingTasks = tasks.filter(t => t.status !== 'Done' && t.status !== 'Completed')
+  const upcomingDeadlines = tasks
+    .filter(t => t.due_date && t.status !== 'Done' && t.status !== 'Completed')
+    .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+    .slice(0, 6)
 
   return (
     <>
-      <Header title="Dashboard" subtitle="Your workspace" />
-      <div className="page-content">
-        <GreetingBanner name={userName} />
-        <MagicMomentToast name={userName} />
-        <LiveClock />
+      {/* KPI Row — no financial data */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard label="Active Projects"  value={String(activeProjects.length)}    icon={<FolderKanban size={17} />} accent="#8b5cf6" sub="In progress"        href="/projects" />
+        <KpiCard label="Pending Tasks"    value={String(pendingTasks.length)}      icon={<CheckSquare size={17} />}  accent="#3b82f6" sub="To complete"         href="/tasks" />
+        <KpiCard label="Hours This Week"  value={String(hoursThisWeek)}            icon={<Clock size={17} />}        accent="#015035" sub="Time logged"         href="/time-tracking" />
+        <KpiCard label="Deadlines"        value={String(upcomingDeadlines.length)} icon={<Calendar size={17} />}     accent="#f59e0b" sub="Upcoming due dates"  href="/tasks" />
+      </div>
 
-        {/* KPI Row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KpiCard label="Active Projects"  value={String(activeProjects.length)} icon={<FolderKanban size={17} />}  accent="#8b5cf6" sub="In progress"   href="/projects" />
-          <KpiCard label="Open Tickets"     value={String(openTickets.length)}    icon={<MessageSquare size={17} />} accent="#f59e0b" sub="Need attention" href="/tickets" />
-          <KpiCard label="Pending Tasks"    value={String(pendingTasks.length)}   icon={<CheckSquare size={17} />}   accent="#3b82f6" sub="To complete"    href="/tasks" />
-          <KpiCard label="Total Projects"   value={String(projects.length)}       icon={<CheckCircle size={17} />}   accent="#015035" sub="All time"       href="/projects" />
-        </div>
+      {/* Content Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Content Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-          {/* Active Projects */}
-          <div className="metric-card">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <FolderKanban size={14} style={{ color: '#8b5cf6' }} />
-                <h3 className="font-bold text-gray-800 text-sm">Active Projects</h3>
-              </div>
-              <Link href="/projects" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
-                View All <ArrowRight size={11} />
-              </Link>
-            </div>
-            {activeProjects.length === 0 ? (
-              <p className="text-xs text-gray-400 py-4 text-center">No active projects</p>
-            ) : (
-              <div className="flex flex-col divide-y divide-gray-50">
-                {activeProjects.slice(0, 6).map(p => (
-                  <Link key={p.id} href="/projects" className="flex items-center justify-between py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-semibold text-gray-800 truncate">{p.company}</p>
-                      <p className="text-[11px] text-gray-400">{p.serviceType}</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${p.progress}%`, background: '#015035' }} />
-                      </div>
-                      <span className="text-[11px] font-bold text-gray-500 w-8 text-right">{p.progress}%</span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Open Tickets */}
-          <div className="metric-card">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <MessageSquare size={14} style={{ color: '#f59e0b' }} />
-                <h3 className="font-bold text-gray-800 text-sm">Open Tickets</h3>
-              </div>
-              <Link href="/tickets" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
-                View All <ArrowRight size={11} />
-              </Link>
-            </div>
-            {openTickets.length === 0 ? (
-              <p className="text-xs text-gray-400 py-4 text-center">No open tickets</p>
-            ) : (
-              <div className="flex flex-col divide-y divide-gray-50">
-                {openTickets.slice(0, 6).map(t => {
-                  const priorityColor = t.priority === 'High' || t.priority === 'Urgent' ? 'text-red-600 bg-red-50' : t.priority === 'Medium' ? 'text-orange-600 bg-orange-50' : 'text-gray-600 bg-gray-50'
-                  return (
-                    <Link key={t.id} href="/tickets" className="flex items-center justify-between py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[12px] font-semibold text-gray-800 truncate">{t.subject}</p>
-                        <p className="text-[11px] text-gray-400">{t.company}</p>
-                      </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ml-2 ${priorityColor}`}>
-                        {t.priority}
-                      </span>
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Tasks Row */}
+        {/* Active Projects */}
         <div className="metric-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <CheckSquare size={14} style={{ color: '#3b82f6' }} />
-              <h3 className="font-bold text-gray-800 text-sm">Pending Tasks</h3>
+              <FolderKanban size={14} style={{ color: '#8b5cf6' }} />
+              <h3 className="font-bold text-gray-800 text-sm">Active Projects</h3>
             </div>
-            <Link href="/tasks" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
+            <Link href="/projects" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
               View All <ArrowRight size={11} />
             </Link>
           </div>
-          {pendingTasks.length === 0 ? (
-            <p className="text-xs text-gray-400 py-4 text-center">All tasks completed</p>
+          {activeProjects.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">No active projects</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {pendingTasks.slice(0, 9).map(t => (
-                <Link key={t.id} href="/tasks" className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
-                  <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: t.status === 'In Progress' ? '#3b82f6' : '#d1d5db' }} />
+            <div className="flex flex-col divide-y divide-gray-50">
+              {activeProjects.slice(0, 6).map(p => (
+                <Link key={p.id} href="/projects" className="flex items-center justify-between py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
                   <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-medium text-gray-800 truncate">{t.title}</p>
-                    {t.due_date && <p className="text-[10px] text-gray-400">Due {t.due_date}</p>}
+                    <p className="text-[12px] font-semibold text-gray-800 truncate">{p.company}</p>
+                    <p className="text-[11px] text-gray-400">{p.serviceType}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${p.progress}%`, background: '#015035' }} />
+                    </div>
+                    <span className="text-[11px] font-bold text-gray-500 w-8 text-right">{p.progress}%</span>
                   </div>
                 </Link>
               ))}
@@ -567,23 +521,81 @@ function ContractorDashboard({ userName }: { userName: string }) {
           )}
         </div>
 
-        {/* Quick Links */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: 'Projects',      href: '/projects',      icon: <FolderKanban size={16} />, color: '#8b5cf6' },
-            { label: 'Maintenance',   href: '/maintenance',   icon: <Wrench size={16} />,       color: '#015035' },
-            { label: 'Time Tracking', href: '/time-tracking', icon: <Clock size={16} />,        color: '#3b82f6' },
-            { label: 'Tickets',       href: '/tickets',       icon: <MessageSquare size={16} />,color: '#f59e0b' },
-          ].map(link => (
-            <Link key={link.href} href={link.href} className="metric-card flex items-center gap-3 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${link.color}15` }}>
-                <span style={{ color: link.color }}>{link.icon}</span>
-              </div>
-              <span className="text-sm font-semibold text-gray-800">{link.label}</span>
-              <ArrowRight size={13} className="text-gray-300 ml-auto" />
+        {/* Upcoming Deadlines */}
+        <div className="metric-card">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Calendar size={14} style={{ color: '#f59e0b' }} />
+              <h3 className="font-bold text-gray-800 text-sm">Upcoming Deadlines</h3>
+            </div>
+            <Link href="/tasks" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
+              View All <ArrowRight size={11} />
             </Link>
-          ))}
+          </div>
+          {upcomingDeadlines.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">No upcoming deadlines</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-gray-50">
+              {upcomingDeadlines.map(t => (
+                <Link key={t.id} href="/tasks" className="flex items-center justify-between py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-semibold text-gray-800 truncate">{t.title}</p>
+                    <p className="text-[11px] text-gray-400">{t.status}</p>
+                  </div>
+                  <span className="text-[11px] font-bold text-orange-600 flex-shrink-0 ml-2">
+                    Due {t.due_date}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Tasks Row */}
+      <div className="metric-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <CheckSquare size={14} style={{ color: '#3b82f6' }} />
+            <h3 className="font-bold text-gray-800 text-sm">Pending Tasks</h3>
+          </div>
+          <Link href="/tasks" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
+            View All <ArrowRight size={11} />
+          </Link>
+        </div>
+        {pendingTasks.length === 0 ? (
+          <p className="text-xs text-gray-400 py-4 text-center">All tasks completed</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {pendingTasks.slice(0, 9).map(t => (
+              <Link key={t.id} href="/tasks" className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: t.status === 'In Progress' ? '#3b82f6' : '#d1d5db' }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-medium text-gray-800 truncate">{t.title}</p>
+                  {t.due_date && <p className="text-[10px] text-gray-400">Due {t.due_date}</p>}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Quick Links — no financial links */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Projects',      href: '/projects',      icon: <FolderKanban size={16} />, color: '#8b5cf6' },
+          { label: 'Maintenance',   href: '/maintenance',   icon: <Wrench size={16} />,       color: '#015035' },
+          { label: 'Time Tracking', href: '/time-tracking', icon: <Clock size={16} />,        color: '#3b82f6' },
+          { label: 'Tasks',         href: '/tasks',         icon: <CheckSquare size={16} />,  color: '#f59e0b' },
+        ].map(link => (
+          <Link key={link.href} href={link.href} className="metric-card flex items-center gap-3 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${link.color}15` }}>
+              <span style={{ color: link.color }}>{link.icon}</span>
+            </div>
+            <span className="text-sm font-semibold text-gray-800">{link.label}</span>
+            <ArrowRight size={13} className="text-gray-300 ml-auto" />
+          </Link>
+        ))}
       </div>
     </>
   )
@@ -1339,7 +1351,16 @@ export default function DashboardPage() {
       ? DASHBOARD_VIEWS.filter(v => v.id === 'contractor')
       : DASHBOARD_VIEWS.filter(v => v.id !== 'contractor' && v.roles.includes(user?.role ?? 'Team Member'))
 
-  const defaultView: DashboardView = isContractor ? 'contractor' : 'executive'
+  // Default view based on user's occupational unit
+  const defaultView: DashboardView = isContractor
+    ? 'contractor'
+    : user?.unit === 'Sales'
+      ? 'sales'
+      : user?.unit === 'Billing/Finance'
+        ? 'billing'
+        : user?.unit === 'Delivery/Operations'
+          ? 'operations'
+          : 'executive'
   const [view, setView] = useState<DashboardView>(defaultView)
 
   useEffect(() => {

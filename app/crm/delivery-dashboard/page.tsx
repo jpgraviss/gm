@@ -481,6 +481,27 @@ export default function DeliveryDashboardPage() {
           ))}
         </div>
 
+        {/* Service type filter tabs */}
+        {activeServiceTypes.length > 1 && (
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 mb-3">
+            <Filter size={13} className="text-gray-400 flex-shrink-0 mr-1" />
+            {['All', ...activeServiceTypes].map(svc => (
+              <button
+                key={svc}
+                onClick={() => setServiceFilter(svc)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
+                  serviceFilter === svc
+                    ? 'text-white'
+                    : 'text-gray-500 bg-gray-100 hover:bg-gray-200'
+                }`}
+                style={serviceFilter === svc ? { background: '#015035' } : undefined}
+              >
+                {svc}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
           <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
             {FILTER_TABS.map(tab => (
@@ -506,7 +527,7 @@ export default function DeliveryDashboardPage() {
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex-1">
-          <div className="hidden md:grid grid-cols-[1fr_120px_100px_140px_100px_100px_80px] gap-2 px-5 py-3 border-b border-gray-100 bg-gray-50/60">
+          <div className="hidden md:grid grid-cols-[1fr_120px_100px_140px_100px_100px_160px] gap-2 px-5 py-3 border-b border-gray-100 bg-gray-50/60">
             <button onClick={() => toggleSort('company')} className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide text-left flex items-center gap-1">
               Company <ArrowUpDown size={10} />
             </button>
@@ -535,17 +556,14 @@ export default function DeliveryDashboardPage() {
 
                 return (
                   <div key={w.id}>
-                    <button
-                      onClick={() => setExpandedId(isExpanded ? null : w.id)}
-                      className="w-full text-left hover:bg-gray-50/60 transition-colors"
-                    >
-                      <div className="hidden md:grid grid-cols-[1fr_120px_100px_140px_100px_100px_80px] gap-2 px-5 py-3.5 items-center">
-                        <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-full text-left hover:bg-gray-50/60 transition-colors">
+                      <div className="hidden md:grid grid-cols-[1fr_120px_100px_140px_100px_100px_160px] gap-2 px-5 py-3.5 items-center">
+                        <button onClick={() => setExpandedId(isExpanded ? null : w.id)} className="flex items-center gap-3 min-w-0 text-left">
                           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
                             {w.company[0]}
                           </div>
                           <span className="text-sm font-semibold text-gray-900 truncate">{w.company}</span>
-                        </div>
+                        </button>
                         <span className="text-xs text-gray-500">{w.service}</span>
                         <div>
                           {completed ? (
@@ -557,12 +575,28 @@ export default function DeliveryDashboardPage() {
                         <ProgressBar steps={w.steps} />
                         <span className="text-xs text-gray-400">{formatShortDate(w.startedDate)}</span>
                         <span className="text-xs text-gray-400">{formatShortDate(w.lastUpdated)}</span>
-                        <div className="flex justify-center">
-                          {isExpanded ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+                        <div className="flex items-center justify-center gap-1.5">
+                          {!completed && (
+                            <button
+                              onClick={() => handleSkipStep(w.id)}
+                              className="text-[10px] font-semibold px-2 py-1 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 whitespace-nowrap"
+                            >
+                              Skip
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleRemoveWorkflow(w.id)}
+                            className="text-[10px] font-semibold px-2 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 whitespace-nowrap"
+                          >
+                            Remove
+                          </button>
+                          <button onClick={() => setExpandedId(isExpanded ? null : w.id)} className="p-0.5">
+                            {isExpanded ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+                          </button>
                         </div>
                       </div>
 
-                      <div className="md:hidden px-4 py-3.5">
+                      <div className="md:hidden px-4 py-3.5" onClick={() => setExpandedId(isExpanded ? null : w.id)}>
                         <div className="flex items-center gap-3 mb-2">
                           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
                             {w.company[0]}
@@ -583,8 +617,24 @@ export default function DeliveryDashboardPage() {
                           </div>
                           <ProgressBar steps={w.steps} />
                         </div>
+                        <div className="flex items-center gap-1.5 mt-2">
+                          {!completed && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleSkipStep(w.id) }}
+                              className="text-[10px] font-semibold px-2 py-1 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 whitespace-nowrap"
+                            >
+                              Skip Step
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRemoveWorkflow(w.id) }}
+                            className="text-[10px] font-semibold px-2 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 whitespace-nowrap"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
-                    </button>
+                    </div>
 
                     {isExpanded && (
                       <WorkflowTimeline

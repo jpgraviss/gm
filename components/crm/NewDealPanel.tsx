@@ -13,6 +13,7 @@ export interface NewDealData {
   contactEmail: string
   contactPhone: string
   serviceType: ServiceType
+  serviceTypes?: ServiceType[]
   stage: string
   value: string
   closeDate: string
@@ -77,6 +78,7 @@ export default function NewDealPanel({ onSave, onClose, stages, pipelineId }: Pr
     contactEmail: '',
     contactPhone: '',
     serviceType: 'Website',
+    serviceTypes: [],
     stage: stageNames[0] ?? 'Lead',
     value: '',
     closeDate: '',
@@ -141,13 +143,38 @@ export default function NewDealPanel({ onSave, onClose, stages, pipelineId }: Pr
             </div>
           </div>
 
-          {/* Service + Stage */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Service Types + Stage */}
+          <div className="flex flex-col gap-3">
             <div>
-              <FieldLabel>Service Type</FieldLabel>
-              <Select value={form.serviceType} onChange={e => set('serviceType', e.target.value)}>
-                {SERVICE_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
-              </Select>
+              <FieldLabel>Service Types</FieldLabel>
+              <div className="flex flex-wrap gap-2 p-2.5 border border-gray-200 rounded-xl bg-white">
+                {SERVICE_TYPES.map(s => {
+                  const selected = (form.serviceTypes ?? []).includes(s)
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        const current = form.serviceTypes ?? []
+                        const next = selected ? current.filter(t => t !== s) : [...current, s]
+                        setForm(prev => ({
+                          ...prev,
+                          serviceTypes: next as ServiceType[],
+                          serviceType: (next[0] ?? prev.serviceType) as ServiceType,
+                        }))
+                      }}
+                      className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all ${
+                        selected
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                          : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {selected && <span className="mr-1">&#10003;</span>}
+                      {s}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
             <div>
               <FieldLabel>Stage</FieldLabel>

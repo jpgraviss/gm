@@ -21,6 +21,7 @@ function mapContract(row: any) {
   return {
     id:               row.id,
     proposalId:       row.proposal_id ?? undefined,
+    companyId:        row.company_id || null,
     company:          row.company,
     status:           row.status,
     value:            row.value,
@@ -92,6 +93,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.renewalDate !== undefined)       update.renewal_date = body.renewalDate
   if (body.terminatedReason !== undefined)  update.terminated_reason = body.terminatedReason
   if (body.terminatedDate !== undefined)    update.terminated_date = body.terminatedDate
+  if (body.companyId !== undefined)         update.company_id = body.companyId
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })

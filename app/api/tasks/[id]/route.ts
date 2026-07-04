@@ -14,6 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.dueDate !== undefined)       update.due_date = body.dueDate
   if (body.assignedTo !== undefined)    update.assigned_to = body.assignedTo
   if (body.company !== undefined)       update.company = body.company
+  if (body.companyId !== undefined)     update.company_id = body.companyId
   if (body.completedDate !== undefined) update.completed_date = body.completedDate
   if (body.recurrence !== undefined)    update.recurrence = body.recurrence
   if (body.projectId !== undefined)     update.project_id = body.projectId

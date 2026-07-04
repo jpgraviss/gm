@@ -8,6 +8,7 @@ function mapInvoice(row: any) {
   return {
     id:          row.id,
     contractId:  row.contract_id ?? '',
+    companyId:   row.company_id || null,
     company:     row.company,
     amount:      row.amount,
     status:      row.status,
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
     .from('invoices')
     .insert({
       id:           `inv-${Date.now()}`,
+      company_id:   body.companyId ?? null,
       company:      body.company,
       amount:       body.amount,
       status:       body.status ?? 'Pending',

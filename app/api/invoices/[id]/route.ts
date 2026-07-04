@@ -34,7 +34,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.status !== undefined)   update.status = body.status
   if (body.amount !== undefined)   update.amount = body.amount
   if (body.dueDate !== undefined)  update.due_date = body.dueDate
-  if (body.paidDate !== undefined) update.paid_date = body.paidDate
+  if (body.paidDate !== undefined)  update.paid_date = body.paidDate
+  if (body.companyId !== undefined) update.company_id = body.companyId
 
   if (Object.keys(update).length === 0) {
     return validationError('No valid fields to update')

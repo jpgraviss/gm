@@ -8,6 +8,7 @@ function mapContract(row: any) {
   return {
     id:               row.id,
     proposalId:       row.proposal_id ?? undefined,
+    companyId:        row.company_id || null,
     company:          row.company,
     status:           row.status,
     value:            row.value,
@@ -68,6 +69,7 @@ export async function POST(req: NextRequest) {
     .insert({
       id:                `c-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       proposal_id:       body.proposalId ?? null,
+      company_id:        body.companyId ?? null,
       company:           body.company,
       status:            body.status ?? 'Draft',
       value:             body.value ?? 0,

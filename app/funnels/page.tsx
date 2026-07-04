@@ -8,6 +8,7 @@ import {
   Plus, Trash2, ArrowRight, Eye, Target, Pencil, ChevronDown,
   ChevronUp, ExternalLink, Layers, GripVertical, FileText,
   Search, X, TrendingUp, BarChart3, ArrowDownRight,
+  Gift, ArrowDownCircle, Sparkles, BookOpen,
 } from 'lucide-react'
 
 interface FunnelSummary {
@@ -42,6 +43,37 @@ interface FunnelDetail {
 
 type FilterTab = 'all' | 'Draft' | 'Published'
 
+const FUNNEL_TEMPLATES = [
+  {
+    name: 'Lead Magnet',
+    description: 'Capture leads with a free resource download',
+    icon: <Gift size={20} />,
+    color: '#8b5cf6',
+    steps: ['Opt-in Page', 'Thank You Page'],
+  },
+  {
+    name: 'Webinar Registration',
+    description: 'Drive registrations and follow up after the event',
+    icon: <BookOpen size={20} />,
+    color: '#3b82f6',
+    steps: ['Registration Page', 'Confirmation Page', 'Replay Page'],
+  },
+  {
+    name: 'Sales Page',
+    description: 'Present your offer and convert visitors into buyers',
+    icon: <TrendingUp size={20} />,
+    color: '#015035',
+    steps: ['Sales Page', 'Order Form', 'Upsell Page', 'Thank You Page'],
+  },
+  {
+    name: 'Tripwire Funnel',
+    description: 'Low-ticket offer leading to a premium upsell',
+    icon: <ArrowDownCircle size={20} />,
+    color: '#ef4444',
+    steps: ['Landing Page', 'Checkout', 'Upsell', 'Downsell', 'Confirmation'],
+  },
+]
+
 export default function FunnelsPage() {
   const router = useRouter()
   const { toast: addToast } = useToast()
@@ -59,6 +91,7 @@ export default function FunnelsPage() {
   const [newPageName, setNewPageName] = useState('')
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [creatingFromTemplate, setCreatingFromTemplate] = useState(false)
 
   useEffect(() => {
     loadFunnels()
@@ -93,6 +126,36 @@ export default function FunnelsPage() {
       addToast('Failed to load funnels', 'error')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function createFromTemplate(template: typeof FUNNEL_TEMPLATES[number]) {
+    setCreatingFromTemplate(true)
+    try {
+      const res = await fetch('/api/funnels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: `${template.name} Funnel` }),
+      })
+      if (res.ok) {
+        const funnel = await res.json()
+        const funnelId = funnel.id || funnel.funnelId
+        for (let i = 1; i < template.steps.length; i++) {
+          await fetch(`/api/funnels/${funnelId}/pages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: template.steps[i] }),
+          })
+        }
+        addToast(`"${template.name}" funnel created with ${template.steps.length} pages`, 'success')
+        loadFunnels()
+      } else {
+        addToast('Failed to create funnel from template', 'error')
+      }
+    } catch {
+      addToast('Failed to create funnel from template', 'error')
+    } finally {
+      setCreatingFromTemplate(false)
     }
   }
 
@@ -281,6 +344,45 @@ export default function FunnelsPage() {
                 <span className="text-xs font-medium text-gray-500 dark:text-white/50 uppercase tracking-wider">Avg Conversion</span>
               </div>
               <p className="text-3xl font-bold text-gray-900 dark:text-white">{kpis.avgRate}%</p>
+            </div>
+          </div>
+        )}
+
+        {!loading && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles size={16} className="text-[#015035]" />
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white">Quick Start Templates</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {FUNNEL_TEMPLATES.map(template => (
+                <div key={template.name} className="border border-gray-200 dark:border-white/10 rounded-xl bg-white dark:bg-white/[0.03] p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${template.color}15` }}>
+                      <span style={{ color: template.color }}>{template.icon}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{template.name}</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-white/40 mb-3">{template.description}</p>
+                  <div className="flex items-center gap-1 mb-3 flex-wrap">
+                    {template.steps.map((step, i) => (
+                      <span key={step} className="flex items-center gap-1">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-white/50 font-medium">{step}</span>
+                        {i < template.steps.length - 1 && <ArrowRight size={10} className="text-gray-300 dark:text-white/20" />}
+                      </span>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => createFromTemplate(template)}
+                    disabled={creatingFromTemplate}
+                    className="w-full text-xs font-semibold py-2 rounded-lg border border-gray-200 dark:border-white/10 text-gray-700 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-40"
+                  >
+                    {creatingFromTemplate ? 'Creating...' : 'Use Template'}
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}

@@ -11,7 +11,7 @@ import {
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
   Trash2, X, Eye, EyeOff, AlertTriangle, Mail, LayoutDashboard,
   TrendingUp, Smartphone, Menu, ChevronUp, ChevronDown, RotateCcw, Star,
-  FileText, ArrowUp, ArrowDown, Copy, Clock, PenLine,
+  FileText, ArrowUp, ArrowDown, Copy, Clock, PenLine, Calendar, Brain,
 } from 'lucide-react'
 import { type EmailSignatureData, DEFAULT_SIGNATURE, generateSignatureHtml } from '@/lib/email-signature'
 import {
@@ -1725,6 +1725,19 @@ export default function SettingsPage() {
 
             <MarketingIntegrationsSection />
 
+            <a href="/settings/calendar" className="flex items-center gap-4 p-4 rounded-xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-colors mb-4 mt-4">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#015035' }}>
+                <Calendar size={22} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-gray-900">Google Calendar</p>
+                <p className="text-xs text-gray-600">Connect your Google Calendar to sync events, manage bookings, and check availability</p>
+              </div>
+              <span className="text-xs font-semibold px-4 py-2 rounded-lg text-white flex-shrink-0" style={{ background: '#015035' }}>
+                Configure Calendar
+              </span>
+            </a>
+
             <div className="flex flex-col gap-3">
               {/* Gmail — Connected Inbox (HubSpot-style) */}
               <div className="rounded-xl border border-gray-200 overflow-hidden">
@@ -1923,18 +1936,11 @@ export default function SettingsPage() {
 
             <SmsIntegrationSection />
 
-            <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
-              <h4 className="text-sm font-bold text-gray-900 mb-3">Google Reviews</h4>
-              <p className="text-xs text-gray-500 mb-3">Connect your Google Business Profile to sync reviews automatically.</p>
-              <div className="space-y-3">
-                <input placeholder="Google Place ID" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                <input placeholder="Google API Key" type="password" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                <div className="flex gap-2">
-                  <button type="button" className="text-xs font-medium text-white px-4 py-2 rounded-lg" style={{ background: '#015035' }}>Test Connection</button>
-                  <button type="button" className="text-xs font-medium text-gray-600 bg-gray-100 px-4 py-2 rounded-lg hover:bg-gray-200">Sync Reviews</button>
-                </div>
-              </div>
-            </div>
+            <GoogleReviewsIntegrationSection />
+
+            <MaverickIntegrationSection />
+
+            <ResendIntegrationSection />
           </div>
         )}
 
@@ -3156,6 +3162,208 @@ function GoogleReviewsIntegrationSection() {
           >
             {gbpStatus === 'syncing' && <RefreshCw size={13} className="animate-spin" />}
             Sync Now
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MaverickIntegrationSection() {
+  const [apiKey, setApiKey] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.maverick?.apiKey) {
+          setApiKey(d.maverick.apiKey)
+          setStatus('connected')
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleTest() {
+    if (!apiKey.trim()) return
+    setStatus('testing')
+    try {
+      const res = await fetch('/api/integrations/maverick/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
+      })
+      setStatus(res.ok ? 'connected' : 'error')
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maverick: { apiKey: apiKey.trim() } }),
+      })
+    } catch {}
+    setSaving(false)
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
+          <Brain size={18} className="text-purple-600" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-800">Maverick AI</p>
+          <p className="text-xs text-gray-500">Intelligence data and competitive insights for client reporting</p>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          {status === 'connected' && <CheckCircle size={13} className="text-emerald-600" />}
+          {status === 'error' && <AlertCircle size={13} className="text-red-500" />}
+          <span className={`text-[11px] font-semibold ${
+            status === 'connected' ? 'text-emerald-600' :
+            status === 'error' ? 'text-red-500' :
+            status === 'testing' ? 'text-gray-500' :
+            'text-gray-400'
+          }`}>
+            {status === 'connected' ? 'Connected' :
+             status === 'error' ? 'Error' :
+             status === 'testing' ? 'Testing...' :
+             'Not Connected'}
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">API Key</label>
+          <div className="relative">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={e => { setApiKey(e.target.value); if (status !== 'idle') setStatus('idle') }}
+              placeholder="mk_live_..."
+              className="w-full px-3 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+            />
+            <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={handleTest} disabled={!apiKey.trim() || status === 'testing'} className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40" style={{ background: '#015035' }}>
+            {status === 'testing' && <RefreshCw size={13} className="animate-spin" />}
+            Test Connection
+          </button>
+          <button onClick={handleSave} disabled={!apiKey.trim() || saving} className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40">
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ResendIntegrationSection() {
+  const [apiKey, setApiKey] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.resend?.apiKey) {
+          setApiKey(d.resend.apiKey)
+          setStatus('connected')
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleTest() {
+    if (!apiKey.trim()) return
+    setStatus('testing')
+    try {
+      const res = await fetch('/api/integrations/resend/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
+      })
+      setStatus(res.ok ? 'connected' : 'error')
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resend: { apiKey: apiKey.trim() } }),
+      })
+    } catch {}
+    setSaving(false)
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+          <Mail size={18} className="text-blue-600" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-800">Resend</p>
+          <p className="text-xs text-gray-500">Transactional email delivery for sequences, notifications, and review requests</p>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          {status === 'connected' && <CheckCircle size={13} className="text-emerald-600" />}
+          {status === 'error' && <AlertCircle size={13} className="text-red-500" />}
+          <span className={`text-[11px] font-semibold ${
+            status === 'connected' ? 'text-emerald-600' :
+            status === 'error' ? 'text-red-500' :
+            status === 'testing' ? 'text-gray-500' :
+            'text-gray-400'
+          }`}>
+            {status === 'connected' ? 'Connected' :
+             status === 'error' ? 'Error' :
+             status === 'testing' ? 'Testing...' :
+             'Not Connected'}
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">API Key</label>
+          <div className="relative">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={e => { setApiKey(e.target.value); if (status !== 'idle') setStatus('idle') }}
+              placeholder="re_..."
+              className="w-full px-3 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+            />
+            <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={handleTest} disabled={!apiKey.trim() || status === 'testing'} className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40" style={{ background: '#015035' }}>
+            {status === 'testing' && <RefreshCw size={13} className="animate-spin" />}
+            Test Connection
+          </button>
+          <button onClick={handleSave} disabled={!apiKey.trim() || saving} className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40">
+            {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>

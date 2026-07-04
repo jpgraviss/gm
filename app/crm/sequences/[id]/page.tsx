@@ -8,7 +8,7 @@ import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronLeft, Edit2, Copy, TrendingUp, Search, MoreHorizontal,
   Eye, Trash2, ArrowUpDown, UserMinus, UserPlus, Phone,
-  MessageCircle, Linkedin, AlertCircle,
+  MessageCircle, Linkedin, AlertCircle, Send,
 } from 'lucide-react'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -46,6 +46,10 @@ interface EmailSequence {
   steps: SequenceStep[]
   createdDate: string
   lastModified: string
+  sendVia: 'gmail' | 'resend'
+  fromName: string
+  fromEmail: string
+  assignedRepId: string | null
 }
 
 interface Enrollment {
@@ -349,6 +353,7 @@ export default function SequenceDetailPage() {
   const [showEnrollModal, setShowEnrollModal] = useState(false)
   const [showDeleteSeqModal, setShowDeleteSeqModal] = useState(false)
   const [showRemoveModal, setShowRemoveModal] = useState(false)
+  const [testSending, setTestSending] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -436,6 +441,27 @@ export default function SequenceDetailPage() {
     loadData()
   }
 
+  async function sendTestEmail() {
+    setTestSending(true)
+    try {
+      const res = await fetch(`/api/sequences/${sequenceId}/test-send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'jonathan@gravissmarketing.com' }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast(`Test email sent — "${data.subject}"`, 'success')
+      } else {
+        toast(data.error || 'Failed to send test', 'error')
+      }
+    } catch {
+      toast('Failed to send test email', 'error')
+    } finally {
+      setTestSending(false)
+    }
+  }
+
   // Filter enrollments
   let filteredEnrollments = enrollments
   if (enrollStatusFilter !== 'all') {
@@ -493,7 +519,15 @@ export default function SequenceDetailPage() {
                 {sequence.status}
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">{sequence.trigger || 'Manual enrollment'}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {sequence.trigger || 'Manual enrollment'}
+              {sequence.fromEmail && (
+                <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium">
+                  <Send size={9} />
+                  Sending via {sequence.sendVia === 'gmail' ? 'Gmail' : 'Resend'} — {sequence.fromEmail}
+                </span>
+              )}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -501,6 +535,14 @@ export default function SequenceDetailPage() {
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
             >
               {sequence.status === 'Active' ? <><Pause size={14} /> Pause</> : <><Play size={14} /> Activate</>}
+            </button>
+            <button
+              onClick={sendTestEmail}
+              disabled={testSending || !sequence.steps.some(s => s.type === 'email')}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40"
+            >
+              <Send size={14} />
+              {testSending ? 'Sending...' : 'Test Send'}
             </button>
             <button
               onClick={() => setShowDeleteSeqModal(true)}

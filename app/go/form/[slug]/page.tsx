@@ -564,7 +564,7 @@ export default function PublicFormPage() {
 
           <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 8, lineHeight: 1.5 }}>
             By submitting this form, you agree to our{' '}
-            <a href="/privacy" style={{ color: '#6b7280', textDecoration: 'underline' }}>Privacy Policy</a>.
+            <a href="https://www.gravissmarketing.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#6b7280', textDecoration: 'underline' }}>Privacy Policy</a>.
           </p>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
@@ -597,9 +597,9 @@ export default function PublicFormPage() {
           </div>
         </form>
         <p style={{ textAlign: 'center', fontSize: 10, color: '#9ca3af', marginTop: 16 }}>
-          <a href="/privacy" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</a>
+          <a href="https://www.gravissmarketing.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</a>
           {' · '}
-          <a href="/terms" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Terms of Service</a>
+          <a href="https://www.gravissmarketing.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Terms of Service</a>
         </p>
       </div>
     </div>

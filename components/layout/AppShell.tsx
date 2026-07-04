@@ -47,8 +47,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   // /go/* routes are public — clients access booking pages, forms, and funnels without logging in
-  const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/') || pathname.startsWith('/unsubscribe/') || pathname.startsWith('/go/') || pathname === '/privacy' || pathname === '/terms' || pathname === '/cookie-policy'
-
+  const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/') || pathname.startsWith('/unsubscribe/') || pathname.startsWith('/go/') 
   // Inject brand CSS variables from shared settings (no duplicate fetch)
   useEffect(() => {
     const branding = settings?.branding

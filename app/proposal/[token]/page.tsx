@@ -458,9 +458,9 @@ export default function ProposalViewPage() {
             Powered by <span style={{ fontWeight: 600, color: COLORS.forestGreen }}>Graviss Marketing</span>
           </p>
           <p style={{ fontSize: 10, color: COLORS.stone, marginTop: 6 }}>
-            <a href="/privacy" style={{ color: COLORS.stone, textDecoration: 'underline' }}>Privacy Policy</a>
+            <a href="https://www.gravissmarketing.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: COLORS.stone, textDecoration: 'underline' }}>Privacy Policy</a>
             {' · '}
-            <a href="/terms" style={{ color: COLORS.stone, textDecoration: 'underline' }}>Terms of Service</a>
+            <a href="https://www.gravissmarketing.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: COLORS.stone, textDecoration: 'underline' }}>Terms of Service</a>
           </p>
         </footer>
       </main>

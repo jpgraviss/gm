@@ -416,8 +416,8 @@ export default function SignPage() {
               By signing below, I agree to the terms of this contract. I consent to conducting this transaction electronically
               pursuant to the Electronic Signatures in Global and National Commerce Act (E-SIGN Act) and the Uniform Electronic
               Transactions Act (UETA). I acknowledge receipt of the document and agree to use an electronic signature. See our{' '}
-              <a href="/privacy" className="text-[#015035] underline">Privacy Policy</a> and{' '}
-              <a href="/terms" className="text-[#015035] underline">Terms of Service</a>.
+              <a href="https://www.gravissmarketing.com/privacy" target="_blank" rel="noopener noreferrer" className="text-[#015035] underline">Privacy Policy</a> and{' '}
+              <a href="https://www.gravissmarketing.com/terms" target="_blank" rel="noopener noreferrer" className="text-[#015035] underline">Terms of Service</a>.
             </p>
             {error && (
               <div className="mb-3 p-2.5 rounded-lg bg-red-50 text-xs text-red-600 font-medium">
@@ -440,9 +440,9 @@ export default function SignPage() {
           Powered by Graviss Marketing &middot; Secure E-Signature
         </p>
         <p className="text-center text-[10px] text-gray-400 mt-1">
-          <a href="/privacy" className="text-gray-400 underline hover:text-gray-500">Privacy Policy</a>
+          <a href="https://www.gravissmarketing.com/privacy" target="_blank" rel="noopener noreferrer" className="text-gray-400 underline hover:text-gray-500">Privacy Policy</a>
           {' · '}
-          <a href="/terms" className="text-gray-400 underline hover:text-gray-500">Terms of Service</a>
+          <a href="https://www.gravissmarketing.com/terms" target="_blank" rel="noopener noreferrer" className="text-gray-400 underline hover:text-gray-500">Terms of Service</a>
         </p>
       </div>
     </div>

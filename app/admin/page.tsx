@@ -1904,6 +1904,7 @@ export default function AdminPage() {
               <div className="flex items-center gap-2 mb-4">
                 <Lock size={15} style={{ color: '#015035' }} />
                 <h3 className="text-sm font-bold text-gray-800">Security Settings</h3>
+                <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full ml-auto">(Coming Soon)</span>
               </div>
               <div className="flex flex-col gap-3">
                 {[
@@ -1921,7 +1922,7 @@ export default function AdminPage() {
                     </div>
                     <div className="flex items-center gap-1.5 ml-4">
                       <span className="text-xs text-gray-600 font-medium">{s.value}</span>
-                      <Pencil size={11} className="text-gray-300 hover:text-blue-500 cursor-pointer flex-shrink-0" />
+                      <Lock size={11} className="text-gray-300 flex-shrink-0" />
                     </div>
                   </div>
                 ))}

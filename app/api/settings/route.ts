@@ -63,6 +63,7 @@ export async function PATCH(req: NextRequest) {
   if (body.twilio               !== undefined) updates.twilio               = body.twilio
   if (body.deliverySteps        !== undefined) updates.delivery_steps       = body.deliverySteps
   if (body.trainingModules      !== undefined) updates.training_modules     = body.trainingModules
+  if (body.sops                 !== undefined) updates.sops                 = body.sops
 
   const { data, error } = await db
     .from('app_settings')

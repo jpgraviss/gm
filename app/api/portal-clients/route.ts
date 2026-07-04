@@ -71,8 +71,8 @@ export async function POST(req: NextRequest) {
 
   const result = validate(body, {
     company: { required: true, type: 'string', maxLength: 200 },
-    email:   { required: true, type: 'string', pattern: EMAIL_PATTERN },
-    contact: { required: true, type: 'string', maxLength: 200 },
+    email:   { required: false, type: 'string', pattern: EMAIL_PATTERN },
+    contact: { required: false, type: 'string', maxLength: 200 },
   })
   if (!result.valid) return validationError(result.error)
 

@@ -157,6 +157,9 @@ export default function PortalManagementPage() {
   const [autoSaved, setAutoSaved] = useState<string | null>(null)
   const [autoSaving, setAutoSaving] = useState<string | null>(null)
   const [deletingPortal, setDeletingPortal] = useState<string | null>(null)
+  const [showAddCompanyModal, setShowAddCompanyModal] = useState(false)
+  const [addCompanyForm, setAddCompanyForm] = useState({ companyName: '', service: '' as string, contactName: '', contactEmail: '' })
+  const [addingCompany, setAddingCompany] = useState(false)
 
   useEffect(() => {
     if (!authLoading && (!user || !user.isAdmin)) {
@@ -325,6 +328,66 @@ export default function PortalManagementPage() {
     }
   }
 
+  const addCompany = async () => {
+    if (!addCompanyForm.companyName.trim()) {
+      toast('Company name is required', 'error')
+      return
+    }
+    setAddingCompany(true)
+    try {
+      const hasContact = addCompanyForm.contactName.trim() && addCompanyForm.contactEmail.trim()
+      if (hasContact) {
+        // Use invite API to create company + first member
+        const res = await fetch('/api/portal-clients/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: addCompanyForm.contactName.trim(),
+            email: addCompanyForm.contactEmail.trim(),
+            company: addCompanyForm.companyName.trim(),
+            role: 'Admin',
+            service: addCompanyForm.service,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          toast(data.error || 'Failed to create company', 'error')
+          setAddingCompany(false)
+          return
+        }
+        toast(`Company "${addCompanyForm.companyName.trim()}" created with invite sent to ${addCompanyForm.contactEmail.trim()}`, 'success')
+      } else {
+        // Create company-only record without a member
+        const payload: Record<string, string> = {
+          company: addCompanyForm.companyName.trim(),
+          service: addCompanyForm.service,
+          access: 'Not Setup',
+        }
+        if (addCompanyForm.contactName.trim()) payload.contact = addCompanyForm.contactName.trim()
+        if (addCompanyForm.contactEmail.trim()) payload.email = addCompanyForm.contactEmail.trim()
+        const res = await fetch('/api/portal-clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          toast(data.error || 'Failed to create company', 'error')
+          setAddingCompany(false)
+          return
+        }
+        toast(`Company "${addCompanyForm.companyName.trim()}" created`, 'success')
+      }
+      setShowAddCompanyModal(false)
+      setAddCompanyForm({ companyName: '', service: '', contactName: '', contactEmail: '' })
+      fetchClients()
+    } catch {
+      toast('Failed to create company', 'error')
+    } finally {
+      setAddingCompany(false)
+    }
+  }
+
   const toggleServiceConfig = (company: string, serviceKey: string, enabled: boolean) => {
     let updatedConfig: PortalConfig | null = null
     updateConfig(company, prev => {
@@ -402,7 +465,16 @@ export default function PortalManagementPage() {
                 <Building size={16} style={{ color: '#015035' }} />
                 <h2 className="text-sm font-bold text-gray-900">Companies with Portal Access</h2>
               </div>
-              <span className="text-xs text-gray-400 font-medium">{companies.length} companies</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400 font-medium">{companies.length} companies</span>
+                <button
+                  onClick={() => { setShowAddCompanyModal(true); setAddCompanyForm({ companyName: '', service: '', contactName: '', contactEmail: '' }) }}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl text-white transition-opacity hover:opacity-90"
+                  style={{ background: '#015035' }}
+                >
+                  <Plus size={14} /> Add Company
+                </button>
+              </div>
             </div>
             <p className="text-xs text-gray-500">Each company can have multiple portal users sharing the same view.</p>
           </div>
@@ -921,6 +993,92 @@ export default function PortalManagementPage() {
                   <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Sending...</>
                 ) : (
                   <><Mail size={14} /> Send Invite</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Company Modal */}
+      {showAddCompanyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddCompanyModal(false)} />
+          <div className="relative bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4" style={{ background: '#012b1e' }}>
+              <h2 className="text-sm font-bold text-white">Add New Company</h2>
+              <button onClick={() => setShowAddCompanyModal(false)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                <X size={16} className="text-white/70" />
+              </button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Company Name <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={addCompanyForm.companyName}
+                  onChange={e => setAddCompanyForm(prev => ({ ...prev, companyName: e.target.value }))}
+                  placeholder="Acme Corporation"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+                  autoFocus
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Service Type</label>
+                <select
+                  value={addCompanyForm.service}
+                  onChange={e => setAddCompanyForm(prev => ({ ...prev, service: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-gray-700"
+                >
+                  <option value="">Select a service...</option>
+                  {ALL_SERVICES.map(s => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="border-t border-gray-100 pt-3">
+                <p className="text-[11px] text-gray-400 mb-3">Optionally add a primary contact. An invite email will be sent if both name and email are provided.</p>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-gray-600">Primary Contact Name</label>
+                    <input
+                      type="text"
+                      value={addCompanyForm.contactName}
+                      onChange={e => setAddCompanyForm(prev => ({ ...prev, contactName: e.target.value }))}
+                      placeholder="John Smith"
+                      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-gray-600">Primary Contact Email</label>
+                    <input
+                      type="email"
+                      value={addCompanyForm.contactEmail}
+                      onChange={e => setAddCompanyForm(prev => ({ ...prev, contactEmail: e.target.value }))}
+                      placeholder="john@acme.com"
+                      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowAddCompanyModal(false)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addCompany}
+                disabled={addingCompany || !addCompanyForm.companyName.trim()}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-40"
+                style={{ background: '#015035' }}
+              >
+                {addingCompany ? (
+                  <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Creating...</>
+                ) : (
+                  <><Building size={14} /> Add Company</>
                 )}
               </button>
             </div>

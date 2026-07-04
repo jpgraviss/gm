@@ -14,12 +14,14 @@ import {
 type Tab = 'overview' | 'seo' | 'traffic' | 'ads' | 'reputation'
 
 interface ClientBinding {
+  id?: string
   companyName: string
   gscSiteUrl?: string
   ga4PropertyId?: string
   adsCustomerId?: string
   metaAdAccountId?: string
   gbpLocationName?: string
+  updatedAt?: string
 }
 
 const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
@@ -128,7 +130,17 @@ export default function IntegrationsPage() {
 
         {/* Tab content */}
         {tab === 'overview' && (
-          <OverviewTab clientName={selectedClient || undefined} />
+          <OverviewTab
+            clientName={selectedClient || undefined}
+            allBindings={bindings}
+            onSelectClient={setSelectedClient}
+            onBindingsChanged={() => {
+              fetch('/api/client-integrations')
+                .then(r => (r.ok ? r.json() : []))
+                .then(data => { if (Array.isArray(data)) setBindings(data) })
+                .catch(() => {})
+            }}
+          />
         )}
         {tab === 'seo' && (
           <SeoTab gscSiteUrl={binding?.gscSiteUrl} days={days} />

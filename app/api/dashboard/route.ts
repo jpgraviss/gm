@@ -1,8 +1,17 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { RECURRING_STATUSES } from '@/lib/metrics'
+import type { OccupationalUnit } from '@/lib/types'
 
-export async function GET() {
+/** Units that must never receive financial data */
+const RESTRICTED_UNITS: OccupationalUnit[] = ['Contractors', 'Client']
+
+function isRestrictedUnit(unit: string | null): boolean {
+  return !!unit && RESTRICTED_UNITS.includes(unit as OccupationalUnit)
+}
+
+export async function GET(req: NextRequest) {
+  const unit = req.nextUrl.searchParams.get('unit') ?? req.nextUrl.searchParams.get('role')
   try {
   const db = createServiceClient()
 
@@ -66,6 +75,35 @@ export async function GET() {
   const automations = (automationsRes.data ?? []).map((a: Record<string, unknown>) => ({
     name: a.name, status: a.status, runs: a.runs ?? 0,
   }))
+
+  // ── Role-based filtering: strip financial data for Contractors & Client ──
+  if (isRestrictedUnit(unit)) {
+    return NextResponse.json({
+      metrics: {
+        activeClients,
+        openDeals,
+        pipelineValue: 0,
+        overdueInvoices: 0,
+        upcomingRenewals,
+        totalCollected: 0,
+        totalInvoiced: 0,
+        totalOverdue: 0,
+        totalPending: 0,
+        winRate: 0,
+        avgDealSize: 0,
+        totalDealValue: 0,
+        deals30d,
+        contracts30d,
+        invoices30d,
+      },
+      recentDeals: recentDeals.map((d: Record<string, unknown>) => ({ ...d, value: 0 })),
+      recentContracts: recentContracts.map((c: Record<string, unknown>) => ({ ...c, value: 0 })),
+      recentInvoices: [],
+      activityFeed: activityFeed.filter((a: Record<string, unknown>) => a.module !== 'invoices' && a.module !== 'billing'),
+      revenueByMonth: [],
+      automations,
+    })
+  }
 
   return NextResponse.json({
     metrics: {

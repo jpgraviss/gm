@@ -5,7 +5,7 @@ import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import { Wand2, Loader2, X } from 'lucide-react'
 
-type DateRange = '30D' | '90D' | '12M'
+type DateRange = '30D' | '90D' | '12M' | 'Custom'
 
 interface Broadcast {
   id: string
@@ -42,6 +42,8 @@ export default function MarketingAnalyticsPage() {
   const [dateRange, setDateRange] = useState<DateRange>('90D')
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [forms, setForms] = useState<FormDef[]>([])
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -55,20 +57,28 @@ export default function MarketingAnalyticsPage() {
   }, [])
 
   const sentBroadcasts = useMemo(() => {
-    const now = new Date()
-    const cutoff = new Date(now)
-    if (dateRange === '30D') cutoff.setDate(cutoff.getDate() - 30)
-    else if (dateRange === '90D') cutoff.setDate(cutoff.getDate() - 90)
-    else cutoff.setFullYear(cutoff.getFullYear() - 1)
-    const cutoffISO = cutoff.toISOString()
+    let cutoffISO: string
+    let endISO: string
+    if (dateRange === 'Custom') {
+      cutoffISO = customStart || '1970-01-01'
+      endISO = customEnd ? customEnd + 'T23:59:59.999Z' : new Date().toISOString()
+    } else {
+      const now = new Date()
+      const cutoff = new Date(now)
+      if (dateRange === '30D') cutoff.setDate(cutoff.getDate() - 30)
+      else if (dateRange === '90D') cutoff.setDate(cutoff.getDate() - 90)
+      else cutoff.setFullYear(cutoff.getFullYear() - 1)
+      cutoffISO = cutoff.toISOString()
+      endISO = now.toISOString()
+    }
 
     return broadcasts
       .filter(b => b.status === 'sent' || b.totalSent > 0)
       .filter(b => {
         const date = b.sentAt || b.createdAt
-        return !date || date >= cutoffISO
+        return !date || (date >= cutoffISO && date <= endISO)
       })
-  }, [broadcasts, dateRange])
+  }, [broadcasts, dateRange, customStart, customEnd])
 
   const totals = useMemo(() => {
     const sent = sentBroadcasts.reduce((s, b) => s + b.totalSent, 0)
@@ -127,10 +137,10 @@ export default function MarketingAnalyticsPage() {
     <>
       <Header title="Marketing Analytics" subtitle="Broadcast performance, form conversions, and funnel metrics" />
       <div className="page-content">
-        <div className="flex items-center gap-2 mb-5">
+        <div className="flex flex-wrap items-center gap-2 mb-5">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Period:</span>
           <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
-            {(['30D', '90D', '12M'] as DateRange[]).map(r => (
+            {(['30D', '90D', '12M', 'Custom'] as DateRange[]).map(r => (
               <button
                 key={r}
                 onClick={() => setDateRange(r)}
@@ -141,6 +151,13 @@ export default function MarketingAnalyticsPage() {
               </button>
             ))}
           </div>
+          {dateRange === 'Custom' && (
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
+              <span className="text-xs text-gray-400">to</span>
+              <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">

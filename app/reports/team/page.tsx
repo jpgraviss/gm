@@ -248,6 +248,52 @@ export default function TeamProductivityPage() {
           </div>
         </div>
 
+        <div className="metric-card mb-6">
+          <h3 className="font-semibold text-gray-800 text-sm mb-4">Per-Member Revenue Breakdown</h3>
+          <div className="flex flex-col gap-3">
+            {filteredStats
+              .filter(m => m.dealRevenue > 0 || m.memberMRR > 0)
+              .sort((a, b) => (b.dealRevenue + b.memberMRR * 12) - (a.dealRevenue + a.memberMRR * 12))
+              .map(m => {
+                const totalAnnual = m.dealRevenue + m.memberMRR * 12
+                const maxAnnual = Math.max(...filteredStats.map(s => s.dealRevenue + s.memberMRR * 12), 1)
+                return (
+                  <div key={m.id} className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 w-28 flex-shrink-0">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: '#015035' }}>
+                        {m.initials}
+                      </div>
+                      <span className="text-xs font-medium text-gray-800 truncate">{m.name}</span>
+                    </div>
+                    <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden flex">
+                      <div
+                        className="h-full"
+                        style={{ width: `${maxAnnual > 0 ? (m.dealRevenue / maxAnnual) * 100 : 0}%`, background: '#015035' }}
+                        title={`Deal revenue: ${formatCurrency(m.dealRevenue)}`}
+                      />
+                      <div
+                        className="h-full"
+                        style={{ width: `${maxAnnual > 0 ? ((m.memberMRR * 12) / maxAnnual) * 100 : 0}%`, background: '#8b5cf6' }}
+                        title={`Recurring (annualized): ${formatCurrency(m.memberMRR * 12)}`}
+                      />
+                    </div>
+                    <div className="flex-shrink-0 text-right w-28">
+                      <span className="text-xs font-bold text-gray-800">{formatCurrency(totalAnnual)}</span>
+                      <span className="text-[10px] text-gray-400 ml-1">total</span>
+                    </div>
+                  </div>
+                )
+              })}
+            {filteredStats.filter(m => m.dealRevenue > 0 || m.memberMRR > 0).length === 0 && (
+              <p className="text-xs text-gray-400 text-center py-4">No revenue attributed to team members in this period</p>
+            )}
+          </div>
+          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100 justify-center">
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ background: '#015035' }} /><span className="text-[10px] text-gray-500">Deal Revenue</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ background: '#8b5cf6' }} /><span className="text-[10px] text-gray-500">Recurring (Annualized)</span></div>
+          </div>
+        </div>
+
         <div className="metric-card">
           <h3 className="font-semibold text-gray-800 text-sm mb-4">Activity Timeline</h3>
           <div className="flex flex-col">

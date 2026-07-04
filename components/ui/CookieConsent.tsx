@@ -53,8 +53,8 @@ export default function CookieConsent() {
             <p className="text-white text-sm font-semibold mb-1">We use cookies</p>
             <p className="text-white/70 text-xs leading-relaxed">
               We use cookies and similar technologies to enhance your experience, analyze site traffic, and serve personalized content. By clicking &quot;Accept All&quot; you consent to our use of cookies. See our{' '}
-              <a href="/privacy" className="text-white/90 underline hover:text-white">Privacy Policy</a> and{' '}
-              <a href="/cookie-policy" className="text-white/90 underline hover:text-white">Cookie Policy</a>.
+              <a href="https://www.gravissmarketing.com/privacy" target="_blank" rel="noopener noreferrer" className="text-white/90 underline hover:text-white">Privacy Policy</a> and{' '}
+              <a href="https://www.gravissmarketing.com/cookie-policy" target="_blank" rel="noopener noreferrer" className="text-white/90 underline hover:text-white">Cookie Policy</a>.
             </p>
             <div className="flex items-center gap-2 mt-3">
               <button

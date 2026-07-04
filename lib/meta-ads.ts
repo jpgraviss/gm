@@ -17,7 +17,18 @@ const META_API_VERSION = 'v21.0'
 const META_OAUTH_BASE = `https://www.facebook.com/${META_API_VERSION}/dialog/oauth`
 const META_GRAPH_BASE = `https://graph.facebook.com/${META_API_VERSION}`
 
-export const META_SCOPES = ['ads_read', 'ads_management', 'business_management']
+export const META_SCOPES = [
+  'ads_read',
+  'ads_management',
+  'business_management',
+  // Publishing scopes (gated on Meta App Review). Requested at connect time so
+  // one Meta grant covers both ads reporting and Facebook/Instagram publishing.
+  'pages_show_list',
+  'pages_manage_posts',
+  'pages_read_engagement',
+  'instagram_basic',
+  'instagram_content_publish',
+]
 
 function redirectUri(): string {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
@@ -308,6 +319,45 @@ export async function listMetaAdAccounts(): Promise<MetaAdAccount[]> {
     name: row.name ?? row.id,
     currency: row.currency ?? '',
     timezoneName: row.timezone_name ?? '',
+  }))
+}
+
+export interface MetaPage {
+  id: string
+  name: string
+  accessToken: string
+  instagramId?: string
+  instagramUsername?: string
+}
+
+interface RawMetaPage {
+  id: string
+  name?: string
+  access_token?: string
+  instagram_business_account?: { id?: string; username?: string }
+}
+
+/**
+ * List the Facebook Pages the connected user manages, with each Page's own
+ * access token and linked Instagram business account (if any). Used by the
+ * social connection picker to choose a publish target.
+ */
+export async function listMetaPages(): Promise<MetaPage[]> {
+  const auth = await getValidMetaToken()
+  if (!auth) throw new Error('Meta not connected')
+
+  const data = await metaGet<{ data?: RawMetaPage[] }>(
+    '/me/accounts',
+    auth.accessToken,
+    { fields: 'id,name,access_token,instagram_business_account{id,username}' },
+  )
+
+  return (data.data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name ?? row.id,
+    accessToken: row.access_token ?? '',
+    instagramId: row.instagram_business_account?.id,
+    instagramUsername: row.instagram_business_account?.username,
   }))
 }
 

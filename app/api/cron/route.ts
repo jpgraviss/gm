@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { checkSite, recordCheck, computeUptime30d, type MonitoredSiteRow } from '@/lib/uptime'
 import { checkAllRanks } from '@/lib/rank-tracker'
+import { publishSocialPost } from '@/lib/social-publish'
 
 /**
  * Cron endpoint — called on a schedule (e.g. every 6 hours via Vercel Cron).
@@ -108,6 +109,14 @@ export async function GET(req: NextRequest) {
     results.uptime = { error: 'Failed' }
   }
 
+  // 5b. Publish scheduled social posts whose scheduled_at has passed.
+  try {
+    results.socialPosts = await publishScheduledSocialPosts()
+  } catch (err) {
+    console.error('[cron] Scheduled social publishing failed:', err)
+    results.socialPosts = { error: 'Failed' }
+  }
+
   // 6. Keyword rank tracker — once per UTC day. GSC data has a 2-3 day lag,
   //    so running more than once/day is wasted quota. We detect "already ran
   //    today" by checking whether the most-recently-checked tracked keyword
@@ -204,6 +213,47 @@ async function runUptimeChecks(): Promise<{ checked: number; skipped: number; er
   }
 
   return { checked, skipped, errors }
+}
+
+/**
+ * Publish social posts whose scheduled_at has passed. Each post goes through
+ * the same publisher path as a manual publish, so per-platform success/failure
+ * is recorded honestly.
+ */
+async function publishScheduledSocialPosts(): Promise<{ published: number; failed: number; skipped: number }> {
+  const db = createServiceClient()
+  const now = new Date().toISOString()
+
+  const { data: due, error } = await db
+    .from('social_posts')
+    .select('id')
+    .eq('status', 'scheduled')
+    .not('scheduled_at', 'is', null)
+    .lte('scheduled_at', now)
+    .limit(50)
+
+  if (error) {
+    console.error('[cron] Failed to load scheduled social posts:', error)
+    return { published: 0, failed: 0, skipped: 0 }
+  }
+
+  let published = 0
+  let failed = 0
+  let skipped = 0
+
+  for (const row of due ?? []) {
+    try {
+      const result = await publishSocialPost(row.id)
+      if (result.reason) { skipped++; continue }
+      if (result.anySucceeded) published++
+      else failed++
+    } catch (err) {
+      console.error('[cron] Failed to publish scheduled post', row.id, err)
+      failed++
+    }
+  }
+
+  return { published, failed, skipped }
 }
 
 async function spawnRecurringTasks() {

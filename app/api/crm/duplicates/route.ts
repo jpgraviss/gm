@@ -32,6 +32,15 @@ export async function GET(req: NextRequest) {
 
   const db = createServiceClient()
 
+  // Load dismissed duplicate group keys
+  const { data: settings } = await db
+    .from('app_settings')
+    .select('dismissed_duplicates')
+    .eq('id', 'global')
+    .maybeSingle()
+  const dismissed: Record<string, string[]> = (settings?.dismissed_duplicates as Record<string, string[]>) ?? {}
+  const dismissedKeys = new Set<string>(dismissed[type] ?? [])
+
   if (type === 'contacts') {
     const { data, error } = await db.from('crm_contacts').select('*').order('created_at', { ascending: false })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -103,8 +112,9 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    groups.sort((a, b) => b.records.length - a.records.length)
-    return NextResponse.json({ groups })
+    const filteredGroups = groups.filter(g => !dismissedKeys.has(g.key))
+    filteredGroups.sort((a, b) => b.records.length - a.records.length)
+    return NextResponse.json({ groups: filteredGroups })
   }
 
   const { data, error } = await db.from('crm_companies').select('*').order('created_at', { ascending: false })
@@ -151,8 +161,9 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  groups.sort((a, b) => b.records.length - a.records.length)
-  return NextResponse.json({ groups })
+  const filteredGroups = groups.filter(g => !dismissedKeys.has(g.key))
+  filteredGroups.sort((a, b) => b.records.length - a.records.length)
+  return NextResponse.json({ groups: filteredGroups })
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

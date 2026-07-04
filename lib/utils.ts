@@ -58,6 +58,7 @@ export const contractStatusColors: Record<string, string> = {
   'Countersign Needed': 'bg-orange-100 text-orange-700',
   'Fully Executed': 'bg-green-100 text-green-700',
   Expired: 'bg-red-100 text-red-600',
+  Terminated: 'bg-red-200 text-red-800',
 }
 
 export const invoiceStatusColors: Record<string, string> = {

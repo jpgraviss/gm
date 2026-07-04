@@ -317,7 +317,7 @@ export default function PortalWorkflowPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: '#f8fafc' }}>
+    <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
       <div className="max-w-2xl mx-auto px-4 py-6 sm:py-10">
         <Link href="/portal" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-6">
           <ArrowLeft size={14} /> Back to Portal

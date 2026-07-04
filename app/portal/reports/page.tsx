@@ -88,7 +88,7 @@ export default function ReportsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f8fafc' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--page-bg)' }}>
         <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
       </div>
     )
@@ -96,7 +96,7 @@ export default function ReportsPage() {
 
   if (!data || !data.company) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f8fafc' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--page-bg)' }}>
         <div className="text-center">
           <FileText size={32} className="mx-auto text-gray-300 mb-3" />
           <p className="text-sm font-medium text-gray-500">Reports unavailable</p>
@@ -137,7 +137,7 @@ export default function ReportsPage() {
   ]
 
   return (
-    <div className="min-h-screen" style={{ background: '#f8fafc' }}>
+    <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
       {/* Header */}
       <div className="border-b border-gray-200 bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-5">

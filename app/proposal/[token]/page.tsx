@@ -107,7 +107,7 @@ export default function ProposalViewPage() {
   // ── Loading state ──
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: COLORS.warmCream, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight: '100vh', background: 'var(--page-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 40, height: 40, border: `3px solid ${COLORS.forestGreen}20`, borderTopColor: COLORS.forestGreen, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -117,8 +117,8 @@ export default function ProposalViewPage() {
   // ── Error / not found state ──
   if (error && !proposal) {
     return (
-      <div style={{ minHeight: '100vh', background: COLORS.warmCream, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <div style={{ background: '#ffffff', borderRadius: 16, padding: '48px 40px', textAlign: 'center', maxWidth: 440, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
+      <div style={{ minHeight: '100vh', background: 'var(--page-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ background: 'var(--card-bg)', borderRadius: 16, padding: '48px 40px', textAlign: 'center', maxWidth: 440, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
           <div style={{
             width: 56, height: 56, borderRadius: '50%', background: '#fef2f2',
             display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
@@ -140,8 +140,8 @@ export default function ProposalViewPage() {
   if (responded) {
     const isAccepted = responded === 'Accepted'
     return (
-      <div style={{ minHeight: '100vh', background: COLORS.warmCream, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <div style={{ background: '#ffffff', borderRadius: 16, padding: '48px 40px', textAlign: 'center', maxWidth: 440, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
+      <div style={{ minHeight: '100vh', background: 'var(--page-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ background: 'var(--card-bg)', borderRadius: 16, padding: '48px 40px', textAlign: 'center', maxWidth: 440, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
           <div style={{
             width: 64, height: 64, borderRadius: '50%',
             background: isAccepted ? `${COLORS.forestGreen}10` : '#fef2f2',
@@ -174,7 +174,7 @@ export default function ProposalViewPage() {
   if (!proposal) return null
 
   return (
-    <div style={{ minHeight: '100vh', background: COLORS.warmCream }}>
+    <div style={{ minHeight: '100vh', background: 'var(--page-bg)' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@300;400;500;600;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -205,7 +205,7 @@ export default function ProposalViewPage() {
 
         {/* ── Company & Meta Card ── */}
         <section style={{
-          background: '#ffffff', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+          background: 'var(--card-bg)', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
           padding: '32px 36px', marginBottom: 20,
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
@@ -229,7 +229,7 @@ export default function ProposalViewPage() {
 
         {/* ── Executive Summary ── */}
         <section style={{
-          background: '#ffffff', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+          background: 'var(--card-bg)', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
           padding: '32px 36px', marginBottom: 20,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
@@ -249,7 +249,7 @@ export default function ProposalViewPage() {
         {/* ── Pricing Section ── */}
         {proposal.items.length > 0 && (
           <section style={{
-            background: '#ffffff', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+            background: 'var(--card-bg)', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
             padding: '32px 36px', marginBottom: 20,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
@@ -371,7 +371,7 @@ export default function ProposalViewPage() {
 
         {/* ── Response Section ── */}
         <section style={{
-          background: '#ffffff', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+          background: 'var(--card-bg)', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
           padding: '32px 36px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>

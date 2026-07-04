@@ -142,6 +142,8 @@ create table if not exists public.contracts (
   service_type      text not null default 'General',
   client_signed     text,
   internal_signed   text,
+  terminated_reason text,
+  terminated_date   text,
   created_at        timestamptz not null default now()
 );
 

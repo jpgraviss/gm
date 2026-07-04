@@ -19,6 +19,8 @@ function mapContract(row: any) {
     serviceType:      row.service_type,
     clientSigned:     row.client_signed ?? undefined,
     internalSigned:   row.internal_signed ?? undefined,
+    terminatedReason: row.terminated_reason ?? undefined,
+    terminatedDate:   row.terminated_date ?? undefined,
   }
 }
 

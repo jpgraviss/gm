@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Loader2, Mail, Phone, User, Building2, GitMerge, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { X, Loader2, Mail, Phone, User, Building2, GitMerge, AlertTriangle, CheckCircle2, EyeOff } from 'lucide-react'
 import MergePreview from './MergePreview'
 import { useToast } from '@/components/ui/Toast'
 
@@ -75,6 +75,22 @@ export default function DuplicatesPanel({ type, onClose, onMergeComplete }: Dupl
       toast('Merge failed', 'error')
     }
     setMerging(false)
+  }
+
+  async function handleIgnore(group: DuplicateGroup) {
+    // Instantly remove from local state
+    setGroups(prev => prev.filter(g => g.key !== group.key))
+    toast('Duplicate group dismissed', 'success')
+    // Persist to server
+    try {
+      await fetch('/api/crm/duplicates/ignore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, groupKey: group.key }),
+      })
+    } catch {
+      toast('Failed to save dismissal', 'error')
+    }
   }
 
   return (
@@ -231,7 +247,13 @@ export default function DuplicatesPanel({ type, onClose, onMergeComplete }: Dupl
                         })}
                       </div>
 
-                      <div className="px-4 py-3 border-t border-gray-100 flex justify-end">
+                      <div className="px-4 py-3 border-t border-gray-100 flex justify-end gap-2">
+                        <button
+                          onClick={() => handleIgnore(group)}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-gray-500 text-xs font-semibold border border-gray-200 hover:bg-gray-50 transition-colors"
+                        >
+                          <EyeOff size={13} /> Ignore
+                        </button>
                         <button
                           onClick={() => setMergingGroup(group)}
                           disabled={!selectedPrimary[group.key]}

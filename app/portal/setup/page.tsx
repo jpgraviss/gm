@@ -136,14 +136,14 @@ export default function PortalSetupPage() {
 
   if (step === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f4f4f5' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--page-bg)' }}>
         <Loader2 size={32} className="animate-spin text-gray-400" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#f4f4f5' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--page-bg)' }}>
       <div className="flex-shrink-0 px-6 py-5 flex items-center justify-center" style={{ background: '#012b1e' }}>
         <div className="text-center">
           <h1 className="text-white font-bold text-lg tracking-widest" style={{ fontFamily: "'Syncopate', sans-serif" }}>

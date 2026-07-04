@@ -20,7 +20,7 @@ export default function GlobalError({
 
   return (
     <html>
-      <body style={{ margin: 0, fontFamily: 'system-ui, -apple-system, sans-serif', background: '#f9fafb' }}>
+      <body style={{ margin: 0, fontFamily: 'system-ui, -apple-system, sans-serif', background: 'var(--page-bg)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 24 }}>
           <div style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
             <div

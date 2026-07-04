@@ -76,7 +76,7 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
   }
 
   return (
-    <div className="min-h-screen" style={{ background: '#f8fafc' }}>
+    <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
       <div className="px-4 py-4 sm:px-8 sm:py-6 border-b border-gray-200 bg-white">
         <Link href="/portal" className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 mb-3 transition-colors">
           <ArrowLeft size={14} /> Portal

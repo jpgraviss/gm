@@ -30,6 +30,7 @@ export type ContractStatus =
   | 'Countersign Needed'
   | 'Fully Executed'
   | 'Expired'
+  | 'Terminated'
 
 export type InvoiceStatus = 'Pending' | 'Sent' | 'Overdue' | 'Paid' | 'Cancelled'
 
@@ -161,6 +162,8 @@ export interface Contract {
   serviceType: ServiceType
   clientSigned?: string
   internalSigned?: string
+  terminatedReason?: string
+  terminatedDate?: string
 }
 
 export interface Invoice {

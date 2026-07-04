@@ -7,16 +7,29 @@ create extension if not exists "pgcrypto";
 
 -- ─── Team Members ─────────────────────────────────────────────────────────────
 create table if not exists public.team_members (
-  id          text primary key,
-  name        text not null,
-  email       text not null unique,
-  role        text not null default 'Team Member',
-  unit        text not null default 'Leadership/Admin',
-  initials    text,
-  status      text not null default 'Active',
-  is_admin    boolean not null default false,
-  last_login  timestamptz,
-  created_at  timestamptz not null default now()
+  id                    text primary key,
+  name                  text not null,
+  email                 text not null unique,
+  role                  text not null default 'Team Member',
+  unit                  text not null default 'Leadership/Admin',
+  initials              text,
+  status                text not null default 'Active',
+  is_admin              boolean not null default false,
+  last_login            timestamptz,
+  suspended_at          timestamptz,
+  suspended_until       timestamptz,
+  suspended_reason      text,
+  access_schedule       jsonb,
+  deleted_at            timestamptz,
+  pending_approval      boolean not null default false,
+  setup_completed       boolean not null default false,
+  verification_code     text,
+  verification_expires  timestamptz,
+  email_signature       jsonb,
+  avatar_url            text,
+  gmail_access_token    text,
+  gmail_refresh_token   text,
+  created_at            timestamptz not null default now()
 );
 
 -- ─── CRM Companies ────────────────────────────────────────────────────────────
@@ -246,6 +259,11 @@ create table if not exists public.app_tasks (
   completed_date    text,
   linked_id         text,
   team_service_line text,
+  recurrence        jsonb,
+  parent_task_id    text,
+  project_id        text,
+  section           text,
+  sort_order        integer not null default 0,
   created_at        timestamptz not null default now()
 );
 

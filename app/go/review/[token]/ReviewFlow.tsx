@@ -47,66 +47,74 @@ export default function ReviewFlow({ token, customerName, companyName, alreadyCo
 
   const firstName = customerName.split(' ')[0]
 
+  async function submitToApi(rating: number, feedbackText?: string) {
+    const res = await fetch(`/api/reputation/review-request/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rating,
+        feedback: feedbackText?.trim() || undefined,
+      }),
+    })
+
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Something went wrong')
+    return data as { success: boolean; isPositive: boolean; googleReviewUrl: string | null }
+  }
+
   async function handleRatingSelect(rating: number) {
     setSelectedRating(rating)
+
+    // For 1-3 stars, show the feedback form first (don't call API yet)
+    if (rating <= 3) {
+      setStep('feedback')
+      return
+    }
+
+    // For 4-5 stars, submit immediately and redirect
     setSubmitting(true)
     setError(null)
-
     try {
-      const res = await fetch(`/api/reputation/review-request/${token}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating }),
-      })
+      const data = await submitToApi(rating)
 
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error || 'Something went wrong')
-        setSubmitting(false)
-        return
-      }
-
-      if (data.isPositive && data.googleReviewUrl) {
-        // 4-5 stars: redirect to Google Business Profile
+      if (data.googleReviewUrl) {
         setStep('redirect')
         setTimeout(() => {
-          window.location.href = data.googleReviewUrl
+          window.location.href = data.googleReviewUrl!
         }, 2000)
-      } else if (data.isPositive) {
-        // 4-5 stars but no Google URL configured
-        setStep('done')
       } else {
-        // 1-3 stars: show internal feedback form
-        setStep('feedback')
+        setStep('done')
       }
-    } catch {
-      setError('Something went wrong. Please try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
       setSubmitting(false)
     }
   }
 
   async function handleFeedbackSubmit() {
-    if (!feedback.trim()) return
     setSubmitting(true)
     setError(null)
 
     try {
-      const res = await fetch(`/api/reputation/review-request/${token}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating: selectedRating, feedback: feedback.trim() }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        setError(data.error || 'Something went wrong')
-        return
-      }
-
+      await submitToApi(selectedRating, feedback.trim() || undefined)
       setStep('done')
-    } catch {
-      setError('Something went wrong. Please try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleFeedbackSkip() {
+    setSubmitting(true)
+    setError(null)
+
+    try {
+      await submitToApi(selectedRating)
+      setStep('done')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -295,7 +303,8 @@ export default function ReviewFlow({ token, customerName, companyName, alreadyCo
               </button>
 
               <button
-                onClick={() => setStep('done')}
+                onClick={handleFeedbackSkip}
+                disabled={submitting}
                 style={{
                   display: 'block',
                   width: '100%',
@@ -305,7 +314,8 @@ export default function ReviewFlow({ token, customerName, companyName, alreadyCo
                   border: 'none',
                   color: '#9ca3af',
                   fontSize: 14,
-                  cursor: 'pointer',
+                  cursor: submitting ? 'wait' : 'pointer',
+                  opacity: submitting ? 0.5 : 1,
                 }}
               >
                 Skip

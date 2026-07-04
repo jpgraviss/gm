@@ -17,7 +17,7 @@ import type { Deal, Invoice, Project, Renewal, RevenueMonth, MaintenanceRecord, 
 import { fetchTeamMembers } from '@/lib/supabase'
 import { computeMRR, computeARR } from '@/lib/metrics'
 
-type DateRange = '3M' | '6M' | '12M'
+type DateRange = '3M' | '6M' | '12M' | 'Custom'
 type RepFilter = 'All' | string
 
 const SERVICE_COLORS: Record<string, string> = {
@@ -54,6 +54,8 @@ export default function ReportsPage() {
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -78,6 +80,46 @@ export default function ReportsPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const cutoffISO = useMemo(() => {
+    if (dateRange === 'Custom') {
+      return {
+        start: customStart || '1970-01-01',
+        end: customEnd ? customEnd + 'T23:59:59.999Z' : new Date().toISOString(),
+      }
+    }
+    const end = new Date()
+    const start = new Date()
+    if (dateRange === '3M') start.setMonth(start.getMonth() - 3)
+    else if (dateRange === '6M') start.setMonth(start.getMonth() - 6)
+    else start.setFullYear(start.getFullYear() - 1)
+    return { start: start.toISOString(), end: end.toISOString() }
+  }, [dateRange, customStart, customEnd])
+
+  const filteredDeals = useMemo(() => deals.filter(d => {
+    const date = d.closeDate || d.lastActivity
+    return !date || (date >= cutoffISO.start && date <= cutoffISO.end)
+  }), [deals, cutoffISO])
+
+  const filteredInvoices = useMemo(() => invoices.filter(i => {
+    return !i.issuedDate || (i.issuedDate >= cutoffISO.start && i.issuedDate <= cutoffISO.end)
+  }), [invoices, cutoffISO])
+
+  const filteredProjects = useMemo(() => projects.filter(p => {
+    return !p.startDate || (p.startDate >= cutoffISO.start && p.startDate <= cutoffISO.end)
+  }), [projects, cutoffISO])
+
+  const filteredRenewals = useMemo(() => renewals.filter(r => {
+    return !r.expirationDate || (r.expirationDate >= cutoffISO.start && r.expirationDate <= cutoffISO.end)
+  }), [renewals, cutoffISO])
+
+  const filteredMaintenance = useMemo(() => maintenance.filter(m => {
+    return !m.startDate || (m.startDate >= cutoffISO.start && m.startDate <= cutoffISO.end)
+  }), [maintenance, cutoffISO])
+
+  const filteredContracts = useMemo(() => contracts.filter(c => {
+    return !c.startDate || (c.startDate >= cutoffISO.start && c.startDate <= cutoffISO.end)
+  }), [contracts, cutoffISO])
+
   function exportCSV() {
     const headers = ['ID', 'Company', 'Amount', 'Status', 'Due Date', 'Paid Date', 'Service Type']
     const rows = invoices.map(i => [i.id, i.company, i.amount, i.status, i.dueDate, i.paidDate || '', i.serviceType])
@@ -91,19 +133,19 @@ export default function ReportsPage() {
     URL.revokeObjectURL(url)
   }
 
-  const closedWon = deals.filter(d => d.stage === 'Closed Won')
-  const totalDeals = deals.length
+  const closedWon = filteredDeals.filter(d => d.stage === 'Closed Won')
+  const totalDeals = filteredDeals.length
   const conversionRate = totalDeals > 0 ? Math.round((closedWon.length / totalDeals) * 100) : 0
   const avgDealSize = closedWon.length > 0 ? closedWon.reduce((s, d) => s + d.value, 0) / closedWon.length : 0
-  const collected = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0)
-  const outstanding = invoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0)
-  const completedProjects = projects.filter(p => ['Completed', 'Launched', 'In Maintenance'].includes(p.status)).length
-  const renewalRate = renewals.length > 0 ? Math.round((renewals.filter(r => r.status === 'Renewed').length / renewals.length) * 100) : 0
+  const collected = filteredInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0)
+  const outstanding = filteredInvoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0)
+  const completedProjects = filteredProjects.filter(p => ['Completed', 'Launched', 'In Maintenance'].includes(p.status)).length
+  const renewalRate = filteredRenewals.length > 0 ? Math.round((filteredRenewals.filter(r => r.status === 'Renewed').length / filteredRenewals.length) * 100) : 0
 
-  // Operational metrics — calculated from real data
-  const totalInvoiced = invoices.reduce((s, i) => s + i.amount, 0)
+  // Operational metrics — calculated from filtered data
+  const totalInvoiced = filteredInvoices.reduce((s, i) => s + i.amount, 0)
   const collectionRate = totalInvoiced > 0 ? Math.round((collected / totalInvoiced) * 100) : 0
-  const completedProjectsList = projects.filter(p => ['Completed', 'Launched', 'In Maintenance'].includes(p.status))
+  const completedProjectsList = filteredProjects.filter(p => ['Completed', 'Launched', 'In Maintenance'].includes(p.status))
   const avgProjectDays = completedProjectsList.length > 0
     ? Math.round(completedProjectsList.reduce((s, p) => {
         const start = new Date(p.startDate).getTime()
@@ -111,14 +153,14 @@ export default function ReportsPage() {
         return s + Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)))
       }, 0) / completedProjectsList.length)
     : 0
-  const activeMaintenance = maintenance.filter(m => m.status === 'Active').length
-  const cancelledMaintenance = maintenance.filter(m => m.status === 'Cancelled').length
+  const activeMaintenance = filteredMaintenance.filter(m => m.status === 'Active').length
+  const cancelledMaintenance = filteredMaintenance.filter(m => m.status === 'Cancelled').length
   const churnRate = (activeMaintenance + cancelledMaintenance) > 0
     ? Math.round((cancelledMaintenance / (activeMaintenance + cancelledMaintenance)) * 100)
     : 0
   // MRR/ARR from active recurring contracts (see lib/metrics)
-  const mrr = computeMRR(contracts)
-  const arr = computeARR(contracts)
+  const mrr = computeMRR(filteredContracts)
+  const arr = computeARR(filteredContracts)
   const mrrGrowth = revenueByMonth.length >= 2
     ? Math.round(((revenueByMonth[revenueByMonth.length - 1].revenue - revenueByMonth[revenueByMonth.length - 2].revenue) / Math.max(1, revenueByMonth[revenueByMonth.length - 2].revenue)) * 100)
     : 0
@@ -128,10 +170,10 @@ export default function ReportsPage() {
   const maxRevenue = Math.max(...visibleMonths.map(r => r.revenue), 1)
 
   // Use deal rep names as-is — all team members are valid reps
-  const normalizedDeals = useMemo(() => deals.map(d => ({
+  const normalizedDeals = useMemo(() => filteredDeals.map(d => ({
     ...d,
     assignedRep: d.assignedRep || 'Unassigned',
-  })), [deals])
+  })), [filteredDeals])
 
   const allRepStats = useMemo(() => {
     const reps: Record<string, { name: string; deals: number; revenue: number; won: number }> = {}
@@ -180,7 +222,7 @@ export default function ReportsPage() {
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Period:</span>
             <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
-              {(['3M', '6M', '12M'] as DateRange[]).map(r => (
+              {(['3M', '6M', '12M', 'Custom'] as DateRange[]).map(r => (
                 <button
                   key={r}
                   onClick={() => setDateRange(r)}
@@ -191,6 +233,13 @@ export default function ReportsPage() {
                 </button>
               ))}
             </div>
+            {dateRange === 'Custom' && (
+              <div className="flex items-center gap-1.5">
+                <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
+                <span className="text-xs text-gray-400">to</span>
+                <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
+              </div>
+            )}
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide ml-2">Rep:</span>
             <select
               value={repFilter}
@@ -233,7 +282,7 @@ export default function ReportsPage() {
             { label: 'Revenue Collected', value: formatCurrency(collected),     icon: <CheckCircle size={16} />,color: '#22c55e', sub: 'All invoices' },
             { label: 'Outstanding',       value: formatCurrency(outstanding),   icon: <DollarSign size={16} />, color: '#f59e0b', sub: 'Pending + overdue' },
             { label: 'ARR',              value: formatCurrency(arr),  icon: <RefreshCw size={16} />,  color: '#8b5cf6', sub: `${formatCurrency(mrr)}/mo recurring` },
-            { label: 'Renewal Rate',     value: `${renewalRate}%`,              icon: <Users size={16} />,      color: '#ec4899', sub: renewals.length > 0 ? `${renewals.filter(r => r.status === 'Renewed').length}/${renewals.length} renewals` : 'No renewals yet' },
+            { label: 'Renewal Rate',     value: `${renewalRate}%`,              icon: <Users size={16} />,      color: '#ec4899', sub: filteredRenewals.length > 0 ? `${filteredRenewals.filter(r => r.status === 'Renewed').length}/${filteredRenewals.length} renewals` : 'No renewals yet' },
           ].map(m => (
             <div key={m.label} className="kpi-card" style={{ '--kpi-accent': m.color } as React.CSSProperties}>
               <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: `${m.color}15` }}>
@@ -360,7 +409,7 @@ export default function ReportsPage() {
             <h3 className="font-semibold text-gray-800 text-sm mb-4">Operational Metrics</h3>
             <div className="flex flex-col gap-3">
               {[
-                { label: 'Projects Delivered', value: `${completedProjects}/${projects.length}`, bar: projects.length > 0 ? completedProjects / projects.length : 0, color: '#22c55e' },
+                { label: 'Projects Delivered', value: `${completedProjects}/${filteredProjects.length}`, bar: filteredProjects.length > 0 ? completedProjects / filteredProjects.length : 0, color: '#22c55e' },
                 { label: 'Collection Rate', value: `${collectionRate}%`, bar: collectionRate / 100, color: '#015035' },
                 { label: 'Avg Project Time', value: avgProjectDays > 0 ? `${avgProjectDays} days` : '—', bar: Math.min(avgProjectDays / 90, 1), color: '#3b82f6' },
                 { label: 'Active Maintenance', value: `${activeMaintenance}`, bar: Math.min(activeMaintenance / 20, 1), color: '#f59e0b' },
@@ -390,7 +439,7 @@ export default function ReportsPage() {
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            {renewals.map(r => (
+            {filteredRenewals.map(r => (
               <div key={r.id} className="flex items-center gap-3">
                 <span className="text-xs text-gray-600 w-24 sm:w-36 font-medium truncate">{r.company}</span>
                 <div className="flex-1 relative h-6 bg-gray-100 rounded-lg overflow-hidden">

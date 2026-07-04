@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight, GitBranch } from 'lucide-react'
+import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight, GitBranch, Briefcase, FileText, Target, UserCheck, MessageSquare, Inbox, ArrowRightLeft } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
 type AutoStatus = 'Active' | 'Triggered' | 'Paused'
@@ -32,6 +32,8 @@ const TRIGGER_OPTIONS = [
   'Contract Sent', 'Invoice Paid', 'Invoice Overdue', 'Invoice Overdue by 3 Days',
   'Project Status = Launched', 'Renewal Date Within 90 Days',
   'Renewal Date Within 30 Days', 'Deal Stage Changed', 'Contact Created',
+  'Deal Created', 'Form Submitted', 'Ticket Created', 'Client Onboarded',
+  'Milestone Completed',
 ]
 
 const ACTION_OPTIONS = [
@@ -41,6 +43,86 @@ const ACTION_OPTIONS = [
   'Send Email Reminder', 'Send Follow-up Email', 'Log Activity',
   'Log Touchpoint', 'Flag in Dashboard', 'Update Revenue Metrics',
   'Apply Service Template', 'Update Client Portal', 'Escalate if 7+ Days',
+  'Create Welcome Task', 'Create CRM Contact', 'Send Notification',
+  'Send Welcome Sequence', 'Notify Client', 'Create Task',
+]
+
+// ─── Automation Templates ────────────────────────────────────────────────────
+
+interface AutomationTemplate {
+  id: string
+  name: string
+  description: string
+  icon: React.ReactNode
+  trigger: string
+  actions: string[]
+}
+
+const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
+  {
+    id: 'new_deal_welcome',
+    name: 'New Deal Welcome',
+    description: 'Create a welcome task and notify the team when a deal is created.',
+    icon: <Briefcase size={20} />,
+    trigger: 'Deal Created',
+    actions: ['Create Welcome Task', 'Send Notification'],
+  },
+  {
+    id: 'invoice_overdue_reminder',
+    name: 'Invoice Overdue Reminder',
+    description: 'Send a reminder email when an invoice is overdue.',
+    icon: <Clock size={20} />,
+    trigger: 'Invoice Overdue',
+    actions: ['Send Email Reminder'],
+  },
+  {
+    id: 'contract_expiring_soon',
+    name: 'Contract Expiring Soon',
+    description: 'Create a renewal task when a contract is within 30 days of expiring.',
+    icon: <FileText size={20} />,
+    trigger: 'Renewal Date Within 30 Days',
+    actions: ['Create Renewal Task', 'Notify Assigned Rep'],
+  },
+  {
+    id: 'new_form_submission',
+    name: 'New Form Submission',
+    description: 'Create a CRM contact and notify sales when a form is submitted.',
+    icon: <Inbox size={20} />,
+    trigger: 'Form Submitted',
+    actions: ['Create CRM Contact', 'Notify Sales Rep'],
+  },
+  {
+    id: 'project_milestone_complete',
+    name: 'Project Milestone Complete',
+    description: 'Log activity and notify the client when a milestone is completed.',
+    icon: <Target size={20} />,
+    trigger: 'Milestone Completed',
+    actions: ['Log Activity', 'Notify Client'],
+  },
+  {
+    id: 'ticket_submitted',
+    name: 'Ticket Submitted',
+    description: 'Create a task and notify the assigned team when a ticket comes in.',
+    icon: <MessageSquare size={20} />,
+    trigger: 'Ticket Created',
+    actions: ['Create Task', 'Notify Delivery Team'],
+  },
+  {
+    id: 'client_onboarded',
+    name: 'Client Onboarded',
+    description: 'Send a welcome sequence when a new client is onboarded.',
+    icon: <UserCheck size={20} />,
+    trigger: 'Client Onboarded',
+    actions: ['Send Welcome Sequence'],
+  },
+  {
+    id: 'proposal_accepted_followup',
+    name: 'Proposal Accepted Follow-up',
+    description: 'Draft a contract and notify finance when a proposal is accepted.',
+    icon: <ArrowRightLeft size={20} />,
+    trigger: 'Proposal Accepted',
+    actions: ['Create Draft Contract', 'Notify Finance Team'],
+  },
 ]
 
 function formatRelative(iso: string): string {
@@ -58,10 +140,16 @@ function formatRelative(iso: string): string {
 
 // ─── New Automation Panel ─────────────────────────────────────────────────────
 
-function NewAutomationPanel({ onSave, onClose }: { onSave: (a: Automation) => void; onClose: () => void }) {
-  const [name, setName] = useState('')
-  const [trigger, setTrigger] = useState('')
-  const [actions, setActions] = useState<string[]>([''])
+function NewAutomationPanel({ onSave, onClose, initialName, initialTrigger, initialActions }: {
+  onSave: (a: Automation) => void
+  onClose: () => void
+  initialName?: string
+  initialTrigger?: string
+  initialActions?: string[]
+}) {
+  const [name, setName] = useState(initialName ?? '')
+  const [trigger, setTrigger] = useState(initialTrigger ?? '')
+  const [actions, setActions] = useState<string[]>(initialActions && initialActions.length > 0 ? initialActions : [''])
 
   function addAction() { setActions(prev => [...prev, '']) }
   function removeAction(i: number) { setActions(prev => prev.filter((_, idx) => idx !== i)) }
@@ -201,6 +289,7 @@ export default function AutomationPage() {
   const { toast } = useToast()
   const [automations, setAutomations] = useState<Automation[]>([])
   const [creatingAutomation, setCreatingAutomation] = useState(false)
+  const [activeTemplate, setActiveTemplate] = useState<AutomationTemplate | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -230,6 +319,7 @@ export default function AutomationPage() {
       setAutomations(prev => [saved, ...prev])
     }
     setCreatingAutomation(false)
+    setActiveTemplate(null)
   }
 
   const active = automations.filter(a => a.status === 'Active').length
@@ -245,7 +335,7 @@ export default function AutomationPage() {
       <Header
         title="Automation Engine"
         subtitle="Triggers, actions, and workflow automation"
-        action={{ label: 'New Automation', onClick: () => setCreatingAutomation(true) }}
+        action={{ label: 'New Automation', onClick: () => { setActiveTemplate(null); setCreatingAutomation(true) } }}
       />
       <div className="p-3 sm:p-6 flex-1">
         <div className="flex items-center justify-end mb-4">
@@ -277,6 +367,43 @@ export default function AutomationPage() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Templates */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap size={15} style={{ color: '#015035' }} />
+            <h3 className="text-sm font-bold text-gray-900">Quick Start Templates</h3>
+            <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Pre-built workflows</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {AUTOMATION_TEMPLATES.map(template => (
+              <div
+                key={template.id}
+                className="bg-white rounded-xl border border-gray-200 p-4 hover:border-emerald-300 hover:shadow-sm transition-all group"
+              >
+                <div className="flex items-start gap-3 mb-3">
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: '#01503512' }}
+                  >
+                    <span style={{ color: '#015035' }}>{template.icon}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 leading-snug">{template.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{template.description}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setActiveTemplate(template); setCreatingAutomation(true) }}
+                  className="w-full py-2 rounded-lg text-xs font-semibold transition-colors border hover:bg-emerald-50"
+                  style={{ borderColor: '#015035', color: '#015035' }}
+                >
+                  Use Template
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Automation Cards */}
@@ -376,7 +503,14 @@ export default function AutomationPage() {
       </div>
 
       {creatingAutomation && (
-        <NewAutomationPanel onSave={handleNewAutomation} onClose={() => setCreatingAutomation(false)} />
+        <NewAutomationPanel
+          key={activeTemplate?.id ?? 'new'}
+          onSave={handleNewAutomation}
+          onClose={() => { setCreatingAutomation(false); setActiveTemplate(null) }}
+          initialName={activeTemplate?.name}
+          initialTrigger={activeTemplate?.trigger}
+          initialActions={activeTemplate?.actions}
+        />
       )}
     </>
   )

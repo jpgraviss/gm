@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import { useToast } from '@/components/ui/Toast'
 import {
   Search, BookOpen, Rocket, Users, TrendingUp, Megaphone, Settings2,
   CreditCard, Plug, ShieldCheck, ChevronRight, ThumbsUp, ThumbsDown,
@@ -87,6 +88,7 @@ type View =
   | { kind: 'article'; article: Article }
 
 export default function HelpCenterPage() {
+  const { toast } = useToast()
   const [articles, setArticles] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -98,7 +100,7 @@ export default function HelpCenterPage() {
     fetch('/api/portal/help')
       .then(r => r.ok ? r.json() : [])
       .then((data: Article[]) => setArticles(Array.isArray(data) ? data : []))
-      .catch(() => {})
+      .catch(() => toast('Failed to load articles', 'error'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -144,7 +146,7 @@ export default function HelpCenterPage() {
             </span>
           </Link>
           <Link
-            href="/tickets"
+            href="/portal/tickets"
             className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white rounded-lg transition-opacity hover:opacity-90 min-h-[44px]"
             style={{ background: '#015035' }}
           >
@@ -394,7 +396,7 @@ function ArticleDetailView({
           {feedback === 'no' && (
             <p className="text-xs text-gray-500 mt-3">
               Sorry this wasn&apos;t helpful.{' '}
-              <Link href="/tickets" className="text-[#015035] font-medium hover:underline">
+              <Link href="/portal/tickets" className="text-[#015035] font-medium hover:underline">
                 Contact support
               </Link>{' '}
               for further assistance.
@@ -410,7 +412,7 @@ function ArticleDetailView({
         <p className="text-sm text-gray-500">
           Still need help?{' '}
           <Link
-            href="/tickets"
+            href="/portal/tickets"
             className="font-medium hover:underline"
             style={{ color: '#015035' }}
           >

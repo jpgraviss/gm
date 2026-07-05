@@ -272,6 +272,7 @@ export default function DeliveryDashboardPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [sendModal, setSendModal] = useState<{ workflowId: string; step: number } | null>(null)
+  const [sendModalEmail, setSendModalEmail] = useState('')
   const [sendModalScheduleDate, setSendModalScheduleDate] = useState('')
   const [sendModalScheduleTime, setSendModalScheduleTime] = useState('08:00')
   const [sendModalRecurring, setSendModalRecurring] = useState('none')
@@ -289,7 +290,7 @@ export default function DeliveryDashboardPage() {
       })
       .catch(() => {})
 
-    fetch('/api/delivery/workflows')
+    fetch('/api/delivery/workflow')
       .then(r => r.ok ? r.json() : [])
       .then((data: Workflow[]) => { if (Array.isArray(data)) setWorkflows(data) })
       .catch(() => toast('Failed to load workflows', 'error'))
@@ -336,15 +337,18 @@ export default function DeliveryDashboardPage() {
       const newCurrent = nextPending ? nextPending.step : totalSteps
       return { ...w, steps: updatedSteps, currentStep: newCurrent, lastUpdated: new Date().toISOString().split('T')[0] }
     }))
-    fetch(`/api/delivery/workflows/${workflowId}/steps/${stepNum}`, {
+    fetch(`/api/delivery/workflow/${workflowId}/step`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'completed' }),
+      body: JSON.stringify({ step: stepNum, status: 'Completed' }),
     }).catch(() => toast('Failed to update step', 'error'))
   }
 
+  const STEP_TEMPLATE_MAP: Record<number, string> = { 3: 'welcome', 6: 'usage_guide', 8: 'monthly_report' }
+
   function handleSendTemplate(workflowId: string, stepNum: number) {
     setSendModal({ workflowId, step: stepNum })
+    setSendModalEmail('')
     setSendModalMode('now')
     setSendModalScheduleDate('')
     setSendModalScheduleTime('08:00')
@@ -352,14 +356,22 @@ export default function DeliveryDashboardPage() {
   }
 
   async function executeSendTemplate() {
-    if (!sendModal) return
-    const payload: Record<string, unknown> = { step: sendModal.step }
+    if (!sendModal || !sendModalEmail.trim()) return
+    const templateType = STEP_TEMPLATE_MAP[sendModal.step]
+    if (!templateType) { toast('No template for this step', 'error'); return }
+    const payload: Record<string, unknown> = {
+      workflowId: sendModal.workflowId,
+      step: sendModal.step,
+      templateType,
+      recipientEmail: sendModalEmail.trim(),
+      sendEmail: true,
+    }
     if (sendModalMode === 'schedule' && sendModalScheduleDate) {
       payload.scheduleAt = new Date(`${sendModalScheduleDate}T${sendModalScheduleTime}`).toISOString()
       if (sendModalRecurring !== 'none') payload.recurring = sendModalRecurring
     }
     try {
-      const res = await fetch(`/api/delivery/workflows/${sendModal.workflowId}/send-template`, {
+      const res = await fetch('/api/delivery/send-template', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -394,10 +406,10 @@ export default function DeliveryDashboardPage() {
     }
     setWorkflows(prev => [newWorkflow, ...prev])
     setShowNewModal(false)
-    fetch('/api/delivery/workflows', {
+    fetch('/api/delivery/workflow', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ companyName: data.company, serviceType: data.service, projectId: data.projectId }),
     }).catch(() => toast('Failed to create workflow', 'error'))
   }
 
@@ -414,15 +426,17 @@ export default function DeliveryDashboardPage() {
       const nextStep = currentIdx + 1 < w.steps.length ? w.steps[currentIdx + 1].step : totalSteps
       return { ...w, steps: newSteps, currentStep: nextStep, lastUpdated: new Date().toISOString().split('T')[0] }
     }))
-    fetch(`/api/delivery/workflows/${workflowId}/skip`, {
-      method: 'POST',
+    const currentStep = workflows.find(w => w.id === workflowId)?.currentStep ?? 1
+    fetch(`/api/delivery/workflow/${workflowId}/step`, {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: currentStep, status: 'Skipped' }),
     }).catch(() => toast('Failed to skip step', 'error'))
   }
 
   function handleRemoveWorkflow(workflowId: string) {
     setWorkflows(prev => prev.filter(w => w.id !== workflowId))
-    fetch(`/api/delivery/workflows/${workflowId}`, {
+    fetch(`/api/delivery/workflow/${workflowId}`, {
       method: 'DELETE',
     }).catch(() => toast('Failed to remove workflow', 'error'))
     toast('Workflow removed from pipeline', 'success')
@@ -661,6 +675,21 @@ export default function DeliveryDashboardPage() {
               <button onClick={() => setSendModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={16} className="text-gray-400" /></button>
             </div>
             <div className="p-6 flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Recipient Email</label>
+                <input
+                  type="email"
+                  value={sendModalEmail}
+                  onChange={e => setSendModalEmail(e.target.value)}
+                  placeholder="client@example.com"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+                />
+              </div>
+              {!STEP_TEMPLATE_MAP[sendModal.step] && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                  No email template configured for this step. Templates are available for steps 3 (Welcome), 6 (Usage Guide), and 8 (Monthly Report).
+                </div>
+              )}
               <div className="flex gap-2">
                 <button
                   onClick={() => setSendModalMode('now')}
@@ -724,7 +753,7 @@ export default function DeliveryDashboardPage() {
             <div className="px-6 py-4 border-t border-gray-100 flex gap-2">
               <button
                 onClick={executeSendTemplate}
-                disabled={sendModalMode === 'schedule' && !sendModalScheduleDate}
+                disabled={!sendModalEmail.trim() || !STEP_TEMPLATE_MAP[sendModal.step] || (sendModalMode === 'schedule' && !sendModalScheduleDate)}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
                 style={{ background: sendModalMode === 'now' ? '#015035' : '#1e40af' }}
               >

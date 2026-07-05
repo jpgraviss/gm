@@ -210,6 +210,10 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
   const [clientTickets, setClientTickets] = useState<any[]>([])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [clientFiles, setClientFiles] = useState<any[]>([])
+  const [previewSubject, setPreviewSubject] = useState('')
+  const [previewDesc, setPreviewDesc] = useState('')
+  const [previewSubmitting, setPreviewSubmitting] = useState(false)
+  const [previewSubmitSuccess, setPreviewSubmitSuccess] = useState(false)
 
   const unreadCount = notifications.filter(n => !n.read).length
 
@@ -499,7 +503,7 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
                       className="w-full py-2 rounded-xl text-white text-xs font-semibold"
                       style={{ background: '#015035' }}
                     >
-                      Pay Now
+                      View Invoices
                     </button>
                   </>
                 ) : (
@@ -630,7 +634,7 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
                   </p>
                   <p className="text-xs text-orange-600">{openInvoices.length} invoice{openInvoices.length > 1 ? 's' : ''} awaiting payment</p>
                 </div>
-                <button className="px-4 py-2 rounded-xl text-white text-xs font-semibold" style={{ background: '#015035' }}>
+                <button disabled className="px-4 py-2 rounded-xl text-white text-xs font-semibold opacity-50 cursor-not-allowed" style={{ background: '#015035' }} title="Payment processing coming soon">
                   Pay Now
                 </button>
               </div>
@@ -652,7 +656,7 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
                         <p className="text-sm font-bold text-gray-900">{formatCurrency(inv.amount)}</p>
                         <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
                         {inv.status !== 'Paid' && (
-                          <button className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors">
+                          <button disabled className="text-xs font-semibold text-gray-400 px-2 py-1 rounded-md cursor-not-allowed" title="Payment processing coming soon">
                             Pay
                           </button>
                         )}
@@ -699,25 +703,56 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-800 mb-1">Submit a Request</h3>
               <p className="text-xs text-gray-400 mb-4">Have a question or need a change? Send us a message.</p>
-              <div className="flex flex-col gap-3">
-                <input
-                  placeholder="Subject / brief description..."
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
-                />
-                <textarea
-                  placeholder="Describe your request in detail..."
-                  rows={4}
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
-                />
-                <div className="flex items-center justify-between">
-                  <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors">
-                    <Upload size={12} /> Attach file
-                  </button>
-                  <button className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ background: '#015035' }}>
-                    Submit Request
-                  </button>
+              {previewSubmitSuccess ? (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                  <CheckCircle size={24} className="mx-auto mb-2 text-emerald-600" />
+                  <p className="text-sm font-semibold text-emerald-800">Request submitted!</p>
+                  <button onClick={() => { setPreviewSubmitSuccess(false); setPreviewSubject(''); setPreviewDesc('') }} className="mt-3 text-xs text-emerald-700 underline">Submit another</button>
                 </div>
-              </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <input
+                    value={previewSubject}
+                    onChange={e => setPreviewSubject(e.target.value)}
+                    placeholder="Subject / brief description..."
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+                  />
+                  <textarea
+                    value={previewDesc}
+                    onChange={e => setPreviewDesc(e.target.value)}
+                    placeholder="Describe your request in detail..."
+                    rows={4}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
+                  />
+                  <div className="flex items-center justify-between">
+                    <button disabled className="flex items-center gap-1.5 text-xs text-gray-400 cursor-not-allowed" title="File attachments coming soon">
+                      <Upload size={12} /> Attach file (coming soon)
+                    </button>
+                    <button
+                      disabled={previewSubmitting || !previewSubject.trim()}
+                      onClick={async () => {
+                        setPreviewSubmitting(true)
+                        try {
+                          const res = await fetch('/api/tickets', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ subject: previewSubject.trim(), company, source: 'Portal', messages: previewDesc.trim() ? [{ from: company, body: previewDesc.trim(), date: new Date().toISOString() }] : [] }),
+                          })
+                          if (res.ok) {
+                            setPreviewSubmitSuccess(true)
+                            const q = encodeURIComponent(company)
+                            fetch(`/api/tickets?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => setClientTickets(Array.isArray(d) ? d : [])).catch(() => {})
+                          }
+                        } finally { setPreviewSubmitting(false) }
+                      }}
+                      className="px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                      style={{ background: '#015035' }}
+                    >
+                      {previewSubmitting ? 'Submitting...' : 'Submit Request'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -757,8 +792,8 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-800">Shared Files & Documents</h3>
-                <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors border border-gray-200 px-2.5 py-1.5 rounded-lg">
-                  <Upload size={12} /> Upload
+                <button disabled className="flex items-center gap-1.5 text-xs text-gray-400 cursor-not-allowed border border-gray-200 px-2.5 py-1.5 rounded-lg" title="File uploads coming soon">
+                  <Upload size={12} /> Upload (coming soon)
                 </button>
               </div>
               {clientFiles.length > 0 ? (

@@ -220,7 +220,9 @@ export default function EmailAuthPage() {
                 />
               </div>
               <a
-                href="#"
+                href="https://resend.com/domains"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90"
                 style={{ background: '#015035' }}
               >

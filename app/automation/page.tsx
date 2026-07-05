@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight, GitBranch, Briefcase, FileText, Target, UserCheck, MessageSquare, Inbox, ArrowRightLeft } from 'lucide-react'
+import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight, GitBranch, Briefcase, FileText, Target, UserCheck, MessageSquare, Inbox, ArrowRightLeft, Trash2 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
 type AutoStatus = 'Active' | 'Triggered' | 'Paused'
@@ -308,6 +308,17 @@ export default function AutomationPage() {
     })
   }
 
+  async function deleteAutomation(id: string) {
+    if (!confirm('Delete this automation? This cannot be undone.')) return
+    const res = await fetch(`/api/automations/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setAutomations(prev => prev.filter(a => a.id !== id))
+      toast('Automation deleted', 'success')
+    } else {
+      toast('Failed to delete automation', 'error')
+    }
+  }
+
   async function handleNewAutomation(automation: Automation) {
     const res = await fetch('/api/automations', {
       method: 'POST',
@@ -480,6 +491,13 @@ export default function AutomationPage() {
                       {auto.status === 'Paused'
                         ? <Play size={14} className="text-emerald-500" />
                         : <Pause size={14} className="text-gray-400" />}
+                    </button>
+                    <button
+                      onClick={() => deleteAutomation(auto.id)}
+                      className="p-1.5 rounded-lg transition-colors hover:bg-red-50"
+                      title="Delete automation"
+                    >
+                      <Trash2 size={14} className="text-gray-400 hover:text-red-500" />
                     </button>
                   </div>
                 </div>

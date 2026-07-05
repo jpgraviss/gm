@@ -633,6 +633,7 @@ export default function TasksPage() {
   }
 
   function deleteTask(id: string) {
+    if (!confirm('Delete this task?')) return
     setTasks(prev => prev.filter(t => t.id !== id))
     fetch(`/api/tasks/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete task', 'error'))
   }
@@ -644,7 +645,13 @@ export default function TasksPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(task),
-    }).catch(() => toast('Failed to save task', 'error'))
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+      toast('Task created', 'success')
+    }).catch(() => {
+      setTasks(prev => prev.filter(t => t.id !== task.id))
+      toast('Failed to save task', 'error')
+    })
   }
 
   function toggleComplete(id: string, currentlyCompleted?: boolean) {

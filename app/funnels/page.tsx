@@ -140,7 +140,7 @@ export default function FunnelsPage() {
       if (res.ok) {
         const funnel = await res.json()
         const funnelId = funnel.id || funnel.funnelId
-        for (let i = 1; i < template.steps.length; i++) {
+        for (let i = 0; i < template.steps.length; i++) {
           await fetch(`/api/funnels/${funnelId}/pages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

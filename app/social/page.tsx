@@ -109,7 +109,7 @@ export default function SocialMediaPage() {
     }
   }, [toast])
 
-  const filtered = useMemo(() => posts, [posts])
+  const filtered = posts
 
   // Group posts by date for calendar
   const postsByDate = useMemo(() => {

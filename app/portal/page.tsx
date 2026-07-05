@@ -257,7 +257,7 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
     fetch(`/api/contracts?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => setContract(d[0] ?? null)).catch(() => toast('Failed to load contract data', 'error'))
     fetch(`/api/invoices?company=${q}`).then(r => r.ok ? r.json() : []).then(setClientInvoices).catch(() => toast('Failed to load invoices', 'error'))
     fetch(`/api/tickets?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => setClientTickets(Array.isArray(d) ? d : [])).catch(() => toast('Failed to load tickets', 'error'))
-    fetch(`/api/drive/files?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => setClientFiles(Array.isArray(d) ? d : [])).catch(() => toast('Failed to load files', 'error'))
+    fetch(`/api/files?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => setClientFiles(Array.isArray(d) ? d : [])).catch(() => toast('Failed to load files', 'error'))
     fetchNotifications()
   }, [company])
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
@@ -890,23 +890,10 @@ function ManageClientPanel({ client, onClose }: { client: PortalClient; onClose:
 
   async function handleFileSubmit() {
     if (!fileName.trim()) return
-    setFileSaving(true)
-    try {
-      const res = await fetch('/api/drive/files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: fileName.trim(), type: fileType, notes: fileNotes.trim(), company: client.company }),
-      })
-      if (!res.ok) throw new Error()
-      toast('File metadata added successfully', 'success')
-      setFileName('')
-      setFileNotes('')
-      setFileType('Document')
-    } catch {
-      toast('Failed to add file', 'error')
-    } finally {
-      setFileSaving(false)
-    }
+    toast('Use the Files tab to upload files directly to client storage', 'info')
+    setFileName('')
+    setFileNotes('')
+    setFileType('Document')
   }
 
   async function handleTicketSubmit() {

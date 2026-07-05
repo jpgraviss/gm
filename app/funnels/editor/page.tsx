@@ -8,6 +8,7 @@ import {
   PlayCircle, HelpCircle, Copyright, ChevronDown, ChevronUp,
   Layers, Plus, GripVertical,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 type BlockType = 'hero' | 'features' | 'testimonials' | 'cta' | 'form' | 'video' | 'faq' | 'footer'
 
@@ -506,6 +507,7 @@ function LinksEditor({ links, onChange }: { links: Array<{ label: string; url: s
 }
 
 function EditorInner() {
+  const { toast } = useToast()
   const searchParams = useSearchParams()
   const router = useRouter()
   const funnelId = searchParams.get('funnel')
@@ -580,11 +582,15 @@ function EditorInner() {
     if (!funnelId || !pageId) return
     setSaving(true)
     try {
-      await fetch(`/api/funnels/${funnelId}/pages`, {
+      const res = await fetch(`/api/funnels/${funnelId}/pages`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId, blocks, name: pageName }),
       })
+      if (res.ok) toast('Page saved', 'success')
+      else toast('Failed to save page', 'error')
+    } catch {
+      toast('Failed to save page', 'error')
     } finally {
       setSaving(false)
     }
@@ -599,11 +605,15 @@ function EditorInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId, blocks, name: pageName }),
       })
-      await fetch(`/api/funnels/${funnelId}`, {
+      const res = await fetch(`/api/funnels/${funnelId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'Published' }),
       })
+      if (res.ok) toast('Funnel published', 'success')
+      else toast('Failed to publish funnel', 'error')
+    } catch {
+      toast('Failed to publish funnel', 'error')
     } finally {
       setPublishing(false)
     }

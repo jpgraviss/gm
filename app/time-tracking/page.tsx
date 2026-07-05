@@ -399,10 +399,12 @@ export default function TimeTrackingPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(entry),
         })
+        if (!res.ok) throw new Error('Failed')
         const saved = await res.json()
         setEntries(prev => [saved, ...prev])
+        toast('Time entry logged', 'success')
       } catch {
-        setEntries(prev => [entry, ...prev])
+        toast('Failed to save time entry', 'error')
       }
     } else {
       fetch(`/api/time-entries/${entry.id}`, {
@@ -417,8 +419,9 @@ export default function TimeTrackingPage() {
   }
 
   function handleDelete(id: string) {
-    fetch(`/api/time-entries/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete time entry', 'error'))
+    if (!confirm('Delete this time entry?')) return
     setEntries(prev => prev.filter(e => e.id !== id))
+    fetch(`/api/time-entries/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete time entry', 'error'))
   }
 
   async function handleBulkApproval(status: 'approved' | 'rejected', rejectionNote?: string) {

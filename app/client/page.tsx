@@ -6,7 +6,7 @@ import { formatCurrency, projectStatusColors, invoiceStatusColors, formatDate } 
 import StatusBadge from '@/components/ui/StatusBadge'
 import {
   Globe, CheckCircle, FolderKanban, FileText, MessageSquare,
-  Download, Upload, Bell, ChevronDown, ChevronRight, X, AlertTriangle, LogOut,
+  Download, Upload, Bell, ChevronRight, X, AlertTriangle, LogOut,
   Search, BarChart3, Star, Activity, TrendingUp, Share2,
 } from 'lucide-react'
 
@@ -232,7 +232,6 @@ export default function ClientPortalPage() {
               {contactName.split(' ').map(n => n[0]).join('')}
             </div>
             <span className="text-white/80 text-xs font-medium hidden sm:block">{contactName}</span>
-            <ChevronDown size={12} className="text-white/40" />
           </div>
           <button
             onClick={logout}

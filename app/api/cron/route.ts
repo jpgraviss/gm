@@ -4,6 +4,8 @@ import { fireAutomations } from '@/lib/automations-engine'
 import { checkSite, recordCheck, computeUptime30d, type MonitoredSiteRow } from '@/lib/uptime'
 import { checkAllRanks } from '@/lib/rank-tracker'
 import { publishSocialPost } from '@/lib/social-publish'
+import { processScheduledEmails } from '@/lib/email-scheduler'
+import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender'
 
 /**
  * Cron endpoint — called on a schedule (e.g. every 6 hours via Vercel Cron).
@@ -130,6 +132,26 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error('[cron] Rank tracker failed:', err)
     results.rankTracker = { error: 'Failed' }
+  }
+
+  // 7. Process scheduled/recurring emails that are due.
+  try {
+    results.scheduledEmails = await processScheduledEmails()
+  } catch (err) {
+    console.error('[cron] Scheduled email processing failed:', err)
+    results.scheduledEmails = { error: 'Failed' }
+  }
+
+  // 8. Monthly SEO reports — runs on the 1st of each month.
+  try {
+    if (await seoReportsDue()) {
+      results.seoReports = await sendMonthlyClientReports()
+    } else {
+      results.seoReports = { skipped: true }
+    }
+  } catch (err) {
+    console.error('[cron] SEO report sending failed:', err)
+    results.seoReports = { error: 'Failed' }
   }
 
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })

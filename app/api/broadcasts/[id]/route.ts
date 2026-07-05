@@ -13,6 +13,7 @@ function mapBroadcast(row: any) {
     fromEmail:       row.from_email,
     replyTo:         row.reply_to ?? undefined,
     htmlBody:        row.html_body ?? '',
+    contentBlocks:   row.content_blocks ?? undefined,
     plainBody:       row.plain_body ?? undefined,
     previewText:     row.preview_text ?? undefined,
     audienceFilter:  row.audience_filter ?? {},
@@ -59,6 +60,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.fromEmail !== undefined)      update.from_email = body.fromEmail
   if (body.replyTo !== undefined)        update.reply_to = body.replyTo
   if (body.htmlBody !== undefined)       update.html_body = body.htmlBody
+  if (body.contentBlocks !== undefined)  update.content_blocks = body.contentBlocks
   if (body.plainBody !== undefined)      update.plain_body = body.plainBody
   if (body.previewText !== undefined)    update.preview_text = body.previewText
   if (body.audienceFilter !== undefined) update.audience_filter = body.audienceFilter

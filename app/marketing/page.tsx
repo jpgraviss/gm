@@ -42,6 +42,7 @@ interface Broadcast {
   fromEmail: string
   replyTo?: string
   htmlBody: string
+  contentBlocks?: EmailBlock[]
   plainBody?: string
   previewText?: string
   audienceFilter: AudienceFilter
@@ -380,7 +381,7 @@ function BroadcastEditor({
   const [draft, setDraft] = useState<Broadcast>(broadcast)
   const [audiencePreview, setAudiencePreview] = useState<{ total: number; suppressed: number; estimated: number; sample: Array<{ id: string; email: string; name: string }> } | null>(null)
   const [sending, setSending] = useState(false)
-  const [emailBlocks, setEmailBlocks] = useState<EmailBlock[]>([])
+  const [emailBlocks, setEmailBlocks] = useState<EmailBlock[]>(broadcast.contentBlocks ?? [])
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
 
   const [clickData, setClickData] = useState<Array<{ url: string; totalClicks: number; uniqueClickers: number }>>([])
@@ -414,6 +415,7 @@ function BroadcastEditor({
       replyTo:     draft.replyTo,
       previewText: draft.previewText,
       htmlBody:    htmlFromBlocks,
+      contentBlocks: emailBlocks.length > 0 ? emailBlocks : undefined,
       audienceFilter: draft.audienceFilter,
     })
     if (updated) setDraft(updated)

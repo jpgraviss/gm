@@ -191,14 +191,21 @@ export default function CalendarPage() {
   async function handleCancel(id: string) {
     if (!confirm('Cancel this booking? The client will need to rebook.')) return
     setCancellingId(id)
-    await fetch(`/api/bookings/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'cancelled' }),
-    })
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'cancelled' } : b))
-    if (selected?.id === id) setSelected(null)
-    setCancellingId(null)
+    try {
+      const res = await fetch(`/api/bookings/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled' }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'cancelled' } : b))
+      if (selected?.id === id) setSelected(null)
+      toast('Booking cancelled', 'success')
+    } catch {
+      toast('Failed to cancel booking', 'error')
+    } finally {
+      setCancellingId(null)
+    }
   }
 
   async function handleDelete(id: string) {

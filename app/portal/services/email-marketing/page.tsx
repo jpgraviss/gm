@@ -45,10 +45,11 @@ export default function PortalEmailMarketingPage() {
 
   useEffect(() => {
     if (!company) { requestAnimationFrame(() => setLoading(false)); return }
-    fetch('/api/broadcasts?limit=20')
+    fetch('/api/broadcasts?limit=50')
       .then(r => r.ok ? r.json() : { data: [] })
       .then(result => {
-        const broadcasts: Broadcast[] = (result.data ?? result ?? []).map((b: Record<string, unknown>) => ({
+        const all = (result.data ?? result ?? []).filter((b: Record<string, unknown>) => b.status === 'sent')
+        const broadcasts: Broadcast[] = all.map((b: Record<string, unknown>) => ({
           id: b.id as string,
           name: b.name as string ?? '',
           subject: b.subject as string ?? '',

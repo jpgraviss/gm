@@ -17,14 +17,12 @@ export async function GET(req: NextRequest) {
     projectsRes,
     invoicesRes,
     ticketsRes,
-    notificationsRes,
   ] = await Promise.all([
     db.from('portal_clients').select('*').eq('company', q).limit(1).maybeSingle(),
     db.from('contracts').select('*').eq('company', q).order('created_at', { ascending: false }),
     db.from('projects').select('*').eq('company', q).order('created_at', { ascending: false }),
     db.from('invoices').select('*').eq('company', q).order('created_at', { ascending: false }).limit(10),
     db.from('tickets').select('*').eq('company', q).order('created_at', { ascending: false }).limit(5),
-    db.from('portal_notifications').select('*').eq('portal_client_id', '').order('created_at', { ascending: false }).limit(10),
   ])
 
   const portalClient = clientRes.data

@@ -57,7 +57,8 @@ export default function ReportsPage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
-  useEffect(() => {
+  function loadData() {
+    setLoading(true)
     Promise.all([
       fetch('/api/deals').then(r => r.ok ? r.json() : []),
       fetch('/api/invoices').then(r => r.ok ? r.json() : []),
@@ -78,7 +79,9 @@ export default function ReportsPage() {
       if (Array.isArray(con)) setContracts(con)
     }).catch(() => toast('Failed to load report data', 'error'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadData() }, [])
 
   const cutoffISO = useMemo(() => {
     if (dateRange === 'Custom') {
@@ -122,7 +125,7 @@ export default function ReportsPage() {
 
   function exportCSV() {
     const headers = ['ID', 'Company', 'Amount', 'Status', 'Due Date', 'Paid Date', 'Service Type']
-    const rows = invoices.map(i => [i.id, i.company, i.amount, i.status, i.dueDate, i.paidDate || '', i.serviceType])
+    const rows = filteredInvoices.map(i => [i.id, i.company, i.amount, i.status, i.dueDate, i.paidDate || '', i.serviceType])
     const csv = [headers, ...rows].map(r => r.map(String).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -252,9 +255,14 @@ export default function ReportsPage() {
               ))}
             </select>
           </div>
-          <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-            <Download size={12} /> Export CSV
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={loadData} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <RefreshCw size={12} /> Refresh
+            </button>
+            <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <Download size={12} /> Export CSV
+            </button>
+          </div>
         </div>
 
         {/* Deep-dive reports */}

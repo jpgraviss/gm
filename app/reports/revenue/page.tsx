@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
+import { RefreshCw } from 'lucide-react'
 import type { Deal, Invoice, RevenueMonth } from '@/lib/types'
 
 type DateRange = '3M' | '6M' | '12M' | 'Custom'
@@ -27,7 +28,8 @@ export default function RevenueReportPage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
-  useEffect(() => {
+  function loadData() {
+    setLoading(true)
     Promise.all([
       fetch('/api/deals').then(r => r.ok ? r.json() : []),
       fetch('/api/invoices').then(r => r.ok ? r.json() : []),
@@ -38,7 +40,9 @@ export default function RevenueReportPage() {
       if (Array.isArray(rev)) setRevenueByMonth(rev)
     }).catch(() => toast('Failed to load revenue data', 'error'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadData() }, [])
 
   const cutoffISO = useMemo(() => {
     if (dateRange === 'Custom') {
@@ -98,7 +102,8 @@ export default function RevenueReportPage() {
     <>
       <Header title="Revenue Report" subtitle="Revenue trends, pipeline forecast, and top deals" />
       <div className="page-content">
-        <div className="flex flex-wrap items-center gap-2 mb-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-5">
+          <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Period:</span>
           <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
             {(['3M', '6M', '12M', 'Custom'] as DateRange[]).map(r => (
@@ -119,6 +124,10 @@ export default function RevenueReportPage() {
               <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
             </div>
           )}
+          </div>
+          <button onClick={loadData} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            <RefreshCw size={12} /> Refresh
+          </button>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

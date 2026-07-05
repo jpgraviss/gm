@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
+import { RefreshCw } from 'lucide-react'
 import type { Deal, Renewal, Invoice, CRMCompany } from '@/lib/types'
 
 type DateRange = '30D' | '90D' | '12M' | 'Custom'
@@ -110,7 +111,8 @@ export default function ClientHealthPage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
-  useEffect(() => {
+  function loadData() {
+    setLoading(true)
     Promise.all([
       fetch('/api/crm/companies').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
       fetch('/api/deals').then(r => r.ok ? r.json() : []),
@@ -125,7 +127,9 @@ export default function ClientHealthPage() {
       if (Array.isArray(t)) setTickets(t)
     }).catch(() => toast('Failed to load client health data', 'error'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadData() }, [])
 
   const clientHealth = useMemo(() => {
     let cutoffISO: string
@@ -181,7 +185,8 @@ export default function ClientHealthPage() {
     <>
       <Header title="Client Health" subtitle="Client engagement scores, risk factors, and renewal timeline" />
       <div className="page-content">
-        <div className="flex flex-wrap items-center gap-3 mb-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Period:</span>
             <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
@@ -219,6 +224,10 @@ export default function ClientHealthPage() {
               ))}
             </div>
           </div>
+          </div>
+          <button onClick={loadData} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            <RefreshCw size={12} /> Refresh
+          </button>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

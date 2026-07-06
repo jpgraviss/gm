@@ -26,8 +26,6 @@ interface SocialPost {
 
 interface SocialData {
   posts: SocialPost[]
-  totalFollowers: number
-  followerGrowth: number
   totalEngagement: number
   avgReach: number
 }
@@ -38,8 +36,6 @@ export default function PortalSocialMediaPage() {
   const company = user?.company ?? ''
   const [data, setData] = useState<SocialData>({
     posts: [],
-    totalFollowers: 0,
-    followerGrowth: 0,
     totalEngagement: 0,
     avgReach: 0,
   })
@@ -68,8 +64,6 @@ export default function PortalSocialMediaPage() {
         const totalImpressions = posts.reduce((s, p) => s + (p.engagement?.impressions ?? 0), 0)
         setData({
           posts,
-          totalFollowers: 0,
-          followerGrowth: 0,
           totalEngagement,
           avgReach: posts.length > 0 ? Math.round(totalImpressions / posts.length) : 0,
         })

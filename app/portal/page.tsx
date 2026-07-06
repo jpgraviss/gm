@@ -9,7 +9,7 @@ import {
   Globe, Lock, Eye, CheckCircle, Calendar, RefreshCw, FolderKanban,
   ChevronDown, X, AlertTriangle, FileText, MessageSquare, Bell,
   ArrowLeft, Settings, LogOut, ChevronRight, Upload, Download, Trash2,
-  Check, BookOpen,
+  Check, BookOpen, Loader2,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
@@ -214,6 +214,9 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
   const [previewDesc, setPreviewDesc] = useState('')
   const [previewSubmitting, setPreviewSubmitting] = useState(false)
   const [previewSubmitSuccess, setPreviewSubmitSuccess] = useState(false)
+  const [portalAttachments, setPortalAttachments] = useState<{name: string, url: string, path: string, type: string, size: number}[]>([])
+  const [portalUploading, setPortalUploading] = useState(false)
+  const [filesUploading, setFilesUploading] = useState(false)
 
   const unreadCount = notifications.filter(n => !n.read).length
 
@@ -634,8 +637,8 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
                   </p>
                   <p className="text-xs text-orange-600">{openInvoices.length} invoice{openInvoices.length > 1 ? 's' : ''} awaiting payment</p>
                 </div>
-                <button disabled className="px-4 py-2 rounded-xl text-white text-xs font-semibold opacity-50 cursor-not-allowed" style={{ background: '#015035' }} title="Payment processing coming soon">
-                  Pay Now
+                <button disabled className="px-4 py-2 rounded-xl text-white text-xs font-semibold opacity-50 cursor-not-allowed" style={{ background: '#015035' }} title="Contact us to arrange payment">
+                  Contact Us
                 </button>
               </div>
             )}
@@ -656,8 +659,8 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
                         <p className="text-sm font-bold text-gray-900">{formatCurrency(inv.amount)}</p>
                         <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
                         {inv.status !== 'Paid' && (
-                          <button disabled className="text-xs font-semibold text-gray-400 px-2 py-1 rounded-md cursor-not-allowed" title="Payment processing coming soon">
-                            Pay
+                          <button disabled className="text-xs font-semibold text-gray-400 px-2 py-1 rounded-md cursor-not-allowed" title="Contact us to arrange payment">
+                            Contact Us
                           </button>
                         )}
                         <button

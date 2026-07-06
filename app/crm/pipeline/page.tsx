@@ -13,6 +13,7 @@ import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
 import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
+import { downloadCsv } from '@/lib/csv-export'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
 import NewClientModal from '@/components/admin/NewClientModal'
@@ -1248,7 +1249,19 @@ export default function PipelinePage() {
           selectedCount={selectedIds.size}
           onDeselectAll={() => setSelectedIds(new Set())}
           actions={[
-            { label: 'Export', icon: <Download size={13} />, onClick: () => toast('Export coming soon', 'info') },
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {
+              const rows = selectedIds.size === 0 ? localDeals : localDeals.filter(d => selectedIds.has(d.id))
+              downloadCsv(rows.map(d => ({ ...d, contactName: d.contact?.name ?? '' })) as unknown as Record<string, unknown>[], [
+                { key: 'company', label: 'Company' },
+                { key: 'contactName', label: 'Contact' },
+                { key: 'serviceTypes', label: 'Service Types', format: v => Array.isArray(v) ? v.join('; ') : String(v ?? '') },
+                { key: 'value', label: 'Value', format: v => v ? `$${Number(v).toLocaleString()}` : '' },
+                { key: 'stage', label: 'Stage' },
+                { key: 'probability', label: 'Probability', format: v => v != null ? `${v}%` : '' },
+                { key: 'closeDate', label: 'Close Date' },
+                { key: 'assignedRep', label: 'Assigned Rep' },
+              ], 'deals-export.csv')
+            } },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />

@@ -1912,7 +1912,7 @@ export default function SettingsPage() {
                       </span>
                     ) : (
                       <span className="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-gray-100 text-gray-400 border border-gray-200">
-                        Not available yet
+                        Contact admin to configure
                       </span>
                     )}
                   </div>

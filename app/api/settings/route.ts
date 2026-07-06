@@ -64,6 +64,7 @@ export async function PATCH(req: NextRequest) {
   if (body.deliverySteps        !== undefined) updates.delivery_steps       = body.deliverySteps
   if (body.trainingModules      !== undefined) updates.training_modules     = body.trainingModules
   if (body.sops                 !== undefined) updates.sops                 = body.sops
+  if (body.security             !== undefined) updates.security             = body.security
 
   const { data, error } = await db
     .from('app_settings')

@@ -20,6 +20,7 @@ function generateId(prefix: string) {
   return `${prefix}-${Date.now()}`
 }
 import { useToast } from '@/components/ui/Toast'
+import { downloadCsv } from '@/lib/csv-export'
 
 const statusOrder: ProposalStatus[] = ['Draft', 'Pending Approval', 'Approved', 'Sent', 'Viewed', 'Accepted', 'Declined']
 
@@ -1007,7 +1008,17 @@ export default function ProposalsPage() {
           selectedCount={selectedIds.size}
           onDeselectAll={() => setSelectedIds(new Set())}
           actions={[
-            { label: 'Export', icon: <Download size={13} />, onClick: () => toast('Export coming soon', 'info') },
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {
+              const rows = selectedIds.size === 0 ? localProposals : localProposals.filter(p => selectedIds.has(p.id))
+              downloadCsv(rows as unknown as Record<string, unknown>[], [
+                { key: 'company', label: 'Company' },
+                { key: 'serviceType', label: 'Service Type' },
+                { key: 'status', label: 'Status' },
+                { key: 'value', label: 'Value', format: v => v ? `$${Number(v).toLocaleString()}` : '' },
+                { key: 'assignedRep', label: 'Assigned Rep' },
+                { key: 'sentDate', label: 'Sent Date', format: v => String(v ?? '') },
+              ], 'proposals-export.csv')
+            } },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />

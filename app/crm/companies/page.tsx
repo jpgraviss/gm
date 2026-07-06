@@ -19,6 +19,7 @@ import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/New
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMCompany, CRMContact, CompanyStatus, Deal, Contract, Invoice, Project, CRMActivity } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
+import { downloadCsv } from '@/lib/csv-export'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
@@ -1605,7 +1606,17 @@ export default function CompaniesPage() {
           selectedCount={selectedIds.size}
           onDeselectAll={() => setSelectedIds(new Set())}
           actions={[
-            { label: 'Export', icon: <Download size={13} />, onClick: () => toast('Export coming soon', 'info') },
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {
+              const rows = selectedIds.size === 0 ? localCompanies : localCompanies.filter(c => selectedIds.has(c.id))
+              downloadCsv(rows as unknown as Record<string, unknown>[], [
+                { key: 'name', label: 'Name' },
+                { key: 'industry', label: 'Industry' },
+                { key: 'status', label: 'Status' },
+                { key: 'hq', label: 'HQ' },
+                { key: 'website', label: 'Website' },
+                { key: 'owner', label: 'Owner' },
+              ], 'companies-export.csv')
+            } },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />

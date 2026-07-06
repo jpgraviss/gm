@@ -16,6 +16,7 @@ import {
   PenTool, Mail, Search, Eye, Pencil, FileSignature, TrendingUp, Trash2, Download,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { downloadCsv } from '@/lib/csv-export'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 
@@ -1382,7 +1383,18 @@ export default function ContractsPage() {
           selectedCount={selectedIds.size}
           onDeselectAll={() => setSelectedIds(new Set())}
           actions={[
-            { label: 'Export', icon: <Download size={13} />, onClick: () => toast('Export coming soon', 'info') },
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {
+              const rows = selectedIds.size === 0 ? localContracts : localContracts.filter(c => selectedIds.has(c.id))
+              downloadCsv(rows as unknown as Record<string, unknown>[], [
+                { key: 'company', label: 'Company' },
+                { key: 'serviceType', label: 'Service Type' },
+                { key: 'status', label: 'Status' },
+                { key: 'value', label: 'Value', format: v => v ? `$${Number(v).toLocaleString()}` : '' },
+                { key: 'startDate', label: 'Start Date' },
+                { key: 'renewalDate', label: 'Renewal Date' },
+                { key: 'assignedRep', label: 'Assigned Rep' },
+              ], 'contracts-export.csv')
+            } },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />

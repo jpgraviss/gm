@@ -1,18 +1,13 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import Link from 'next/link'
 import {
   TrendingUp, Building2, Users, Zap, FileText, ScrollText,
-  BookOpen, GraduationCap, DollarSign, Target, ArrowRight,
+  BookOpen, GraduationCap, DollarSign, Target, ArrowRight, RefreshCw,
 } from 'lucide-react'
-
-const KPI_ITEMS = [
-  { label: 'Active Deals', value: '—', icon: <Target size={16} />, color: '#015035' },
-  { label: 'Pipeline Value', value: '—', icon: <TrendingUp size={16} />, color: '#3b82f6' },
-  { label: 'Proposals Sent', value: '—', icon: <FileText size={16} />, color: '#8b5cf6' },
-  { label: 'Contracts Signed', value: '—', icon: <ScrollText size={16} />, color: '#22c55e' },
-]
+import { formatCurrency } from '@/lib/utils'
 
 const CARDS = [
   { title: 'Pipeline',         href: '/crm/pipeline',     icon: <TrendingUp size={20} />,   color: '#015035', description: 'Manage deals across stages' },
@@ -26,13 +21,65 @@ const CARDS = [
   { title: 'Courses',          href: '/courses',          icon: <GraduationCap size={20} />, color: '#ec4899', description: 'Training and certifications' },
 ]
 
+const CLOSED_STAGES = ['Closed Won', 'Closed Lost']
+
 export default function SalesHub() {
+  const [activeDeals, setActiveDeals] = useState<number | null>(null)
+  const [pipelineValue, setPipelineValue] = useState<number | null>(null)
+  const [proposalsSent, setProposalsSent] = useState<number | null>(null)
+  const [contractsSigned, setContractsSigned] = useState<number | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+
+  async function loadKPIs() {
+    setRefreshing(true)
+    try {
+      const [dealsRes, proposalsRes, contractsRes] = await Promise.all([
+        fetch('/api/deals').then(r => r.ok ? r.json() : { data: [] }),
+        fetch('/api/proposals').then(r => r.ok ? r.json() : { data: [] }),
+        fetch('/api/contracts').then(r => r.ok ? r.json() : { data: [] }),
+      ])
+
+      const deals = Array.isArray(dealsRes) ? dealsRes : (dealsRes.data ?? [])
+      const open = deals.filter((d: { stage: string }) => !CLOSED_STAGES.includes(d.stage))
+      setActiveDeals(open.length)
+      setPipelineValue(open.reduce((s: number, d: { value: number }) => s + (d.value ?? 0), 0))
+
+      const proposals = Array.isArray(proposalsRes) ? proposalsRes : (proposalsRes.data ?? [])
+      const sent = proposals.filter((p: { status: string }) => p.status !== 'Draft')
+      setProposalsSent(sent.length)
+
+      const contracts = Array.isArray(contractsRes) ? contractsRes : (contractsRes.data ?? [])
+      const signed = contracts.filter((c: { status: string }) => c.status === 'Fully Executed')
+      setContractsSigned(signed.length)
+    } catch { /* non-fatal */ }
+    setRefreshing(false)
+  }
+
+  useEffect(() => { loadKPIs() }, [])
+
+  const kpiItems = [
+    { label: 'Active Deals', value: activeDeals !== null ? activeDeals.toString() : '...', icon: <Target size={16} />, color: '#015035' },
+    { label: 'Pipeline Value', value: pipelineValue !== null ? formatCurrency(pipelineValue) : '...', icon: <TrendingUp size={16} />, color: '#3b82f6' },
+    { label: 'Proposals Sent', value: proposalsSent !== null ? proposalsSent.toString() : '...', icon: <FileText size={16} />, color: '#8b5cf6' },
+    { label: 'Contracts Signed', value: contractsSigned !== null ? contractsSigned.toString() : '...', icon: <ScrollText size={16} />, color: '#22c55e' },
+  ]
+
   return (
     <>
       <Header title="Sales" subtitle="Pipeline, proposals, and revenue" />
       <main className="p-4 md:p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div />
+          <button
+            onClick={loadKPIs}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
+          </button>
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {KPI_ITEMS.map(k => (
+          {kpiItems.map(k => (
             <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: k.color + '14', color: k.color }}>
                 {k.icon}

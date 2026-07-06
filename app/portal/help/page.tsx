@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import { useToast } from '@/components/ui/Toast'
 import {
   Search, BookOpen, Rocket, Users, TrendingUp, Megaphone, Settings2,
   CreditCard, Plug, ShieldCheck, ChevronRight, ThumbsUp, ThumbsDown,
@@ -47,13 +48,30 @@ function renderMarkdown(text: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+  // Code blocks (``` ... ```)
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, _lang, code) =>
+    `<pre class="bg-gray-900 text-gray-100 text-[13px] rounded-lg p-4 my-3 overflow-x-auto font-mono"><code>${code.trim()}</code></pre>`)
+  // Headings
   html = html.replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-gray-900 mt-4 mb-1">$1</h3>')
   html = html.replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold text-gray-900 mt-5 mb-2">$1</h2>')
+  // Bold / italic
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
+  // Inline code
   html = html.replace(/`([^`]+)`/g, '<code class="bg-gray-100 text-[13px] px-1.5 py-0.5 rounded font-mono text-gray-800">$1</code>')
+  // Images ![alt](url)
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="rounded-lg max-w-full my-3" />')
+  // Links [text](url)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline hover:text-emerald-900">$1</a>')
+  // Blockquotes
+  html = html.replace(/^&gt; (.+)$/gm, '<blockquote class="border-l-4 border-emerald-300 pl-4 py-1 my-2 text-sm text-gray-600 italic">$1</blockquote>')
+  // Ordered lists
+  html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal text-gray-700 text-sm leading-relaxed">$1</li>')
+  // Unordered lists
   html = html.replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-gray-700 text-sm leading-relaxed">$1</li>')
-  html = html.replace(/(<li.*<\/li>\n?)+/g, (match) => `<ul class="my-2 space-y-1">${match}</ul>`)
+  html = html.replace(/(<li class="ml-4 list-disc.*<\/li>\n?)+/g, (match) => `<ul class="my-2 space-y-1">${match}</ul>`)
+  html = html.replace(/(<li class="ml-4 list-decimal.*<\/li>\n?)+/g, (match) => `<ol class="my-2 space-y-1">${match}</ol>`)
+  // Paragraphs
   html = html.replace(/\n{2,}/g, '</p><p class="text-sm text-gray-700 leading-relaxed mb-2">')
   html = `<p class="text-sm text-gray-700 leading-relaxed mb-2">${html}</p>`
   return html
@@ -70,17 +88,19 @@ type View =
   | { kind: 'article'; article: Article }
 
 export default function HelpCenterPage() {
+  const { toast } = useToast()
   const [articles, setArticles] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [view, setView] = useState<View>({ kind: 'home' })
   const [feedback, setFeedback] = useState<Record<string, 'yes' | 'no'>>({})
+  const [feedbackSaving, setFeedbackSaving] = useState(false)
 
   useEffect(() => {
     fetch('/api/portal/help')
       .then(r => r.ok ? r.json() : [])
       .then((data: Article[]) => setArticles(Array.isArray(data) ? data : []))
-      .catch(() => {})
+      .catch(() => toast('Failed to load articles', 'error'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -126,7 +146,7 @@ export default function HelpCenterPage() {
             </span>
           </Link>
           <Link
-            href="/tickets"
+            href="/portal/tickets"
             className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white rounded-lg transition-opacity hover:opacity-90 min-h-[44px]"
             style={{ background: '#015035' }}
           >
@@ -140,7 +160,20 @@ export default function HelpCenterPage() {
         <ArticleDetailView
           article={view.article}
           feedback={feedback[view.article.id]}
-          onFeedback={(val) => setFeedback(prev => ({ ...prev, [view.article.id]: val }))}
+          feedbackSaving={feedbackSaving}
+          onFeedback={async (val) => {
+            if (feedback[view.article.id]) return
+            setFeedbackSaving(true)
+            setFeedback(prev => ({ ...prev, [view.article.id]: val }))
+            try {
+              await fetch(`/api/knowledge-base/${view.article.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ feedback: val === 'yes' ? 'helpful' : 'not_helpful' }),
+              })
+            } catch { /* best effort */ }
+            setFeedbackSaving(false)
+          }}
           onBack={() => setView(
             view.article.category && activeCategory
               ? { kind: 'category', category: view.article.category }
@@ -269,12 +302,14 @@ export default function HelpCenterPage() {
 function ArticleDetailView({
   article,
   feedback,
+  feedbackSaving,
   onFeedback,
   onBack,
   onCategoryClick,
 }: {
   article: Article
   feedback: 'yes' | 'no' | undefined
+  feedbackSaving: boolean
   onFeedback: (val: 'yes' | 'no') => void
   onBack: () => void
   onCategoryClick: (cat: string) => void
@@ -361,7 +396,7 @@ function ArticleDetailView({
           {feedback === 'no' && (
             <p className="text-xs text-gray-500 mt-3">
               Sorry this wasn&apos;t helpful.{' '}
-              <Link href="/tickets" className="text-[#015035] font-medium hover:underline">
+              <Link href="/portal/tickets" className="text-[#015035] font-medium hover:underline">
                 Contact support
               </Link>{' '}
               for further assistance.
@@ -377,7 +412,7 @@ function ArticleDetailView({
         <p className="text-sm text-gray-500">
           Still need help?{' '}
           <Link
-            href="/tickets"
+            href="/portal/tickets"
             className="font-medium hover:underline"
             style={{ color: '#015035' }}
           >

@@ -11,7 +11,7 @@ import { computeMRR } from '@/lib/metrics'
 import {
   DollarSign, AlertCircle, CheckCircle, Clock, Send, RefreshCw,
   X, ExternalLink, ScrollText, Calendar,
-  Search, FileText,
+  Search, FileText, Upload,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
@@ -192,6 +192,181 @@ function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: I
   )
 }
 
+function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImported: (count: number) => void }) {
+  const [file, setFile] = useState<File | null>(null)
+  const [rows, setRows] = useState<string[][]>([])
+  const [headers, setHeaders] = useState<string[]>([])
+  const [mapping, setMapping] = useState<Record<string, string>>({})
+  const [importing, setImporting] = useState(false)
+  const [preview, setPreview] = useState(false)
+
+  const fields = ['company', 'amount', 'status', 'serviceType', 'issuedDate', 'dueDate', 'paidDate'] as const
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setFile(f)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      const lines = text.split('\n').map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g, '')))
+      if (lines.length < 2) return
+      const hdrs = lines[0]
+      setHeaders(hdrs)
+      setRows(lines.slice(1).filter(r => r.length >= hdrs.length && r.some(c => c)))
+
+      const autoMap: Record<string, string> = {}
+      for (const field of fields) {
+        const match = hdrs.findIndex(h => {
+          const lower = h.toLowerCase().replace(/[_\s-]/g, '')
+          if (field === 'company') return ['company', 'client', 'customer', 'companyname', 'clientname'].includes(lower)
+          if (field === 'amount') return ['amount', 'total', 'invoiceamount', 'price'].includes(lower)
+          if (field === 'status') return ['status', 'invoicestatus', 'paymentstatus'].includes(lower)
+          if (field === 'serviceType') return ['servicetype', 'service', 'type', 'category'].includes(lower)
+          if (field === 'issuedDate') return ['issueddate', 'issuedate', 'invoicedate', 'date', 'created'].includes(lower)
+          if (field === 'dueDate') return ['duedate', 'due', 'paymentdue'].includes(lower)
+          if (field === 'paidDate') return ['paiddate', 'paid', 'paymentdate', 'datepaid'].includes(lower)
+          return false
+        })
+        if (match >= 0) autoMap[field] = hdrs[match]
+      }
+      setMapping(autoMap)
+      setPreview(true)
+    }
+    reader.readAsText(f)
+  }
+
+  async function handleImport() {
+    if (!rows.length) return
+    setImporting(true)
+    let imported = 0
+    for (const row of rows) {
+      const getValue = (field: string) => {
+        const header = mapping[field]
+        if (!header) return ''
+        const idx = headers.indexOf(header)
+        return idx >= 0 ? row[idx] : ''
+      }
+      const company = getValue('company')
+      const amount = parseFloat(getValue('amount') || '0')
+      if (!company || !amount) continue
+
+      try {
+        const res = await fetch('/api/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            company,
+            amount,
+            status: getValue('status') || 'Pending',
+            serviceType: getValue('serviceType') || 'Other',
+            issuedDate: getValue('issuedDate') || new Date().toISOString().split('T')[0],
+            dueDate: getValue('dueDate') || '',
+            paidDate: getValue('paidDate') || null,
+          }),
+        })
+        if (res.ok) imported++
+      } catch {}
+    }
+    onImported(imported)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div>
+            <h3 className="text-base font-bold text-gray-900">Import Invoices from CSV</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Upload a CSV file and map columns to invoice fields</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100">
+            <X size={16} className="text-gray-400" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {!preview ? (
+            <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+              <Upload size={32} className="text-gray-300 mb-3" />
+              <p className="text-sm text-gray-600 font-medium mb-1">Drop a CSV file or click to browse</p>
+              <p className="text-xs text-gray-400 mb-4">Supports: company, amount, status, service type, dates</p>
+              <label className="px-5 py-2.5 rounded-lg text-white text-sm font-semibold cursor-pointer hover:opacity-90 transition-opacity" style={{ background: '#015035' }}>
+                Choose File
+                <input type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+              </label>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-4">
+                <FileText size={16} className="text-gray-400" />
+                <span className="text-sm font-medium text-gray-700">{file?.name}</span>
+                <span className="text-xs text-gray-400">{rows.length} rows</span>
+                <button onClick={() => { setPreview(false); setFile(null); setRows([]); setHeaders([]) }} className="ml-auto text-xs text-gray-500 hover:text-gray-700">Change file</button>
+              </div>
+
+              <div className="mb-5">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Column Mapping</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {fields.map(field => (
+                    <div key={field}>
+                      <label className="block text-xs text-gray-600 mb-1 capitalize">{field.replace(/([A-Z])/g, ' $1')}</label>
+                      <select
+                        value={mapping[field] || ''}
+                        onChange={e => setMapping(m => ({ ...m, [field]: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+                      >
+                        <option value="">— Skip —</option>
+                        {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Preview (first 5 rows)</p>
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        {headers.map(h => <th key={h} className="text-left px-3 py-2 font-semibold text-gray-500">{h}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.slice(0, 5).map((row, i) => (
+                        <tr key={i} className="border-b border-gray-100 last:border-0">
+                          {row.slice(0, headers.length).map((cell, j) => <td key={j} className="px-3 py-2 text-gray-700">{cell}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {preview && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+            <span className="text-sm text-gray-500">{rows.length} rows to import</span>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button
+                onClick={handleImport}
+                disabled={importing || !mapping.company || !mapping.amount}
+                className="px-5 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-40 hover:opacity-90 transition-opacity"
+                style={{ background: '#015035' }}
+              >
+                {importing ? 'Importing...' : `Import ${rows.length} Invoices`}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function BillingPage() {
   const { toast } = useToast()
   const [localInvoices, setLocalInvoices] = useState<Invoice[]>([])
@@ -205,6 +380,7 @@ export default function BillingPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [billableSummary, setBillableSummary] = useState<any[]>([])
   const [showBillable, setShowBillable] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
 
   const [loading, setLoading] = useState(true)
 
@@ -403,9 +579,17 @@ export default function BillingPage() {
                   )
                 })}
               </div>
-              <span className="text-xs text-gray-400 flex-shrink-0">
-                {filtered.length} · {formatCurrency(filtered.reduce((s, i) => s + i.amount, 0))}
-              </span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  <Upload size={13} /> Import CSV
+                </button>
+                <span className="text-xs text-gray-400">
+                  {filtered.length} · {formatCurrency(filtered.reduce((s, i) => s + i.amount, 0))}
+                </span>
+              </div>
             </div>
             <div className="px-4 py-2.5 border-b border-gray-100">
               <div className="relative max-w-xs">
@@ -508,6 +692,17 @@ export default function BillingPage() {
           </div>
         </div>
       </div>
+
+      {showImportModal && (
+        <CSVImportModal
+          onClose={() => setShowImportModal(false)}
+          onImported={(count) => {
+            toast(`${count} invoice${count !== 1 ? 's' : ''} imported`, 'success')
+            setShowImportModal(false)
+            fetch('/api/invoices').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalInvoices(data) })
+          }}
+        />
+      )}
 
       {selectedInvoice && (
         <InvoicePanel

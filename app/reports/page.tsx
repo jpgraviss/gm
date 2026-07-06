@@ -5,13 +5,14 @@ import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
-import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download, DollarSign as RevenueIcon, HeartPulse, Megaphone, ArrowRight } from 'lucide-react'
+import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download, DollarSign as RevenueIcon, HeartPulse, Megaphone, Search, ArrowRight } from 'lucide-react'
 
 const DEEP_DIVE_REPORTS = [
-  { href: '/reports/revenue',   label: 'Revenue',   icon: <RevenueIcon size={15} />, desc: 'Detailed revenue breakdown' },
-  { href: '/reports/team',      label: 'Team',      icon: <Users size={15} />,       desc: 'Per-rep performance' },
-  { href: '/reports/health',    label: 'Health',    icon: <HeartPulse size={15} />,  desc: 'Client health & churn risk' },
-  { href: '/reports/marketing', label: 'Marketing', icon: <Megaphone size={15} />,   desc: 'Campaign & channel metrics' },
+  { href: '/reports/revenue',     label: 'Revenue',     icon: <RevenueIcon size={15} />, desc: 'Detailed revenue breakdown' },
+  { href: '/reports/team',        label: 'Team',        icon: <Users size={15} />,       desc: 'Per-rep performance' },
+  { href: '/reports/health',      label: 'Health',      icon: <HeartPulse size={15} />,  desc: 'Client health & churn risk' },
+  { href: '/reports/marketing',   label: 'Marketing',   icon: <Megaphone size={15} />,   desc: 'Campaign & channel metrics' },
+  { href: '/reports/seo-reports', label: 'SEO Reports', icon: <Search size={15} />,      desc: 'Automated monthly client SEO reports' },
 ]
 import type { Deal, Invoice, Project, Renewal, RevenueMonth, MaintenanceRecord, TeamMember, Contract } from '@/lib/types'
 import { fetchTeamMembers } from '@/lib/supabase'
@@ -57,7 +58,8 @@ export default function ReportsPage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
-  useEffect(() => {
+  function loadData() {
+    setLoading(true)
     Promise.all([
       fetch('/api/deals').then(r => r.ok ? r.json() : []),
       fetch('/api/invoices').then(r => r.ok ? r.json() : []),
@@ -78,7 +80,9 @@ export default function ReportsPage() {
       if (Array.isArray(con)) setContracts(con)
     }).catch(() => toast('Failed to load report data', 'error'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadData() }, [])
 
   const cutoffISO = useMemo(() => {
     if (dateRange === 'Custom') {
@@ -122,7 +126,7 @@ export default function ReportsPage() {
 
   function exportCSV() {
     const headers = ['ID', 'Company', 'Amount', 'Status', 'Due Date', 'Paid Date', 'Service Type']
-    const rows = invoices.map(i => [i.id, i.company, i.amount, i.status, i.dueDate, i.paidDate || '', i.serviceType])
+    const rows = filteredInvoices.map(i => [i.id, i.company, i.amount, i.status, i.dueDate, i.paidDate || '', i.serviceType])
     const csv = [headers, ...rows].map(r => r.map(String).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -252,9 +256,14 @@ export default function ReportsPage() {
               ))}
             </select>
           </div>
-          <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-            <Download size={12} /> Export CSV
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={loadData} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <RefreshCw size={12} /> Refresh
+            </button>
+            <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <Download size={12} /> Export CSV
+            </button>
+          </div>
         </div>
 
         {/* Deep-dive reports */}

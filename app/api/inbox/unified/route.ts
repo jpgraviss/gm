@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
   // 4. CRM activities flagged as communications
   const { data: crmActivities } = await db
     .from('crm_activities')
-    .select('id, type, description, contact_id, company_id, timestamp, logged_by')
+    .select('id, type, body, contact_id, company_id, timestamp, user_name')
     .in('type', ['Email', 'Call', 'Meeting', 'Note'])
     .order('timestamp', { ascending: false })
     .limit(limit)
@@ -188,7 +188,7 @@ export async function GET(req: NextRequest) {
         c.company || undefined,
         'activity',
         `${a.type} logged`,
-        (a.description ?? '').slice(0, 200),
+        (a.body ?? '').slice(0, 200),
         a.timestamp,
         false,
       )

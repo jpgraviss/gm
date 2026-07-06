@@ -160,8 +160,11 @@ function TicketPanel({
             <div className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
               <Zap size={13} className="text-amber-500 flex-shrink-0" />
               <p className="text-xs text-amber-800 flex-1">Unassigned — assign this ticket to auto-create a project task</p>
-              <button className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 transition-colors flex-shrink-0">
-                Assign →
+              <button
+                onClick={() => onUpdateStatus(ticket.id, 'In Progress')}
+                className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 transition-colors flex-shrink-0"
+              >
+                Start →
               </button>
             </div>
           </div>
@@ -377,6 +380,24 @@ export default function TicketsPage() {
     return localTickets.filter(t => t.status === 'Resolved' && t.updatedDate.startsWith(ym)).length
   }, [localTickets])
 
+  const avgResponseTime = useMemo(() => {
+    const times: number[] = []
+    for (const t of localTickets) {
+      if (!t.messages.length) continue
+      const firstReply = t.messages.find(m => m.author !== t.contactName && !m.isInternal)
+      if (!firstReply) continue
+      const created = new Date(t.createdDate).getTime()
+      const replied = new Date(firstReply.timestamp).getTime()
+      if (replied > created) times.push(replied - created)
+    }
+    if (times.length === 0) return null
+    const avg = times.reduce((s, v) => s + v, 0) / times.length
+    const hours = Math.round(avg / (1000 * 60 * 60))
+    if (hours < 1) return `${Math.round(avg / (1000 * 60))}m`
+    if (hours < 24) return `${hours}h`
+    return `${Math.round(hours / 24)}d`
+  }, [localTickets])
+
   const filtered = useMemo(() => {
     let list = localTickets
     if (statusFilter !== 'All') list = list.filter(t => t.status === statusFilter)
@@ -466,7 +487,7 @@ export default function TicketsPage() {
                 <Clock size={16} className="text-amber-500" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>—</p>
+            <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{avgResponseTime ?? '—'}</p>
             <p className="text-xs font-medium text-gray-500 mt-0.5">Avg Response Time</p>
           </div>
           <div className="metric-card p-4">

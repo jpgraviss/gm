@@ -21,6 +21,7 @@ function mapSite(row: any) {
     uptime30d:            row.uptime_30d,
     createdAt:            row.created_at,
     updatedAt:            row.updated_at,
+    isWordPress:          row.is_wordpress ?? false,
   }
 }
 

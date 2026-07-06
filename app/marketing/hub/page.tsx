@@ -1,18 +1,12 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import Link from 'next/link'
 import {
   Mail, Share2, ClipboardList, Layers, Search, BookOpen,
-  Send, ArrowRight,
+  Send, ArrowRight, RefreshCw,
 } from 'lucide-react'
-
-const KPI_ITEMS = [
-  { label: 'Emails Sent', value: '—', icon: <Send size={16} />, color: '#015035' },
-  { label: 'Form Submissions', value: '—', icon: <ClipboardList size={16} />, color: '#3b82f6' },
-  { label: 'Keywords Tracked', value: '—', icon: <Search size={16} />, color: '#8b5cf6' },
-  { label: 'Social Posts', value: '—', icon: <Share2 size={16} />, color: '#f59e0b' },
-]
 
 const CARDS = [
   { title: 'Broadcasts',    href: '/marketing',      icon: <Mail size={20} />,          color: '#015035', description: 'Email campaigns and broadcasts' },
@@ -24,12 +18,66 @@ const CARDS = [
 ]
 
 export default function MarketingHub() {
+  const [emailsSent, setEmailsSent] = useState<number | null>(null)
+  const [formSubs, setFormSubs] = useState<number | null>(null)
+  const [keywords, setKeywords] = useState<number | null>(null)
+  const [socialPosts, setSocialPosts] = useState<number | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+
+  async function loadKPIs() {
+    setRefreshing(true)
+    try {
+      const [broadcastsRes, formsRes, keywordsRes, postsRes] = await Promise.all([
+        fetch('/api/broadcasts').then(r => r.ok ? r.json() : { data: [] }),
+        fetch('/api/forms').then(r => r.ok ? r.json() : { data: [] }),
+        fetch('/api/rank-tracker/keywords').then(r => r.ok ? r.json() : []),
+        fetch('/api/social-posts').then(r => r.ok ? r.json() : { data: [] }),
+      ])
+
+      const broadcasts = Array.isArray(broadcastsRes) ? broadcastsRes : (broadcastsRes.data ?? [])
+      const sent = broadcasts
+        .filter((b: { status: string }) => b.status === 'sent')
+        .reduce((s: number, b: { totalSent?: number }) => s + (b.totalSent ?? 0), 0)
+      setEmailsSent(sent)
+
+      const forms = Array.isArray(formsRes) ? formsRes : (formsRes.data ?? [])
+      const subs = forms.reduce((s: number, f: { submissionsCount?: number }) => s + (f.submissionsCount ?? 0), 0)
+      setFormSubs(subs)
+
+      const kws = Array.isArray(keywordsRes) ? keywordsRes : (keywordsRes.data ?? [])
+      setKeywords(kws.length)
+
+      const posts = Array.isArray(postsRes) ? postsRes : (postsRes.data ?? [])
+      setSocialPosts(posts.length)
+    } catch { /* non-fatal */ }
+    setRefreshing(false)
+  }
+
+  useEffect(() => { loadKPIs() }, [])
+
+  const kpiItems = [
+    { label: 'Emails Sent', value: emailsSent !== null ? emailsSent.toLocaleString() : '...', icon: <Send size={16} />, color: '#015035' },
+    { label: 'Form Submissions', value: formSubs !== null ? formSubs.toLocaleString() : '...', icon: <ClipboardList size={16} />, color: '#3b82f6' },
+    { label: 'Keywords Tracked', value: keywords !== null ? keywords.toString() : '...', icon: <Search size={16} />, color: '#8b5cf6' },
+    { label: 'Social Posts', value: socialPosts !== null ? socialPosts.toString() : '...', icon: <Share2 size={16} />, color: '#f59e0b' },
+  ]
+
   return (
     <>
       <Header title="Marketing" subtitle="Campaigns, content, and engagement" />
       <main className="p-4 md:p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div />
+          <button
+            onClick={loadKPIs}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
+          </button>
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {KPI_ITEMS.map(k => (
+          {kpiItems.map(k => (
             <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: k.color + '14', color: k.color }}>
                 {k.icon}

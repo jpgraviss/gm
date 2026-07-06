@@ -1,0 +1,196 @@
+<?php
+/**
+ * GravHub Admin Page.
+ *
+ * Handles the plugin's admin settings page.
+ *
+ * @package GravHub_SEO
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * Class GravHub_Admin_Page
+ */
+class GravHub_Admin_Page {
+
+	/**
+	 * API client instance.
+	 *
+	 * @var GravHub_API_Client
+	 */
+	private $api_client;
+
+	/**
+	 * SEO analyzer instance.
+	 *
+	 * @var GravHub_SEO_Analyzer
+	 */
+	private $seo_analyzer;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param GravHub_API_Client   $api_client   API client instance.
+	 * @param GravHub_SEO_Analyzer $seo_analyzer SEO analyzer instance.
+	 */
+	public function __construct( GravHub_API_Client $api_client, GravHub_SEO_Analyzer $seo_analyzer ) {
+		$this->api_client   = $api_client;
+		$this->seo_analyzer = $seo_analyzer;
+
+		add_action( 'admin_menu', array( $this, 'register_menu' ) );
+		add_action( 'admin_init', array( $this, 'register_settings' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+	}
+
+	/**
+	 * Register admin menu.
+	 */
+	public function register_menu() {
+		add_menu_page(
+			__( 'GravHub SEO', 'gravhub-seo' ),
+			__( 'GravHub SEO', 'gravhub-seo' ),
+			'manage_gravhub_seo',
+			'gravhub-seo',
+			array( $this, 'render_page' ),
+			'dashicons-search',
+			80
+		);
+	}
+
+	/**
+	 * Register settings using the Settings API.
+	 */
+	public function register_settings() {
+		register_setting(
+			'gravhub_seo_settings',
+			GravHub_API_Client::OPTION_API_KEY,
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+				'default'           => '',
+			)
+		);
+
+		register_setting(
+			'gravhub_seo_settings',
+			GravHub_API_Client::OPTION_API_URL,
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => 'esc_url_raw',
+				'default'           => '',
+			)
+		);
+
+		// Connection section.
+		add_settings_section(
+			'gravhub_connection',
+			__( 'Connection Settings', 'gravhub-seo' ),
+			array( $this, 'render_connection_section_description' ),
+			'gravhub-seo'
+		);
+
+		add_settings_field(
+			'gravhub_api_url',
+			__( 'GravHub URL', 'gravhub-seo' ),
+			array( $this, 'render_api_url_field' ),
+			'gravhub-seo',
+			'gravhub_connection'
+		);
+
+		add_settings_field(
+			'gravhub_api_key',
+			__( 'API Key', 'gravhub-seo' ),
+			array( $this, 'render_api_key_field' ),
+			'gravhub-seo',
+			'gravhub_connection'
+		);
+	}
+
+	/**
+	 * Enqueue admin assets on the plugin page only.
+	 *
+	 * @param string $hook_suffix The current admin page hook suffix.
+	 */
+	public function enqueue_assets( $hook_suffix ) {
+		if ( 'toplevel_page_gravhub-seo' !== $hook_suffix ) {
+			return;
+		}
+
+		wp_enqueue_style(
+			'gravhub-seo-admin',
+			GRAVHUB_SEO_PLUGIN_URL . 'assets/admin.css',
+			array(),
+			GRAVHUB_SEO_VERSION
+		);
+
+		wp_enqueue_script(
+			'gravhub-seo-admin',
+			'',
+			array(),
+			GRAVHUB_SEO_VERSION,
+			true
+		);
+
+		wp_localize_script(
+			'gravhub-seo-admin',
+			'gravhubSeo',
+			array(
+				'restUrl' => esc_url_raw( rest_url( 'gravhub-seo/v1/' ) ),
+				'nonce'   => wp_create_nonce( 'wp_rest' ),
+			)
+		);
+	}
+
+	/**
+	 * Render connection section description.
+	 */
+	public function render_connection_section_description() {
+		echo '<p>' . esc_html__( 'Enter your GravHub platform credentials to connect this site.', 'gravhub-seo' ) . '</p>';
+	}
+
+	/**
+	 * Render API URL field.
+	 */
+	public function render_api_url_field() {
+		$value = $this->api_client->get_api_url();
+		printf(
+			'<input type="url" id="gravhub_api_url" name="%s" value="%s" class="regular-text" placeholder="https://app.gravhub.io" />',
+			esc_attr( GravHub_API_Client::OPTION_API_URL ),
+			esc_attr( $value )
+		);
+		echo '<p class="description">' . esc_html__( 'The URL of your GravHub instance.', 'gravhub-seo' ) . '</p>';
+	}
+
+	/**
+	 * Render API key field.
+	 */
+	public function render_api_key_field() {
+		$value = $this->api_client->get_api_key();
+		printf(
+			'<input type="password" id="gravhub_api_key" name="%s" value="%s" class="regular-text" autocomplete="off" />',
+			esc_attr( GravHub_API_Client::OPTION_API_KEY ),
+			esc_attr( $value )
+		);
+		echo '<p class="description">' . esc_html__( 'Your GravHub API key. Found in GravHub under Settings > API Keys.', 'gravhub-seo' ) . '</p>';
+	}
+
+	/**
+	 * Render the admin settings page.
+	 */
+	public function render_page() {
+		if ( ! current_user_can( 'manage_gravhub_seo' ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'gravhub-seo' ) );
+		}
+
+		// Get data for the template.
+		$is_connected       = $this->api_client->is_configured();
+		$last_report_time   = get_option( 'gravhub_last_health_report', 0 );
+		$last_analysis_time = get_option( 'gravhub_last_analysis_time', 0 );
+		$analysis_results   = get_option( 'gravhub_last_analysis', array() );
+
+		include GRAVHUB_SEO_PLUGIN_DIR . 'admin/views/settings-page.php';
+	}
+}

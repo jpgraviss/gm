@@ -202,8 +202,8 @@ export default function PortalTicketsPage() {
                 />
               </div>
               <div className="flex items-center justify-between mt-3">
-                <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors">
-                  <Upload size={12} /> Attach file
+                <button disabled className="flex items-center gap-1.5 text-xs text-gray-400 cursor-not-allowed" title="File attachments coming soon">
+                  <Upload size={12} /> Attach file (coming soon)
                 </button>
                 <button
                   onClick={handleReply}
@@ -285,8 +285,8 @@ export default function PortalTicketsPage() {
                   <option>High</option>
                 </select>
               </div>
-              <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors">
-                <Upload size={12} /> Attach file
+              <button disabled className="flex items-center gap-1.5 text-xs text-gray-400 cursor-not-allowed" title="File attachments coming soon">
+                <Upload size={12} /> Attach file (coming soon)
               </button>
               <div className="flex items-center gap-2 justify-end pt-2 border-t border-gray-100">
                 <button onClick={() => setShowNewForm(false)} className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100">

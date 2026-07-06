@@ -948,11 +948,11 @@ export default function ContractsPage() {
         })
         if (!emailRes.ok) {
           const err = await emailRes.json()
-          alert(`Could not send contract email: ${err.error ?? 'Unknown error'}`)
+          toast(`Could not send contract email: ${err.error ?? 'Unknown error'}`, 'error')
           return
         }
       } catch {
-        alert('Failed to send contract email. Please try again.')
+        toast('Failed to send contract email. Please try again.', 'error')
         return
       }
     }

@@ -21,6 +21,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json()
   const db = createServiceClient()
 
+  // Handle feedback increment separately (doesn't update updated_at)
+  if (body.feedback === 'helpful' || body.feedback === 'not_helpful') {
+    const col = body.feedback === 'helpful' ? 'helpful_count' : 'not_helpful_count'
+    const { data: current } = await db.from('knowledge_articles').select(col).eq('id', id).single()
+    const currentVal = (current as Record<string, number> | null)?.[col] ?? 0
+    const { error: fbErr } = await db.from('knowledge_articles').update({ [col]: currentVal + 1 }).eq('id', id)
+    if (fbErr) {
+      console.error('[knowledge-base/:id feedback]', fbErr)
+      return NextResponse.json({ error: fbErr.message }, { status: 500 })
+    }
+    return NextResponse.json({ ok: true })
+  }
+
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (body.title !== undefined) update.title = body.title
   if (body.body !== undefined) update.body = body.body

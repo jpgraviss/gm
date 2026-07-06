@@ -654,10 +654,9 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
             <div className="flex flex-col">
               {/* Filter + count */}
               <div className="px-5 pt-4 pb-2">
-                <button className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1.5 transition-colors">
-                  Filter Activity ({totalActivities}/{totalActivities})
-                  <ChevronRight size={11} className="rotate-90" />
-                </button>
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 bg-gray-100 rounded-full px-3 py-1.5">
+                  All Activity ({totalActivities})
+                </span>
               </div>
 
               {/* AI Summarize button */}

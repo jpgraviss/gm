@@ -6,7 +6,7 @@ import { formatCurrency, projectStatusColors, invoiceStatusColors, formatDate } 
 import StatusBadge from '@/components/ui/StatusBadge'
 import {
   Globe, CheckCircle, FolderKanban, FileText, MessageSquare,
-  Download, Upload, Bell, ChevronDown, ChevronRight, X, AlertTriangle, LogOut,
+  Download, Upload, Bell, ChevronRight, X, AlertTriangle, LogOut,
   Search, BarChart3, Star, Activity, TrendingUp, Share2,
 } from 'lucide-react'
 
@@ -53,6 +53,8 @@ export default function ClientPortalPage() {
   const [ticketMessage, setTicketMessage] = useState('')
   const [ticketSubmitting, setTicketSubmitting] = useState(false)
   const [ticketSuccess, setTicketSuccess] = useState(false)
+  const [existingTickets, setExistingTickets] = useState<{ id: string; subject: string; status: string; priority: string; createdAt: string; messages?: { from: string; body: string; date: string }[] }[]>([])
+  const [ticketsLoading, setTicketsLoading] = useState(false)
   const [files, setFiles] = useState<{ name: string; size: number; createdAt: string; url: string | null }[]>([])
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -95,6 +97,17 @@ export default function ClientPortalPage() {
       .then(data => { if (Array.isArray(data)) setNotifications(data) })
       .catch(() => {/* non-fatal */})
   }, [user?.id])
+
+  // Load existing tickets when Support tab opens
+  useEffect(() => {
+    if (activeTab !== 'tickets' || !company) return
+    setTicketsLoading(true)
+    fetch(`/api/tickets?company=${encodeURIComponent(company)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setExistingTickets(data) })
+      .catch(() => {/* non-fatal */})
+      .finally(() => setTicketsLoading(false))
+  }, [activeTab, company])
 
   // Load social posts lazily when Social tab opens
   useEffect(() => {
@@ -219,7 +232,6 @@ export default function ClientPortalPage() {
               {contactName.split(' ').map(n => n[0]).join('')}
             </div>
             <span className="text-white/80 text-xs font-medium hidden sm:block">{contactName}</span>
-            <ChevronDown size={12} className="text-white/40" />
           </div>
           <button
             onClick={logout}
@@ -578,7 +590,13 @@ export default function ClientPortalPage() {
                               messages: ticketMessage.trim() ? [{ from: contactName, body: ticketMessage.trim(), date: new Date().toISOString() }] : [],
                             }),
                           })
-                          if (res.ok) setTicketSuccess(true)
+                          if (res.ok) {
+                            setTicketSuccess(true)
+                            fetch(`/api/tickets?company=${encodeURIComponent(company)}`)
+                              .then(r => r.ok ? r.json() : [])
+                              .then(data => { if (Array.isArray(data)) setExistingTickets(data) })
+                              .catch(() => {})
+                          }
                         } finally {
                           setTicketSubmitting(false)
                         }
@@ -592,6 +610,40 @@ export default function ClientPortalPage() {
                 </div>
               )}
             </div>
+
+            {/* Existing tickets */}
+            {ticketsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
+              </div>
+            ) : existingTickets.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100">
+                  <h3 className="text-sm font-semibold text-gray-800">Your Requests</h3>
+                </div>
+                <div className="flex flex-col divide-y divide-gray-100">
+                  {existingTickets.map(t => {
+                    const statusColor: Record<string, string> = { Open: 'bg-blue-50 text-blue-700', 'In Progress': 'bg-amber-50 text-amber-700', Resolved: 'bg-emerald-50 text-emerald-700', Closed: 'bg-gray-100 text-gray-500' }
+                    return (
+                      <div key={t.id} className="px-5 py-3.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 truncate">{t.subject}</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">
+                              {t.createdAt ? formatDate(t.createdAt) : ''}
+                              {t.messages && t.messages.length > 0 ? ` · ${t.messages.length} message${t.messages.length > 1 ? 's' : ''}` : ''}
+                            </p>
+                          </div>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${statusColor[t.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                            {t.status}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

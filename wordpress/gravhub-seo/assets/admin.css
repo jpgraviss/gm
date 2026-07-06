@@ -1,0 +1,184 @@
+/**
+ * GravHub SEO — Admin Styles
+ *
+ * @package GravHub_SEO
+ */
+
+/* Layout */
+.gravhub-seo-wrap {
+	max-width: 960px;
+}
+
+/* Card containers */
+.gravhub-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	margin-bottom: 20px;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.gravhub-card-header {
+	border-bottom: 1px solid #c3c4c7;
+	padding: 8px 12px;
+	background: #f6f7f7;
+}
+
+.gravhub-card-header h2 {
+	margin: 0;
+	padding: 0;
+	font-size: 14px;
+	line-height: 1.4;
+}
+
+.gravhub-card-body {
+	padding: 12px;
+}
+
+/* Status badges */
+.gravhub-status-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.5;
+}
+
+.gravhub-status-connected {
+	background: #d4edda;
+	color: #155724;
+}
+
+.gravhub-status-disconnected {
+	background: #f8d7da;
+	color: #721c24;
+}
+
+/* Status table */
+.gravhub-status-table {
+	border-collapse: collapse;
+	width: 100%;
+	margin-bottom: 12px;
+}
+
+.gravhub-status-table th,
+.gravhub-status-table td {
+	padding: 8px 12px;
+	text-align: left;
+	border-bottom: 1px solid #e2e4e7;
+}
+
+.gravhub-status-table th {
+	width: 200px;
+	font-weight: 600;
+	color: #1d2327;
+}
+
+/* Score badges */
+.gravhub-score-badge {
+	display: inline-block;
+	min-width: 36px;
+	padding: 4px 8px;
+	border-radius: 3px;
+	font-size: 13px;
+	font-weight: 700;
+	text-align: center;
+	line-height: 1;
+}
+
+.gravhub-score-green {
+	background: #d4edda;
+	color: #155724;
+}
+
+.gravhub-score-yellow {
+	background: #fff3cd;
+	color: #856404;
+}
+
+.gravhub-score-red {
+	background: #f8d7da;
+	color: #721c24;
+}
+
+/* Severity badges */
+.gravhub-severity-badge {
+	display: inline-block;
+	padding: 1px 6px;
+	border-radius: 3px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	line-height: 1.5;
+	margin-right: 4px;
+	vertical-align: middle;
+}
+
+.gravhub-severity-error {
+	background: #f8d7da;
+	color: #721c24;
+}
+
+.gravhub-severity-warning {
+	background: #fff3cd;
+	color: #856404;
+}
+
+.gravhub-severity-info {
+	background: #d1ecf1;
+	color: #0c5460;
+}
+
+/* Scores table */
+.gravhub-scores-table {
+	margin-top: 12px;
+}
+
+.gravhub-scores-table td {
+	vertical-align: top;
+}
+
+.gravhub-issues-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.gravhub-issues-list li {
+	margin-bottom: 4px;
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.gravhub-no-issues {
+	color: #155724;
+	font-style: italic;
+	font-size: 12px;
+}
+
+/* Connection actions */
+.gravhub-connection-actions {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid #e2e4e7;
+}
+
+/* Result messages */
+.gravhub-result-pending {
+	color: #856404;
+	margin-left: 8px;
+	font-style: italic;
+}
+
+.gravhub-result-success {
+	color: #155724;
+	margin-left: 8px;
+	font-weight: 600;
+}
+
+.gravhub-result-error {
+	color: #721c24;
+	margin-left: 8px;
+	font-weight: 600;
+}

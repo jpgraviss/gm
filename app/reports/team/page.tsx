@@ -5,6 +5,7 @@ import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import { fetchTeamMembers } from '@/lib/supabase'
 import { formatCurrency } from '@/lib/utils'
+import { RefreshCw } from 'lucide-react'
 import { computeMRR, contractMonthlyValue, RECURRING_STATUSES } from '@/lib/metrics'
 import type { TeamMember, AppTask, TimeEntry, Contract, Deal } from '@/lib/types'
 
@@ -32,7 +33,8 @@ export default function TeamProductivityPage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
-  useEffect(() => {
+  function loadData() {
+    setLoading(true)
     Promise.all([
       fetchTeamMembers(),
       fetch('/api/tasks').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
@@ -49,7 +51,9 @@ export default function TeamProductivityPage() {
       if (Array.isArray(dl)) setDeals(dl)
     }).catch(() => toast('Failed to load team data', 'error'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadData() }, [])
 
   const cutoffDate = useMemo(() => {
     if (dateRange === 'Custom') return customStart || '1970-01-01'
@@ -129,7 +133,8 @@ export default function TeamProductivityPage() {
     <>
       <Header title="Team Productivity" subtitle="Performance metrics, leaderboard, and activity timeline" />
       <div className="page-content">
-        <div className="flex flex-wrap items-center gap-3 mb-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Period:</span>
             <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
@@ -165,6 +170,10 @@ export default function TeamProductivityPage() {
               ))}
             </select>
           </div>
+          </div>
+          <button onClick={loadData} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            <RefreshCw size={12} /> Refresh
+          </button>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">

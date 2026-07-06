@@ -21,6 +21,7 @@ function mapSite(row: any) {
     uptime30d:            row.uptime_30d,
     createdAt:            row.created_at,
     updatedAt:            row.updated_at,
+    isWordPress:          row.is_wordpress ?? false,
   }
 }
 
@@ -85,6 +86,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         : []
   }
   if (body.status !== undefined)                update.status = body.status
+  if (body.wpUsername !== undefined)             update.wp_username = body.wpUsername
+  if (body.wpAppPassword !== undefined)          update.wp_app_password = body.wpAppPassword
 
   const { data, error } = await db
     .from('monitored_sites')

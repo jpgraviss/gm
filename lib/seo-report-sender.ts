@@ -1,0 +1,267 @@
+import { createServiceClient } from '@/lib/supabase'
+import { buildClientReport, saveReportSnapshot, type ClientReportConfig } from '@/lib/client-reports'
+import { generateMonthlyReportHtml, type MonthlyReportData } from '@/lib/templates/generate-monthly-report'
+import { sendEmail } from '@/lib/email'
+import { getSettings } from '@/lib/settings'
+
+interface ClientIntegration {
+  id: string
+  company_name: string
+  company_id: string | null
+  gsc_site_url: string | null
+  ga4_property_id: string | null
+  gbp_location_name: string | null
+  portal_enabled: boolean
+  seo_reports_enabled: boolean
+  seo_report_recipients: string[] | null
+  last_seo_report_at: string | null
+}
+
+interface SendResult {
+  company: string
+  sent: boolean
+  recipient?: string
+  error?: string
+}
+
+function lastMonthRange(): { start: string; end: string; label: string } {
+  const now = new Date()
+  const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const lastOfPrevMonth = new Date(firstOfThisMonth.getTime() - 1)
+  const firstOfPrevMonth = new Date(lastOfPrevMonth.getFullYear(), lastOfPrevMonth.getMonth(), 1)
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  const monthName = firstOfPrevMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  return { start: fmt(firstOfPrevMonth), end: fmt(lastOfPrevMonth), label: monthName }
+}
+
+export async function seoReportsDue(): Promise<boolean> {
+  const today = new Date()
+  if (today.getUTCDate() !== 1) return false
+
+  const db = createServiceClient()
+  const { data } = await db
+    .from('client_integrations')
+    .select('last_seo_report_at')
+    .eq('seo_reports_enabled', true)
+    .order('last_seo_report_at', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!data?.last_seo_report_at) return true
+
+  const lastSent = new Date(data.last_seo_report_at)
+  const startOfToday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
+  return lastSent < startOfToday
+}
+
+export async function sendMonthlyClientReports(): Promise<{ sent: number; failed: number; results: SendResult[] }> {
+  const db = createServiceClient()
+  const settings = await getSettings()
+
+  const { data: integrations, error } = await db
+    .from('client_integrations')
+    .select('*')
+    .eq('seo_reports_enabled', true)
+
+  if (error || !integrations || integrations.length === 0) {
+    return { sent: 0, failed: 0, results: [] }
+  }
+
+  const { start, end, label } = lastMonthRange()
+  const results: SendResult[] = []
+  let sent = 0
+  let failed = 0
+
+  for (const integration of integrations as ClientIntegration[]) {
+    try {
+      const config: ClientReportConfig = {
+        companyName: integration.company_name,
+        companyId: integration.company_id ?? undefined,
+        gscSiteUrl: integration.gsc_site_url ?? undefined,
+        ga4PropertyId: integration.ga4_property_id ?? undefined,
+        gbpLocationName: integration.gbp_location_name ?? undefined,
+        startDate: start,
+        endDate: end,
+      }
+
+      const reportData = await buildClientReport(config)
+      await saveReportSnapshot(reportData)
+
+      let recipientEmail: string | null = null
+
+      if (integration.seo_report_recipients?.length) {
+        recipientEmail = integration.seo_report_recipients[0]
+      } else if (integration.company_id) {
+        const { data: contacts } = await db
+          .from('crm_contacts')
+          .select('emails')
+          .eq('company_id', integration.company_id)
+          .eq('is_primary', true)
+          .limit(1)
+
+        if (contacts?.[0]) {
+          const emails = (contacts[0] as { emails: string[] }).emails
+          if (emails?.length) recipientEmail = emails[0]
+        }
+      }
+
+      if (!recipientEmail) {
+        results.push({ company: integration.company_name, sent: false, error: 'No recipient found' })
+        failed++
+        continue
+      }
+
+      const monthlyData: MonthlyReportData = {
+        clientName: integration.company_name,
+        companyName: settings?.company.name ?? 'Graviss Marketing',
+        period: { start, end, label },
+        metrics: {
+          seo: reportData.seo ? {
+            clicks: reportData.seo.clicks,
+            impressions: reportData.seo.impressions,
+            avgPosition: reportData.seo.avgPosition,
+            ctr: reportData.seo.ctr,
+          } : undefined,
+          traffic: reportData.traffic ? {
+            sessions: reportData.traffic.sessions,
+            users: reportData.traffic.users,
+            pageviews: reportData.traffic.pageviews,
+            bounceRate: reportData.traffic.bounceRate,
+          } : undefined,
+          reputation: reportData.reputation,
+          ranking: reportData.ranking,
+          uptime: reportData.uptime,
+        },
+        recommendations: [],
+        changelog: [],
+      }
+
+      const html = generateMonthlyReportHtml(monthlyData, settings)
+
+      const emailResult = await sendEmail({
+        to: recipientEmail,
+        subject: `Your Monthly SEO Report — ${label}`,
+        html,
+      })
+
+      if (emailResult.success) {
+        await db
+          .from('client_integrations')
+          .update({ last_seo_report_at: new Date().toISOString() })
+          .eq('id', integration.id)
+
+        results.push({ company: integration.company_name, sent: true, recipient: recipientEmail })
+        sent++
+      } else {
+        results.push({ company: integration.company_name, sent: false, recipient: recipientEmail, error: emailResult.error })
+        failed++
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error(`[seo-reports] Failed for ${integration.company_name}:`, err)
+      results.push({ company: integration.company_name, sent: false, error: message })
+      failed++
+    }
+  }
+
+  return { sent, failed, results }
+}
+
+export async function sendSingleReport(companyName: string, options?: { recipientOverride?: string; preview?: boolean }): Promise<{ html: string; sent: boolean; recipient?: string; error?: string }> {
+  const db = createServiceClient()
+  const settings = await getSettings()
+
+  const { data: integration } = await db
+    .from('client_integrations')
+    .select('*')
+    .eq('company_name', companyName)
+    .maybeSingle()
+
+  if (!integration) {
+    return { html: '', sent: false, error: 'No integration found for this company' }
+  }
+
+  const row = integration as ClientIntegration
+  const { start, end, label } = lastMonthRange()
+
+  const reportData = await buildClientReport({
+    companyName: row.company_name,
+    companyId: row.company_id ?? undefined,
+    gscSiteUrl: row.gsc_site_url ?? undefined,
+    ga4PropertyId: row.ga4_property_id ?? undefined,
+    gbpLocationName: row.gbp_location_name ?? undefined,
+    startDate: start,
+    endDate: end,
+  })
+
+  const monthlyData: MonthlyReportData = {
+    clientName: row.company_name,
+    companyName: settings?.company.name ?? 'Graviss Marketing',
+    period: { start, end, label },
+    metrics: {
+      seo: reportData.seo ? {
+        clicks: reportData.seo.clicks,
+        impressions: reportData.seo.impressions,
+        avgPosition: reportData.seo.avgPosition,
+        ctr: reportData.seo.ctr,
+      } : undefined,
+      traffic: reportData.traffic ? {
+        sessions: reportData.traffic.sessions,
+        users: reportData.traffic.users,
+        pageviews: reportData.traffic.pageviews,
+        bounceRate: reportData.traffic.bounceRate,
+      } : undefined,
+      reputation: reportData.reputation,
+      ranking: reportData.ranking,
+      uptime: reportData.uptime,
+    },
+    recommendations: [],
+    changelog: [],
+  }
+
+  const html = generateMonthlyReportHtml(monthlyData, settings)
+
+  if (options?.preview) {
+    return { html, sent: false }
+  }
+
+  let recipientEmail = options?.recipientOverride ?? null
+
+  if (!recipientEmail && row.seo_report_recipients?.length) {
+    recipientEmail = row.seo_report_recipients[0]
+  }
+
+  if (!recipientEmail && row.company_id) {
+    const { data: contacts } = await db
+      .from('crm_contacts')
+      .select('emails')
+      .eq('company_id', row.company_id)
+      .eq('is_primary', true)
+      .limit(1)
+
+    if (contacts?.[0]) {
+      const emails = (contacts[0] as { emails: string[] }).emails
+      if (emails?.length) recipientEmail = emails[0]
+    }
+  }
+
+  if (!recipientEmail) {
+    return { html, sent: false, error: 'No recipient found' }
+  }
+
+  const result = await sendEmail({
+    to: recipientEmail,
+    subject: `Your Monthly SEO Report — ${label}`,
+    html,
+  })
+
+  if (result.success) {
+    await saveReportSnapshot(reportData)
+    await db
+      .from('client_integrations')
+      .update({ last_seo_report_at: new Date().toISOString() })
+      .eq('id', row.id)
+  }
+
+  return { html, sent: result.success, recipient: recipientEmail, error: result.error }
+}

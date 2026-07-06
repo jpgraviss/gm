@@ -18,7 +18,7 @@ type TriggerType =
   | 'proposal_accepted' | 'proposal_declined' | 'invoice_paid'
 
 type ActionType =
-  | 'send_email' | 'send_sms' | 'slack_message'
+  | 'send_email'
   | 'update_contact' | 'create_deal' | 'add_tag' | 'remove_tag'
   | 'create_task' | 'log_activity' | 'send_notification'
   | 'wait' | 'if_else'
@@ -48,9 +48,6 @@ const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: s
     label: 'Communication',
     actions: [
       { value: 'send_email',     label: 'Send Email',       icon: <Mail size={18} />,          description: 'Send an automated email' },
-      // Send SMS / Slack Message are intentionally omitted: the automation engine
-      // has no handler for them yet, so offering them would create steps that
-      // silently do nothing. Re-add once lib/automations-engine.ts implements them.
     ],
   },
   {
@@ -93,8 +90,6 @@ const TRIGGER_TO_DB: Record<TriggerType, string> = {
 
 const ACTION_TO_DB: Record<ActionType, string> = {
   send_email:        'Send Email Reminder',
-  send_sms:          'Send SMS',
-  slack_message:     'Slack Message',
   update_contact:    'Update Contact',
   create_deal:       'Create Deal',
   add_tag:           'Add Tag',
@@ -252,25 +247,6 @@ function NodeConfigPanel({ node, onChange, onClose }: {
             </FieldLabel>
             <FieldLabel label="From Name">
               <input value={(config.fromName as string) ?? ''} onChange={e => update('fromName', e.target.value)} placeholder="GravHub" className="cfg-input" />
-            </FieldLabel>
-          </>
-        )
-      case 'send_sms':
-        return (
-          <>
-            <FieldLabel label="Message">
-              <textarea rows={3} value={(config.message as string) ?? ''} onChange={e => update('message', e.target.value)} placeholder="SMS body..." className="cfg-input resize-none" />
-            </FieldLabel>
-          </>
-        )
-      case 'slack_message':
-        return (
-          <>
-            <FieldLabel label="Channel">
-              <input value={(config.channel as string) ?? ''} onChange={e => update('channel', e.target.value)} placeholder="#general" className="cfg-input" />
-            </FieldLabel>
-            <FieldLabel label="Message">
-              <textarea rows={3} value={(config.message as string) ?? ''} onChange={e => update('message', e.target.value)} placeholder="Slack message..." className="cfg-input resize-none" />
             </FieldLabel>
           </>
         )

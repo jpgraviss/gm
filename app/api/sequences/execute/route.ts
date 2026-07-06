@@ -682,26 +682,3 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ processed: enrollments.length, sent, completed, skipped })
 }
 
-/*
- * ─── 7. Bounce / Reply Detection Placeholder ──────────────────────────────────
- *
- * Bounce and reply detection will be handled by separate webhook endpoints:
- *
- * - POST /api/sequences/webhooks/gmail
- *     Receives Gmail push notifications for bounces and replies.
- *     On bounce: update enrollment status to 'bounced', log activity with event_type 'bounced'.
- *     On reply: update enrollment status per sequence config (pause or unenroll),
- *               log activity with event_type 'replied', update sequence reply_rate.
- *
- * - POST /api/sequences/webhooks/resend
- *     Receives Resend webhook events (email.bounced, email.complained, email.delivered).
- *     On bounce: same as Gmail bounce handling.
- *     On complaint: add to suppression list, unenroll contact.
- *     On delivery: update delivery_status to 'delivered' in enrollment.
- *
- * Both endpoints should:
- *   1. Verify webhook signatures
- *   2. Look up the enrollment by message_id
- *   3. Update sequence_enrollments and sequence_activities
- *   4. Update aggregate stats on the sequences table (open_rate, click_rate, reply_rate)
- */

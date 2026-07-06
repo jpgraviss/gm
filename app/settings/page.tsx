@@ -10,7 +10,7 @@ import {
   CheckCircle, AlertCircle, RefreshCw, Plug, Globe, Tag,
   FolderKanban, MessageSquare, DollarSign, ChevronRight, ExternalLink,
   Trash2, X, Eye, EyeOff, AlertTriangle, Mail, LayoutDashboard,
-  TrendingUp, Smartphone, Menu, ChevronUp, ChevronDown, RotateCcw, Star,
+  TrendingUp, Menu, ChevronUp, ChevronDown, RotateCcw, Star,
   FileText, ArrowUp, ArrowDown, Copy, Clock, PenLine, Calendar, Brain,
 } from 'lucide-react'
 import { type EmailSignatureData, DEFAULT_SIGNATURE, generateSignatureHtml } from '@/lib/email-signature'
@@ -1895,9 +1895,6 @@ export default function SettingsPage() {
               */}
               {[
                 { name: 'E-Signature', description: 'Built in — proposals and contracts sign natively in GravHub. No DocuSign needed.', builtIn: true },
-                { name: 'Slack', description: 'Team notifications for deals and project updates', builtIn: false },
-                { name: 'Stripe', description: 'Accept online invoice payments from clients', builtIn: false },
-                { name: 'Zapier', description: 'Connect GravHub to 5,000+ apps with automations', builtIn: false },
               ].map(integration => (
                 <div key={integration.name} className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50">
                   <div className="text-2xl flex-shrink-0">{integration.builtIn ? '🟢' : '⚪'}</div>
@@ -1933,8 +1930,6 @@ export default function SettingsPage() {
             </div>
 
             <HubSpotIntegrationSection />
-
-            <SmsIntegrationSection />
 
             <GoogleReviewsIntegrationSection />
 
@@ -2910,101 +2905,6 @@ function HubSpotIntegrationSection() {
             {saving ? 'Saving...' : 'Save Key'}
           </button>
         </div>
-      </div>
-    </div>
-  )
-}
-
-function SmsIntegrationSection() {
-  const [sid, setSid] = useState('')
-  const [token, setToken] = useState('')
-  const [phone, setPhone] = useState('')
-  const [showToken, setShowToken] = useState(false)
-  const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
-
-  function handleTest() {
-    if (!sid.trim() || !token.trim() || !phone.trim()) return
-    setStatus('testing')
-    setTimeout(() => {
-      setStatus('connected')
-    }, 1500)
-  }
-
-  return (
-    <div className="mt-6 pt-6 border-t border-gray-100">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
-          <Smartphone size={18} className="text-purple-600" />
-        </div>
-        <div>
-          <p className="text-sm font-bold text-gray-800">SMS / Twilio</p>
-          <p className="text-xs text-gray-500">Send SMS messages to contacts via Twilio</p>
-        </div>
-        <div className="ml-auto flex items-center gap-1.5">
-          {status === 'connected' && <CheckCircle size={13} className="text-emerald-600" />}
-          {status === 'error' && <AlertCircle size={13} className="text-red-500" />}
-          <span className={`text-[11px] font-semibold ${
-            status === 'connected' ? 'text-emerald-600' :
-            status === 'error' ? 'text-red-500' :
-            'text-gray-400'
-          }`}>
-            {status === 'connected' ? 'Connected' :
-             status === 'error' ? 'Connection Failed' :
-             status === 'testing' ? 'Testing...' :
-             'Not Connected'}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Account SID</label>
-          <input
-            type="text"
-            value={sid}
-            onChange={e => setSid(e.target.value)}
-            placeholder="AC..."
-            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Auth Token</label>
-          <div className="relative">
-            <input
-              type={showToken ? 'text' : 'password'}
-              value={token}
-              onChange={e => setToken(e.target.value)}
-              placeholder="Your Twilio auth token"
-              className="w-full px-3 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
-            />
-            <button
-              type="button"
-              onClick={() => setShowToken(v => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Twilio Phone Number</label>
-          <input
-            type="text"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            placeholder="+1 (555) 000-0000"
-            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
-          />
-        </div>
-        <button
-          onClick={handleTest}
-          disabled={!sid.trim() || !token.trim() || !phone.trim() || status === 'testing'}
-          className="self-start flex items-center gap-2 px-4 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
-          style={{ background: '#015035' }}
-        >
-          {status === 'testing' && <RefreshCw size={13} className="animate-spin" />}
-          Test Connection
-        </button>
       </div>
     </div>
   )

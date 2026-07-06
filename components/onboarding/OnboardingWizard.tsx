@@ -23,7 +23,6 @@ const STEPS: StepDef[] = [
 ]
 
 const INTEGRATION_LIST = [
-  { id: 'quickbooks', name: 'QuickBooks', desc: 'Sync invoices & payments', href: '/integrations', icon: '🧾' },
   { id: 'google',     name: 'Google Workspace', desc: 'Calendar, Drive, Gmail', href: '/settings/email-auth', icon: '📧' },
   { id: 'resend',     name: 'Resend',      desc: 'Transactional email', href: '/integrations', icon: '📬' },
   { id: 'hubspot',    name: 'HubSpot',     desc: 'Import CRM data', href: '/integrations', icon: '🔶' },

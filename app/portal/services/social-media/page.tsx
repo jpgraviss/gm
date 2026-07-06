@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import {
   ArrowLeft, Megaphone, Calendar, Heart, MessageCircle,
-  Share2, Users, TrendingUp, Eye,
+  Share2, Eye,
 } from 'lucide-react'
 
 interface SocialPost {

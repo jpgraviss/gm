@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { RECURRING_STATUSES } from '@/lib/metrics'
 import type { OccupationalUnit } from '@/lib/types'
 
 /** Units that must never receive financial data */
@@ -15,7 +14,7 @@ export async function GET(req: NextRequest) {
   try {
   const db = createServiceClient()
 
-  const [dealsRes, invoicesRes, contractsRes, renewalsRes, revenueRes, activityRes, automationsRes] = await Promise.all([
+  const [dealsRes, invoicesRes, contractsRes, renewalsRes, revenueRes, activityRes, automationsRes, activeClientsRes] = await Promise.all([
     db.from('deals').select('id,stage,value,company,assigned_rep,last_activity,service_type,close_date,created_at').order('created_at', { ascending: false }),
     db.from('invoices').select('id,company,amount,status,due_date,issued_date,paid_date,service_type,contract_id,created_at').order('created_at', { ascending: false }),
     db.from('contracts').select('id,company,status,value,renewal_date,service_type,assigned_rep,billing_structure').order('created_at', { ascending: false }),
@@ -23,6 +22,7 @@ export async function GET(req: NextRequest) {
     db.from('revenue_months').select('*').order('month', { ascending: true }),
     db.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(20),
     db.from('automations').select('id,name,status,runs').order('created_at', { ascending: false }).limit(10),
+    db.from('crm_companies').select('id', { count: 'exact', head: true }).eq('status', 'Active Client'),
   ])
 
   const deals     = dealsRes.data    ?? []
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   const revenueMonths = revenueRes.data ?? []
   const auditLogs = activityRes.data ?? []
 
-  const activeClients   = contracts.filter(c => RECURRING_STATUSES.includes(c.status)).length
+  const activeClients   = activeClientsRes.count ?? 0
   const openDeals       = deals.filter(d => !['Closed Won','Closed Lost'].includes(d.stage)).length
   const pipelineValue   = deals.filter(d => !['Closed Won','Closed Lost'].includes(d.stage)).reduce((s: number, d: { value: number }) => s + (d.value ?? 0), 0)
   const totalCollected  = invoices.filter((i: { status: string }) => i.status === 'Paid').reduce((s: number, i: { amount: number }) => s + (i.amount ?? 0), 0)

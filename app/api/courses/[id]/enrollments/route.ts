@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,23 +22,21 @@ function mapEnrollment(row: any) {
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { limit, cursor } = parsePagination(req)
+  const pag = parsePagination(req)
   const db = createServiceClient()
 
   let query = db
     .from('course_enrollments')
     .select('*')
     .eq('course_id', id)
-    .order('created_at', { ascending: false })
-    .limit(limit + 1)
-  if (cursor) query = query.lt('created_at', cursor)
+  query = applyCursor(query, pag)
 
   const { data, error } = await query
   if (error) {
     console.error('[enrollments GET]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapEnrollment), nextCursor)
 }
 

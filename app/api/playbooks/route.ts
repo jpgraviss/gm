@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,7 +20,7 @@ function mapPlaybook(row: any) {
 }
 
 export async function GET(req: NextRequest) {
-  const { limit, cursor } = parsePagination(req)
+  const pag = parsePagination(req)
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
   const category = searchParams.get('category')
@@ -28,17 +28,15 @@ export async function GET(req: NextRequest) {
   let query = db
     .from('playbooks')
     .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit + 1)
-  if (cursor) query = query.lt('created_at', cursor)
   if (category) query = query.eq('category', category)
+  query = applyCursor(query, pag)
 
   const { data, error } = await query
   if (error) {
     console.error('[playbooks GET]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapPlaybook), nextCursor)
 }
 

@@ -1,22 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-/**
- * Cursor-based pagination helper. Uses `created_at` as the ordering key —
- * stable, non-skipping, works on any table with a `created_at timestamptz`.
- *
- * Backwards-compatible: the response body stays an array, and the next
- * cursor is returned via the `X-Next-Cursor` response header. Clients that
- * don't know about pagination just get the first page silently.
- *
- * Usage in a GET handler:
- *   const { limit, cursor, orderBy } = parsePagination(req)
- *   let query = db.from('deals').select('*').order(orderBy, { ascending: false }).limit(limit + 1)
- *   if (cursor) query = query.lt(orderBy, cursor)
- *   const { data } = await query
- *   const { rows, nextCursor } = slicePage(data, limit, orderBy)
- *   return paginatedJson(rows.map(mapRow), nextCursor)
- */
-
 export const DEFAULT_LIMIT = 100
 export const MAX_LIMIT = 500
 
@@ -36,9 +18,32 @@ export function parsePagination(req: NextRequest): {
 }
 
 /**
- * Slice the fetched rows into a page + next cursor. Call with `limit + 1`
- * rows — if the extra row exists, it becomes the next cursor.
+ * Apply ordering + cursor filter to a Supabase query. Uses (orderBy, id) as a
+ * composite key so rows with identical timestamps don't get skipped.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function applyCursor<T extends { order: (...args: any[]) => any; limit: (...args: any[]) => any; or: (...args: any[]) => any; lt: (...args: any[]) => any }>(
+  query: T,
+  { limit, cursor, orderBy }: { limit: number; cursor: string | null; orderBy: string },
+): T {
+  let q = query
+    .order(orderBy, { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1) as T
+
+  if (cursor) {
+    const sep = cursor.indexOf('|')
+    if (sep !== -1) {
+      const ts = cursor.slice(0, sep)
+      const id = cursor.slice(sep + 1)
+      q = q.or(`${orderBy}.lt.${ts},and(${orderBy}.eq.${ts},id.lt.${id})`) as T
+    } else {
+      q = q.lt(orderBy, cursor) as T
+    }
+  }
+  return q
+}
+
 export function slicePage<T extends Record<string, unknown>>(
   rows: T[] | null,
   limit: number,
@@ -48,15 +53,12 @@ export function slicePage<T extends Record<string, unknown>>(
   const hasMore = list.length > limit
   const page = hasMore ? list.slice(0, limit) : list
   const last = page[page.length - 1]
-  const nextCursor = hasMore && last ? String(last[orderByField] ?? '') : null
+  const nextCursor = hasMore && last
+    ? `${String(last[orderByField] ?? '')}|${String(last['id'] ?? '')}`
+    : null
   return { rows: page, nextCursor }
 }
 
-/**
- * Return a JSON response with the paginated rows as the body and the next
- * cursor exposed via the X-Next-Cursor header. Backwards-compatible with
- * clients that expect a plain array body.
- */
 export function paginatedJson(rows: unknown[], nextCursor: string | null, status = 200) {
   const headers: Record<string, string> = {}
   if (nextCursor) headers['X-Next-Cursor'] = nextCursor

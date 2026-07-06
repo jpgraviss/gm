@@ -8,13 +8,13 @@ import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronLeft, Edit2, Copy, TrendingUp, Search, MoreHorizontal,
   Eye, Trash2, ArrowUpDown, UserMinus, UserPlus, Phone,
-  MessageCircle, Linkedin, AlertCircle, Send,
+  Linkedin, AlertCircle, Send,
 } from 'lucide-react'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 type SequenceStatus = 'Active' | 'Paused' | 'Draft' | 'Completed'
-type StepType = 'email' | 'manual_email' | 'wait' | 'task' | 'condition' | 'sms' | 'linkedin' | 'call'
+type StepType = 'email' | 'manual_email' | 'wait' | 'task' | 'condition' | 'linkedin' | 'call'
 
 interface SequenceStep {
   id: string
@@ -25,7 +25,6 @@ interface SequenceStep {
   waitDays?: number
   taskTitle?: string
   condition?: string
-  smsBody?: string
   linkedinAction?: 'connect' | 'inmail' | 'view_profile'
   linkedinMessage?: string
   callScript?: string
@@ -88,7 +87,6 @@ const stepTypeConfig: Record<StepType, { color: string; label: string; icon: Rea
   wait:         { color: '#9ca3af', label: 'Delay',          icon: <Clock size={14} /> },
   task:         { color: '#10b981', label: 'Task',           icon: <CheckCircle size={14} /> },
   condition:    { color: '#f59e0b', label: 'Branch',         icon: <Zap size={14} /> },
-  sms:          { color: '#06b6d4', label: 'SMS',            icon: <MessageCircle size={14} /> },
   linkedin:     { color: '#0077b5', label: 'LinkedIn',       icon: <Linkedin size={14} /> },
   call:         { color: '#ef4444', label: 'Call',           icon: <Phone size={14} /> },
 }
@@ -806,7 +804,6 @@ export default function SequenceDetailPage() {
                         {step.subject && <p className="text-xs text-gray-600 mt-1">Subject: {step.subject}</p>}
                         {step.type === 'wait' && <p className="text-xs text-gray-500 mt-1">Wait {step.waitDays || step.day} day(s)</p>}
                         {step.taskTitle && <p className="text-xs text-gray-500 mt-1">Task: {step.taskTitle}</p>}
-                        {step.smsBody && <p className="text-xs text-gray-500 mt-1">SMS: {step.smsBody}</p>}
                         {step.linkedinAction && <p className="text-xs text-gray-500 mt-1">LinkedIn: {step.linkedinAction}</p>}
                       </div>
                     </div>

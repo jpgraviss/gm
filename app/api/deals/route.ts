@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
-import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDeal(row: any) {
@@ -28,22 +28,20 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const stage = searchParams.get('stage')
   const pipelineId = searchParams.get('pipeline_id')
-  const { limit, cursor } = parsePagination(req)
+  const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
     .from('deals')
     .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit + 1)
   if (stage) query = query.eq('stage', stage)
   if (pipelineId) query = query.eq('pipeline_id', pipelineId)
-  if (cursor) query = query.lt('created_at', cursor)
+  query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
     console.error('[deals GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch deals' }, { status: 500 })
   }
-  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapDeal), nextCursor)
 }
 

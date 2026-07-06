@@ -276,7 +276,7 @@ async function logActivity(
     enrollmentId: string
     contactEmail: string
     stepIndex: number
-    eventType: 'sent' | 'failed' | 'skipped'
+    eventType: 'sent' | 'failed' | 'skipped' | 'task_created'
     messageId?: string | null
     metadata?: Record<string, unknown>
   },
@@ -462,6 +462,10 @@ export async function POST(req: NextRequest) {
       fromName?: string
       fromEmail?: string
       htmlTemplate?: HtmlTemplate
+      taskTitle?: string
+      linkedinAction?: string
+      linkedinMessage?: string
+      callScript?: string
     }[] = seq.steps ?? []
     const step = steps[enrollment.current_step]
     if (!step) continue
@@ -629,8 +633,44 @@ export async function POST(req: NextRequest) {
         // Don't advance step on failure — retry next cron run
         continue
       }
+    } else if (step.type === 'manual_email' || step.type === 'linkedin' || step.type === 'call' || step.type === 'task') {
+      const taskTitles: Record<string, string> = {
+        manual_email: `Send manual email: ${step.subject || enrollment.contact_name || 'Contact'}`,
+        linkedin: `LinkedIn action (${step.linkedinAction || 'connect'}): ${enrollment.contact_name || 'Contact'}`,
+        call: `Call: ${enrollment.contact_name || 'Contact'}`,
+        task: step.taskTitle || `Follow up with ${enrollment.contact_name || 'Contact'}`,
+      }
+      const taskBodies: Record<string, string> = {
+        manual_email: step.body || '',
+        linkedin: step.linkedinMessage || '',
+        call: step.callScript || '',
+        task: step.body || '',
+      }
+
+      const activityId = `seq-${seq.id}-${enrollment.id}-step${enrollment.current_step}`
+      await db.from('crm_activities').upsert({
+        id: activityId,
+        type: 'task',
+        title: taskTitles[step.type] ?? `Sequence task: ${enrollment.contact_name}`,
+        body: taskBodies[step.type] || null,
+        contact_id: enrollment.contact_id || null,
+        contact_name: enrollment.contact_name || '',
+        company_name: enrollment.company || '',
+        user_name: 'Sequence',
+        timestamp: now.toISOString(),
+        outcome: 'pending',
+      }, { onConflict: 'id' })
+
+      await logActivity(db, {
+        sequenceId: seq.id,
+        enrollmentId: enrollment.id,
+        contactEmail: enrollment.contact_email,
+        stepIndex: enrollment.current_step,
+        eventType: 'task_created',
+        metadata: { stepType: step.type, taskTitle: taskTitles[step.type] },
+      })
     }
-    // wait/task/condition steps: no email — just advance
+    // wait/condition steps: no action — just advance
 
     // Advance to next step
     const nextStepIndex = enrollment.current_step + 1
@@ -682,26 +722,3 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ processed: enrollments.length, sent, completed, skipped })
 }
 
-/*
- * ─── 7. Bounce / Reply Detection Placeholder ──────────────────────────────────
- *
- * Bounce and reply detection will be handled by separate webhook endpoints:
- *
- * - POST /api/sequences/webhooks/gmail
- *     Receives Gmail push notifications for bounces and replies.
- *     On bounce: update enrollment status to 'bounced', log activity with event_type 'bounced'.
- *     On reply: update enrollment status per sequence config (pause or unenroll),
- *               log activity with event_type 'replied', update sequence reply_rate.
- *
- * - POST /api/sequences/webhooks/resend
- *     Receives Resend webhook events (email.bounced, email.complained, email.delivered).
- *     On bounce: same as Gmail bounce handling.
- *     On complaint: add to suppression list, unenroll contact.
- *     On delivery: update delivery_status to 'delivered' in enrollment.
- *
- * Both endpoints should:
- *   1. Verify webhook signatures
- *   2. Look up the enrollment by message_id
- *   3. Update sequence_enrollments and sequence_activities
- *   4. Update aggregate stats on the sequences table (open_rate, click_rate, reply_rate)
- */

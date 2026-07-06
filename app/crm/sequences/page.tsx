@@ -8,13 +8,13 @@ import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronRight, Edit2, Copy, TrendingUp, Search, MoreHorizontal,
   Eye, MousePointerClick, Trash2, ArrowUpDown, Filter,
-  Phone, MessageCircle, Linkedin, BarChart3,
+  Phone, Linkedin, BarChart3,
 } from 'lucide-react'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 type SequenceStatus = 'Active' | 'Paused' | 'Draft' | 'Completed'
-type StepType = 'email' | 'manual_email' | 'wait' | 'task' | 'condition' | 'sms' | 'linkedin' | 'call'
+type StepType = 'email' | 'manual_email' | 'wait' | 'task' | 'condition' | 'linkedin' | 'call'
 type HtmlTemplate = 'branded' | 'minimal' | 'plain'
 
 interface SequenceStep {
@@ -36,7 +36,6 @@ interface SequenceStep {
   abSplit?: number // percentage for variant A (default 50)
   abWinner?: 'A' | 'B' | null
   // Multichannel
-  smsBody?: string
   linkedinAction?: 'connect' | 'inmail' | 'view_profile'
   linkedinMessage?: string
   callScript?: string
@@ -79,7 +78,6 @@ const stepTypeConfig: Record<StepType, { color: string; label: string; icon: Rea
   wait:         { color: '#9ca3af', label: 'Delay',           icon: <Clock size={14} /> },
   task:         { color: '#10b981', label: 'Task',            icon: <CheckCircle size={14} /> },
   condition:    { color: '#f59e0b', label: 'Branch',          icon: <Zap size={14} /> },
-  sms:          { color: '#06b6d4', label: 'SMS',             icon: <MessageCircle size={14} /> },
   linkedin:     { color: '#0077b5', label: 'LinkedIn',        icon: <Linkedin size={14} /> },
   call:         { color: '#ef4444', label: 'Call',            icon: <Phone size={14} /> },
 }
@@ -510,9 +508,6 @@ export default function SequencesPage() {
                               </span>
                               {seq.steps.some(s => s.type === 'linkedin') && (
                                 <span className="text-[11px] text-[#0077b5] flex items-center gap-0.5"><Linkedin size={9} /> LinkedIn</span>
-                              )}
-                              {seq.steps.some(s => s.type === 'sms') && (
-                                <span className="text-[11px] text-cyan-600 flex items-center gap-0.5"><MessageCircle size={9} /> SMS</span>
                               )}
                               {seq.steps.some(s => s.type === 'call') && (
                                 <span className="text-[11px] text-red-500 flex items-center gap-0.5"><Phone size={9} /> Call</span>

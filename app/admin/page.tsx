@@ -449,9 +449,6 @@ export default function AdminPage() {
     maverick: emptyKey(),
     resend: emptyKey(),
     hubspot: emptyKey(),
-    twilio_sid: emptyKey(),
-    twilio_token: emptyKey(),
-    twilio_phone: emptyKey(),
   })
 
   function updateKey(id: string, patch: Partial<IntegrationKey>) {
@@ -467,9 +464,6 @@ export default function AdminPage() {
         if (d.maverick?.apiKey) updateKey('maverick', { key: d.maverick.apiKey, status: 'connected' })
         if (d.resend?.apiKey) updateKey('resend', { key: d.resend.apiKey, status: 'connected' })
         if (d.hubspot?.apiKey) updateKey('hubspot', { key: d.hubspot.apiKey, status: 'connected' })
-        if (d.twilio?.accountSid) updateKey('twilio_sid', { key: d.twilio.accountSid, status: 'connected' })
-        if (d.twilio?.authToken) updateKey('twilio_token', { key: d.twilio.authToken, status: 'connected' })
-        if (d.twilio?.phoneNumber) updateKey('twilio_phone', { key: d.twilio.phoneNumber, status: 'connected' })
       })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -510,13 +504,6 @@ export default function AdminPage() {
       else if (id === 'maverick') payload = { maverick: { apiKey: k.key.trim() } }
       else if (id === 'resend') payload = { resend: { apiKey: k.key.trim() } }
       else if (id === 'hubspot') payload = { hubspot: { apiKey: k.key.trim() } }
-      else if (id.startsWith('twilio_')) {
-        payload = { twilio: {
-          accountSid: integrationKeys.twilio_sid.key.trim(),
-          authToken: integrationKeys.twilio_token.key.trim(),
-          phoneNumber: integrationKeys.twilio_phone.key.trim(),
-        }}
-      }
       await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       toast('API key saved', 'success')
     } catch {
@@ -1801,64 +1788,6 @@ export default function AdminPage() {
                   {integrationKeys.resend.error && <p className="text-[11px] text-red-500 mt-1.5">{integrationKeys.resend.error}</p>}
                 </div>
 
-                {/* Twilio SMS */}
-                <div className="p-5">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center font-bold text-red-700 text-[11px]">TW</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800">Twilio SMS</p>
-                      <p className="text-[11px] text-gray-400">SMS notifications and two-factor authentication</p>
-                    </div>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                      integrationKeys.twilio_sid.status === 'connected' ? 'bg-green-100 text-green-700' :
-                      'bg-gray-100 text-gray-500'
-                    }`}>
-                      {integrationKeys.twilio_sid.status === 'connected' ? 'Configured' : 'Not Set'}
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex gap-2 items-center">
-                      <label className="text-[11px] font-medium text-gray-500 w-20 flex-shrink-0">Account SID</label>
-                      <input
-                        type="text"
-                        value={integrationKeys.twilio_sid.key}
-                        onChange={e => updateKey('twilio_sid', { key: e.target.value })}
-                        placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
-                      />
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <label className="text-[11px] font-medium text-gray-500 w-20 flex-shrink-0">Auth Token</label>
-                      <div className="relative flex-1">
-                        <input
-                          type={integrationKeys.twilio_token.show ? 'text' : 'password'}
-                          value={integrationKeys.twilio_token.key}
-                          onChange={e => updateKey('twilio_token', { key: e.target.value })}
-                          placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                          className="w-full px-3 py-2 pr-9 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
-                        />
-                        <button type="button" onClick={() => updateKey('twilio_token', { show: !integrationKeys.twilio_token.show })} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                          {integrationKeys.twilio_token.show ? <EyeOff size={13} /> : <Eye size={13} />}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <label className="text-[11px] font-medium text-gray-500 w-20 flex-shrink-0">Phone #</label>
-                      <input
-                        type="text"
-                        value={integrationKeys.twilio_phone.key}
-                        onChange={e => updateKey('twilio_phone', { key: e.target.value })}
-                        placeholder="+1XXXXXXXXXX"
-                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
-                      />
-                    </div>
-                    <div className="flex justify-end">
-                      <button onClick={() => saveIntegrationKey('twilio_sid')} disabled={integrationKeys.twilio_sid.saving} className="px-3 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-40">
-                        {integrationKeys.twilio_sid.saving ? 'Saving...' : 'Save Twilio Config'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
 

@@ -1941,6 +1941,8 @@ export default function SettingsPage() {
             <MaverickIntegrationSection />
 
             <ResendIntegrationSection />
+
+            <ApolloIntegrationSection />
           </div>
         )}
 
@@ -3364,6 +3366,135 @@ function ResendIntegrationSection() {
           </button>
           <button onClick={handleSave} disabled={!apiKey.trim() || saving} className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40">
             {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ApolloIntegrationSection() {
+  const [apiKey, setApiKey] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.apollo?.apiKey) {
+          setApiKey(d.apollo.apiKey)
+          setStatus('connected')
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleTest() {
+    if (!apiKey.trim()) return
+    setStatus('testing')
+    setErrorMsg('')
+    try {
+      const res = await fetch('/api/integrations/apollo/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
+      })
+      const data = await res.json()
+      if (data.connected) {
+        setStatus('connected')
+      } else {
+        setStatus('error')
+        setErrorMsg(data.error || 'Connection failed')
+      }
+    } catch {
+      setStatus('error')
+      setErrorMsg('Failed to test connection')
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apollo: { apiKey: apiKey.trim() } }),
+      })
+    } catch { /* ignore */ }
+    setSaving(false)
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
+          <TrendingUp size={18} className="text-indigo-600" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-800">Apollo.io</p>
+          <p className="text-xs text-gray-500">Sales intelligence, lead enrichment, and prospecting data</p>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          {status === 'connected' && <CheckCircle size={13} className="text-emerald-600" />}
+          {status === 'error' && <AlertCircle size={13} className="text-red-500" />}
+          <span className={`text-[11px] font-semibold ${
+            status === 'connected' ? 'text-emerald-600' :
+            status === 'error' ? 'text-red-500' :
+            status === 'testing' ? 'text-gray-500' :
+            'text-gray-400'
+          }`}>
+            {status === 'connected' ? 'Connected' :
+             status === 'error' ? 'Connection Failed' :
+             status === 'testing' ? 'Testing...' :
+             'Not Connected'}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">API Key</label>
+          <div className="relative">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={e => { setApiKey(e.target.value); if (status === 'connected' || status === 'error') setStatus('idle') }}
+              placeholder="YOUR_APOLLO_API_KEY"
+              className="w-full px-3 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+
+        {errorMsg && (
+          <p className="text-xs text-red-500">{errorMsg}</p>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleTest}
+            disabled={!apiKey.trim() || status === 'testing'}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+            style={{ background: '#015035' }}
+          >
+            {status === 'testing' && <RefreshCw size={13} className="animate-spin" />}
+            Test Connection
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!apiKey.trim() || saving}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+          >
+            {saving ? 'Saving...' : 'Save Key'}
           </button>
         </div>
       </div>

@@ -61,6 +61,7 @@ export async function PATCH(req: NextRequest) {
   if (body.mercury              !== undefined) updates.mercury              = body.mercury
   if (body.maverick             !== undefined) updates.maverick             = body.maverick
   if (body.twilio               !== undefined) updates.twilio               = body.twilio
+  if (body.apollo               !== undefined) updates.apollo               = body.apollo
   if (body.deliverySteps        !== undefined) updates.delivery_steps       = body.deliverySteps
   if (body.trainingModules      !== undefined) updates.training_modules     = body.trainingModules
   if (body.sops                 !== undefined) updates.sops                 = body.sops

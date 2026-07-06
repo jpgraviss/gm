@@ -175,13 +175,29 @@ export async function POST(req: NextRequest) {
 
   const db = createServiceClient()
 
-  const { data: existing } = await db.from('deals').select('company, stage, value')
-  const existingKeys = new Set(
-    (existing ?? []).map((d: { company?: string; stage?: string; value?: number }) => `${(d.company ?? '').toLowerCase()}|${(d.stage ?? '').toLowerCase()}|${d.value}`),
-  )
+  // Build lookup maps for associations
+  const { data: allCompanies } = await db.from('crm_companies').select('id, name')
+  const companyByName = new Map<string, string>()
+  for (const co of allCompanies ?? []) companyByName.set(co.name.toLowerCase(), co.id)
+
+  const { data: allContacts } = await db.from('crm_contacts').select('id, full_name, emails, company_name')
+  const contactByEmail = new Map<string, { id: string; name: string; email: string; phone: string; title: string }>()
+  const contactByCompany = new Map<string, { id: string; name: string; email: string; phone: string; title: string }>()
+  for (const ct of allContacts ?? []) {
+    const entry = { id: ct.id, name: ct.full_name ?? '', email: ct.emails?.[0] ?? '', phone: '', title: '' }
+    for (const e of ct.emails ?? []) contactByEmail.set(e.toLowerCase(), entry)
+    if (ct.company_name) contactByCompany.set(ct.company_name.toLowerCase(), entry)
+  }
+
+  const { data: existing } = await db.from('deals').select('id, company, stage, value')
+  const existingByKey = new Map<string, string>()
+  for (const d of existing ?? []) {
+    const key = `${(d.company ?? '').toLowerCase()}|${(d.stage ?? '').toLowerCase()}|${d.value}`
+    existingByKey.set(key, d.id)
+  }
 
   let inserted = 0
-  const updated = 0
+  let updated = 0
   let skipped = 0
   const errors: string[] = []
   let after: string | undefined
@@ -214,30 +230,63 @@ export async function POST(req: NextRequest) {
       const stage = normalizeStage(p.dealstage)
       const value = parseNum(p.amount) ?? 0
 
-      const key = `${company.toLowerCase()}|${stage.toLowerCase()}|${value}`
-      if (existingKeys.has(key)) { skipped++; continue }
+      // Resolve contact association — match by company name
+      const contactMatch = contactByCompany.get(company.toLowerCase()) ??
+        { id: '', name: '', email: '', phone: '', title: '' }
+
+      // Resolve company_id
+      const companyId = companyByName.get(company.toLowerCase()) ?? null
 
       const probability = parseNum(p.hs_deal_stage_probability) ?? stageProbability(stage)
+      const serviceType = normalizeServiceType(p.dealtype, p.dealname)
+      const closeDate = p.closedate || null
+      const lastActivity = p.notes_last_activity_date || new Date().toISOString().split('T')[0]
+      const notes = p.description ? [p.description] : []
+
+      const key = `${company.toLowerCase()}|${stage.toLowerCase()}|${value}`
+      const existingId = existingByKey.get(key)
+
+      if (existingId) {
+        // ── Update existing deal ──────────────────────────────────────
+        const { error } = await db.from('deals').update({
+          contact: contactMatch,
+          company_id: companyId,
+          service_type: serviceType,
+          close_date: closeDate,
+          probability,
+          last_activity: lastActivity,
+          notes,
+        }).eq('id', existingId)
+
+        if (error) {
+          errors.push(`Update deal "${dealName}": ${error.message}`)
+        } else {
+          updated++
+        }
+        continue
+      }
 
       const { error } = await db.from('deals').insert({
         id: `deal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         company,
-        contact: { id: '', name: '', email: '', phone: '', title: '' },
+        company_id: companyId,
+        contact: contactMatch,
+        contact_id: contactMatch.id || null,
         stage,
         value,
-        service_type: normalizeServiceType(p.dealtype, p.dealname),
-        close_date: p.closedate || null,
+        service_type: serviceType,
+        close_date: closeDate,
         assigned_rep: 'Jonathan Graviss',
         probability,
-        notes: p.description ? [p.description] : [],
-        last_activity: p.notes_last_activity_date || new Date().toISOString().split('T')[0],
+        notes,
+        last_activity: lastActivity,
       })
 
       if (error) {
         errors.push(`Insert deal "${dealName}": ${error.message}`)
       } else {
         inserted++
-        existingKeys.add(key)
+        existingByKey.set(key, '')
       }
     }
 

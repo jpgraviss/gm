@@ -297,7 +297,7 @@ export default function SeoReportsPage() {
 
       <div className="page-content">
         {/* ---- KPI cards ---- */}
-        <div className="flex flex-wrap gap-4">
+        <div className="flex flex-wrap items-end gap-4">
           <KpiCard icon={Building} label="Total Companies" value={loading ? '--' : totalCompanies} />
           <KpiCard icon={Mail} label="Auto-Reports Enabled" value={loading ? '--' : enabledCount} />
           <KpiCard icon={Calendar} label="Reports Sent This Month" value={loading ? '--' : sentThisMonth} />

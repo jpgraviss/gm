@@ -25,6 +25,7 @@ import {
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
   PhoneCall, Video, Pencil, Trash2, Upload, Eye, MessageSquare, MousePointerClick,
   Flame, Thermometer, Snowflake, Sparkles, Brain, Wand2, GitMerge, Download, Tag, ArrowUpDown,
+  MapPin, Smartphone,
 } from 'lucide-react'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
 import BulkActionBar from '@/components/ui/BulkActionBar'
@@ -1222,6 +1223,51 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                   <FieldRow label="Created" value={
                     <span className="text-sm text-gray-900">{contact.createdDate ? new Date(contact.createdDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '—'}</span>
                   } />
+
+                  {/* ── HubSpot Extended Data ── */}
+                  {contact.hubspotData && (() => {
+                    const hd = contact.hubspotData
+                    const addressParts = [hd.address, hd.city, hd.state, hd.zip, hd.country].filter(Boolean)
+                    const address = addressParts.join(', ')
+                    return (
+                      <>
+                        {hd.mobilePhone && (
+                          <FieldRow label="Mobile" value={
+                            <a href={`tel:${hd.mobilePhone}`} className="text-sm text-gray-900 flex items-center gap-1.5">
+                              <Smartphone size={12} className="text-gray-400" />{hd.mobilePhone}
+                            </a>
+                          } />
+                        )}
+                        {address && (
+                          <FieldRow label="Address" value={
+                            <span className="text-sm text-gray-900 flex items-center gap-1.5">
+                              <MapPin size={12} className="text-gray-400" />{address}
+                            </span>
+                          } />
+                        )}
+                        {hd.twitterHandle && (
+                          <FieldRow label="Twitter" value={
+                            <a href={`https://twitter.com/${hd.twitterHandle.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="text-sm text-emerald-700 hover:underline">@{hd.twitterHandle.replace('@', '')}</a>
+                          } />
+                        )}
+                        {hd.facebookPage && (
+                          <FieldRow label="Facebook" value={
+                            <a href={hd.facebookPage.startsWith('http') ? hd.facebookPage : `https://facebook.com/${hd.facebookPage}`} target="_blank" rel="noopener noreferrer" className="text-sm text-emerald-700 hover:underline truncate block">{hd.facebookPage}</a>
+                          } />
+                        )}
+                        {hd.analyticsSource && (
+                          <FieldRow label="Source" value={
+                            <span className="text-sm text-gray-900 capitalize">{hd.analyticsSource.replace(/_/g, ' ')}</span>
+                          } />
+                        )}
+                        {hd.industry && (
+                          <FieldRow label="Industry (Contact)" value={
+                            <span className="text-sm text-gray-900">{hd.industry}</span>
+                          } />
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
               )}
 

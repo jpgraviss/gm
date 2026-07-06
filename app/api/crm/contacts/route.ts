@@ -28,6 +28,7 @@ function mapContact(row: any) {
     contactTasks:   row.contact_tasks ?? [],
     createdDate:    row.created_date ?? '',
     lastActivity:   row.last_activity ?? undefined,
+    hubspotData:    row.hubspot_data ?? undefined,
   }
 }
 

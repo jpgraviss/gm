@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header'
 import NewTicketPanel, { type NewTicketFormData } from '@/components/crm/NewTicketPanel'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
+import { downloadCsv } from '@/lib/csv-export'
 import {
   MessageSquare, CheckCircle, Clock, X, ExternalLink,
   Plus, ChevronRight, Send, User, FolderKanban,
@@ -684,7 +685,17 @@ export default function TicketsPage() {
           selectedCount={selectedIds.size}
           onDeselectAll={() => setSelectedIds(new Set())}
           actions={[
-            { label: 'Export', icon: <Download size={13} />, onClick: () => toast('Export coming soon', 'info') },
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {
+              const rows = selectedIds.size === 0 ? localTickets : localTickets.filter(t => selectedIds.has(t.id))
+              downloadCsv(rows as unknown as Record<string, unknown>[], [
+                { key: 'subject', label: 'Subject' },
+                { key: 'company', label: 'Company' },
+                { key: 'status', label: 'Status' },
+                { key: 'priority', label: 'Priority' },
+                { key: 'assignedTo', label: 'Assigned To' },
+                { key: 'createdDate', label: 'Created Date' },
+              ], 'tickets-export.csv')
+            } },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />

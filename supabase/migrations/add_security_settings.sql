@@ -1,0 +1,1 @@
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS security jsonb DEFAULT '{"sessionTimeout":"8h","passwordPolicy":"strong","twoFactor":"optional","loginAttempts":5,"auditLogging":true,"ipRestriction":"disabled"}';

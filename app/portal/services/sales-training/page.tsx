@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import {
-  ArrowLeft, GraduationCap, BookOpen, Award, Calendar,
+  ArrowLeft, GraduationCap, BookOpen, Calendar,
   CheckCircle, Circle, Clock, Users, Play,
 } from 'lucide-react'
 
@@ -29,7 +29,6 @@ interface TrainingData {
   courses: Course[]
   totalCompleted: number
   totalInProgress: number
-  totalCertifications: number
 }
 
 export default function PortalSalesTrainingPage() {
@@ -40,7 +39,6 @@ export default function PortalSalesTrainingPage() {
     courses: [],
     totalCompleted: 0,
     totalInProgress: 0,
-    totalCertifications: 0,
   })
   const [loading, setLoading] = useState(true)
 
@@ -59,11 +57,15 @@ export default function PortalSalesTrainingPage() {
           thumbnailUrl: c.thumbnailUrl as string ?? undefined,
         }))
         const published = courses.filter(c => c.status === 'published' || c.status === 'Published')
+        const completed = published.filter(c => {
+          const totalMods = c.modules.length
+          const completedMods = c.modules.filter(m => m.completed).length
+          return totalMods > 0 && completedMods === totalMods
+        }).length
         setData({
           courses: published,
-          totalCompleted: 0,
-          totalInProgress: published.length,
-          totalCertifications: 0,
+          totalCompleted: completed,
+          totalInProgress: published.length - completed,
         })
       })
       .catch(() => toast('Failed to load training data', 'error'))
@@ -91,12 +93,11 @@ export default function PortalSalesTrainingPage() {
       </div>
 
       <div className="p-4 sm:p-8 max-w-5xl mx-auto flex flex-col gap-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           {[
             { label: 'Available Courses', value: data.courses.length.toString(), icon: BookOpen, color: '#be123c' },
             { label: 'In Progress', value: data.totalInProgress.toString(), icon: Play, color: '#2563eb' },
             { label: 'Completed', value: data.totalCompleted.toString(), icon: CheckCircle, color: '#015035' },
-            { label: 'Certifications', value: data.totalCertifications.toString(), icon: Award, color: '#7c3aed' },
           ].map(card => {
             const Icon = card.icon
             return (

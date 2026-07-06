@@ -8,13 +8,22 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import { formatDate } from '@/lib/utils'
 import {
   ArrowLeft, MessageSquare, Plus, ChevronRight, Send, Upload,
-  AlertCircle, X,
+  AlertCircle, X, Loader2, FileText, Download,
 } from 'lucide-react'
+
+interface FileAttachment {
+  name: string
+  url: string
+  path: string
+  type: string
+  size: number
+}
 
 interface TicketMessage {
   sender: string
   text: string
   date: string
+  attachments?: FileAttachment[]
 }
 
 interface Ticket {
@@ -63,6 +72,10 @@ export default function PortalTicketsPage() {
 
   const [replyText, setReplyText] = useState('')
   const [replying, setReplying] = useState(false)
+  const [replyAttachments, setReplyAttachments] = useState<FileAttachment[]>([])
+  const [replyUploading, setReplyUploading] = useState(false)
+  const [newAttachments, setNewAttachments] = useState<FileAttachment[]>([])
+  const [newUploading, setNewUploading] = useState(false)
 
   useEffect(() => {
     if (!company) { setLoading(false); return }
@@ -88,7 +101,9 @@ export default function PortalTicketsPage() {
           status: 'Open',
           priority: newPriority,
           source: 'Portal',
-          messages: newDescription.trim() ? [{ sender: contactName, text: newDescription.trim(), date: new Date().toISOString() }] : [],
+          messages: newDescription.trim() || newAttachments.length > 0
+            ? [{ sender: contactName, text: newDescription.trim(), date: new Date().toISOString(), ...(newAttachments.length > 0 ? { attachments: newAttachments } : {}) }]
+            : [],
         }),
       })
       if (!res.ok) throw new Error()
@@ -97,6 +112,7 @@ export default function PortalTicketsPage() {
       setNewSubject('')
       setNewDescription('')
       setNewPriority('Medium')
+      setNewAttachments([])
       setShowNewForm(false)
       toast('Ticket submitted', 'success')
     } catch {
@@ -107,12 +123,14 @@ export default function PortalTicketsPage() {
   }
 
   async function handleReply() {
-    if (!selected || !replyText.trim()) return
+    if (!selected || (!replyText.trim() && replyAttachments.length === 0)) return
     setReplying(true)
     try {
+      const newMsg: TicketMessage = { sender: contactName, text: replyText.trim(), date: new Date().toISOString() }
+      if (replyAttachments.length > 0) newMsg.attachments = replyAttachments
       const updatedMessages = [
         ...(selected.messages || []),
-        { sender: contactName, text: replyText.trim(), date: new Date().toISOString() },
+        newMsg,
       ]
       const res = await fetch(`/api/tickets/${selected.id}`, {
         method: 'PATCH',
@@ -124,12 +142,43 @@ export default function PortalTicketsPage() {
       setSelected(updated)
       setTickets(prev => prev.map(t => t.id === selected.id ? updated : t))
       setReplyText('')
+      setReplyAttachments([])
       toast('Reply sent', 'success')
     } catch {
       toast('Failed to send reply', 'error')
     } finally {
       setReplying(false)
     }
+  }
+
+  async function handleFileUpload(
+    e: React.ChangeEvent<HTMLInputElement>,
+    setAttachments: React.Dispatch<React.SetStateAction<FileAttachment[]>>,
+    setUploading: React.Dispatch<React.SetStateAction<boolean>>,
+  ) {
+    const file = e.target.files?.[0]
+    if (!file || !company) return
+    e.target.value = ''
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('company', company)
+      const res = await fetch('/api/files', { method: 'POST', body: fd })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Upload failed') }
+      const data = await res.json()
+      setAttachments(prev => [...prev, { name: data.name, url: data.url, path: data.path, type: file.type, size: file.size }])
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to upload file', 'error')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   if (loading) {
@@ -145,7 +194,7 @@ export default function PortalTicketsPage() {
       <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
         <div className="px-4 py-4 sm:px-8 sm:py-6 border-b border-gray-200 bg-white">
           <button
-            onClick={() => { setSelected(null); setReplyText('') }}
+            onClick={() => { setSelected(null); setReplyText(''); setReplyAttachments([]) }}
             className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 mb-3 transition-colors"
           >
             <ArrowLeft size={14} /> Back to Tickets
@@ -180,6 +229,23 @@ export default function PortalTicketsPage() {
                           </p>
                         </div>
                         <p className="text-sm leading-relaxed">{msg.text}</p>
+                        {msg.attachments && msg.attachments.length > 0 && (
+                          <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/10">
+                            {msg.attachments.map((att, j) => (
+                              <a
+                                key={j}
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`flex items-center gap-1.5 text-xs rounded-lg px-2 py-1 w-fit ${isClient ? 'bg-white/10 text-white/90 hover:bg-white/20' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} transition-colors`}
+                              >
+                                <Download size={10} />
+                                <span className="truncate max-w-[180px]">{att.name}</span>
+                                {att.size > 0 && <span className="opacity-60">({formatFileSize(att.size)})</span>}
+                              </a>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
@@ -201,13 +267,28 @@ export default function PortalTicketsPage() {
                   className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
                 />
               </div>
+              {replyAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {replyAttachments.map((att, i) => (
+                    <span key={i} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 rounded-lg px-2 py-1">
+                      <FileText size={10} />
+                      <span className="truncate max-w-[120px]">{att.name}</span>
+                      <button onClick={() => setReplyAttachments(prev => prev.filter((_, idx) => idx !== i))} className="ml-0.5 text-gray-400 hover:text-gray-600">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center justify-between mt-3">
-                <button disabled className="flex items-center gap-1.5 text-xs text-gray-400 cursor-not-allowed" title="File attachments coming soon">
-                  <Upload size={12} /> Attach file (coming soon)
-                </button>
+                <label className="flex items-center gap-1.5 text-xs text-[#015035] cursor-pointer hover:underline">
+                  {replyUploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                  {replyUploading ? 'Uploading...' : 'Attach file'}
+                  <input type="file" className="hidden" onChange={e => handleFileUpload(e, setReplyAttachments, setReplyUploading)} accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.ppt,.pptx,.zip" disabled={replyUploading} />
+                </label>
                 <button
                   onClick={handleReply}
-                  disabled={!replyText.trim() || replying}
+                  disabled={(!replyText.trim() && replyAttachments.length === 0) || replying}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
                   style={{ background: '#015035' }}
                 >
@@ -285,9 +366,26 @@ export default function PortalTicketsPage() {
                   <option>High</option>
                 </select>
               </div>
-              <button disabled className="flex items-center gap-1.5 text-xs text-gray-400 cursor-not-allowed" title="File attachments coming soon">
-                <Upload size={12} /> Attach file (coming soon)
-              </button>
+              <div>
+                <label className="flex items-center gap-1.5 text-xs text-[#015035] cursor-pointer hover:underline">
+                  {newUploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                  {newUploading ? 'Uploading...' : 'Attach file'}
+                  <input type="file" className="hidden" onChange={e => handleFileUpload(e, setNewAttachments, setNewUploading)} accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.ppt,.pptx,.zip" disabled={newUploading} />
+                </label>
+                {newAttachments.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {newAttachments.map((att, i) => (
+                      <span key={i} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 rounded-lg px-2 py-1">
+                        <FileText size={10} />
+                        <span className="truncate max-w-[120px]">{att.name}</span>
+                        <button onClick={() => setNewAttachments(prev => prev.filter((_, idx) => idx !== i))} className="ml-0.5 text-gray-400 hover:text-gray-600">
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex items-center gap-2 justify-end pt-2 border-t border-gray-100">
                 <button onClick={() => setShowNewForm(false)} className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100">
                   Cancel

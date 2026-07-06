@@ -2028,34 +2028,115 @@ export default function AdminPage() {
             </div>
 
             {/* Security */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Lock size={15} style={{ color: '#015035' }} />
-                <h3 className="text-sm font-bold text-gray-800">Security Settings</h3>
-                <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full ml-auto">(Coming Soon)</span>
-              </div>
-              <div className="flex flex-col gap-3">
-                {[
-                  { label: 'Session Timeout', value: '8 hours', desc: 'Auto-logout after inactivity' },
-                  { label: 'Password Policy', value: 'Strong (8+ chars)', desc: 'Min complexity requirements' },
-                  { label: 'Two-Factor Auth', value: 'Optional', desc: 'Per-user 2FA setting' },
-                  { label: 'Login Attempts', value: '5 before lockout', desc: 'Brute force protection' },
-                  { label: 'Audit Logging', value: 'Enabled (all events)', desc: 'Full action history' },
-                  { label: 'IP Restriction', value: 'Disabled', desc: 'Restrict to office IPs' },
-                ].map(s => (
-                  <div key={s.label} className="flex items-start justify-between py-2 border-b border-gray-50 last:border-0">
+            {(() => {
+              const secDefaults = { sessionTimeout: '8h', passwordPolicy: 'strong', twoFactor: 'optional', loginAttempts: 5, auditLogging: true, ipRestriction: 'disabled' }
+              const sec = { ...secDefaults, ...(platformSettings?.security as Record<string, unknown> ?? {}) }
+              const updateSecurity = async (field: string, value: unknown) => {
+                const updated = { ...sec, [field]: value }
+                try {
+                  const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ security: updated }) })
+                  if (res.ok) {
+                    setPlatformSettings((prev: Record<string, unknown> | null) => ({ ...prev, security: updated }))
+                    toast('Security setting saved', 'success')
+                  } else { toast('Failed to save security setting', 'error') }
+                } catch { toast('Failed to save security setting', 'error') }
+              }
+              return (
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Lock size={15} style={{ color: '#015035' }} />
+                  <h3 className="text-sm font-bold text-gray-800">Security Settings</h3>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {/* Session Timeout */}
+                  <div className="flex items-start justify-between py-2 border-b border-gray-50">
                     <div>
-                      <p className="text-xs font-semibold text-gray-700">{s.label}</p>
-                      <p className="text-[11px] text-gray-400">{s.desc}</p>
+                      <p className="text-xs font-semibold text-gray-700">Session Timeout</p>
+                      <p className="text-[11px] text-gray-400">Auto-logout after inactivity</p>
                     </div>
-                    <div className="flex items-center gap-1.5 ml-4">
-                      <span className="text-xs text-gray-600 font-medium">{s.value}</span>
-                      <Lock size={11} className="text-gray-300 flex-shrink-0" />
+                    <select value={String(sec.sessionTimeout)} onChange={e => updateSecurity('sessionTimeout', e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 ml-4" style={{ focusRingColor: '#015035' } as React.CSSProperties}>
+                      <option value="1h">1 hour</option>
+                      <option value="4h">4 hours</option>
+                      <option value="8h">8 hours</option>
+                      <option value="24h">24 hours</option>
+                      <option value="never">Never</option>
+                    </select>
+                  </div>
+                  {/* Password Policy */}
+                  <div className="flex items-start justify-between py-2 border-b border-gray-50">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-700">Password Policy</p>
+                      <p className="text-[11px] text-gray-400">Min complexity requirements</p>
+                    </div>
+                    <select value={String(sec.passwordPolicy)} onChange={e => updateSecurity('passwordPolicy', e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 ml-4">
+                      <option value="basic">Basic (6+ chars)</option>
+                      <option value="strong">Strong (8+ chars)</option>
+                      <option value="very-strong">Very Strong (12+ chars)</option>
+                    </select>
+                  </div>
+                  {/* Two-Factor Auth */}
+                  <div className="flex items-start justify-between py-2 border-b border-gray-50">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-700">Two-Factor Auth</p>
+                      <p className="text-[11px] text-gray-400">Per-user 2FA setting</p>
+                    </div>
+                    <select value={String(sec.twoFactor)} onChange={e => updateSecurity('twoFactor', e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 ml-4">
+                      <option value="disabled">Disabled</option>
+                      <option value="optional">Optional</option>
+                      <option value="required">Required</option>
+                    </select>
+                  </div>
+                  {/* Login Attempts */}
+                  <div className="flex items-start justify-between py-2 border-b border-gray-50">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-700">Login Attempts</p>
+                      <p className="text-[11px] text-gray-400">Brute force protection</p>
+                    </div>
+                    <select value={String(sec.loginAttempts)} onChange={e => updateSecurity('loginAttempts', e.target.value === 'unlimited' ? 'unlimited' : Number(e.target.value))} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 ml-4">
+                      <option value="3">3 before lockout</option>
+                      <option value="5">5 before lockout</option>
+                      <option value="10">10 before lockout</option>
+                      <option value="unlimited">Unlimited</option>
+                    </select>
+                  </div>
+                  {/* Audit Logging */}
+                  <div className="flex items-start justify-between py-2 border-b border-gray-50">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-700">Audit Logging</p>
+                      <p className="text-[11px] text-gray-400">Full action history</p>
+                    </div>
+                    <button
+                      onClick={() => updateSecurity('auditLogging', !sec.auditLogging)}
+                      className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors ml-4 flex-shrink-0"
+                      style={{ background: sec.auditLogging ? '#015035' : '#d1d5db' }}
+                    >
+                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${sec.auditLogging ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                  {/* IP Restriction */}
+                  <div className="flex items-start justify-between py-2">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-700">IP Restriction</p>
+                      <p className="text-[11px] text-gray-400">Restrict to office IPs</p>
+                    </div>
+                    <div className="flex items-center gap-2 ml-4">
+                      {sec.ipRestriction === 'disabled' ? (
+                        <button onClick={() => { const ips = prompt('Enter comma-separated IPs:'); if (ips) updateSecurity('ipRestriction', ips.trim()) }} className="text-xs font-medium px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
+                          Disabled &mdash; Edit
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-gray-600 font-medium max-w-[140px] truncate">{String(sec.ipRestriction)}</span>
+                          <button onClick={() => { const ips = prompt('Edit IPs (comma-separated):', String(sec.ipRestriction)); if (ips !== null) updateSecurity('ipRestriction', ips.trim() || 'disabled') }} className="text-[11px] font-medium text-emerald-700 hover:underline">Edit</button>
+                          <button onClick={() => updateSecurity('ipRestriction', 'disabled')} className="text-[11px] font-medium text-red-500 hover:underline">Clear</button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
+              )
+            })()}
           </div>
           )
         })()}

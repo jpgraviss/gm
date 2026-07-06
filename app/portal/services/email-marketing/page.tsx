@@ -6,7 +6,6 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import {
   ArrowLeft, Mail, Send, Eye, MousePointer,
-  Users, TrendingUp, Calendar, BarChart3,
 } from 'lucide-react'
 
 interface Broadcast {
@@ -27,7 +26,6 @@ interface EmailData {
   totalSent: number
   avgOpenRate: number
   avgClickRate: number
-  totalSubscribers: number
 }
 
 export default function PortalEmailMarketingPage() {
@@ -39,7 +37,6 @@ export default function PortalEmailMarketingPage() {
     totalSent: 0,
     avgOpenRate: 0,
     avgClickRate: 0,
-    totalSubscribers: 0,
   })
   const [loading, setLoading] = useState(true)
 
@@ -70,7 +67,6 @@ export default function PortalEmailMarketingPage() {
           totalSent,
           avgOpenRate: totalSent > 0 ? totalOpened / totalSent : 0,
           avgClickRate: totalSent > 0 ? totalClicked / totalSent : 0,
-          totalSubscribers: 0,
         })
       })
       .catch(() => toast('Failed to load email data', 'error'))

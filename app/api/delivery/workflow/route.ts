@@ -63,6 +63,8 @@ export async function GET(req: NextRequest) {
     .limit(limit + 1)
 
   if (companyId) query = query.eq('company_id', companyId)
+  const company = searchParams.get('company')
+  if (company) query = query.eq('company_name', company)
   if (cursor) query = query.lt('created_at', cursor)
 
   const { data, error } = await query

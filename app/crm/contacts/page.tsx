@@ -16,6 +16,7 @@ import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMContact, ContactNote, ContactTask, CRMCompany, Deal, Contract, Project, CRMActivity } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
+import { downloadCsv } from '@/lib/csv-export'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import {
   X, Phone, Mail, User, Search, Plus, ScrollText, Filter,
@@ -1780,7 +1781,17 @@ export default function ContactsPage() {
           selectedCount={selectedIds.size}
           onDeselectAll={() => setSelectedIds(new Set())}
           actions={[
-            { label: 'Export', icon: <Download size={13} />, onClick: () => toast('Export coming soon', 'info') },
+            { label: 'Export', icon: <Download size={13} />, onClick: () => {
+              const rows = selectedIds.size === 0 ? localContacts : localContacts.filter(c => selectedIds.has(c.id))
+              downloadCsv(rows as unknown as Record<string, unknown>[], [
+                { key: 'fullName', label: 'Full Name' },
+                { key: 'emails', label: 'Email', format: v => Array.isArray(v) ? v.join('; ') : String(v ?? '') },
+                { key: 'companyName', label: 'Company' },
+                { key: 'title', label: 'Title' },
+                { key: 'phones', label: 'Phone', format: v => Array.isArray(v) ? v.join('; ') : String(v ?? '') },
+                { key: 'owner', label: 'Owner' },
+              ], 'contacts-export.csv')
+            } },
             { label: 'Tag', icon: <Tag size={13} />, onClick: () => setShowBulkTag(true) },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}

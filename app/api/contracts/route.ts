@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
-import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContract(row: any) {
@@ -28,21 +28,19 @@ function mapContract(row: any) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
-  const { limit, cursor } = parsePagination(req)
+  const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
     .from('contracts')
     .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit + 1)
   if (company) query = query.eq('company', company)
-  if (cursor) query = query.lt('created_at', cursor)
+  query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
     console.error('[contracts GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch contracts' }, { status: 500 })
   }
-  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapContract), nextCursor)
 }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTask(row: any) {
@@ -32,23 +32,21 @@ export async function GET(req: NextRequest) {
   const status     = searchParams.get('status')
   const assignedTo = searchParams.get('assignedTo')
   const projectId  = searchParams.get('projectId')
-  const { limit, cursor } = parsePagination(req)
+  const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
     .from('app_tasks')
     .select('*')
-    .order(projectId ? 'sort_order' : 'created_at', { ascending: projectId ? true : false })
-    .limit(limit + 1)
   if (status)     query = query.eq('status', status)
   if (assignedTo) query = query.eq('assigned_to', assignedTo)
   if (projectId)  query = query.eq('project_id', projectId)
-  if (cursor) query = query.lt('created_at', cursor)
+  query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
     console.error('[tasks GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch tasks' }, { status: 500 })
   }
-  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapTask), nextCursor)
 }
 

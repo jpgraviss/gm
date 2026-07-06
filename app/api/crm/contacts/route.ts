@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError } from '@/lib/validation'
-import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {
@@ -35,23 +35,19 @@ function mapContact(row: any) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const companyId = searchParams.get('companyId')
-  const { limit, cursor } = parsePagination(req)
+  const pag = parsePagination(req)
 
   const db = createServiceClient()
-  let query = db
-    .from('crm_contacts')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit + 1)
+  let query = db.from('crm_contacts').select('*')
   if (companyId) query = query.eq('company_id', companyId)
-  if (cursor) query = query.lt('created_at', cursor)
+  query = applyCursor(query, pag)
 
   const { data, error } = await query
   if (error) {
     console.error('[crm/contacts GET]', error)
     return NextResponse.json({ error: error?.message || 'Failed to fetch contacts' }, { status: 500 })
   }
-  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapContact), nextCursor)
 }
 

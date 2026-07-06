@@ -266,6 +266,38 @@ function ClientPortalView({ company, accountInfo, onExit }: { company: string; a
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
 
+  async function handlePortalFileUpload(e: React.ChangeEvent<HTMLInputElement>, target: 'ticket' | 'files') {
+    const file = e.target.files?.[0]
+    if (!file || !company) return
+    e.target.value = ''
+    const setUploading = target === 'ticket' ? setPortalUploading : setFilesUploading
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('company', company)
+      const res = await fetch('/api/files', { method: 'POST', body: fd })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Upload failed') }
+      const data = await res.json()
+      if (target === 'ticket') {
+        setPortalAttachments(prev => [...prev, { name: data.name, url: data.url, path: data.path, type: file.type, size: file.size }])
+      } else {
+        // Refresh the file list
+        const q = encodeURIComponent(company)
+        const listRes = await fetch(`/api/files?company=${q}`)
+        if (listRes.ok) {
+          const files = await listRes.json()
+          setClientFiles(Array.isArray(files) ? files : [])
+        }
+        toast('File uploaded', 'success')
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to upload file', 'error')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--page-bg)' }}>
 
@@ -710,7 +742,7 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
                 <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
                   <CheckCircle size={24} className="mx-auto mb-2 text-emerald-600" />
                   <p className="text-sm font-semibold text-emerald-800">Request submitted!</p>
-                  <button onClick={() => { setPreviewSubmitSuccess(false); setPreviewSubject(''); setPreviewDesc('') }} className="mt-3 text-xs text-emerald-700 underline">Submit another</button>
+                  <button onClick={() => { setPreviewSubmitSuccess(false); setPreviewSubject(''); setPreviewDesc(''); setPortalAttachments([]) }} className="mt-3 text-xs text-emerald-700 underline">Submit another</button>
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
@@ -727,22 +759,40 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
                     rows={4}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
                   />
+                  {portalAttachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {portalAttachments.map((att, i) => (
+                        <span key={i} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 rounded-lg px-2 py-1">
+                          <FileText size={10} />
+                          <span className="truncate max-w-[120px]">{att.name}</span>
+                          <button onClick={() => setPortalAttachments(prev => prev.filter((_, idx) => idx !== i))} className="ml-0.5 text-gray-400 hover:text-gray-600">
+                            <X size={10} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
-                    <button disabled className="flex items-center gap-1.5 text-xs text-gray-400 cursor-not-allowed" title="File attachments coming soon">
-                      <Upload size={12} /> Attach file (coming soon)
-                    </button>
+                    <label className="flex items-center gap-1.5 text-xs text-[#015035] cursor-pointer hover:underline">
+                      {portalUploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                      {portalUploading ? 'Uploading...' : 'Attach file'}
+                      <input type="file" className="hidden" onChange={e => handlePortalFileUpload(e, 'ticket')} accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.ppt,.pptx,.zip" disabled={portalUploading} />
+                    </label>
                     <button
                       disabled={previewSubmitting || !previewSubject.trim()}
                       onClick={async () => {
                         setPreviewSubmitting(true)
                         try {
+                          const msg: Record<string, unknown> = { from: company, body: previewDesc.trim(), date: new Date().toISOString() }
+                          if (portalAttachments.length > 0) msg.attachments = portalAttachments
                           const res = await fetch('/api/tickets', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ subject: previewSubject.trim(), company, source: 'Portal', messages: previewDesc.trim() ? [{ from: company, body: previewDesc.trim(), date: new Date().toISOString() }] : [] }),
+                            body: JSON.stringify({ subject: previewSubject.trim(), company, source: 'Portal', messages: previewDesc.trim() || portalAttachments.length > 0 ? [msg] : [] }),
                           })
                           if (res.ok) {
                             setPreviewSubmitSuccess(true)
+                            setPortalAttachments([])
                             const q = encodeURIComponent(company)
                             fetch(`/api/tickets?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => setClientTickets(Array.isArray(d) ? d : [])).catch(() => {})
                           }
@@ -795,9 +845,11 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-800">Shared Files & Documents</h3>
-                <button disabled className="flex items-center gap-1.5 text-xs text-gray-400 cursor-not-allowed border border-gray-200 px-2.5 py-1.5 rounded-lg" title="File uploads coming soon">
-                  <Upload size={12} /> Upload (coming soon)
-                </button>
+                <label className="flex items-center gap-1.5 text-xs text-[#015035] cursor-pointer border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
+                  {filesUploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                  {filesUploading ? 'Uploading...' : 'Upload'}
+                  <input type="file" className="hidden" onChange={e => handlePortalFileUpload(e, 'files')} accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.ppt,.pptx,.zip" disabled={filesUploading} />
+                </label>
               </div>
               {clientFiles.length > 0 ? (
                 <div className="flex flex-col divide-y divide-gray-100">

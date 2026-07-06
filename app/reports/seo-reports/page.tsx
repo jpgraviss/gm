@@ -296,11 +296,32 @@ export default function SeoReportsPage() {
       <Header title="SEO Reports" subtitle="Automated monthly client reports" />
 
       <div className="page-content">
-        {/* ---- KPI cards ---- */}
-        <div className="flex flex-wrap gap-4">
+        {/* ---- KPI cards + preview template ---- */}
+        <div className="flex flex-wrap items-end gap-4">
           <KpiCard icon={Building} label="Total Companies" value={loading ? '--' : totalCompanies} />
           <KpiCard icon={Mail} label="Auto-Reports Enabled" value={loading ? '--' : enabledCount} />
           <KpiCard icon={Calendar} label="Reports Sent This Month" value={loading ? '--' : sentThisMonth} />
+          <button
+            onClick={async () => {
+              setPreviewLoading(true)
+              setPreviewCompany('Email Template Preview')
+              setPreviewHtml(null)
+              try {
+                const res = await fetch('/api/seo-reports/preview-template')
+                const data = await res.json()
+                setPreviewHtml(data.html)
+              } catch {
+                toast('Failed to load template preview', 'error')
+                setPreviewHtml(null)
+                setPreviewLoading(false)
+              } finally {
+                setPreviewLoading(false)
+              }
+            }}
+            className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <Eye size={13} /> Preview Email Template
+          </button>
         </div>
 
         {/* ---- Search bar ---- */}

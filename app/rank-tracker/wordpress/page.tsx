@@ -177,17 +177,33 @@ export default function WordPressSeoPage() {
           <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
             <Globe size={40} className="mx-auto text-gray-200 mb-4" />
             <h3 className="text-sm font-semibold text-gray-900 mb-2">No WordPress Sites Connected</h3>
-            <p className="text-xs text-gray-500 max-w-sm mx-auto">
+            <p className="text-xs text-gray-500 max-w-sm mx-auto mb-4">
               Install the GravHub SEO plugin on client WordPress sites. Once connected, site health data and SEO scores will appear here.
             </p>
+            <a
+              href="/api/wordpress/plugin/download"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white transition-opacity hover:opacity-90"
+              style={{ background: '#015035' }}
+            >
+              <Package size={14} /> Download Plugin (.zip)
+            </a>
           </div>
         ) : (
           <div className="flex gap-6">
             {/* Sites list */}
             <div className="w-72 flex-shrink-0 space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 px-1 mb-2">
-                Connected Sites ({sites.length})
-              </p>
+              <div className="flex items-center justify-between px-1 mb-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                  Connected Sites ({sites.length})
+                </p>
+                <a
+                  href="/api/wordpress/plugin/download"
+                  className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                  title="Download Plugin"
+                >
+                  <Package size={13} className="text-gray-400" />
+                </a>
+              </div>
               {sites.map(site => (
                 <button
                   key={site.id}

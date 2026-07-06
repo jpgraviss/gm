@@ -258,6 +258,13 @@ export async function POST(req: NextRequest) {
     for (const e of c.emails ?? []) existingEmails.add(e.toLowerCase())
   }
 
+  // Build company lookup maps for association resolution
+  const { data: allCompanies } = await db.from('crm_companies').select('id, name')
+  const companyByName = new Map<string, string>()
+  for (const co of allCompanies ?? []) {
+    companyByName.set(co.name.toLowerCase(), co.id)
+  }
+
   let inserted = 0
   let updated = 0
   let skipped = 0
@@ -307,13 +314,18 @@ export async function POST(req: NextRequest) {
       // Last activity: prefer HubSpot's notes_last_activity_date
       const lastActivity = p.notes_last_activity_date || undefined
 
+      // Resolve company_id from company name
+      const companyName = s(p.company).trim()
+      const resolvedCompanyId = companyName ? companyByName.get(companyName.toLowerCase()) ?? null : null
+
       if (email && existingEmails.has(email)) {
         // ── Update existing contact ──────────────────────────────────────
         const updatePayload: Record<string, unknown> = {
           first_name: firstName || undefined,
           last_name: lastName || undefined,
           full_name: `${firstName} ${lastName}`.trim() || undefined,
-          company_name: p.company || undefined,
+          company_name: companyName || undefined,
+          company_id: resolvedCompanyId || undefined,
           title: p.jobtitle || undefined,
           phones: phones.length > 0 ? phones : undefined,
           linked_in: p.hs_linkedinbio || undefined,
@@ -349,7 +361,8 @@ export async function POST(req: NextRequest) {
         first_name: firstName,
         last_name: lastName,
         full_name: `${firstName} ${lastName}`.trim(),
-        company_name: p.company ?? '',
+        company_id: resolvedCompanyId,
+        company_name: companyName || '',
         title: p.jobtitle || null,
         emails: email ? [email] : [],
         phones,

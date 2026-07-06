@@ -365,6 +365,32 @@ export interface ContactTask {
 export type ContactLifecycleStage = 'lead' | 'opportunity' | 'client' | 'other'
 export type ContactLeadStatus = 'new' | 'open' | 'in_progress' | 'open_deal' | 'unqualified' | 'attempted_to_contact' | 'connected' | 'bad_timing'
 
+export interface HubSpotData {
+  mobilePhone?: string
+  industry?: string
+  annualRevenue?: string
+  address?: string
+  city?: string
+  state?: string
+  zip?: string
+  country?: string
+  twitterHandle?: string
+  facebookPage?: string
+  dateOfBirth?: string
+  hubspotCreateDate?: string
+  hubspotLastModified?: string
+  analyticsSource?: string
+  analyticsSourceData?: string
+  lastContacted?: string
+  lastActivityDate?: string
+  numContactedNotes?: string
+  emailDomain?: string
+  marketableStatus?: string
+  hubspotOwnerId?: string
+  associatedCompanyId?: string
+  lifecycleStage?: string
+}
+
 export interface CRMContact {
   id: string
   companyId: string
@@ -387,6 +413,7 @@ export interface CRMContact {
   lastActivity?: string
   lifecycleStage?: ContactLifecycleStage
   leadStatus?: ContactLeadStatus
+  hubspotData?: HubSpotData
 }
 
 export interface CRMCompany {

@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import { X, Upload, FileText, CheckCircle, AlertCircle, Building2, Users, TrendingUp, Cloud, FileUp, RefreshCw, Undo2, GitMerge } from 'lucide-react'
+import { X, Upload, FileText, CheckCircle, AlertCircle, Building2, Users, TrendingUp, Cloud, FileUp, RefreshCw, Undo2, GitMerge, ScrollText } from 'lucide-react'
 
-type ImportType = 'companies' | 'contacts' | 'deals'
+type ImportType = 'companies' | 'contacts' | 'deals' | 'engagements'
 type ImportMode = 'csv' | 'api'
 
 interface ImportResult {
@@ -92,6 +92,14 @@ const typeConfig: Record<ImportType, { icon: typeof Building2; label: string; de
     apiEndpoint: '/api/integrations/hubspot/deals',
     responseKey: 'deals',
   },
+  engagements: {
+    icon: ScrollText,
+    label: 'Activities',
+    description: 'Import notes, calls, emails, and meetings from HubSpot',
+    columns: ['Type', 'Title', 'Body', 'Date'],
+    apiEndpoint: '/api/integrations/hubspot/engagements',
+    responseKey: 'engagements',
+  },
 }
 
 const apiPreviewColumns: Record<ImportType, { key: string; label: string }[]> = {
@@ -118,6 +126,12 @@ const apiPreviewColumns: Record<ImportType, { key: string; label: string }[]> = 
     { key: 'closeDate', label: 'Close Date' },
     { key: 'pipeline', label: 'Pipeline' },
   ],
+  engagements: [
+    { key: 'type', label: 'Type' },
+    { key: 'title', label: 'Title' },
+    { key: 'body', label: 'Body' },
+    { key: 'timestamp', label: 'Date' },
+  ],
 }
 
 function getCellValue(record: ApiRecord, type: ImportType, key: string): string {
@@ -135,6 +149,14 @@ function getCellValue(record: ApiRecord, type: ImportType, key: string): string 
     try {
       return new Date(record.closeDate).toLocaleDateString()
     } catch { /* fall through */ }
+  }
+  if (type === 'engagements' && key === 'timestamp' && record.timestamp) {
+    try {
+      return new Date(record.timestamp).toLocaleDateString()
+    } catch { /* fall through */ }
+  }
+  if (type === 'engagements' && key === 'body' && record.body) {
+    return record.body.length > 80 ? record.body.slice(0, 80) + '…' : record.body
   }
   return record[key] || ''
 }
@@ -239,7 +261,7 @@ export default function HubSpotImportPanel({ onClose, onComplete, onShowDuplicat
       } else {
         setResult(data)
         onComplete?.()
-        if (data.inserted > 0 && type !== 'deals') {
+        if (data.inserted > 0 && type !== 'deals' && type !== 'engagements') {
           try {
             const dupRes = await fetch(`/api/crm/duplicates?type=${type}`)
             if (dupRes.ok) {
@@ -278,7 +300,7 @@ export default function HubSpotImportPanel({ onClose, onComplete, onShowDuplicat
           errors: data.errors,
         })
         onComplete?.()
-        if (data.inserted > 0 && type !== 'deals') {
+        if (data.inserted > 0 && type !== 'deals' && type !== 'engagements') {
           try {
             const dupRes = await fetch(`/api/crm/duplicates?type=${type}`)
             if (dupRes.ok) {
@@ -328,6 +350,7 @@ export default function HubSpotImportPanel({ onClose, onComplete, onShowDuplicat
 
   const handleTypeChange = (newType: ImportType) => {
     setType(newType)
+    if (newType === 'engagements') setMode('api')
     resetState()
   }
 
@@ -376,6 +399,7 @@ export default function HubSpotImportPanel({ onClose, onComplete, onShowDuplicat
           </div>
 
           {/* Import mode toggle */}
+          {type !== 'engagements' && (
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Import method</label>
             <div className="grid grid-cols-2 gap-2">
@@ -409,6 +433,7 @@ export default function HubSpotImportPanel({ onClose, onComplete, onShowDuplicat
               </button>
             </div>
           </div>
+          )}
 
           {/* CSV mode: Expected columns hint */}
           {mode === 'csv' && (

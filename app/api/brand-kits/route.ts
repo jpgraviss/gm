@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapBrandKit(row: any) {
@@ -21,7 +21,7 @@ function mapBrandKit(row: any) {
 }
 
 export async function GET(req: NextRequest) {
-  const { limit, cursor } = parsePagination(req)
+  const pag = parsePagination(req)
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
 
@@ -29,17 +29,15 @@ export async function GET(req: NextRequest) {
   let query = db
     .from('brand_kits')
     .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit + 1)
-  if (cursor) query = query.lt('created_at', cursor)
   if (company) query = query.eq('company_name', company)
+  query = applyCursor(query, pag)
 
   const { data, error } = await query
   if (error) {
     console.error('[brand-kits GET]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapBrandKit), nextCursor)
 }
 

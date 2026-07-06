@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { mapPost } from '@/lib/social-media'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
-  const { limit, cursor } = parsePagination(req)
+  const pag = parsePagination(req)
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   const status = searchParams.get('status')
@@ -14,18 +14,16 @@ export async function GET(req: NextRequest) {
   let query = db
     .from('social_posts')
     .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit + 1)
-  if (cursor) query = query.lt('created_at', cursor)
   if (company) query = query.eq('company_name', company)
   if (status) query = query.eq('status', status)
+  query = applyCursor(query, pag)
 
   const { data, error } = await query
   if (error) {
     console.error('[social-posts GET]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapPost), nextCursor)
 }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { parsePagination, slicePage, paginatedJson } from '@/lib/pagination'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { slugifyForm } from '@/lib/forms'
 import { logAudit } from '@/lib/audit'
 
@@ -39,22 +39,20 @@ function mapForm(row: any) {
 }
 
 export async function GET(req: NextRequest) {
-  const { limit, cursor } = parsePagination(req)
+  const pag = parsePagination(req)
   const db = createServiceClient()
 
   let query = db
     .from('forms')
     .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit + 1)
-  if (cursor) query = query.lt('created_at', cursor)
+  query = applyCursor(query, pag)
 
   const { data, error } = await query
   if (error) {
     console.error('[forms GET]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  const { rows, nextCursor } = slicePage(data ?? [], limit, 'created_at')
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapForm), nextCursor)
 }
 

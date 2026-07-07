@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireWordPressAuth } from '@/lib/wordpress-auth'
 
 export async function GET(req: NextRequest) {
+  const denied = await requireWordPressAuth(req)
+  if (denied) return denied
+
   const siteUrl = req.nextUrl.searchParams.get('site')
   if (!siteUrl) {
     return NextResponse.json({ error: 'site query param is required' }, { status: 400 })
@@ -22,6 +26,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const denied = await requireWordPressAuth(req)
+  if (denied) return denied
+
   const body = await req.json()
   const { siteUrl, pagePath, metaTitle, metaDescription, ogTitle, ogDescription, ogImage, schemaMarkup } = body
 

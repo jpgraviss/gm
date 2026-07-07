@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireWordPressAuth } from '@/lib/wordpress-auth'
 
 export async function POST(req: NextRequest) {
-  const key = req.headers.get('x-gravhub-key')
-  if (!key) {
-    return NextResponse.json({ error: 'API key required' }, { status: 401 })
-  }
+  const denied = await requireWordPressAuth(req)
+  if (denied) return denied
 
   const body = await req.json()
-  const { siteUrl, pages } = body as {
-    siteUrl: string
-    pages: Array<{
-      pagePath: string
-      pageTitle?: string
-      score: number
-      issues: Array<{ type: string; message: string; severity: string }>
-    }>
-  }
+  const siteUrl = body.siteUrl ?? body.site_url
+  const pages = body.pages
 
   if (!siteUrl || !Array.isArray(pages)) {
     return NextResponse.json({ error: 'siteUrl and pages array required' }, { status: 400 })
@@ -25,15 +17,27 @@ export async function POST(req: NextRequest) {
   const db = createServiceClient()
   const now = new Date().toISOString()
 
-  const rows = pages.map(p => ({
-    id: `wsc-${Buffer.from(`${siteUrl}:${p.pagePath}`).toString('base64url').slice(0, 30)}`,
-    site_url: siteUrl,
-    page_path: p.pagePath,
-    page_title: p.pageTitle ?? null,
-    score: p.score,
-    issues: p.issues ?? [],
-    checked_at: now,
-  }))
+  const rows = pages.map((p: Record<string, unknown>) => {
+    let pagePath = (p.pagePath ?? p.page_path ?? '') as string
+    if (!pagePath && typeof p.url === 'string') {
+      try {
+        pagePath = new URL(p.url as string).pathname
+      } catch {
+        pagePath = p.url as string
+      }
+    }
+    const pageTitle = (p.pageTitle ?? p.page_title ?? p.title ?? null) as string | null
+
+    return {
+      id: `wsc-${Buffer.from(`${siteUrl}:${pagePath}`).toString('base64url').slice(0, 30)}`,
+      site_url: siteUrl,
+      page_path: pagePath,
+      page_title: pageTitle,
+      score: p.score as number,
+      issues: (p.issues ?? []) as unknown[],
+      checked_at: now,
+    }
+  })
 
   const { error } = await db
     .from('wordpress_seo_scores')
@@ -48,6 +52,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const denied = await requireWordPressAuth(req)
+  if (denied) return denied
+
   const siteUrl = req.nextUrl.searchParams.get('site')
   if (!siteUrl) {
     return NextResponse.json({ error: 'site query param is required' }, { status: 400 })

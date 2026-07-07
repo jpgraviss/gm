@@ -1,24 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-
-async function validateApiKey(req: NextRequest): Promise<boolean> {
-  const key = req.headers.get('x-gravhub-key')
-  if (!key) return false
-  const db = createServiceClient()
-  const { data } = await db
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'wordpress_api_keys')
-    .maybeSingle()
-  if (!data) return key === process.env.WORDPRESS_API_KEY
-  const keys = (data as { value: string[] }).value
-  return Array.isArray(keys) && keys.includes(key)
-}
+import { requireWordPressAuth } from '@/lib/wordpress-auth'
 
 export async function POST(req: NextRequest) {
-  if (!(await validateApiKey(req))) {
-    return NextResponse.json({ error: 'Invalid API key' }, { status: 401 })
-  }
+  const denied = await requireWordPressAuth(req)
+  if (denied) return denied
 
   const body = await req.json()
   const { siteUrl, companyName, wpVersion, phpVersion, plugins, themes, security } = body
@@ -52,7 +38,10 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data)
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await requireWordPressAuth(req)
+  if (denied) return denied
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('wordpress_site_health')

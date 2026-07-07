@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireWordPressAuth } from '@/lib/wordpress-auth'
 
 export async function POST(req: NextRequest) {
-  const key = req.headers.get('x-gravhub-key')
-  if (!key) {
-    return NextResponse.json({ error: 'API key required' }, { status: 401 })
-  }
+  const denied = await requireWordPressAuth(req)
+  if (denied) return denied
 
   const body = await req.json()
   const { siteUrl, pages } = body as {
@@ -48,6 +47,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const denied = await requireWordPressAuth(req)
+  if (denied) return denied
+
   const siteUrl = req.nextUrl.searchParams.get('site')
   if (!siteUrl) {
     return NextResponse.json({ error: 'site query param is required' }, { status: 400 })

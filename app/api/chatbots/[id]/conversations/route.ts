@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/admin-auth'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
   const { id } = await params
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
@@ -44,6 +47,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
   const { id } = await params
   const body = await req.json()
   const { conversationId, flagged, status: newStatus } = body as {
@@ -77,6 +82,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
   const { id } = await params
   const { searchParams } = new URL(req.url)
   const conversationId = searchParams.get('conversationId')

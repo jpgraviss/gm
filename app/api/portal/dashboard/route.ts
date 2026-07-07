@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requirePortalClient } from '@/lib/portal-auth'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -7,6 +8,9 @@ export async function GET(req: NextRequest) {
   if (!company) {
     return NextResponse.json({ error: 'company param is required' }, { status: 400 })
   }
+
+  const denied = await requirePortalClient(req, company)
+  if (denied) return denied
 
   const db = createServiceClient()
   const q = company

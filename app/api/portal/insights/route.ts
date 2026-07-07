@@ -1,19 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { buildClientReport } from '@/lib/client-reports'
+import { requirePortalClient } from '@/lib/portal-auth'
 
-/**
- * GET /api/portal/insights?company=Company+Name&days=28
- *
- * Portal-facing endpoint. Reads the client_integrations binding for the
- * company and returns a trimmed version of the client report — only the
- * widgets the admin has enabled for the portal.
- *
- * Does NOT require authentication because the portal uses its own auth
- * model. Company scoping happens at the binding layer: clients only see
- * companies they're authorized for. The portal layer validates the
- * portal_clients.company matches the requested company before calling.
- */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const companyName = searchParams.get('company')
@@ -22,6 +11,9 @@ export async function GET(req: NextRequest) {
   if (!companyName) {
     return NextResponse.json({ error: 'company param is required' }, { status: 400 })
   }
+
+  const denied = await requirePortalClient(req, companyName)
+  if (denied) return denied
 
   const db = createServiceClient()
   const { data: binding } = await db
@@ -53,7 +45,6 @@ export async function GET(req: NextRequest) {
       endDate:   fmt(end),
     })
 
-    // Filter widgets to only those the admin enabled for the portal
     const allowed = new Set<string>(binding.portal_widgets ?? [])
     const filtered: Record<string, unknown> = {
       company: report.company,

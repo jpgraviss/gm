@@ -105,6 +105,7 @@ export const defaultNavigation: NavSection[] = [
       { label: 'Funnels',       href: '/funnels',      icon: <Layers size={16} />,        allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
       { label: 'Chatbots',      href: '/chatbots',     icon: <Bot size={16} />,           allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
       { label: 'Rank Tracker',  href: '/rank-tracker', icon: <Search size={16} />,        allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
+      { label: 'WordPress SEO', href: '/rank-tracker/wordpress', icon: <Globe size={16} />, allowedUnits: ['Leadership/Admin', 'Delivery/Operations'] },
       { label: 'Audits',        href: '/audits',       icon: <FileSearch size={16} />,    allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
     ],
   },

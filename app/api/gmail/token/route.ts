@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
+
+async function verifyOwnership(req: NextRequest, targetEmail: string): Promise<NextResponse | null> {
+  const callerEmail = await getAuthenticatedEmail(req)
+  if (!callerEmail) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  if (callerEmail !== targetEmail.toLowerCase()) {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
+  return null
+}
 
 // GET /api/gmail/token?email=user@example.com — retrieve stored Gmail token
 export async function GET(req: NextRequest) {
   const email = new URL(req.url).searchParams.get('email')
   if (!email) return NextResponse.json({ error: 'email is required' }, { status: 400 })
+
+  const denied = await verifyOwnership(req, email)
+  if (denied) return denied
 
   const db = createServiceClient()
   const { data, error } = await db
@@ -39,6 +54,9 @@ export async function POST(req: NextRequest) {
   if (!userEmail) {
     return NextResponse.json({ error: 'userEmail is required' }, { status: 400 })
   }
+
+  const denied = await verifyOwnership(req, userEmail)
+  if (denied) return denied
 
   const db = createServiceClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -78,6 +96,9 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const { userEmail } = await req.json()
   if (!userEmail) return NextResponse.json({ error: 'userEmail is required' }, { status: 400 })
+
+  const denied = await verifyOwnership(req, userEmail)
+  if (denied) return denied
 
   const db = createServiceClient()
   await db

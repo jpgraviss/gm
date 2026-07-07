@@ -126,22 +126,7 @@ class GravHub_Admin_Page {
 			GRAVHUB_SEO_VERSION
 		);
 
-		wp_enqueue_script(
-			'gravhub-seo-admin',
-			'',
-			array(),
-			GRAVHUB_SEO_VERSION,
-			true
-		);
-
-		wp_localize_script(
-			'gravhub-seo-admin',
-			'gravhubSeo',
-			array(
-				'restUrl' => esc_url_raw( rest_url( 'gravhub-seo/v1/' ) ),
-				'nonce'   => wp_create_nonce( 'wp_rest' ),
-			)
-		);
+		// JS is inlined in the settings-page.php template.
 	}
 
 	/**

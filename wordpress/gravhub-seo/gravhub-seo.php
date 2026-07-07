@@ -155,6 +155,93 @@ final class GravHub_SEO {
 				},
 			)
 		);
+
+		register_rest_route(
+			'gravhub-seo/v1',
+			'/heartbeat',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'rest_heartbeat' ),
+				'permission_callback' => array( $this, 'verify_gravhub_key' ),
+			)
+		);
+
+		register_rest_route(
+			'gravhub-seo/v1',
+			'/remote-sync',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'rest_remote_sync' ),
+				'permission_callback' => array( $this, 'verify_gravhub_key' ),
+			)
+		);
+	}
+
+	/**
+	 * Verify incoming request has a valid GravHub key.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return bool
+	 */
+	public function verify_gravhub_key( $request ) {
+		$key = $request->get_header( 'X-GravHub-Key' );
+		if ( empty( $key ) ) {
+			return false;
+		}
+		$stored_key = $this->api_client->get_api_key();
+		return ! empty( $stored_key ) && hash_equals( $stored_key, $key );
+	}
+
+	/**
+	 * REST callback: heartbeat — GravHub checks if this site is alive and connected.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response
+	 */
+	public function rest_heartbeat( $request ) {
+		$last_analysis = get_option( 'gravhub_last_analysis_time', 0 );
+		$last_report   = get_option( 'gravhub_last_health_report', 0 );
+
+		return new WP_REST_Response(
+			array(
+				'status'          => 'connected',
+				'plugin_version'  => GRAVHUB_SEO_VERSION,
+				'wp_version'      => get_bloginfo( 'version' ),
+				'php_version'     => phpversion(),
+				'site_name'       => get_bloginfo( 'name' ),
+				'site_url'        => get_site_url(),
+				'last_analysis'   => $last_analysis ? gmdate( 'c', $last_analysis ) : null,
+				'last_report'     => $last_report ? gmdate( 'c', $last_report ) : null,
+				'page_count'      => wp_count_posts( 'page' )->publish ?? 0,
+				'post_count'      => wp_count_posts( 'post' )->publish ?? 0,
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST callback: remote-sync — GravHub triggers a fresh analysis + health report.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response
+	 */
+	public function rest_remote_sync( $request ) {
+		$analysis = $this->seo_analyzer->analyze_all_pages();
+		$this->api_client->send_scores( $analysis );
+		update_option( 'gravhub_last_analysis', $analysis );
+		update_option( 'gravhub_last_analysis_time', current_time( 'timestamp' ) );
+
+		$health = $this->health_reporter->send_report();
+
+		return new WP_REST_Response(
+			array(
+				'success'        => true,
+				'pages_analyzed' => count( $analysis ),
+				'health_sent'    => ! is_wp_error( $health ),
+				'synced_at'      => current_time( 'c' ),
+			),
+			200
+		);
 	}
 
 	/**

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Shield, Lock, Camera, CheckCircle, AlertCircle, ArrowRight, Loader2 } from 'lucide-react'
+import { GravissGMark } from '@/components/ui/GravissGMark'
 
 type Step = 'verify' | 'password' | 'photo' | 'done'
 
@@ -273,7 +274,7 @@ export default function SetupAccountPage() {
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-3 mb-6">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#015035' }}>
-            <span className="text-white text-sm font-bold" style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.05em' }}>G</span>
+            <GravissGMark size={22} color="white" />
           </div>
           <span className="text-gray-900 text-base font-bold tracking-widest" style={{ fontFamily: 'var(--font-heading)' }}>GRAVHUB</span>
         </div>

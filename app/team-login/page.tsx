@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Link from 'next/link'
 import { Mail, AlertCircle, ArrowRight } from 'lucide-react'
+import { GravissGMark } from '@/components/ui/GravissGMark'
 import { getSupabaseClient } from '@/lib/supabase'
 
 // Minimal type shim for Google Identity Services
@@ -162,7 +163,7 @@ export default function TeamLoginPage() {
         {/* Logo */}
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#015035' }}>
-            <span className="text-white text-sm font-bold" style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.05em' }}>G</span>
+            <GravissGMark size={22} color="white" />
           </div>
           <span className="text-white text-base font-bold tracking-widest" style={{ fontFamily: 'var(--font-heading)' }}>GRAVHUB</span>
         </div>
@@ -203,7 +204,7 @@ export default function TeamLoginPage() {
           {/* Mobile logo */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#015035' }}>
-              <span className="text-white text-sm font-bold" style={{ fontFamily: 'var(--font-heading)' }}>G</span>
+              <GravissGMark size={22} color="white" />
             </div>
             <span className="text-gray-900 text-base font-bold tracking-widest" style={{ fontFamily: 'var(--font-heading)' }}>GRAVHUB</span>
           </div>

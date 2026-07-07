@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
 import path from 'path'
 import fs from 'fs'
+import { PassThrough } from 'stream'
 
 export async function GET(req: NextRequest) {
   const denied = await requireAdmin(req)
@@ -15,7 +16,6 @@ export async function GET(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const archiver = require('archiver')
-  const { PassThrough } = require('stream')
 
   const passthrough = new PassThrough()
   const archive = archiver('zip', { zlib: { level: 9 } })

@@ -495,6 +495,7 @@ create table if not exists public.app_settings (
   branding         jsonb not null default '{}',
   google_drive     jsonb not null default '{}',
   pipelines        jsonb not null default '[]',
+  wordpress        jsonb not null default '{}',
   updated_at       timestamptz not null default now()
 );
 
@@ -532,3 +533,59 @@ create table if not exists public.ai_conversations (
 alter table public.ai_conversations enable row level security;
 create policy "auth_read_ai_conversations"  on public.ai_conversations for select to authenticated using (true);
 create policy "auth_write_ai_conversations" on public.ai_conversations for all    to authenticated using (true) with check (true);
+
+-- ─── WordPress Site Health ──────────────────────────────────────────────────
+create table if not exists public.wordpress_site_health (
+  id                text primary key,
+  company_name      text not null,
+  site_url          text not null unique,
+  wp_version        text,
+  php_version       text,
+  plugins           jsonb default '[]',
+  themes            jsonb default '[]',
+  security          jsonb default '{}',
+  last_reported_at  timestamptz,
+  created_at        timestamptz default now()
+);
+
+alter table public.wordpress_site_health enable row level security;
+create policy "auth_read_wordpress_site_health"  on public.wordpress_site_health for select to authenticated using (true);
+create policy "auth_write_wordpress_site_health" on public.wordpress_site_health for all    to authenticated using (true) with check (true);
+create policy "anon_write_wordpress_site_health" on public.wordpress_site_health for all    to anon using (true) with check (true);
+
+-- ─── WordPress SEO Settings ────────────────────────────────────────────────
+create table if not exists public.wordpress_seo_settings (
+  id                text primary key,
+  site_url          text not null,
+  page_path         text not null,
+  meta_title        text,
+  meta_description  text,
+  og_title          text,
+  og_description    text,
+  og_image          text,
+  schema_markup     jsonb,
+  updated_at        timestamptz default now(),
+  unique(site_url, page_path)
+);
+
+alter table public.wordpress_seo_settings enable row level security;
+create policy "auth_read_wordpress_seo_settings"  on public.wordpress_seo_settings for select to authenticated using (true);
+create policy "auth_write_wordpress_seo_settings" on public.wordpress_seo_settings for all    to authenticated using (true) with check (true);
+create policy "anon_write_wordpress_seo_settings" on public.wordpress_seo_settings for all    to anon using (true) with check (true);
+
+-- ─── WordPress SEO Scores ──────────────────────────────────────────────────
+create table if not exists public.wordpress_seo_scores (
+  id          text primary key,
+  site_url    text not null,
+  page_path   text not null,
+  page_title  text,
+  score       integer,
+  issues      jsonb default '[]',
+  checked_at  timestamptz default now(),
+  unique(site_url, page_path)
+);
+
+alter table public.wordpress_seo_scores enable row level security;
+create policy "auth_read_wordpress_seo_scores"  on public.wordpress_seo_scores for select to authenticated using (true);
+create policy "auth_write_wordpress_seo_scores" on public.wordpress_seo_scores for all    to authenticated using (true) with check (true);
+create policy "anon_write_wordpress_seo_scores" on public.wordpress_seo_scores for all    to anon using (true) with check (true);

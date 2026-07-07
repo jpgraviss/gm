@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/admin-auth'
 
 export async function POST(req: NextRequest) {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const body = await req.json()
   const { siteUrl } = body as { siteUrl?: string }
 
@@ -10,14 +14,15 @@ export async function POST(req: NextRequest) {
   }
 
   const db = createServiceClient()
-  const { data: keys } = await db
+  const { data: settings } = await db
     .from('app_settings')
-    .select('value')
-    .eq('key', 'wordpress_api_keys')
+    .select('wordpress')
+    .eq('id', 'global')
     .maybeSingle()
 
-  const apiKey = Array.isArray((keys as { value: string[] } | null)?.value)
-    ? (keys as { value: string[] }).value[0]
+  const wp = settings?.wordpress as { apiKeys?: string[] } | null
+  const apiKey = (wp && Array.isArray(wp.apiKeys) && wp.apiKeys[0])
+    ? wp.apiKeys[0]
     : process.env.WORDPRESS_API_KEY
 
   if (!apiKey) {
@@ -26,7 +31,6 @@ export async function POST(req: NextRequest) {
 
   const base = siteUrl.replace(/\/+$/, '')
 
-  // 1. Heartbeat — check if plugin is alive
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 10000)
@@ -45,7 +49,6 @@ export async function POST(req: NextRequest) {
 
     const status = await heartbeat.json()
 
-    // 2. Trigger remote sync
     const syncController = new AbortController()
     const syncTimeout = setTimeout(() => syncController.abort(), 60000)
     const syncRes = await fetch(`${base}/wp-json/gravhub-seo/v1/remote-sync`, {

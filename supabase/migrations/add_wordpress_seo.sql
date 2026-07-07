@@ -12,6 +12,11 @@ CREATE TABLE IF NOT EXISTS wordpress_site_health (
   created_at timestamptz DEFAULT now()
 );
 
+ALTER TABLE wordpress_site_health ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "auth_read_wordpress_site_health"  ON wordpress_site_health FOR SELECT TO authenticated USING (true);
+CREATE POLICY IF NOT EXISTS "auth_write_wordpress_site_health" ON wordpress_site_health FOR ALL    TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY IF NOT EXISTS "anon_write_wordpress_site_health" ON wordpress_site_health FOR ALL    TO anon USING (true) WITH CHECK (true);
+
 -- Managed SEO settings pushed from GravHub to WordPress
 CREATE TABLE IF NOT EXISTS wordpress_seo_settings (
   id text PRIMARY KEY,
@@ -27,6 +32,11 @@ CREATE TABLE IF NOT EXISTS wordpress_seo_settings (
   UNIQUE(site_url, page_path)
 );
 
+ALTER TABLE wordpress_seo_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "auth_read_wordpress_seo_settings"  ON wordpress_seo_settings FOR SELECT TO authenticated USING (true);
+CREATE POLICY IF NOT EXISTS "auth_write_wordpress_seo_settings" ON wordpress_seo_settings FOR ALL    TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY IF NOT EXISTS "anon_write_wordpress_seo_settings" ON wordpress_seo_settings FOR ALL    TO anon USING (true) WITH CHECK (true);
+
 -- On-page SEO scores reported by the plugin
 CREATE TABLE IF NOT EXISTS wordpress_seo_scores (
   id text PRIMARY KEY,
@@ -38,3 +48,18 @@ CREATE TABLE IF NOT EXISTS wordpress_seo_scores (
   checked_at timestamptz DEFAULT now(),
   UNIQUE(site_url, page_path)
 );
+
+ALTER TABLE wordpress_seo_scores ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "auth_read_wordpress_seo_scores"  ON wordpress_seo_scores FOR SELECT TO authenticated USING (true);
+CREATE POLICY IF NOT EXISTS "auth_write_wordpress_seo_scores" ON wordpress_seo_scores FOR ALL    TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY IF NOT EXISTS "anon_write_wordpress_seo_scores" ON wordpress_seo_scores FOR ALL    TO anon USING (true) WITH CHECK (true);
+
+-- Add wordpress JSONB column to app_settings for API key storage
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'app_settings' AND column_name = 'wordpress'
+  ) THEN
+    ALTER TABLE app_settings ADD COLUMN wordpress jsonb NOT NULL DEFAULT '{}';
+  END IF;
+END $$;

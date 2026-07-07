@@ -1,8 +1,12 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/admin-auth'
 import path from 'path'
 import fs from 'fs'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const pluginDir = path.join(process.cwd(), 'wordpress', 'gravhub-seo')
 
   if (!fs.existsSync(pluginDir)) {

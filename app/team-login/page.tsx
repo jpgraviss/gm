@@ -162,9 +162,7 @@ export default function TeamLoginPage() {
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style={{ background: '#012b1e' }}>
         {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#015035' }}>
-            <GravissGMark size={22} color="white" />
-          </div>
+          <GravissGMark size={36} />
           <span className="text-white text-base font-bold tracking-widest" style={{ fontFamily: 'var(--font-heading)' }}>GRAVHUB</span>
         </div>
 

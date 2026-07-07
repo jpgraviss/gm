@@ -49,11 +49,12 @@ export async function POST(req: NextRequest) {
     // but don't fail if it's slow or unavailable.
     let email = payload.email?.toLowerCase()
 
-    // Optional server-side JWT verification via Google's tokeninfo endpoint.
-    // Bounded at 3 seconds so we don't hit Vercel function timeouts.
+    // Server-side JWT verification via Google's tokeninfo endpoint.
+    // Bounded at 5 seconds. Verification is REQUIRED — we reject if it fails.
+    const expectedAud = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
     try {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 3000)
+      const timeout = setTimeout(() => controller.abort(), 5000)
 
       const tokenInfoRes = await fetch(
         `https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`,
@@ -61,22 +62,29 @@ export async function POST(req: NextRequest) {
       )
       clearTimeout(timeout)
 
-      if (tokenInfoRes.ok) {
-        const tokenInfo = await tokenInfoRes.json()
-        const expectedAud = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
-        if (expectedAud && tokenInfo.aud && tokenInfo.aud !== expectedAud) {
-          console.error('[google-verify] audience mismatch', { expected: expectedAud, actual: tokenInfo.aud })
-          return NextResponse.json(
-            { error: 'Sign-in token audience mismatch — check that GOOGLE_CLIENT_ID matches NEXT_PUBLIC_GOOGLE_CLIENT_ID in your environment.' },
-            { status: 403 },
-          )
-        }
-        if (tokenInfo.email) email = String(tokenInfo.email).toLowerCase()
+      if (!tokenInfoRes.ok) {
+        console.error('[google-verify] tokeninfo returned', tokenInfoRes.status)
+        return NextResponse.json(
+          { error: 'Google token verification failed. Please try signing in again.' },
+          { status: 401 },
+        )
       }
-      // Non-200 from tokeninfo: fall through to JWT payload email
+
+      const tokenInfo = await tokenInfoRes.json()
+      if (expectedAud && tokenInfo.aud && tokenInfo.aud !== expectedAud) {
+        console.error('[google-verify] audience mismatch', { expected: expectedAud, actual: tokenInfo.aud })
+        return NextResponse.json(
+          { error: 'Sign-in token audience mismatch — check that GOOGLE_CLIENT_ID matches NEXT_PUBLIC_GOOGLE_CLIENT_ID in your environment.' },
+          { status: 403 },
+        )
+      }
+      if (tokenInfo.email) email = String(tokenInfo.email).toLowerCase()
     } catch (verifyErr) {
-      // Timeout, network error, etc. — fall through to JWT payload email
-      console.warn('[google-verify] tokeninfo call failed/timed out, using JWT payload email:', verifyErr)
+      console.error('[google-verify] tokeninfo call failed/timed out:', verifyErr)
+      return NextResponse.json(
+        { error: 'Could not verify Google sign-in token. Please try again.' },
+        { status: 502 },
+      )
     }
 
     if (!email) {

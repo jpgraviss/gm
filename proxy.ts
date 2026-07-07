@@ -108,10 +108,9 @@ function proxyImpl(req: NextRequest): NextResponse {
   const hasAuthCookie = req.cookies.getAll().some(c =>
     c.name.startsWith('sb-') && c.name.endsWith('-auth-token')
   )
-  const hasGravhubCookie = req.cookies.has('gravhub-auth')
   const hasAuthHeader = !!req.headers.get('authorization')
 
-  if (!hasAuthCookie && !hasGravhubCookie && !hasAuthHeader) {
+  if (!hasAuthCookie && !hasAuthHeader) {
     return NextResponse.json(
       { error: 'Authentication required' },
       { status: 401 }

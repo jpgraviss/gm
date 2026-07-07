@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { chatCompletion, buildToolResultMessage, buildAssistantMessage, type AiMessage, type AiToolDef } from '@/lib/ai-client'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -844,6 +845,22 @@ Keep the tone professional but approachable. Be specific about deliverables. Use
 
 export async function POST(req: NextRequest) {
   try {
+    const callerEmail = await getAuthenticatedEmail(req)
+    if (!callerEmail) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const staffDb = createServiceClient()
+    const { data: staffRow } = await staffDb
+      .from('team_members')
+      .select('id')
+      .ilike('email', callerEmail)
+      .maybeSingle()
+
+    if (!staffRow) {
+      return NextResponse.json({ error: 'AI assistant is only available to staff members' }, { status: 403 })
+    }
+
     const { messages } = (await req.json()) as ChatRequest
 
     if (!messages || messages.length === 0) {

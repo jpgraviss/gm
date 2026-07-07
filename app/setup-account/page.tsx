@@ -273,9 +273,7 @@ export default function SetupAccountPage() {
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#FFF3EA' }}>
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#015035' }}>
-            <GravissGMark size={22} color="white" />
-          </div>
+          <GravissGMark size={36} />
           <span className="text-gray-900 text-base font-bold tracking-widest" style={{ fontFamily: 'var(--font-heading)' }}>GRAVHUB</span>
         </div>
 

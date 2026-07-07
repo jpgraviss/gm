@@ -92,6 +92,7 @@ export default function WordPressSeoPage() {
   const [editingMeta, setEditingMeta] = useState<SeoSetting | null>(null)
   const [metaDraft, setMetaDraft] = useState({ metaTitle: '', metaDescription: '', ogTitle: '', ogDescription: '' })
   const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
     fetch('/api/wordpress/seo/health')
@@ -152,6 +153,29 @@ export default function WordPressSeoPage() {
       toast('Failed to save settings', 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function syncSite() {
+    if (!selectedSite || syncing) return
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/wordpress/seo/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ siteUrl: selectedSite.site_url }),
+      })
+      const data = await res.json()
+      if (data.connected) {
+        toast(`Synced ${data.sync?.pages_analyzed ?? 0} pages`, 'success')
+        selectSite(selectedSite)
+      } else {
+        toast(data.error || 'Site not reachable', 'error')
+      }
+    } catch {
+      toast('Sync failed', 'error')
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -265,6 +289,23 @@ export default function WordPressSeoPage() {
                     </div>
                   ) : tab === 'health' ? (
                     <div className="space-y-4">
+                      {/* Sync button */}
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-gray-400">
+                          {selectedSite.last_reported_at
+                            ? `Last sync: ${new Date(selectedSite.last_reported_at).toLocaleString()}`
+                            : 'Never synced'}
+                        </p>
+                        <button
+                          onClick={syncSite}
+                          disabled={syncing}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                          style={{ background: '#015035' }}
+                        >
+                          <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
+                          {syncing ? 'Syncing...' : 'Sync Now'}
+                        </button>
+                      </div>
                       {/* Version info */}
                       <div className="bg-white rounded-2xl border border-gray-100 p-5">
                         <h3 className="text-sm font-semibold text-gray-900 mb-3">Environment</h3>

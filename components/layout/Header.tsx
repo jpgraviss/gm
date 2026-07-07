@@ -1,22 +1,34 @@
 'use client'
 
-import { useState } from 'react'
-import { Bell, Search, Plus, Menu, X, LogOut, ShieldCheck, User, CheckCircle2, AlertCircle, FileText, DollarSign, RefreshCw, MessageSquare, Moon, Sun } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Bell, Search, Plus, Menu, X, LogOut, ShieldCheck, User, CheckCircle2, AlertCircle, FileText, DollarSign, RefreshCw, MessageSquare, Moon, Sun, Phone, StickyNote, CalendarDays } from 'lucide-react'
 import { useUI } from '@/contexts/UIContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import Link from 'next/link'
 
-// ─── Notifications data ───────────────────────────────────────────────────────
+const NOTIF_ICONS: Record<string, React.ReactNode> = {
+  call:     <Phone size={13} />,
+  email:    <MessageSquare size={13} />,
+  meeting:  <CalendarDays size={13} />,
+  note:     <StickyNote size={13} />,
+  task:     <CheckCircle2 size={13} />,
+  deal:     <DollarSign size={13} />,
+  contract: <FileText size={13} />,
+  invoice:  <DollarSign size={13} />,
+  proposal: <FileText size={13} />,
+}
 
-const NOTIFICATIONS = [
-  { id: 'n1', type: 'alert',    icon: <AlertCircle size={13} />,  color: '#ef4444', title: 'Overdue invoice',    body: 'Summit Capital — $12,500 is 12 days past due',          time: '2h ago',  href: '/billing',    unread: true },
-  { id: 'n2', type: 'contract', icon: <FileText size={13} />,     color: '#015035', title: 'Contract signed',    body: 'BlueStar Logistics signed the SEO agreement',          time: '5h ago',  href: '/contracts',  unread: true },
-  { id: 'n3', type: 'renewal',  icon: <RefreshCw size={13} />,    color: '#8b5cf6', title: 'Renewal coming up',  body: 'ProVenture LLC renews in 12 days — action needed',     time: '1d ago',  href: '/renewals',   unread: true },
-  { id: 'n4', type: 'invoice',  icon: <DollarSign size={13} />,   color: '#22c55e', title: 'Payment received',   body: 'Coastal Realty paid INV-2024-005 ($27,500)',           time: '2d ago',  href: '/billing',    unread: false },
-  { id: 'n5', type: 'ticket',   icon: <MessageSquare size={13} />,color: '#f59e0b', title: 'New support ticket', body: 'Harvest Foods — Email footer link is broken',          time: '2d ago',  href: '/tickets',    unread: false },
-  { id: 'n6', type: 'deal',     icon: <CheckCircle2 size={13} />, color: '#3b82f6', title: 'Proposal viewed',    body: 'Summit Capital opened your $52,000 proposal',          time: '3d ago',  href: '/proposals',  unread: false },
-]
+interface Notification {
+  id: string
+  type: string
+  color: string
+  title: string
+  body: string
+  time: string
+  href: string
+  unread: boolean
+}
 
 interface HeaderProps {
   title: string
@@ -34,7 +46,14 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [notifications, setNotifications] = useState(NOTIFICATIONS)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+
+  useEffect(() => {
+    fetch('/api/notifications')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: Notification[]) => setNotifications(data))
+      .catch(() => {})
+  }, [])
 
   const unreadCount = notifications.filter(n => n.unread).length
 
@@ -145,7 +164,7 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
                         className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
                         style={{ background: n.color + '18', color: n.color }}
                       >
-                        {n.icon}
+                        {NOTIF_ICONS[n.type] ?? <AlertCircle size={13} />}
                       </div>
                       {/* Text */}
                       <div className="flex-1 min-w-0">

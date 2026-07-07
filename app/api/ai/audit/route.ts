@@ -4,6 +4,24 @@ import { createServiceClient } from '@/lib/supabase'
 import { getAuditSystemPrompt } from '@/lib/audit-template'
 import type { AuditSectionResult, AuditType } from '@/lib/types'
 
+async function fetchPageHtml(url: string): Promise<string> {
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15000)
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'GravHub-SEO-Audit/1.0' },
+      signal: controller.signal,
+      redirect: 'follow',
+    })
+    clearTimeout(timeout)
+    if (!res.ok) return `[Could not fetch page: HTTP ${res.status}]`
+    const html = await res.text()
+    return html.slice(0, 30000)
+  } catch {
+    return '[Could not fetch page: request failed]'
+  }
+}
+
 const AUDIT_SECTIONS: { key: string; label: string; prompt: string }[] = [
   {
     key: 'seo_onpage',
@@ -170,6 +188,8 @@ export async function POST(req: NextRequest) {
         ? AUDIT_SECTIONS.filter(s => !s.key.startsWith('seo_'))
         : AUDIT_SECTIONS
 
+    const pageHtml = await fetchPageHtml(url)
+
     const systemPrompt = getAuditSystemPrompt()
 
     const sectionResults: AuditSectionResult[] = []
@@ -185,7 +205,7 @@ export async function POST(req: NextRequest) {
           system: systemPrompt,
           messages: [{
             role: 'user',
-            content: `${section.prompt}\n\nWebsite URL: ${url}\n${companyName ? `Company: ${companyName}` : ''}\n\nProvide your analysis as a JSON object with score (0-100), findings (array of strings), and recommendations (array of strings).`,
+            content: `${section.prompt}\n\nWebsite URL: ${url}\n${companyName ? `Company: ${companyName}` : ''}\n\n--- PAGE HTML (first 30KB) ---\n${pageHtml}\n--- END HTML ---\n\nAnalyze the actual HTML above. Provide your analysis as a JSON object with score (0-100), findings (array of strings), and recommendations (array of strings).`,
           }],
           maxTokens: 2048,
           timeoutMs: 45_000,

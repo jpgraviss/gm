@@ -19,9 +19,6 @@ begin
   if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'calendar_settings') then
     alter table public.calendar_settings add column if not exists connected_at timestamptz;
   end if;
-  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'quickbooks_config') then
-    alter table public.quickbooks_config add column if not exists connected_at timestamptz;
-  end if;
 end $$;
 
 -- app_settings stores Google Drive OAuth tokens as JSONB. No column change
@@ -32,4 +29,3 @@ end $$;
 update public.google_integrations set connected_at = now() where connected_at is null;
 update public.meta_integration   set connected_at = now() where connected_at is null;
 update public.calendar_settings   set connected_at = now() where connected_at is null;
-update public.quickbooks_config   set connected_at = now() where connected_at is null;

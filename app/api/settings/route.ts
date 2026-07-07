@@ -42,7 +42,6 @@ export async function PATCH(req: NextRequest) {
   if (body.serviceTypes     !== undefined) updates.service_types    = body.serviceTypes
   if (body.contactTags      !== undefined) updates.contact_tags     = body.contactTags
   if (body.branding         !== undefined) updates.branding         = body.branding
-  if (body.qbSync           !== undefined) updates.qb_sync          = body.qbSync
   if (body.gcalLinks        !== undefined) updates.gcal_links       = body.gcalLinks
   if (body.pipelines        !== undefined) updates.pipelines        = body.pipelines
   if (body.emailDefaults    !== undefined) updates.email_defaults   = body.emailDefaults

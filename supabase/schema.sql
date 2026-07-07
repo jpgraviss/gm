@@ -178,7 +178,6 @@ create table if not exists public.invoices (
   issued_date    text,
   paid_date      text,
   service_type   text not null default 'General',
-  qb_invoice_id  text unique,
   client         text,
   amount_paid    numeric not null default 0,
   issue_date     text,
@@ -494,7 +493,6 @@ create table if not exists public.app_settings (
   service_types    jsonb not null default '[]',
   contact_tags     jsonb not null default '[]',
   branding         jsonb not null default '{}',
-  qb_sync          jsonb not null default '[]',
   google_drive     jsonb not null default '{}',
   pipelines        jsonb not null default '[]',
   updated_at       timestamptz not null default now()
@@ -503,25 +501,6 @@ create table if not exists public.app_settings (
 alter table public.app_settings enable row level security;
 create policy "auth_read_app_settings"  on public.app_settings for select  to authenticated using (true);
 create policy "auth_write_app_settings" on public.app_settings for all     to authenticated using (true) with check (true);
-
--- ─── QuickBooks Config ─────────────────────────────────────────────────────────
-create table if not exists public.quickbooks_config (
-  id               uuid        primary key default gen_random_uuid(),
-  realm_id         text        not null,
-  access_token     text        not null,
-  refresh_token    text        not null,
-  token_expires_at timestamptz not null,
-  last_sync_at     timestamptz,
-  invoices_synced  integer     not null default 0,
-  payments_synced  integer     not null default 0,
-  sync_errors      integer     not null default 0,
-  created_at       timestamptz not null default now(),
-  updated_at       timestamptz not null default now()
-);
-
-alter table public.quickbooks_config enable row level security;
-create policy "auth_read_qb_config"  on public.quickbooks_config for select to authenticated using (true);
-create policy "auth_write_qb_config" on public.quickbooks_config for all    to authenticated using (true) with check (true);
 
 -- ─── Document Templates ─────────────────────────────────────────────────────
 create table if not exists public.document_templates (

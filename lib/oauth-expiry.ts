@@ -2,7 +2,7 @@
  * 6-month re-auth policy for all OAuth connections.
  *
  * Every OAuth-backed integration (Google Calendar, Drive, Gmail, Marketing
- * products, Meta Ads, QuickBooks) must be re-consented every 180 days.
+ * products, Meta Ads) must be re-consented every 180 days.
  * The refresh token keeps working inside the window; after 180 days, the
  * library layer treats the connection as expired regardless of refresh
  * token validity and the user has to click "Connect" again.

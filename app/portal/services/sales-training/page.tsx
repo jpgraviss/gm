@@ -5,14 +5,22 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import {
-  ArrowLeft, GraduationCap, BookOpen, Calendar,
-  CheckCircle, Circle, Clock, Users, Play,
+  ArrowLeft, GraduationCap, BookOpen,
+  CheckCircle, Play,
 } from 'lucide-react'
 
 interface CourseModule {
+  id: string
   title: string
-  completed: boolean
-  duration?: string
+  type: string
+  content: string
+}
+
+interface Enrollment {
+  id: string
+  courseId: string
+  progress: Record<string, boolean>
+  status: string
 }
 
 interface Course {
@@ -27,6 +35,7 @@ interface Course {
 
 interface TrainingData {
   courses: Course[]
+  enrollments: Enrollment[]
   totalCompleted: number
   totalInProgress: number
 }
@@ -37,6 +46,7 @@ export default function PortalSalesTrainingPage() {
   const company = user?.company ?? ''
   const [data, setData] = useState<TrainingData>({
     courses: [],
+    enrollments: [],
     totalCompleted: 0,
     totalInProgress: 0,
   })
@@ -44,9 +54,10 @@ export default function PortalSalesTrainingPage() {
 
   useEffect(() => {
     if (!company) { requestAnimationFrame(() => setLoading(false)); return }
-    fetch('/api/courses?limit=20')
+
+    fetch('/api/courses?limit=50')
       .then(r => r.ok ? r.json() : { data: [] })
-      .then(result => {
+      .then(async (result) => {
         const courses: Course[] = (result.data ?? result ?? []).map((c: Record<string, unknown>) => ({
           id: c.id as string,
           title: c.title as string ?? '',
@@ -57,20 +68,47 @@ export default function PortalSalesTrainingPage() {
           thumbnailUrl: c.thumbnailUrl as string ?? undefined,
         }))
         const published = courses.filter(c => c.status === 'published' || c.status === 'Published')
+
+        const enrollments: Enrollment[] = []
+        if (user?.email) {
+          for (const c of published) {
+            try {
+              const res = await fetch(`/api/courses/${c.id}/enrollments?limit=200`)
+              if (!res.ok) continue
+              const enrResult = await res.json()
+              const list = enrResult.data ?? enrResult ?? []
+              const mine = list.find((e: Record<string, unknown>) =>
+                (e.studentEmail as string)?.toLowerCase() === user.email.toLowerCase()
+              )
+              if (mine) {
+                enrollments.push({
+                  id: mine.id as string,
+                  courseId: c.id,
+                  progress: (mine.progress as Record<string, boolean>) ?? {},
+                  status: (mine.status as string) ?? 'active',
+                })
+              }
+            } catch { /* skip */ }
+          }
+        }
+
         const completed = published.filter(c => {
-          const totalMods = c.modules.length
-          const completedMods = c.modules.filter(m => m.completed).length
-          return totalMods > 0 && completedMods === totalMods
+          const enr = enrollments.find(e => e.courseId === c.id)
+          if (!enr || c.modules.length === 0) return false
+          const done = c.modules.filter(m => enr.progress[m.id]).length
+          return done === c.modules.length
         }).length
+
         setData({
           courses: published,
+          enrollments,
           totalCompleted: completed,
           totalInProgress: published.length - completed,
         })
       })
       .catch(() => toast('Failed to load training data', 'error'))
       .finally(() => setLoading(false))
-  }, [company, toast])
+  }, [company, user?.email, toast])
 
   if (loading) {
     return (
@@ -122,7 +160,10 @@ export default function PortalSalesTrainingPage() {
             <div className="divide-y divide-gray-50">
               {data.courses.map(c => {
                 const totalModules = c.modules.length
-                const completedModules = c.modules.filter(m => m.completed).length
+                const enrollment = data.enrollments.find(e => e.courseId === c.id)
+                const completedModules = enrollment
+                  ? c.modules.filter(m => enrollment.progress[m.id]).length
+                  : 0
                 const progress = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0
                 return (
                   <div key={c.id} className="px-5 py-4 hover:bg-gray-50 transition-colors">

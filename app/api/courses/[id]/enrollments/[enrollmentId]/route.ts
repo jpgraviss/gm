@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -19,6 +20,27 @@ function mapEnrollment(row: any) {
   }
 }
 
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string; enrollmentId: string }> },
+) {
+  const { id, enrollmentId } = await params
+  const db = createServiceClient()
+
+  const { data, error } = await db
+    .from('course_enrollments')
+    .select('*')
+    .eq('id', enrollmentId)
+    .eq('course_id', id)
+    .single()
+
+  if (error || !data) {
+    return NextResponse.json({ error: 'Enrollment not found' }, { status: 404 })
+  }
+
+  return NextResponse.json(mapEnrollment(data))
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; enrollmentId: string }> },
@@ -32,7 +54,6 @@ export async function PATCH(
   if (body.status !== undefined)        update.status = body.status
   if (body.certificateId !== undefined) update.certificate_id = body.certificateId
 
-  // Mark completed
   if (body.completed === true) {
     update.completed_at = new Date().toISOString()
     update.status = 'Completed'
@@ -56,4 +77,42 @@ export async function PATCH(
   }
 
   return NextResponse.json(mapEnrollment(data))
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; enrollmentId: string }> },
+) {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
+
+  const { id, enrollmentId } = await params
+  const db = createServiceClient()
+
+  const { error } = await db
+    .from('course_enrollments')
+    .delete()
+    .eq('id', enrollmentId)
+    .eq('course_id', id)
+
+  if (error) {
+    console.error('[enrollment DELETE]', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  const { data: course } = await db
+    .from('courses')
+    .select('enrolled_count')
+    .eq('id', id)
+    .single()
+
+  if (course && course.enrolled_count > 0) {
+    await db
+      .from('courses')
+      .update({ enrolled_count: course.enrolled_count - 1 })
+      .eq('id', id)
+  }
+
+  logAudit({ userName: 'system', action: 'unenrolled_student', module: 'courses', type: 'info', metadata: { courseId: id, enrollmentId } })
+  return NextResponse.json({ deleted: enrollmentId })
 }

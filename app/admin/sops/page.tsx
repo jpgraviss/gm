@@ -147,7 +147,7 @@ const DEFAULT_SOPS: SOPSection[] = [
       'Branding: Customize colors, logo text, and app name in Settings > Branding.',
       'Email Defaults: Configure from name, reply-to address, and footer text in Settings > Email Defaults.',
       'Email Templates: Customize system email templates (welcome, notifications) in Settings > Email Templates.',
-      'Integrations: Connect Google, QuickBooks, Gmail, and other services in Settings > Integrations.',
+      'Integrations: Connect Google, Gmail, and other services in Settings > Integrations.',
       'CRM Setup: Configure pipelines, stages, service types, and contact tags in Settings > CRM Setup.',
       'Notifications: Set activity notification channels and quiet hours in Settings > Notifications.',
       'Navigation: Customize sidebar layout and role-based visibility in Settings > Navigation.',

@@ -33,6 +33,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()

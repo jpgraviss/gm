@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS wordpress_site_health (
 );
 
 ALTER TABLE wordpress_site_health ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "auth_read_wordpress_site_health"  ON wordpress_site_health FOR SELECT TO authenticated USING (true);
-CREATE POLICY IF NOT EXISTS "auth_write_wordpress_site_health" ON wordpress_site_health FOR ALL    TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "anon_write_wordpress_site_health" ON wordpress_site_health FOR ALL    TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "auth_read_wordpress_site_health"  ON wordpress_site_health FOR SELECT TO authenticated USING (true);
+CREATE POLICY "auth_write_wordpress_site_health" ON wordpress_site_health FOR ALL    TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "anon_write_wordpress_site_health" ON wordpress_site_health FOR ALL    TO anon USING (true) WITH CHECK (true);
 
 -- Managed SEO settings pushed from GravHub to WordPress
 CREATE TABLE IF NOT EXISTS wordpress_seo_settings (
@@ -33,9 +33,9 @@ CREATE TABLE IF NOT EXISTS wordpress_seo_settings (
 );
 
 ALTER TABLE wordpress_seo_settings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "auth_read_wordpress_seo_settings"  ON wordpress_seo_settings FOR SELECT TO authenticated USING (true);
-CREATE POLICY IF NOT EXISTS "auth_write_wordpress_seo_settings" ON wordpress_seo_settings FOR ALL    TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "anon_write_wordpress_seo_settings" ON wordpress_seo_settings FOR ALL    TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "auth_read_wordpress_seo_settings"  ON wordpress_seo_settings FOR SELECT TO authenticated USING (true);
+CREATE POLICY "auth_write_wordpress_seo_settings" ON wordpress_seo_settings FOR ALL    TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "anon_write_wordpress_seo_settings" ON wordpress_seo_settings FOR ALL    TO anon USING (true) WITH CHECK (true);
 
 -- On-page SEO scores reported by the plugin
 CREATE TABLE IF NOT EXISTS wordpress_seo_scores (
@@ -50,9 +50,9 @@ CREATE TABLE IF NOT EXISTS wordpress_seo_scores (
 );
 
 ALTER TABLE wordpress_seo_scores ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "auth_read_wordpress_seo_scores"  ON wordpress_seo_scores FOR SELECT TO authenticated USING (true);
-CREATE POLICY IF NOT EXISTS "auth_write_wordpress_seo_scores" ON wordpress_seo_scores FOR ALL    TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "anon_write_wordpress_seo_scores" ON wordpress_seo_scores FOR ALL    TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "auth_read_wordpress_seo_scores"  ON wordpress_seo_scores FOR SELECT TO authenticated USING (true);
+CREATE POLICY "auth_write_wordpress_seo_scores" ON wordpress_seo_scores FOR ALL    TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "anon_write_wordpress_seo_scores" ON wordpress_seo_scores FOR ALL    TO anon USING (true) WITH CHECK (true);
 
 -- Add wordpress JSONB column to app_settings for API key storage
 DO $$ BEGIN

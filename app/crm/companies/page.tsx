@@ -45,6 +45,47 @@ const companyStatusColors: Record<CompanyStatus, string> = {
 
 const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned']
 
+const INDUSTRIES = [
+  'Automotive',
+  'Business Supplies & Equipment',
+  'Capital Markets',
+  'Commercial Real Estate',
+  'Construction',
+  'Consulting',
+  'Consumer Electronics',
+  'Consumer Services',
+  'Education',
+  'Electronics Manufacturing',
+  'Energy',
+  'Engineering',
+  'Entertainment',
+  'Financial Services',
+  'Graphic Design',
+  'Healthcare',
+  'Hospitality',
+  'Human Resources',
+  'Information Technology',
+  'Insurance',
+  'Internet',
+  'Legal Services',
+  'Machinery',
+  'Marketing & Advertising',
+  'Media & Broadcasting',
+  'Media Production',
+  'Nonprofit',
+  'Online Media',
+  'OOH',
+  'Printing',
+  'Professional Training',
+  'Real Estate',
+  'Recreation',
+  'Research',
+  'Retail',
+  'Software & Technology',
+  'Venture Capital',
+  'Other',
+]
+
 // ─── Company Files Tab ───────────────────────────────────────────────────────
 
 interface CompanyFile {
@@ -1031,8 +1072,12 @@ function EditCompanyPanel({
                   </button>
                 )}
               </label>
-              <input value={form.industry} onChange={e => { set('industry', e.target.value); clearEnriched('industry') }}
-                className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${ec('industry')}`} />
+              <select value={form.industry} onChange={e => { set('industry', e.target.value); clearEnriched('industry') }}
+                className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${ec('industry')}`}>
+                <option value="">Select industry...</option>
+                {(!INDUSTRIES.includes(form.industry) && form.industry) && <option value={form.industry}>{form.industry}</option>}
+                {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</label>
@@ -1217,11 +1262,25 @@ export default function CompaniesPage() {
     setLocalCompanies(prev => prev.map(c => c.id === updated.id ? updated : c))
     setEditingCompany(null)
     if (selectedCompany?.id === updated.id) setSelectedCompany(updated)
-    await fetch(`/api/crm/companies/${updated.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => toast('Failed to save company changes', 'error'))
+    try {
+      const res = await fetch(`/api/crm/companies/${updated.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Failed to save' }))
+        toast(err.error || 'Failed to save company changes', 'error')
+        fetchCrmCompanies().then(data => setLocalCompanies(data))
+        return
+      }
+      const saved = await res.json()
+      setLocalCompanies(prev => prev.map(c => c.id === saved.id ? saved : c))
+      if (selectedCompany?.id === saved.id) setSelectedCompany(saved)
+    } catch {
+      toast('Failed to save company changes', 'error')
+      fetchCrmCompanies().then(data => setLocalCompanies(data))
+    }
   }
 
   async function handleNewCompany(data: NewCompanyFormData) {

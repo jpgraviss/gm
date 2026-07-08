@@ -72,10 +72,46 @@ export interface NewCompanyFormData {
 }
 
 const STATUSES: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned']
-const SIZES: CompanySize[] = ['1-10', '11-50', '51-200', '201-500', '500+']
+const SIZES: CompanySize[] = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1001-5000', '5001-10000', '10001+']
 const INDUSTRIES = [
-  'OOH', 'Real Estate', 'Healthcare', 'Technology', 'Finance', 'Retail',
-  'Education', 'Construction', 'Hospitality', 'Legal', 'Non-Profit', 'Other',
+  'Automotive',
+  'Business Supplies & Equipment',
+  'Capital Markets',
+  'Commercial Real Estate',
+  'Construction',
+  'Consulting',
+  'Consumer Electronics',
+  'Consumer Services',
+  'Education',
+  'Electronics Manufacturing',
+  'Energy',
+  'Engineering',
+  'Entertainment',
+  'Financial Services',
+  'Graphic Design',
+  'Healthcare',
+  'Hospitality',
+  'Human Resources',
+  'Information Technology',
+  'Insurance',
+  'Internet',
+  'Legal Services',
+  'Machinery',
+  'Marketing & Advertising',
+  'Media & Broadcasting',
+  'Media Production',
+  'Nonprofit',
+  'Online Media',
+  'OOH',
+  'Printing',
+  'Professional Training',
+  'Real Estate',
+  'Recreation',
+  'Research',
+  'Retail',
+  'Software & Technology',
+  'Venture Capital',
+  'Other',
 ]
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -297,7 +333,14 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
             <div>
               <FieldLabel>Company Size</FieldLabel>
               <Select value={form.size} onChange={e => set('size', e.target.value as CompanySize)}>
-                {SIZES.map(s => <option key={s} value={s}>{s} employees</option>)}
+                <option value="1-10">1-10 employees</option>
+                <option value="11-50">11-50 employees</option>
+                <option value="51-200">51-200 employees</option>
+                <option value="201-500">201-500 employees</option>
+                <option value="501-1000">501-1,000 employees</option>
+                <option value="1001-5000">1,001-5,000 employees</option>
+                <option value="5001-10000">5,001-10,000 employees</option>
+                <option value="10001+">10,001+ employees</option>
               </Select>
             </div>
           </div>

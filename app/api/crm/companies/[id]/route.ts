@@ -40,7 +40,7 @@ export const PUT = withErrorHandler('crm/companies/[id] PUT', async (
     industry: { type: 'string', maxLength: 100 },
     website:  { type: 'string', maxLength: 500 },
     phone:    { type: 'string', maxLength: 50 },
-    size:     { type: 'string', enum: ['1-10', '11-50', '51-200', '201-500', '500+'] },
+    size:     { type: 'string', maxLength: 50 },
     status:   { type: 'string', enum: ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned'] },
   })
   if (!result.valid) return validationError(result.error)

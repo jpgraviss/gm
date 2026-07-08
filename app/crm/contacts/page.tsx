@@ -1389,11 +1389,25 @@ export default function ContactsPage() {
     setLocalContacts(prev => prev.map(c => c.id === updated.id ? updated : c))
     setEditingContact(null)
     if (selectedContact?.id === updated.id) setSelectedContact(updated)
-    await fetch(`/api/crm/contacts/${updated.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => toast('Failed to save contact changes', 'error'))
+    try {
+      const res = await fetch(`/api/crm/contacts/${updated.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Failed to save' }))
+        toast(err.error || 'Failed to save contact changes', 'error')
+        fetchCrmContacts().then(data => setLocalContacts(data))
+        return
+      }
+      const saved = await res.json()
+      setLocalContacts(prev => prev.map(c => c.id === saved.id ? saved : c))
+      if (selectedContact?.id === saved.id) setSelectedContact(saved)
+    } catch {
+      toast('Failed to save contact changes', 'error')
+      fetchCrmContacts().then(data => setLocalContacts(data))
+    }
   }
 
   async function handleDelete(id: string) {

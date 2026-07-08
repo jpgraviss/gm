@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchInvoices, fetchProjects, fetchProposals } from '@/lib/supabase'
@@ -790,6 +791,7 @@ const filterTabs: Array<ContractStatus | 'All'> = ['All', 'Draft', 'Sent', 'Full
 
 export default function ContractsPage() {
   const { toast } = useToast()
+  const searchParams = useSearchParams()
   const [localContracts, setLocalContracts] = useState<Contract[]>([])
   const [selected, setSelected] = useState<Contract | null>(null)
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'All'>('All')
@@ -818,6 +820,14 @@ export default function ContractsPage() {
     fetchProjects().then(setProjects)
     fetchProposals().then(setProposals)
   }, [])
+
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (openId && localContracts.length > 0 && !selected) {
+      const match = localContracts.find(c => c.id === openId)
+      if (match) setSelected(match)
+    }
+  }, [searchParams, localContracts, selected])
 
   useEffect(() => {
     if (!selected) return

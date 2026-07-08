@@ -1,39 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/admin-auth'
+import { requireWordPressAuth } from '@/lib/wordpress-auth'
+import { withErrorHandler } from '@/lib/api-handler'
 import path from 'path'
 import fs from 'fs'
-import { PassThrough } from 'stream'
-import { withErrorHandler } from '@/lib/api-handler'
 
 export const GET = withErrorHandler('wordpress/plugin/download GET', async (req) => {
-  const denied = await requireAdmin(req)
+  const denied = await requireWordPressAuth(req)
   if (denied) return denied
 
-  const pluginDir = path.join(process.cwd(), 'wordpress', 'gravhub-seo')
+  const zipPath = path.join(process.cwd(), 'public', 'downloads', 'gravhub-seo.zip')
 
-  if (!fs.existsSync(pluginDir)) {
-    return NextResponse.json({ error: 'Plugin directory not found' }, { status: 404 })
+  if (!fs.existsSync(zipPath)) {
+    return NextResponse.json(
+      { error: 'Plugin zip not built. Run: node scripts/build-plugin-zip.js' },
+      { status: 404 }
+    )
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const archiver = require('archiver')
-
-  const passthrough = new PassThrough()
-  const archive = archiver('zip', { zlib: { level: 9 } })
-
-  archive.on('error', (err: Error) => {
-    console.error('[plugin/download]', err)
-  })
-
-  archive.pipe(passthrough)
-  archive.directory(pluginDir, 'gravhub-seo')
-  archive.finalize()
-
-  const chunks: Buffer[] = []
-  for await (const chunk of passthrough) {
-    chunks.push(Buffer.from(chunk))
-  }
-  const buffer = Buffer.concat(chunks)
+  const buffer = fs.readFileSync(zipPath)
 
   return new NextResponse(buffer, {
     headers: {

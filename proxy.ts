@@ -48,7 +48,6 @@ const PUBLIC_PREFIXES = [
   '/api/intelligence/track',
   '/api/intelligence/script',
   '/api/wordpress/seo/',
-  '/api/wordpress/plugin/download',
 ]
 
 function getClientIp(req: NextRequest): string {

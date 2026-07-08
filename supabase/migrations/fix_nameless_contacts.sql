@@ -27,11 +27,8 @@ WHERE id = 'ct-hs-unknown-tonyc-3aca0f';
 UPDATE crm_contacts SET first_name = 'Muthu', last_name = '', full_name = 'Muthu'
 WHERE id = 'ct-hs-unknown-muthu-5d4371';
 
-UPDATE crm_contacts SET first_name = 'Annas', last_name = '', full_name = 'Annas'
+UPDATE crm_contacts SET first_name = 'Anna', last_name = 'Savignano', full_name = 'Anna Savignano'
 WHERE id = 'ct-hs-unknown-annas-e67d2c';
-
-UPDATE crm_contacts SET first_name = 'Anas', last_name = '', full_name = 'Anas'
-WHERE id = 'ct-hs-unknown-anas-bb576e';
 
 UPDATE crm_contacts SET first_name = 'N', last_name = 'Spencer', full_name = 'N Spencer'
 WHERE id = 'ct-hs-unknown-nspencer-a0c98e';
@@ -56,5 +53,6 @@ DELETE FROM crm_contacts WHERE id IN (
   'ct-hs-unknown-superhuman-e3e452',    -- superhuman@joinsuperhuman.io
   'ct-hs-unknown-marketing-a1e02e',     -- marketing@formetco.com
   'ct-hs-unknown-news-63aa16',          -- news@joinsalesbytes.ai
-  'ct-hs-unknown-kasperhallberg25-bcba30' -- kasper.hallberg25@nordicleadpipeline.pro (spam)
+  'ct-hs-unknown-kasperhallberg25-bcba30', -- kasper.hallberg25@nordicleadpipeline.pro (spam)
+  'ct-hs-unknown-anas-bb576e'             -- anas@formetco.com
 );

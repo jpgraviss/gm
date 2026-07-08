@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 
-export async function GET() {
+export const GET = withErrorHandler('data-audit GET', async () => {
   const db = createServiceClient()
 
   const [
@@ -86,9 +86,9 @@ export async function GET() {
     },
     scores,
   })
-}
+})
 
-export async function POST(req: Request) {
+export const POST = withErrorHandler('data-audit POST', async (req) => {
   const body = await req.json()
   const db = createServiceClient()
 
@@ -134,4 +134,4 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
-}
+})

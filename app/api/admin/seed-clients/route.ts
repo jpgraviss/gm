@@ -47,7 +47,7 @@ const renewals = [
   { id: 'ren-formetco',          company: 'Formetco',          contract_id: 'c-formetco-2026',          expiration_date: '2027-04-30', renewal_value: 1200,   assigned_rep: 'Jonathan Graviss', status: 'Auto-Renew',    service_type: 'SEO' },
 ]
 
-export async function POST() {
+export const POST = withErrorHandler('admin/seed-clients POST', async () => {
   const db = createServiceClient()
   const results: { companies: number; contracts: number; renewals: number; errors: string[] } = {
     companies: 0, contracts: 0, renewals: 0, errors: [],
@@ -76,4 +76,4 @@ export async function POST() {
   }
 
   return NextResponse.json(results, { status: results.errors.length ? 207 : 201 })
-}
+})

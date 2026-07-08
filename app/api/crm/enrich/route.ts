@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { chatCompletion } from '@/lib/ai-client'
 
 const INDUSTRIES = [
@@ -6,7 +7,7 @@ const INDUSTRIES = [
   'Education', 'Construction', 'Hospitality', 'Legal', 'Non-Profit', 'Other',
 ]
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('crm/enrich POST', async (req) => {
   let body: { url?: string }
   try {
     body = await req.json()
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
       linkedInUrl: aiAnalysis.linkedInUrl,
     },
   })
-}
+})
 
 function extractMeta(html: string, property: string): string | null {
   const re = new RegExp(`<meta[^>]+property=["']${escapeRegex(property)}["'][^>]+content=["']([^"']+)["']`, 'i')

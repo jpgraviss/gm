@@ -26,8 +26,8 @@ function mapDeal(row: any) {
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const PATCH = withErrorHandler('deals/[id] PATCH', async (req, ctx) => {
+  const { id } = await ctx!.params
   const body = await req.json()
   const db = createServiceClient()
   const update: Record<string, unknown> = {}
@@ -50,8 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   update.last_activity = new Date().toISOString().split('T')[0]
   const { data, error } = await db.from('deals').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[deals/:id PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update deal' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update deal')
   }
 
   if (body.stage !== undefined) {
@@ -59,18 +58,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   return NextResponse.json(mapDeal(data))
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const DELETE = withErrorHandler('deals/[id] DELETE', async (req, ctx) => {
+  const { id } = await ctx!.params
   const denied = await requireRole(req, 'Dept Manager')
   if (denied) return denied
   const db = createServiceClient()
   const { error } = await db.from('deals').delete().eq('id', id)
   if (error) {
-    console.error('[deals/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete deal' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete deal')
   }
   logAudit({ userName: 'system', action: 'deleted_deal', module: 'crm', type: 'warning', metadata: { dealId: id } })
   return NextResponse.json({ deleted: id })
-}
+})

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const TYPE_META: Record<string, { color: string; href: string }> = {
   call:     { color: '#3b82f6', href: '/crm/contacts' },
@@ -13,7 +14,7 @@ const TYPE_META: Record<string, { color: string; href: string }> = {
   proposal: { color: '#8b5cf6', href: '/proposals' },
 }
 
-export async function GET() {
+export const GET = withErrorHandler('notifications GET', async () => {
   const db = createServiceClient()
   const { data, error } = await db
     .from('crm_activities')
@@ -56,4 +57,4 @@ export async function GET() {
   })
 
   return NextResponse.json(notifications)
-}
+})

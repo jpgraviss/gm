@@ -43,7 +43,7 @@ function mapBroadcast(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('broadcasts GET', async (req) => {
   const pag = parsePagination(req)
   const db = createServiceClient()
 
@@ -54,14 +54,13 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[broadcasts GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapBroadcast), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('broadcasts POST', async (req) => {
   const body = await req.json()
   if (!body.name || !body.subject) {
     return NextResponse.json({ error: 'name and subject are required' }, { status: 400 })
@@ -88,9 +87,8 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[broadcasts POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   logAudit({ userName: 'system', action: 'created_broadcast', module: 'email_marketing', type: 'action', metadata: { broadcastId: data.id } })
   return NextResponse.json(mapBroadcast(data), { status: 201 })
-}
+})

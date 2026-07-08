@@ -14,7 +14,7 @@ import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender
  * 1. Execute pending email sequence steps
  * 2. Check for time-based automation triggers (overdue invoices, upcoming renewals)
  */
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('cron GET', async (req) => {
   // Verify cron secret — always required in production
   const authHeader = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
@@ -156,7 +156,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })
-}
+})
 
 /**
  * Determine if we should run the daily rank-tracking job on this cron tick.

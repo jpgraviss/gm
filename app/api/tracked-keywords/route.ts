@@ -3,8 +3,9 @@ import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { addTrackedKeyword, mapTracked } from '@/lib/rank-tracker'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('tracked-keywords GET', async (req) => {
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
@@ -18,13 +19,12 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[tracked-keywords GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   return NextResponse.json((data ?? []).map(mapTracked))
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('tracked-keywords POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -60,8 +60,7 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json(tracked, { status: 201 })
   } catch (err) {
-    console.error('[tracked-keywords POST]', err)
     const message = err instanceof Error ? err.message : 'Failed to create tracked keyword'
-    return NextResponse.json({ error: message }, { status: 500 })
+    throw new Error(message)
   }
-}
+})

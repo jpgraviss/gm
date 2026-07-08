@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSite(row: any) {
@@ -25,7 +26,7 @@ function mapSite(row: any) {
   }
 }
 
-export async function GET() {
+export const GET = withErrorHandler('monitored-sites GET', async () => {
   const db = createServiceClient()
   const { data, error } = await db
     .from('monitored_sites')
@@ -33,13 +34,12 @@ export async function GET() {
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('[monitored-sites GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch monitored sites')
   }
   return NextResponse.json((data ?? []).map(mapSite))
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('monitored-sites POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -83,8 +83,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[monitored-sites POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create monitored site')
   }
 
   logAudit({
@@ -96,4 +95,4 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json(mapSite(data), { status: 201 })
-}
+})

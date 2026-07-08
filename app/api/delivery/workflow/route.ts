@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const SERVICE_TYPES = ['Website', 'SEO', 'PPC', 'Social Media', 'Branding', 'Maintenance', 'Custom']
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('delivery/workflow POST', async (req: NextRequest) => {
   const body = await req.json()
   const result = validate(body, {
     companyName: { required: true, type: 'string', maxLength: 200 },
@@ -33,8 +34,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[delivery/workflow POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to create workflow')
   }
 
   await db.from('delivery_events').insert({
@@ -48,9 +48,9 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json(data, { status: 201 })
-}
+})
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('delivery/workflow GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
   const companyId = searchParams.get('company_id')
   const pag = parsePagination(req)
@@ -67,10 +67,9 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[delivery/workflow GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to fetch workflows')
   }
 
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows, nextCursor)
-}
+})

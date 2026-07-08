@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 
 // GET /api/admin/integration-health
 // Returns which integrations have valid stored credentials
-export async function GET() {
+export const GET = withErrorHandler('admin/integration-health GET', async () => {
   try {
     const db = createServiceClient()
 
@@ -35,4 +35,4 @@ export async function GET() {
     console.error('[admin/integration-health GET]', err)
     return NextResponse.json({ email: false, googleCalendar: false, googleDrive: false })
   }
-}
+})

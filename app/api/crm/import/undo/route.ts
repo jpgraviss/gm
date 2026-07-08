@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 
@@ -8,7 +9,7 @@ const TABLE_MAP: Record<string, string> = {
   deals: 'deals',
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('crm/import/undo POST', async (req) => {
   const denied = await requireRole(req, 'Dept Manager')
   if (denied) return denied
 
@@ -30,4 +31,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ deleted: totalDeleted, importId })
-}
+})

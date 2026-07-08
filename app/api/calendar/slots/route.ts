@@ -6,9 +6,10 @@ import {
   computeAvailableSlots,
   type CalendarSettings,
 } from '@/lib/google-calendar'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // GET /api/calendar/slots?slug=jaycee-graviss&date=2026-03-10
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('calendar/slots GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const slug = searchParams.get('slug')
   const date = searchParams.get('date')
@@ -67,4 +68,4 @@ export async function GET(req: NextRequest) {
   )
 
   return NextResponse.json({ slots, timezone: settings.timezone })
-}
+})

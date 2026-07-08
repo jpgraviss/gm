@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { validationError } from '@/lib/validation'
@@ -6,7 +7,7 @@ import { requireAdmin } from '@/lib/admin-auth'
 
 const SETTINGS_ID = 'global'
 
-export async function GET() {
+export const GET = withErrorHandler('settings GET', async () => {
   const db = createServiceClient()
   const { data, error } = await db
     .from('app_settings')
@@ -14,15 +15,14 @@ export async function GET() {
     .eq('id', SETTINGS_ID)
     .maybeSingle()
   if (error) {
-    console.error('[settings GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch settings' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch settings')
   }
   return NextResponse.json(data ?? {}, {
     headers: { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=600' },
   })
-}
+})
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withErrorHandler('settings PATCH', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -72,9 +72,8 @@ export async function PATCH(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[settings PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update settings' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update settings')
   }
   logAudit({ userName: 'admin', action: 'updated_settings', module: 'settings', type: 'action' })
   return NextResponse.json(data)
-}
+})

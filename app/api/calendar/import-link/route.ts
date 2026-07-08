@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parseICS } from '@/lib/ical-parser'
+import { withErrorHandler } from '@/lib/api-handler'
 
 function isIcsUrl(link: string): boolean {
   return (
@@ -16,7 +17,7 @@ function normalizeIcsUrl(url: string): string {
   return url.replace(/^webcal:\/\//, 'https://')
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('calendar/import-link POST', async (req) => {
   const { link, userEmail, subscriptionName } = await req.json()
   if (!link || typeof link !== 'string') {
     return NextResponse.json({ error: 'Missing link' }, { status: 400 })
@@ -131,8 +132,8 @@ export async function POST(req: NextRequest) {
   }).select().single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   return NextResponse.json({ type: 'single', ...data })
-}
+})

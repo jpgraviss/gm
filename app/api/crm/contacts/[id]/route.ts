@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
@@ -32,8 +33,8 @@ function mapContact(row: any) {
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) => {
+  const { id } = await ctx!.params
   const body = await req.json()
 
   const result = validate(body, {
@@ -74,14 +75,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     .select()
     .single()
   if (error) {
-    console.error('[crm/contacts/:id PUT]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update contact' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update contact')
   }
   return NextResponse.json(mapContact(data))
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx) => {
+  const { id } = await ctx!.params
   const body = await req.json()
 
   const result = validate(body, {
@@ -100,11 +100,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .select()
     .single()
   if (error) {
-    console.error('[crm/contacts/:id PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update contact' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update contact')
   }
   return NextResponse.json(mapContact(data))
-}
+})
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params

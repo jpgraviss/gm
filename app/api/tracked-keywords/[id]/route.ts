@@ -47,13 +47,12 @@ export const PATCH = withErrorHandler('tracked-keywords/[id] PATCH', async (req,
     .single()
 
   if (error || !data) {
-    console.error('[tracked-keywords PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update')
   }
   return NextResponse.json(mapTracked(data))
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('tracked-keywords/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -65,8 +64,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const { error } = await db.from('tracked_keywords').delete().eq('id', id)
   if (error) {
-    console.error('[tracked-keywords DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   logAudit({
@@ -77,4 +75,4 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     metadata: { id },
   })
   return NextResponse.json({ deleted: id })
-}
+})

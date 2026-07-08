@@ -25,7 +25,7 @@ function mapDeal(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('deals GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const stage = searchParams.get('stage')
   const pipelineId = searchParams.get('pipeline_id')
@@ -39,14 +39,13 @@ export async function GET(req: NextRequest) {
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
-    console.error('[deals GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch deals' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch deals')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapDeal), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('deals POST', async (req) => {
   const body = await req.json()
 
   const result = validate(body, {
@@ -85,8 +84,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[deals POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create deal' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create deal')
   }
   return NextResponse.json(mapDeal(data), { status: 201 })
-}
+})

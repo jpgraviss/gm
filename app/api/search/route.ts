@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const LIMIT_PER_TYPE = 5
 
@@ -11,7 +12,7 @@ interface SearchResult {
   href: string
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('search GET', async (req) => {
   const q = req.nextUrl.searchParams.get('q')?.trim()
   if (!q || q.length < 2) {
     return NextResponse.json([])
@@ -147,4 +148,4 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json(results)
-}
+})

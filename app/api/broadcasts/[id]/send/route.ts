@@ -13,7 +13,7 @@ const CHUNK_SIZE = 50 // Resend allows batches — we throttle to 50 per batch
  * individual email sends (not Resend Broadcasts API — we want per-contact
  * merge fields + suppression checks).
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withErrorHandler('broadcasts/[id]/send POST', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -43,9 +43,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: contacts, error: contactErr } = await query
   if (contactErr) {
-    console.error('[broadcasts send]', contactErr)
     await db.from('broadcasts').update({ status: 'failed' }).eq('id', id)
-    return NextResponse.json({ error: contactErr.message }, { status: 500 })
+    throw new Error(contactErr.message)
   }
 
   // Suppression list
@@ -148,4 +147,4 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   })
 
   return NextResponse.json({ sent, skipped, failed, total: contactList.length })
-}
+})

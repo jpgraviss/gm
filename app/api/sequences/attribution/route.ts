@@ -57,7 +57,7 @@ export const GET = withErrorHandler('sequences/attribution GET', async (req: Nex
     .in('contact_email', emails)
 
   if (dealErr) {
-    return NextResponse.json({ error: dealErr.message }, { status: 500 })
+    throw new Error(dealErr.message || 'Failed to fetch deals')
   }
 
   // Fetch sequence names for labeling
@@ -122,4 +122,4 @@ export const GET = withErrorHandler('sequences/attribution GET', async (req: Nex
     totalDeals,
     sequences: sequencesList,
   })
-}
+})

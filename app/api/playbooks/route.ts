@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapPlaybook(row: any) {
@@ -19,7 +20,7 @@ function mapPlaybook(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('playbooks GET', async (req) => {
   const pag = parsePagination(req)
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
@@ -33,14 +34,13 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[playbooks GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch playbooks')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapPlaybook), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('playbooks POST', async (req) => {
   const body = await req.json()
 
   if (!body.title || typeof body.title !== 'string') {
@@ -65,10 +65,9 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[playbooks POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create playbook')
   }
 
   logAudit({ userName: 'system', action: 'created_playbook', module: 'playbooks', type: 'action', metadata: { playbookId: data.id, title: data.title } })
   return NextResponse.json(mapPlaybook(data), { status: 201 })
-}
+})

@@ -15,4 +15,4 @@ export const GET = withErrorHandler('integrations/linkedin/connect GET', async (
     const msg = err instanceof Error ? err.message : 'linkedin_not_configured'
     return NextResponse.redirect(`${appUrl}/social?li_err=${encodeURIComponent(msg)}`)
   }
-}
+})

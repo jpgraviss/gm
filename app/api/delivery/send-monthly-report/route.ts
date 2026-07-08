@@ -7,7 +7,7 @@ import { scheduleEmail } from '@/lib/email-scheduler'
 import { getSettings } from '@/lib/settings'
 import { generateMonthlyReportHtml, type MonthlyReportData } from '@/lib/templates/generate-monthly-report'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('delivery/send-monthly-report POST', async (req) => {
   const body = await req.json()
   const result = validate(body, {
     workflowId: { required: true, type: 'string', maxLength: 100 },
@@ -34,8 +34,10 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (wfErr) {
-    const status = wfErr.code === 'PGRST116' ? 404 : 500
-    return NextResponse.json({ error: wfErr.message }, { status })
+    if (wfErr.code === 'PGRST116') {
+      return NextResponse.json({ error: wfErr.message }, { status: 404 })
+    }
+    throw new Error(wfErr.message)
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
@@ -121,8 +123,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (updateErr) {
-    console.error('[delivery/send-monthly-report POST]', updateErr)
-    return NextResponse.json({ error: updateErr.message }, { status: 500 })
+    throw new Error(updateErr.message)
   }
 
   await db.from('delivery_events').insert({
@@ -147,4 +148,4 @@ export async function POST(req: NextRequest) {
     scheduled: scheduledResult,
     recipientEmail,
   })
-}
+})

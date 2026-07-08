@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 
@@ -13,7 +14,7 @@ function get(row: Record<string, any>, ...keys: string[]): string {
   return ''
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('crm/import POST', async (req) => {
   const denied = await requireRole(req, 'Dept Manager')
   if (denied) return denied
 
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ inserted, skipped, errors, batchId })
-}
+})
 
 function normalizeLifecycle(val?: string): string | null {
   if (!val) return null

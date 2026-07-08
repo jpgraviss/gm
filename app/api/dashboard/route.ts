@@ -10,9 +10,8 @@ function isRestrictedUnit(unit: string | null): boolean {
   return !!unit && RESTRICTED_UNITS.includes(unit as OccupationalUnit)
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('dashboard GET', async (req) => {
   const unit = req.nextUrl.searchParams.get('unit') ?? req.nextUrl.searchParams.get('role')
-  try {
   const db = createServiceClient()
 
   const [dealsRes, invoicesRes, contractsRes, renewalsRes, revenueRes, activityRes, automationsRes, activeClientsRes] = await Promise.all([
@@ -120,8 +119,4 @@ export async function GET(req: NextRequest) {
     revenueByMonth,
     automations,
   })
-  } catch (err) {
-    console.error('[dashboard GET]', err)
-    return NextResponse.json({ error: 'Failed to load dashboard data' }, { status: 500 })
-  }
-}
+})

@@ -68,7 +68,7 @@ const STEP_SENT_COLUMN: Record<number, string> = {
   8: 'step_08_last_sent_at',
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('delivery/send-template POST', async (req) => {
   const body = await req.json()
   const result = validate(body, {
     workflowId: { required: true, type: 'string', maxLength: 100 },
@@ -150,8 +150,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (updateErr) {
-    console.error('[delivery/send-template POST]', updateErr)
-    return NextResponse.json({ error: updateErr.message }, { status: 500 })
+    throw new Error(updateErr.message)
   }
 
   await db.from('delivery_events').insert({
@@ -191,4 +190,4 @@ export async function POST(req: NextRequest) {
     email: emailResult,
     scheduled: scheduledResult,
   })
-}
+})

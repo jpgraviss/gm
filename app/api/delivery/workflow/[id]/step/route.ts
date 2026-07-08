@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const STEP_STATUSES = ['Pending', 'In Progress', 'Completed', 'Skipped']
 
@@ -42,7 +43,7 @@ function resolveMetaColumn(step: number, camelKey: string): string | null {
   return stepDef.meta.includes(col) ? col : null
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('delivery/workflow/[id]/step PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   if (!id) return NextResponse.json({ error: 'Missing workflow id' }, { status: 400 })
 
@@ -78,8 +79,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .single()
 
   if (error) {
-    console.error('[delivery/workflow/step PATCH]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to update workflow step')
   }
 
   await db.from('delivery_events').insert({
@@ -93,4 +93,4 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   })
 
   return NextResponse.json(data)
-}
+})

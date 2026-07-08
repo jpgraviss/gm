@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { exchangeDriveCode, saveDriveConfig } from '@/lib/google-drive'
 import { encrypt } from '@/lib/encryption'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // GET /api/drive/callback?code=...&state=...
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('drive/callback GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
   const code  = searchParams.get('code')
   const error = searchParams.get('error')
@@ -30,4 +31,4 @@ export async function GET(req: NextRequest) {
     console.error('[drive/callback GET]', err)
     return NextResponse.redirect(`${origin}/admin?tab=integrations&drive=error&msg=token_exchange_failed`)
   }
-}
+})

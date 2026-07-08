@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 
 /**
  * GET /api/auth/health
@@ -8,7 +9,7 @@ import { NextResponse } from 'next/server'
  *
  * Public endpoint — safe to expose because values are masked.
  */
-export async function GET() {
+export const GET = withErrorHandler('auth/health GET', async () => {
   const mask = (v: string | undefined): string => {
     if (!v) return '(not set)'
     if (v.length < 8) return '***'
@@ -39,4 +40,4 @@ export async function GET() {
         : null,
     timestamp: new Date().toISOString(),
   })
-}
+})

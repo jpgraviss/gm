@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { scoreContact } from '@/lib/ai/lead-scoring'
 
 const scoreCache = new Map<string, { score: ReturnType<typeof scoreContact> extends Promise<infer T> ? T : never; cachedAt: number }>()
 const CACHE_TTL = 24 * 60 * 60 * 1000
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const GET = withErrorHandler('crm/contacts/[id]/ai-score GET', async (_req, ctx) => {
+  const { id } = await ctx!.params
 
   const cached = scoreCache.get(id)
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
@@ -85,4 +86,4 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   scoreCache.set(id, { score: result, cachedAt: Date.now() })
 
   return NextResponse.json(result)
-}
+})

@@ -41,15 +41,15 @@ function mapBroadcast(row: any) {
   }
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('broadcasts/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { data } = await db.from('broadcasts').select('*').eq('id', id).single()
   if (!data) return NextResponse.json({ error: 'Broadcast not found' }, { status: 404 })
   return NextResponse.json(mapBroadcast(data))
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('broadcasts/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()
@@ -73,13 +73,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error } = await db.from('broadcasts').update(update).eq('id', id).select().single()
   if (error || !data) {
-    console.error('[broadcasts PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update broadcast' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update broadcast')
   }
   return NextResponse.json(mapBroadcast(data))
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('broadcasts/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -87,9 +86,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const db = createServiceClient()
   const { error } = await db.from('broadcasts').delete().eq('id', id)
   if (error) {
-    console.error('[broadcasts DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   logAudit({ userName: 'system', action: 'deleted_broadcast', module: 'email_marketing', type: 'warning', metadata: { broadcastId: id } })
   return NextResponse.json({ deleted: id })
-}
+})

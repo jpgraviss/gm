@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 interface TokenPayload {
   contactId: string
@@ -17,7 +18,7 @@ function decodeToken(token: string): TokenPayload | null {
   }
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+export const GET = withErrorHandler('unsubscribe/[token] GET', async (_req, { params }: { params: Promise<{ token: string }> }) => {
   const { token } = await params
   const payload = decodeToken(token)
   if (!payload) {
@@ -48,9 +49,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
     email: payload.email,
     preferences: contact.email_preferences ?? null,
   })
-}
+})
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+export const POST = withErrorHandler('unsubscribe/[token] POST', async (req, { params }: { params: Promise<{ token: string }> }) => {
   const { token } = await params
   const payload = decodeToken(token)
   if (!payload) {
@@ -125,4 +126,4 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   }
 
   return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
-}
+})

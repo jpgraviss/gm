@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
+import { withErrorHandler } from '@/lib/api-handler'
 
 interface GmailThread {
   id: string
@@ -16,7 +17,7 @@ async function fetchGmailThread(accessToken: string, threadId: string): Promise<
   return res.json()
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('sequences/reply-check POST', async (req: NextRequest) => {
   // Verify cron secret
   const authHeader = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
@@ -34,8 +35,7 @@ export async function POST(req: NextRequest) {
     .not('message_ids', 'is', null)
 
   if (fetchErr) {
-    console.error('[reply-check]', fetchErr)
-    return NextResponse.json({ error: fetchErr.message }, { status: 500 })
+    throw new Error(fetchErr.message || 'Failed to fetch enrollments')
   }
 
   if (!enrollments?.length) {
@@ -173,4 +173,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ checked, replies })
-}
+})

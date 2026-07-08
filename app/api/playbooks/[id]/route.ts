@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapPlaybook(row: any) {
@@ -19,7 +20,7 @@ function mapPlaybook(row: any) {
   }
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('playbooks/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db.from('playbooks').select('*').eq('id', id).single()
@@ -27,9 +28,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Playbook not found' }, { status: 404 })
   }
   return NextResponse.json(mapPlaybook(data))
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('playbooks/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()
@@ -44,13 +45,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error } = await db.from('playbooks').update(update).eq('id', id).select().single()
   if (error || !data) {
-    console.error('[playbooks PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update playbook' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update playbook')
   }
   return NextResponse.json(mapPlaybook(data))
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('playbooks/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -58,9 +58,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const db = createServiceClient()
   const { error } = await db.from('playbooks').delete().eq('id', id)
   if (error) {
-    console.error('[playbooks DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete playbook')
   }
   logAudit({ userName: 'system', action: 'deleted_playbook', module: 'playbooks', type: 'warning', metadata: { playbookId: id } })
   return NextResponse.json({ deleted: id })
-}
+})

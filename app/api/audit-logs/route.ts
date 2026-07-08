@@ -15,7 +15,7 @@ function mapLog(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('audit-logs GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const limit = parseInt(searchParams.get('limit') ?? '50', 10)
   const db = createServiceClient()
@@ -25,13 +25,12 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(limit)
   if (error) {
-    console.error('[audit-logs GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch audit logs' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch audit logs')
   }
   return NextResponse.json((data ?? []).map(mapLog))
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('audit-logs POST', async (req) => {
   const body = await req.json()
   const db = createServiceClient()
   const { data, error } = await db
@@ -47,8 +46,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[audit-logs POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create audit log' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create audit log')
   }
   return NextResponse.json(mapLog(data), { status: 201 })
-}
+})

@@ -25,7 +25,7 @@ function toCsvRow(values: string[]): string {
   }).join(',')
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('admin/export POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -91,4 +91,4 @@ export async function POST(req: NextRequest) {
       'Content-Disposition': `attachment; filename="gravhub-export-${Date.now()}.csv"`,
     },
   })
-}
+})

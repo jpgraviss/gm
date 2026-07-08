@@ -5,8 +5,9 @@ import { generateICS } from '@/lib/ics-generator'
 import { getGoogleCalendarLink, getOutlookCalendarLink, getOutlook365CalendarLink } from '@/lib/calendar-links'
 import { getResend } from '@/lib/resend'
 import { getSettings } from '@/lib/settings'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const bookingTypeId = searchParams.get('booking_type_id')
   const date = searchParams.get('date')
@@ -136,13 +137,12 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[calendar/bookings GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   return NextResponse.json(data)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('calendar/bookings POST', async (req) => {
   const body = await req.json()
   const { slug, date, start_time, end_time, guest_name, guest_email, guest_phone, guest_company, notes, intake_answers } = body
 
@@ -195,8 +195,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[calendar/bookings POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   if (data) {
@@ -365,4 +364,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(data, { status: 201 })
-}
+})

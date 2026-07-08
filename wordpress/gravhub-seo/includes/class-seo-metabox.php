@@ -1014,8 +1014,6 @@ class GravHub_SEO_Metabox {
 			'_gravhub_meta_title',
 			'_gravhub_focus_keyword',
 			'_gravhub_og_title',
-			'_gravhub_canonical_url',
-			'_gravhub_og_image',
 		);
 
 		foreach ( $text_fields as $field ) {

@@ -4,6 +4,7 @@ import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { addTrackedKeyword, addTrackedKeywordsBulk, mapTracked } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
+import { validate, validationError } from '@/lib/validation'
 
 export const GET = withErrorHandler('rank-tracker/keywords GET', async (req) => {
   const db = createServiceClient()
@@ -63,9 +64,13 @@ export const POST = withErrorHandler('rank-tracker/keywords POST', async (req) =
     return NextResponse.json(created, { status: 201 })
   }
 
-  if (!body.companyName || !body.siteUrl || !body.keyword) {
-    return NextResponse.json({ error: 'companyName, siteUrl, and keyword are required' }, { status: 400 })
-  }
+  const v = validate(body, {
+    keyword:     { required: true, type: 'string', maxLength: 500 },
+    siteUrl:     { required: true, type: 'string', maxLength: 500 },
+    companyName: { required: true, type: 'string', maxLength: 200 },
+    country:     { type: 'string', maxLength: 10 },
+  })
+  if (!v.valid) return validationError(v.error)
 
   const tracked = await addTrackedKeyword({
     companyName:  body.companyName,

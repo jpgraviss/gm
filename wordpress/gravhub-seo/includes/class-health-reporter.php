@@ -61,7 +61,7 @@ class GravHub_Health_Reporter {
 		$result = $this->api_client->send_health_report( $data );
 
 		if ( ! is_wp_error( $result ) ) {
-			update_option( 'gravhub_last_health_report', current_time( 'timestamp' ) );
+			update_option( 'gravhub_last_health_report', time() );
 		}
 
 		return $result;

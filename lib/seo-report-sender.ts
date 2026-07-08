@@ -87,10 +87,10 @@ export async function sendMonthlyClientReports(): Promise<{ sent: number; failed
       const reportData = await buildClientReport(config)
       await saveReportSnapshot(reportData)
 
-      let recipientEmail: string | null = null
+      let recipientEmails: string[] = []
 
       if (integration.seo_report_recipients?.length) {
-        recipientEmail = integration.seo_report_recipients[0]
+        recipientEmails = integration.seo_report_recipients
       } else if (integration.company_id) {
         const { data: contacts } = await db
           .from('crm_contacts')
@@ -101,11 +101,11 @@ export async function sendMonthlyClientReports(): Promise<{ sent: number; failed
 
         if (contacts?.[0]) {
           const emails = (contacts[0] as { emails: string[] }).emails
-          if (emails?.length) recipientEmail = emails[0]
+          if (emails?.length) recipientEmails = [emails[0]]
         }
       }
 
-      if (!recipientEmail) {
+      if (recipientEmails.length === 0) {
         results.push({ company: integration.company_name, sent: false, error: 'No recipient found' })
         failed++
         continue
@@ -139,7 +139,7 @@ export async function sendMonthlyClientReports(): Promise<{ sent: number; failed
       const html = generateMonthlyReportHtml(monthlyData, settings)
 
       const emailResult = await sendEmail({
-        to: recipientEmail,
+        to: recipientEmails,
         subject: `Your Monthly SEO Report — ${label}`,
         html,
       })
@@ -150,10 +150,10 @@ export async function sendMonthlyClientReports(): Promise<{ sent: number; failed
           .update({ last_seo_report_at: new Date().toISOString() })
           .eq('id', integration.id)
 
-        results.push({ company: integration.company_name, sent: true, recipient: recipientEmail })
+        results.push({ company: integration.company_name, sent: true, recipient: recipientEmails.join(', ') })
         sent++
       } else {
-        results.push({ company: integration.company_name, sent: false, recipient: recipientEmail, error: emailResult.error })
+        results.push({ company: integration.company_name, sent: false, recipient: recipientEmails.join(', '), error: emailResult.error })
         failed++
       }
     } catch (err) {
@@ -225,13 +225,13 @@ export async function sendSingleReport(companyName: string, options?: { recipien
     return { html, sent: false }
   }
 
-  let recipientEmail = options?.recipientOverride ?? null
+  let recipientEmails: string[] = options?.recipientOverride ? [options.recipientOverride] : []
 
-  if (!recipientEmail && row.seo_report_recipients?.length) {
-    recipientEmail = row.seo_report_recipients[0]
+  if (recipientEmails.length === 0 && row.seo_report_recipients?.length) {
+    recipientEmails = row.seo_report_recipients
   }
 
-  if (!recipientEmail && row.company_id) {
+  if (recipientEmails.length === 0 && row.company_id) {
     const { data: contacts } = await db
       .from('crm_contacts')
       .select('emails')
@@ -241,16 +241,16 @@ export async function sendSingleReport(companyName: string, options?: { recipien
 
     if (contacts?.[0]) {
       const emails = (contacts[0] as { emails: string[] }).emails
-      if (emails?.length) recipientEmail = emails[0]
+      if (emails?.length) recipientEmails = [emails[0]]
     }
   }
 
-  if (!recipientEmail) {
+  if (recipientEmails.length === 0) {
     return { html, sent: false, error: 'No recipient found' }
   }
 
   const result = await sendEmail({
-    to: recipientEmail,
+    to: recipientEmails,
     subject: `Your Monthly SEO Report — ${label}`,
     html,
   })
@@ -263,5 +263,5 @@ export async function sendSingleReport(companyName: string, options?: { recipien
       .eq('id', row.id)
   }
 
-  return { html, sent: result.success, recipient: recipientEmail, error: result.error }
+  return { html, sent: result.success, recipient: recipientEmails.join(', '), error: result.error }
 }

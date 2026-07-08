@@ -265,19 +265,25 @@ export async function checkKeyword(tracked: TrackedKeyword): Promise<number | nu
 
   const checkedAt = new Date().toISOString()
 
-  await db.from('keyword_rank_history').insert({
+  const { error: insertError } = await db.from('keyword_rank_history').insert({
     id:                 newId('kwh'),
     workspace_id:       DEFAULT_WORKSPACE_ID,
     tracked_keyword_id: tracked.id,
     position,
     checked_at:         checkedAt,
   })
+  if (insertError) {
+    console.error('[rank-tracker] failed to insert keyword_rank_history for', tracked.id, insertError)
+  }
 
   if (position == null) {
-    await db
+    const { error: updateError } = await db
       .from('tracked_keywords')
       .update({ last_checked_at: checkedAt })
       .eq('id', tracked.id)
+    if (updateError) {
+      console.error('[rank-tracker] failed to update last_checked_at for', tracked.id, updateError)
+    }
     return null
   }
 
@@ -287,7 +293,7 @@ export async function checkKeyword(tracked: TrackedKeyword): Promise<number | nu
       ? position
       : tracked.bestPosition
 
-  await db
+  const { error: updateError } = await db
     .from('tracked_keywords')
     .update({
       previous_position: previousPosition,
@@ -296,6 +302,9 @@ export async function checkKeyword(tracked: TrackedKeyword): Promise<number | nu
       last_checked_at:   checkedAt,
     })
     .eq('id', tracked.id)
+  if (updateError) {
+    console.error('[rank-tracker] failed to update tracked_keywords for', tracked.id, updateError)
+  }
 
   return position
 }

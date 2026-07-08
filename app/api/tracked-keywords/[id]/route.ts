@@ -39,6 +39,10 @@ export const PATCH = withErrorHandler('tracked-keywords/[id] PATCH', async (req,
   if (body.location !== undefined)    update.location     = body.location
   if (body.searchVolume !== undefined) update.search_volume = body.searchVolume
 
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+  }
+
   const { data, error } = await db
     .from('tracked_keywords')
     .update(update)
@@ -59,7 +63,8 @@ export const DELETE = withErrorHandler('tracked-keywords/[id] DELETE', async (re
   const { id } = await params
   const db = createServiceClient()
 
-  // Cascade: delete history rows too
+  // Cascade: delete snapshots and history rows too
+  await db.from('competitor_rank_snapshots').delete().eq('tracked_keyword_id', id)
   await db.from('keyword_rank_history').delete().eq('tracked_keyword_id', id)
 
   const { error } = await db.from('tracked_keywords').delete().eq('id', id)

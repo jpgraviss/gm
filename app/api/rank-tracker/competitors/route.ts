@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { getCompetitors, addCompetitor } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
+import { validate, validationError } from '@/lib/validation'
 
 export const GET = withErrorHandler('rank-tracker/competitors GET', async () => {
   const competitors = await getCompetitors()
@@ -14,9 +15,11 @@ export const POST = withErrorHandler('rank-tracker/competitors POST', async (req
   if (denied) return denied
 
   const body = await req.json()
-  if (!body.domain || typeof body.domain !== 'string') {
-    return NextResponse.json({ error: 'domain is required' }, { status: 400 })
-  }
+  const v = validate(body, {
+    domain: { required: true, type: 'string', maxLength: 500 },
+    name:   { type: 'string', maxLength: 200 },
+  })
+  if (!v.valid) return validationError(v.error)
 
   const competitor = await addCompetitor(body.domain, body.label)
   logAudit({

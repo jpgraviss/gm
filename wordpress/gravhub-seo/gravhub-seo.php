@@ -170,7 +170,7 @@ final class GravHub_SEO {
 		$analysis = $this->seo_analyzer->analyze_all_pages();
 		$this->api_client->send_scores( $analysis );
 		update_option( 'gravhub_last_analysis', $analysis );
-		update_option( 'gravhub_last_analysis_time', current_time( 'timestamp' ) );
+		update_option( 'gravhub_last_analysis_time', time() );
 
 		$health = $this->health_reporter->send_report();
 
@@ -213,7 +213,7 @@ final class GravHub_SEO {
 		$send_result = $this->api_client->send_scores( $results );
 
 		update_option( 'gravhub_last_analysis', $results );
-		update_option( 'gravhub_last_analysis_time', current_time( 'timestamp' ) );
+		update_option( 'gravhub_last_analysis_time', time() );
 
 		return new WP_REST_Response(
 			array(

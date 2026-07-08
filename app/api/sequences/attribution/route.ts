@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('sequences/attribution GET', async (req: NextRequest) => {
   const sequenceId = req.nextUrl.searchParams.get('sequenceId')
 
   const db = createServiceClient()
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
   const { data: enrollments, error: enrollErr } = await enrollQuery
 
   if (enrollErr) {
-    return NextResponse.json({ error: enrollErr.message }, { status: 500 })
+    throw new Error(enrollErr.message || 'Failed to fetch enrollments')
   }
 
   if (!enrollments || enrollments.length === 0) {

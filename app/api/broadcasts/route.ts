@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapBroadcast(row: any) {

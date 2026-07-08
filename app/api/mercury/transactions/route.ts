@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listAccounts, listTransactions } from '@/lib/mercury'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('mercury/transactions GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const accountId = searchParams.get('accountId')
   const limit = parseInt(searchParams.get('limit') ?? '50', 10)
@@ -28,4 +29,4 @@ export async function GET(req: NextRequest) {
     const status_code = msg.includes('not configured') ? 400 : 502
     return NextResponse.json({ error: msg }, { status: status_code })
   }
-}
+})

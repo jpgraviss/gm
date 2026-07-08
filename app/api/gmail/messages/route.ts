@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('gmail/messages POST', async (req) => {
   try {
     const { accessToken, maxResults = 30, pageToken, query = '' } = await req.json()
 
@@ -68,7 +69,6 @@ export async function POST(req: NextRequest) {
       nextPageToken: listData.nextPageToken ?? null,
     })
   } catch (err) {
-    console.error('[gmail/messages]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    throw err instanceof Error ? err : new Error('Operation failed')
   }
-}
+})

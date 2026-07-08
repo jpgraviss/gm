@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { applyAudienceFilter } from '@/lib/broadcasts'
+import { withErrorHandler } from '@/lib/api-handler'
 
 /**
  * Preview audience — returns count + sample emails for the current

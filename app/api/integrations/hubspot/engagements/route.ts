@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const PAGE_SIZE = 100
 
@@ -100,7 +101,7 @@ function mapEngagement(type: EngagementType, e: HubSpotEngagement) {
 }
 
 // GET: Preview engagements from HubSpot
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('integrations/hubspot/engagements GET', async (req) => {
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(
@@ -139,10 +140,10 @@ export async function GET(req: NextRequest) {
     nextAfter,
     total: allEngagements.length,
   })
-}
+})
 
 // POST: Import engagements from HubSpot into crm_activities
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('integrations/hubspot/engagements POST', async (req) => {
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(
@@ -261,4 +262,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ inserted, updated: 0, skipped, errors, totalFetched })
-}
+})

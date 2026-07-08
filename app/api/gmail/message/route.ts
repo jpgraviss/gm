@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 
 function decodeBase64Url(str: string): string {
   try {
@@ -58,7 +59,7 @@ interface GmailPayload {
   headers?: { name: string; value: string }[]
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('gmail/message POST', async (req) => {
   try {
     const { accessToken, id } = await req.json()
 
@@ -107,7 +108,6 @@ export async function POST(req: NextRequest) {
       bodyHtml: html || undefined,
     })
   } catch (err) {
-    console.error('[gmail/message]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    throw err instanceof Error ? err : new Error('Operation failed')
   }
-}
+})

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +12,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders })
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('forms/public/funnel-submit POST', async (req: NextRequest) => {
   const body = await req.json()
   const { funnelSlug, data } = body
 
@@ -56,4 +57,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ success: true, id: submissionId }, { status: 201, headers: corsHeaders })
-}
+})

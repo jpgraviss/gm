@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

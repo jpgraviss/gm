@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('push/subscribe POST', async (req) => {
   const body = await req.json()
   const { endpoint, keys } = body
 
@@ -29,14 +30,13 @@ export async function POST(req: NextRequest) {
   )
 
   if (error) {
-    console.error('[push/subscribe POST]', error)
-    return NextResponse.json({ error: 'Failed to save subscription' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to save subscription')
   }
 
   return NextResponse.json({ ok: true }, { status: 201 })
-}
+})
 
-export async function DELETE(req: NextRequest) {
+export const DELETE = withErrorHandler('push/subscribe DELETE', async (req) => {
   const body = await req.json()
   const { endpoint } = body
 
@@ -48,9 +48,8 @@ export async function DELETE(req: NextRequest) {
   const { error } = await db.from('push_subscriptions').delete().eq('endpoint', endpoint)
 
   if (error) {
-    console.error('[push/subscribe DELETE]', error)
-    return NextResponse.json({ error: 'Failed to remove subscription' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to remove subscription')
   }
 
   return NextResponse.json({ ok: true })
-}
+})

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
+import { withErrorHandler } from '@/lib/api-handler'
 
 async function verifyOwnership(req: NextRequest, targetEmail: string): Promise<NextResponse | null> {
   const callerEmail = await getAuthenticatedEmail(req)
@@ -14,7 +15,7 @@ async function verifyOwnership(req: NextRequest, targetEmail: string): Promise<N
 }
 
 // GET /api/gmail/token?email=user@example.com — retrieve stored Gmail token
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('gmail/token GET', async (req) => {
   const email = new URL(req.url).searchParams.get('email')
   if (!email) return NextResponse.json({ error: 'email is required' }, { status: 400 })
 
@@ -46,10 +47,10 @@ export async function GET(req: NextRequest) {
     gmailEmail: data.gmail_email,
     gmailSettings: data.gmail_settings ?? null,
   })
-}
+})
 
 // POST /api/gmail/token — store Gmail token and/or settings for a team member
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('gmail/token POST', async (req) => {
   const { userEmail, gmailToken, gmailEmail, expiresIn, gmailSettings } = await req.json()
   if (!userEmail) {
     return NextResponse.json({ error: 'userEmail is required' }, { status: 400 })
@@ -85,15 +86,14 @@ export async function POST(req: NextRequest) {
     .eq('email', userEmail)
 
   if (error) {
-    console.error('[gmail/token POST]', error)
-    return NextResponse.json({ error: 'Failed to store token' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to store token')
   }
 
   return NextResponse.json({ ok: true })
-}
+})
 
 // DELETE /api/gmail/token — clear stored Gmail token
-export async function DELETE(req: NextRequest) {
+export const DELETE = withErrorHandler('gmail/token DELETE', async (req) => {
   const { userEmail } = await req.json()
   if (!userEmail) return NextResponse.json({ error: 'userEmail is required' }, { status: 400 })
 
@@ -111,4 +111,4 @@ export async function DELETE(req: NextRequest) {
     .eq('email', userEmail)
 
   return NextResponse.json({ ok: true })
-}
+})

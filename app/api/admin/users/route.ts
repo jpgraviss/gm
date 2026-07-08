@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapUser(row: any) {

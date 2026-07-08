@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { exchangeLinkedInCode } from '@/lib/linkedin'
 import { saveConnection } from '@/lib/social-connections'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 /**
  * GET /api/integrations/linkedin/callback?code=...
  * Exchanges the code, resolves the member URN, and stores it as the LinkedIn
  * connection in social_connections.
  */
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('integrations/linkedin/callback GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
   const err = searchParams.get('error')
@@ -35,4 +36,4 @@ export async function GET(req: NextRequest) {
     console.error('[linkedin callback]', exchangeErr)
     return NextResponse.redirect(`${appUrl}/social?li_err=exchange_failed`)
   }
-}
+})

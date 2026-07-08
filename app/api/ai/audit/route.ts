@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chatCompletion } from '@/lib/ai-client'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuditSystemPrompt } from '@/lib/audit-template'
+import { withErrorHandler } from '@/lib/api-handler'
 import type { AuditSectionResult, AuditType } from '@/lib/types'
 
 async function fetchPageHtml(url: string): Promise<string> {
@@ -155,8 +156,7 @@ function parseSection(text: string, label: string): AuditSectionResult {
   return { name: label, score: 50, grade: 'C', findings: ['Unable to fully analyze this section'], recommendations: ['Manual review recommended'] }
 }
 
-export async function POST(req: NextRequest) {
-  try {
+export const POST = withErrorHandler('ai/audit POST', async (req) => {
     const body = await req.json()
     const { url, auditType = 'full', companyId, companyName } = body as {
       url: string
@@ -268,14 +268,9 @@ export async function POST(req: NextRequest) {
       createdAt: now,
       completedAt: now,
     })
-  } catch (error) {
-    console.error('audit error:', error)
-    return NextResponse.json({ error: 'Failed to run audit' }, { status: 500 })
-  }
-}
+})
 
-export async function GET(req: NextRequest) {
-  try {
+export const GET = withErrorHandler('ai/audit GET', async (req) => {
     const supabase = createServiceClient()
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
@@ -294,8 +289,4 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error
     return NextResponse.json(data ?? [])
-  } catch (error) {
-    console.error('audit GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch audits' }, { status: 500 })
-  }
-}
+})

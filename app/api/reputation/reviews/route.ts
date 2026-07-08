@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('reputation/reviews GET', async (req) => {
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
 
@@ -26,9 +27,9 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json(data ?? [])
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('reputation/reviews POST', async (req) => {
   const db = createServiceClient()
   let body: Record<string, unknown>
   try {
@@ -69,8 +70,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      console.error('[reviews POST add]', error)
-      return NextResponse.json({ error: 'Failed to add review' }, { status: 500 })
+      throw new Error(error?.message || 'Failed to add review')
     }
     return NextResponse.json(data)
   }
@@ -113,4 +113,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(data)
-}
+})

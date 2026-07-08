@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('apollo/test POST', async (req) => {
   const { apiKey: bodyKey } = await req.json().catch(() => ({ apiKey: undefined })) as { apiKey?: string }
 
   let apiKey = bodyKey
@@ -47,4 +48,4 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : 'Connection failed'
     return NextResponse.json({ connected: false, error: message })
   }
-}
+})

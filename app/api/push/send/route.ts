@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPushNotification } from '@/lib/push-notifications'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('push/send POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -13,16 +14,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'userId and title are required' }, { status: 400 })
   }
 
-  try {
-    const result = await sendPushNotification({
-      userId,
-      title,
-      body: notifBody ?? '',
-      url,
-    })
-    return NextResponse.json(result)
-  } catch (err) {
-    console.error('[push/send POST]', err)
-    return NextResponse.json({ error: 'Failed to send notification' }, { status: 500 })
-  }
-}
+  const result = await sendPushNotification({
+    userId,
+    title,
+    body: notifBody ?? '',
+    url,
+  })
+  return NextResponse.json(result)
+})

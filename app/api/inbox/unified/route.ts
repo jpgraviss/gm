@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 /**
  * Unified inbox — aggregates conversations across every channel the user
@@ -35,7 +36,7 @@ interface UnifiedThread {
   sources: string[]
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('inbox/unified GET', async (req) => {
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '100', 10), 200)
@@ -201,4 +202,4 @@ export async function GET(req: NextRequest) {
   )
 
   return NextResponse.json(result.slice(0, limit))
-}
+})

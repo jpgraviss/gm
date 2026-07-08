@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const BUCKET = 'client-files'
 const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
@@ -23,7 +24,7 @@ const ALLOWED_MIME_TYPES = new Set([
   'video/quicktime',
 ])
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('files GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
 
@@ -39,8 +40,7 @@ export async function GET(req: NextRequest) {
   })
 
   if (error) {
-    console.error('[files GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to list files' }, { status: 500 })
+    throw error instanceof Error ? error : new Error(error?.message || 'Failed to list files')
   }
 
   // Generate signed URLs for each file
@@ -61,9 +61,9 @@ export async function GET(req: NextRequest) {
   )
 
   return NextResponse.json(files)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('files POST', async (req: NextRequest) => {
   const formData = await req.formData()
   const file = formData.get('file') as File | null
   const company = formData.get('company') as string | null
@@ -89,8 +89,7 @@ export async function POST(req: NextRequest) {
   })
 
   if (error) {
-    console.error('[files POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to upload file' }, { status: 500 })
+    throw error instanceof Error ? error : new Error(error?.message || 'Failed to upload file')
   }
 
   const { data: urlData } = await db.storage.from(BUCKET).createSignedUrl(filePath, 3600)
@@ -101,9 +100,9 @@ export async function POST(req: NextRequest) {
     path: filePath,
     url: urlData?.signedUrl ?? null,
   }, { status: 201 })
-}
+})
 
-export async function DELETE(req: NextRequest) {
+export const DELETE = withErrorHandler('files DELETE', async (req: NextRequest) => {
   const body = await req.json()
   const { path } = body
 
@@ -115,12 +114,11 @@ export async function DELETE(req: NextRequest) {
   const { error } = await db.storage.from(BUCKET).remove([path])
 
   if (error) {
-    console.error('[files DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete file' }, { status: 500 })
+    throw error instanceof Error ? error : new Error(error?.message || 'Failed to delete file')
   }
 
   return NextResponse.json({ ok: true })
-}
+})
 
 function sanitizePath(input: string): string {
   return input.replace(/[^a-zA-Z0-9-_ ]/g, '').trim().replace(/\s+/g, '-')

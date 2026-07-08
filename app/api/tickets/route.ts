@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TASK_PRIORITIES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTicket(row: any) {

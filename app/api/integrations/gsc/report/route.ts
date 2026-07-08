@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGSCSearchAnalytics, getGSCSummary } from '@/lib/google-search-console'
+import { withErrorHandler } from '@/lib/api-handler'
 
 /**
  * GET /api/integrations/gsc/report?site=https://example.com&days=28&dimension=query
  * Returns a summary card + top rows for a given dimension.
  */
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('integrations/gsc/report GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const siteUrl = searchParams.get('site')
   const days = parseInt(searchParams.get('days') ?? '28', 10)
@@ -31,10 +32,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ summary, rows, dimension, days })
   } catch (err) {
-    console.error('[gsc/report]', err)
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'GSC report failed' },
-      { status: 500 },
-    )
+    throw err instanceof Error ? err : new Error('GSC report failed')
   }
-}
+})

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('intelligence/script GET', async (req) => {
   const siteId = new URL(req.url).searchParams.get('site') ?? 'default'
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
   const endpoint = `${appUrl}/api/intelligence/track`
@@ -23,4 +24,4 @@ export async function GET(req: NextRequest) {
       'Access-Control-Allow-Origin': '*',
     },
   })
-}
+})

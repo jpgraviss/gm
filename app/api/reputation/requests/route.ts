@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET() {
+export const GET = withErrorHandler('reputation/requests GET', async () => {
   const db = createServiceClient()
   const { data: campaigns, error } = await db
     .from('review_campaigns')
@@ -9,14 +10,13 @@ export async function GET() {
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('[reputation/requests GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to fetch campaigns')
   }
 
   return NextResponse.json({ campaigns: campaigns ?? [], templates: {} })
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('reputation/requests POST', async (req) => {
   const body = await req.json()
   const { name, template, audience, scheduled_at, workspace_id } = body as {
     name: string
@@ -48,9 +48,8 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[reputation/requests POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to create campaign')
   }
 
   return NextResponse.json(data, { status: 201 })
-}
+})

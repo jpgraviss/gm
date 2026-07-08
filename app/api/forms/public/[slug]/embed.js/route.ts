@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 
 /**
  * Returns a JS snippet that creates an iframe pointing at /go/form/[slug].
@@ -6,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
  *   <div data-gravhub-form="my-contact-form"></div>
  *   <script src="https://app.gravissmarketing.com/api/forms/public/my-contact-form/embed.js" async></script>
  */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+export const GET = withErrorHandler('forms/public/[slug]/embed.js GET', async (_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) => {
   const { slug } = await params
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
 
@@ -47,4 +48,4 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       'Access-Control-Allow-Origin': '*',
     },
   })
-}
+})

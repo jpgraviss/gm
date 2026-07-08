@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const HUBSPOT_DEALS_URL = 'https://api.hubapi.com/crm/v3/objects/deals'
 
@@ -122,7 +123,7 @@ function mapDealToResponse(d: HubSpotDeal) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('integrations/hubspot/deals GET', async (req) => {
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(
@@ -159,9 +160,9 @@ export async function GET(req: NextRequest) {
     nextAfter: data.paging?.next?.after ?? null,
     total: deals.length,
   })
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('integrations/hubspot/deals POST', async (req) => {
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(
@@ -295,4 +296,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ inserted, updated, skipped, errors, totalFetched })
-}
+})

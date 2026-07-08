@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCourse(row: any) {
@@ -22,7 +23,10 @@ function mapCourse(row: any) {
   }
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('courses/[id] GET', async (
+  _req,
+  { params }: { params: Promise<{ id: string }> },
+) => {
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db.from('courses').select('*').eq('id', id).single()
@@ -30,9 +34,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Course not found' }, { status: 404 })
   }
   return NextResponse.json(mapCourse(data))
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('courses/[id] PATCH', async (
+  req,
+  { params }: { params: Promise<{ id: string }> },
+) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
   const { id } = await params
@@ -52,13 +59,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error } = await db.from('courses').update(update).eq('id', id).select().single()
   if (error || !data) {
-    console.error('[courses PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update course' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update course')
   }
   return NextResponse.json(mapCourse(data))
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('courses/[id] DELETE', async (
+  req,
+  { params }: { params: Promise<{ id: string }> },
+) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -66,9 +75,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const db = createServiceClient()
   const { error } = await db.from('courses').delete().eq('id', id)
   if (error) {
-    console.error('[courses DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   logAudit({ userName: 'system', action: 'deleted_course', module: 'courses', type: 'warning', metadata: { courseId: id } })
   return NextResponse.json({ deleted: id })
-}
+})

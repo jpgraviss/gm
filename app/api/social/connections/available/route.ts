@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { listAvailableAccounts } from '@/lib/social-connections'
 import type { SocialPlatform } from '@/lib/social-media'
 
@@ -10,7 +11,7 @@ const DISCOVERABLE: SocialPlatform[] = ['facebook', 'instagram', 'google_busines
  * platform, sourced from the underlying OAuth grant. Returns a clear error
  * (not a fake list) when the platform's OAuth isn't connected.
  */
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('social/connections/available GET', async (req) => {
   const platform = new URL(req.url).searchParams.get('platform') as SocialPlatform | null
   if (!platform || !DISCOVERABLE.includes(platform)) {
     return NextResponse.json({ error: 'Unsupported platform for discovery' }, { status: 400 })
@@ -25,4 +26,4 @@ export async function GET(req: NextRequest) {
       { status: 502 },
     )
   }
-}
+})

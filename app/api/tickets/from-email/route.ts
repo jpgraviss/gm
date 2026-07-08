@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
 export async function POST(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapActivity(row: any) {
@@ -23,7 +24,7 @@ function mapActivity(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('crm/activities GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const companyId = searchParams.get('companyId')
   const contactId = searchParams.get('contactId')
@@ -33,13 +34,12 @@ export async function GET(req: NextRequest) {
   if (contactId) query = query.eq('contact_id', contactId)
   const { data, error } = await query
   if (error) {
-    console.error('[crm/activities GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch activities' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch activities')
   }
   return NextResponse.json((data ?? []).map(mapActivity))
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('crm/activities POST', async (req) => {
   const body = await req.json()
 
   const result = validate(body, {
@@ -73,8 +73,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[crm/activities POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create activity' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create activity')
   }
   return NextResponse.json(mapActivity(data), { status: 201 })
-}
+})

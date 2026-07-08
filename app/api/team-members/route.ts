@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapMember(row: any) {
@@ -24,7 +25,7 @@ function mapMember(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('team-members GET', async (req: NextRequest) => {
   const db = createServiceClient()
   const includeInactive = req.nextUrl.searchParams.get('include_inactive') === 'true'
   let query = db.from('team_members').select('*').order('name')
@@ -33,13 +34,12 @@ export async function GET(req: NextRequest) {
   }
   const { data, error } = await query
   if (error) {
-    console.error('[team-members GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch team members' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch team members')
   }
   return NextResponse.json((data ?? []).map(mapMember))
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('team-members POST', async (req: NextRequest) => {
   const body = await req.json()
   const db = createServiceClient()
   const initials = body.initials ?? body.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -58,13 +58,12 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[team-members POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create team member' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create team member')
   }
   return NextResponse.json(mapMember(data), { status: 201 })
-}
+})
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withErrorHandler('team-members PATCH', async (req: NextRequest) => {
   const body = await req.json()
   const { id, action, reason, suspendUntil, accessSchedule } = body as {
     id: string
@@ -102,8 +101,7 @@ export async function PATCH(req: NextRequest) {
 
   const { data, error } = await db.from('team_members').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[team-members PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update user status' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update user status')
   }
   return NextResponse.json(mapMember(data))
-}
+})

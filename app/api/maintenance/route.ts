@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRecord(row: any) {
@@ -23,7 +24,7 @@ function mapRecord(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('maintenance GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
   const pag = parsePagination(req)
@@ -35,14 +36,13 @@ export async function GET(req: NextRequest) {
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
-    console.error('[maintenance GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch maintenance records' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch maintenance records')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapRecord), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('maintenance POST', async (req) => {
   const body = await req.json()
   const result = validate(body, {
     company: { required: true, type: 'string', maxLength: 200 },
@@ -71,8 +71,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[maintenance POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create maintenance record' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create maintenance record')
   }
   return NextResponse.json(mapRecord(data), { status: 201 })
-}
+})

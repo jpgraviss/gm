@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chatCompletion } from '@/lib/ai-client'
+import { withErrorHandler } from '@/lib/api-handler'
 
 type GenerationType = 'email_draft' | 'proposal_summary' | 'report_summary' | 'social_post' | 'follow_up'
 
@@ -11,8 +12,7 @@ const SYSTEM_PROMPTS: Record<GenerationType, string> = {
   follow_up: 'You are a sales representative at Graviss Marketing. Write personalized follow-up messages that reference previous interactions and provide clear next steps. Be professional but personable.',
 }
 
-export async function POST(req: NextRequest) {
-  try {
+export const POST = withErrorHandler('ai/generate POST', async (req) => {
     const { type, context } = await req.json() as { type: GenerationType; context: Record<string, string> }
 
     if (!type || !SYSTEM_PROMPTS[type]) {
@@ -33,11 +33,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ content: result.text, source: result.source })
-  } catch (err) {
-    console.error('[ai/generate]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+})
 
 function buildUserPrompt(type: GenerationType, ctx: Record<string, string>): string {
   switch (type) {

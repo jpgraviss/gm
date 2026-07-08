@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('sequences/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
 
@@ -47,19 +48,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.folder           !== undefined) update.folder              = body.folder
   const { data, error } = await db.from('sequences').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[sequences/:id PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update sequence' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update sequence')
   }
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('sequences/[id] DELETE', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('sequences').delete().eq('id', id)
   if (error) {
-    console.error('[sequences/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete sequence' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete sequence')
   }
   return NextResponse.json({ deleted: id })
-}
+})

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 
 export async function GET() {

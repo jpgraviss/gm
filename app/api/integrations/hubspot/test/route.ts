@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('integrations/hubspot/test POST', async (req) => {
   const { apiKey: bodyKey } = await req.json().catch(() => ({ apiKey: undefined })) as { apiKey?: string }
 
   let apiKey = bodyKey
@@ -39,4 +40,4 @@ export async function POST(req: NextRequest) {
     { connected: false, error: `HubSpot responded with ${res.status}: ${text}` },
     { status: 200 },
   )
-}
+})

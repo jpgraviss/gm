@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('sequences/activities GET', async (req: NextRequest) => {
   const { searchParams } = req.nextUrl
   const sequenceId = searchParams.get('sequenceId')
   const contactEmail = searchParams.get('contactEmail')
@@ -30,9 +31,8 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
 
   if (error) {
-    console.error('[sequences/activities GET]', error)
-    return NextResponse.json({ error: error.message || 'Failed to fetch activities' }, { status: 500 })
+    throw new Error(error.message || 'Failed to fetch activities')
   }
 
   return NextResponse.json(data ?? [])
-}
+})

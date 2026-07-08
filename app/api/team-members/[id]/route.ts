@@ -3,8 +3,9 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PUT = withErrorHandler('team-members/[id] PUT', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const denied = await requireRole(req, 'Super Admin')
   if (denied) return denied
@@ -33,22 +34,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (body.emailSignature !== undefined) update.email_signature = body.emailSignature
   const { data, error } = await db.from('team_members').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[team-members/:id PUT]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update team member' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update team member')
   }
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('team-members/[id] DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const denied = await requireRole(req, 'Super Admin')
   if (denied) return denied
   const db = createServiceClient()
   const { error } = await db.from('team_members').delete().eq('id', id)
   if (error) {
-    console.error('[team-members/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete team member' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete team member')
   }
   logAudit({ userName: 'system', action: 'deleted_team_member', module: 'admin', type: 'warning', metadata: { memberId: id } })
   return NextResponse.json({ deleted: id })
-}
+})

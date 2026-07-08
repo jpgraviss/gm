@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { getSettings } from '@/lib/settings'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('integrations/resend/test POST', async (req) => {
   try {
     const { apiKey, to } = await req.json()
 
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ connected: false, error: message })
   }
-}
+})
 
 function testEmailHtml(companyName: string): string {
   return `<!DOCTYPE html>

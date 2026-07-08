@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const BUCKET = 'client-files'
 
 // GET /api/files/download?path=... — generate a fresh signed URL for a file
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('files/download GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
   const path = searchParams.get('path')
 
@@ -16,9 +17,8 @@ export async function GET(req: NextRequest) {
   const { data, error } = await db.storage.from(BUCKET).createSignedUrl(path, 3600)
 
   if (error || !data?.signedUrl) {
-    console.error('[files/download GET]', error)
-    return NextResponse.json({ error: 'Failed to generate download URL' }, { status: 500 })
+    throw error instanceof Error ? error : new Error('Failed to generate download URL')
   }
 
   return NextResponse.json({ url: data.signedUrl })
-}
+})

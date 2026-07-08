@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRenewal(row: any) {
@@ -23,7 +24,7 @@ function mapRenewal(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('renewals GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
   const pag = parsePagination(req)
@@ -35,14 +36,13 @@ export async function GET(req: NextRequest) {
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
-    console.error('[renewals GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch renewals' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch renewals')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapRenewal), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('renewals POST', async (req) => {
   const body = await req.json()
   const result = validate(body, {
     company: { required: true, type: 'string', maxLength: 200 },
@@ -67,8 +67,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[renewals POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create renewal' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create renewal')
   }
   return NextResponse.json(mapRenewal(data), { status: 201 })
-}
+})

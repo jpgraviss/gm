@@ -3,8 +3,9 @@ import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { mapTracked } from '@/lib/rank-tracker'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('tracked-keywords/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db
@@ -16,9 +17,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Tracked keyword not found' }, { status: 404 })
   }
   return NextResponse.json(mapTracked(data))
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('tracked-keywords/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 

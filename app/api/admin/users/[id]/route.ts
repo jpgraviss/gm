@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireAdmin(req)

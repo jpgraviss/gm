@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getGBPReviews, replyToGBPReview, STAR_TO_NUMBER } from '@/lib/google-business-profile'
 import type { GBPStarRating } from '@/lib/google-business-profile'
+import { withErrorHandler } from '@/lib/api-handler'
 
 interface MappedReview {
   id: string
@@ -40,7 +41,7 @@ function mapGBPReview(review: {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('integrations/google-reviews GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const locationName = searchParams.get('location')
 
@@ -64,23 +65,15 @@ export async function GET(req: NextRequest) {
   }
 
   return fetchAndReturn(locationName)
-}
+})
 
 async function fetchAndReturn(locationName: string) {
-  try {
-    const { reviews } = await getGBPReviews(locationName, 50)
-    const mapped = reviews.map((r) => mapGBPReview(r, locationName))
-    return NextResponse.json(mapped)
-  } catch (err) {
-    console.error('[google-reviews GET]', err)
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to fetch Google reviews' },
-      { status: 500 },
-    )
-  }
+  const { reviews } = await getGBPReviews(locationName, 50)
+  const mapped = reviews.map((r) => mapGBPReview(r, locationName))
+  return NextResponse.json(mapped)
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('integrations/google-reviews POST', async (req) => {
   let body: { location?: string; reviewId?: string; comment?: string }
   try {
     body = await req.json()
@@ -96,14 +89,6 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  try {
-    const reply = await replyToGBPReview(location, reviewId, comment)
-    return NextResponse.json({ ok: true, reply })
-  } catch (err) {
-    console.error('[google-reviews POST]', err)
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to reply to review' },
-      { status: 500 },
-    )
-  }
-}
+  const reply = await replyToGBPReview(location, reviewId, comment)
+  return NextResponse.json({ ok: true, reply })
+})

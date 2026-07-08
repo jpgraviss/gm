@@ -309,20 +309,22 @@ export async function checkKeyword(tracked: TrackedKeyword): Promise<number | nu
   return position
 }
 
-export async function checkAllRanks(): Promise<{
+export async function checkAllRanks(batchSize = 25): Promise<{
   checked: number
   updated: number
   failed: number
+  total: number
 }> {
   const db = createServiceClient()
   const { data, error } = await db
     .from('tracked_keywords')
     .select('*')
     .order('last_checked_at', { ascending: true, nullsFirst: true })
+    .limit(batchSize)
 
   if (error) {
     console.error('[rank-tracker] failed to list tracked keywords', error)
-    return { checked: 0, updated: 0, failed: 0 }
+    return { checked: 0, updated: 0, failed: 0, total: 0 }
   }
 
   let updated = 0
@@ -337,7 +339,7 @@ export async function checkAllRanks(): Promise<{
     }
   }
 
-  return { checked: data?.length ?? 0, updated, failed }
+  return { checked: data?.length ?? 0, updated, failed, total: data?.length ?? 0 }
 }
 
 export async function getKeywordHistory(

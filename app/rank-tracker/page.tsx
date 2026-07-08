@@ -1391,11 +1391,15 @@ function CompetitorsTab({ competitors, keywords, onUpdate }: {
   const [label, setLabel] = useState('')
   const [adding, setAdding] = useState(false)
 
-  // TODO: Wire up competitor snapshot data once an API route is available.
-  // `getCompetitorSnapshots` exists in lib/rank-tracker.ts but is not exposed
-  // via any API route. A GET handler needs to be added (e.g. at
-  // /api/rank-tracker/competitors/[id]/snapshots) before this can be fetched.
   const [competitorSnapshots, setCompetitorSnapshots] = useState<Record<string, Record<string, number | null>>>({})
+
+  useEffect(() => {
+    if (competitors.length === 0 || keywords.length === 0) return
+    fetch('/api/rank-tracker/competitor-snapshots')
+      .then(r => r.ok ? r.json() : {})
+      .then(data => setCompetitorSnapshots(data))
+      .catch(() => {})
+  }, [competitors.length, keywords.length])
 
   async function addComp() {
     if (!domain.trim()) { toast('Domain is required', 'error'); return }

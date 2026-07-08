@@ -117,7 +117,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 							sprintf(
 								/* translators: %s: human-readable time difference */
 								__( '%s ago', 'gravhub-seo' ),
-								human_time_diff( $last_analysis_time, current_time( 'timestamp' ) )
+								human_time_diff( $last_analysis_time, time() )
 							)
 						);
 						?>
@@ -654,18 +654,72 @@ if ( ! defined( 'ABSPATH' ) ) {
 		});
 	}
 
-	/* ----- Sync Scores ----- */
+	/* ----- Sync (run analysis then send health report) ----- */
+	function runFullSync(resultEl) {
+		if (resultEl) {
+			resultEl.innerHTML = '<span class="gravhub-spinner"></span>';
+			resultEl.className = 'gravhub-result-pending';
+		}
+
+		fetch(restUrl + 'run-analysis', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-WP-Nonce': nonce
+			}
+		})
+		.then(function(response) { return response.json(); })
+		.then(function(data) {
+			if (!data.success) {
+				var msg = data.message || '<?php echo esc_js( __( 'Analysis failed.', 'gravhub-seo' ) ); ?>';
+				if (resultEl) {
+					resultEl.textContent = msg;
+					resultEl.className = 'gravhub-result-error';
+				}
+				showToast(msg, 'error');
+				return;
+			}
+			// Analysis succeeded, now send health report.
+			return fetch(restUrl + 'send-report', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-WP-Nonce': nonce
+				}
+			})
+			.then(function(response) { return response.json(); })
+			.then(function(reportData) {
+				var successMsg = '<?php echo esc_js( __( 'Synced with GravHub!', 'gravhub-seo' ) ); ?>';
+				if (resultEl) {
+					resultEl.textContent = successMsg;
+					resultEl.className = 'gravhub-result-success';
+				}
+				showToast(successMsg, 'success');
+				setTimeout(function() { location.reload(); }, 1500);
+			});
+		})
+		.catch(function(err) {
+			var msg = '<?php echo esc_js( __( 'Sync failed. Check console for details.', 'gravhub-seo' ) ); ?>';
+			if (resultEl) {
+				resultEl.textContent = msg;
+				resultEl.className = 'gravhub-result-error';
+			}
+			showToast(msg, 'error');
+			console.error('GravHub SEO sync:', err);
+		});
+	}
+
 	var syncBtn = document.getElementById('gravhub-sync-scores');
 	if (syncBtn) {
 		syncBtn.addEventListener('click', function() {
-			apiRequest('send-report', document.getElementById('gravhub-analysis-result'), '<?php echo esc_js( __( 'Synced with GravHub!', 'gravhub-seo' ) ); ?>');
+			runFullSync(document.getElementById('gravhub-analysis-result'));
 		});
 	}
 
 	var quickSyncBtn = document.getElementById('gravhub-quick-sync');
 	if (quickSyncBtn) {
 		quickSyncBtn.addEventListener('click', function() {
-			apiRequest('send-report', null, '<?php echo esc_js( __( 'Synced with GravHub!', 'gravhub-seo' ) ); ?>');
+			runFullSync(null);
 		});
 	}
 

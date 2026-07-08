@@ -414,7 +414,7 @@ class GravHub_SEO_Analyzer {
 
 		// Save computed score and issues as post meta.
 		update_post_meta( $post->ID, '_gravhub_seo_score', $score );
-		update_post_meta( $post->ID, '_gravhub_seo_issues', $issues );
+		update_post_meta( $post->ID, '_gravhub_seo_issues', wp_json_encode( $issues ) );
 
 		return array(
 			'post_id'           => $post->ID,

@@ -221,7 +221,11 @@ export default function WordPressSeoPage() {
       })
       if (!res.ok) throw new Error('Failed')
       const updated = await res.json()
-      setSettings(prev => prev.map(s => s.id === editingMeta.id ? updated : s))
+      setSettings(prev => {
+        const idx = prev.findIndex(s => s.id === editingMeta.id)
+        if (idx >= 0) return prev.map(s => s.id === editingMeta.id ? updated : s)
+        return [...prev.filter(s => s.page_path !== editingMeta.page_path), updated]
+      })
       setEditingMeta(null)
       toast('SEO settings saved', 'success')
     } catch {

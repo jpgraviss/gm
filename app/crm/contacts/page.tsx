@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchCrmContacts, fetchCrmCompanies, fetchDeals, fetchContracts, fetchProjects, fetchCrmActivities } from '@/lib/supabase'
@@ -1192,7 +1193,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
 
                   {/* Company Name */}
                   <FieldRow label="Company Name" value={
-                    <Link href="/crm/companies" className="text-sm text-gray-900 hover:text-emerald-700">{contact.companyName}</Link>
+                    <Link href={contact.companyId ? `/crm/companies?open=${contact.companyId}` : '/crm/companies'} className="text-sm text-gray-900 hover:text-emerald-700">{contact.companyName}</Link>
                   } />
 
                   {/* Industry */}
@@ -1330,6 +1331,7 @@ function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function ContactsPage() {
   const { toast } = useToast()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedContact, setSelectedContact] = useState<CRMContact | null>(null)
@@ -1384,6 +1386,14 @@ export default function ContactsPage() {
     fetchProjects().then(setProjects)
     fetchCrmActivities().then(setCrmActivities)
   }, [])
+
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (openId && localContacts.length > 0 && !selectedContact) {
+      const match = localContacts.find(c => c.id === openId)
+      if (match) setSelectedContact(match)
+    }
+  }, [searchParams, localContacts, selectedContact])
 
   async function handleEditSave(updated: CRMContact) {
     setLocalContacts(prev => prev.map(c => c.id === updated.id ? updated : c))

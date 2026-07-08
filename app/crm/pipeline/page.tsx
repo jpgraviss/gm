@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
@@ -883,6 +884,7 @@ export default function PipelinePage() {
   const ALL_REPS = useTeamMembers()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
+  const searchParams = useSearchParams()
   const [mounted, setMounted] = useState(false)
   const [pipelines, setPipelines] = useState<PipelineConfig[]>(initialPipelines)
   const [activePipelineId, setActivePipelineId] = useState('client-acquisition')
@@ -922,6 +924,14 @@ export default function PipelinePage() {
     fetchCrmContacts().then(setCrmContacts)
     fetchContracts().then(setContracts)
   }, [])
+
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (openId && localDeals.length > 0 && !selectedDeal) {
+      const match = localDeals.find(d => d.id === openId)
+      if (match) setSelectedDeal(match)
+    }
+  }, [searchParams, localDeals, selectedDeal])
 
   const activePipeline = pipelines.find(p => p.id === activePipelineId) ?? pipelines[0]
   const activeStages = activePipeline?.stages ?? []

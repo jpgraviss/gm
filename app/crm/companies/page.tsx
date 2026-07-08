@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { useTeamMembers } from '@/lib/useTeamMembers'
@@ -259,6 +260,7 @@ function CompanyFilesTab({ companyId }: { companyId: string }) {
 
 function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, crmContacts, deals, contracts, invoices, projects, crmActivities }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void; onOpenIntegrations?: () => void; crmContacts: CRMContact[]; deals: Deal[]; contracts: Contract[]; invoices: Invoice[]; projects: Project[]; crmActivities: CRMActivity[] }) {
   const { toast } = useToast()
+  const router = useRouter()
   const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'files' | 'activity'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
@@ -781,7 +783,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
           {tab === 'contacts' && (
             <div className="flex flex-col gap-3">
               {[...companyContacts, ...extraContacts].map(c => (
-                <div key={c.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                <div key={c.id} onClick={() => router.push(`/crm/contacts?open=${c.id}`)} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors">
                   <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
                     {c.firstName[0]}{c.lastName[0]}
                   </div>
@@ -823,7 +825,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
           {tab === 'deals' && (
             <div className="flex flex-col gap-3">
               {companyDeals.map(d => (
-                <div key={d.id} className="p-4 bg-gray-50 rounded-xl">
+                <div key={d.id} onClick={() => router.push(`/crm/pipeline?open=${d.id}`)} className="p-4 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <StatusBadge label={d.stage} colorClass={stageColors[d.stage]} />
@@ -861,7 +863,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
           {tab === 'contracts' && (
             <div className="flex flex-col gap-3">
               {companyContracts.map(c => (
-                <div key={c.id} className="p-4 bg-gray-50 rounded-xl">
+                <div key={c.id} onClick={() => router.push(`/contracts?open=${c.id}`)} className="p-4 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors">
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <StatusBadge label={c.status} colorClass={contractStatusColors[c.status]} />
@@ -1202,6 +1204,7 @@ function EditCompanyPanel({
 
 export default function CompaniesPage() {
   const { toast } = useToast()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('All')
@@ -1257,6 +1260,14 @@ export default function CompaniesPage() {
     fetchProjects().then(setProjects)
     fetchCrmActivities().then(setCrmActivities)
   }, [])
+
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (openId && localCompanies.length > 0 && !selectedCompany) {
+      const match = localCompanies.find(c => c.id === openId)
+      if (match) setSelectedCompany(match)
+    }
+  }, [searchParams, localCompanies, selectedCompany])
 
   async function handleEditCompany(updated: CRMCompany) {
     setLocalCompanies(prev => prev.map(c => c.id === updated.id ? updated : c))

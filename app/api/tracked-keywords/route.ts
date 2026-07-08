@@ -6,6 +6,9 @@ import { addTrackedKeyword, mapTracked } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
 
 export const GET = withErrorHandler('tracked-keywords GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')

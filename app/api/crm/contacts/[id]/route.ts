@@ -77,6 +77,11 @@ export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) =>
   if (error) {
     throw new Error(error?.message || 'Failed to update contact')
   }
+
+  if (body.lifecycleStage === 'client' && body.companyId) {
+    await db.from('crm_companies').update({ status: 'Active Client' }).eq('id', body.companyId)
+  }
+
   return NextResponse.json(mapContact(data))
 })
 

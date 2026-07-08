@@ -4,6 +4,7 @@ import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { mapTracked } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
+import { validate, validationError } from '@/lib/validation'
 
 export const GET = withErrorHandler('rank-tracker/keywords/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
@@ -25,6 +26,13 @@ export const PATCH = withErrorHandler('rank-tracker/keywords/[id] PATCH', async 
 
   const { id } = await params
   const body = await req.json()
+
+  const v = validate(body, {
+    tags:          { type: 'array' },
+    portalVisible: { type: 'boolean' },
+  })
+  if (!v.valid) return validationError(v.error)
+
   const db = createServiceClient()
 
   const update: Record<string, unknown> = {}
@@ -39,6 +47,10 @@ export const PATCH = withErrorHandler('rank-tracker/keywords/[id] PATCH', async 
   if (body.location !== undefined)    update.location     = body.location
   if (body.searchVolume !== undefined) update.search_volume = body.searchVolume
   if (body.portalVisible !== undefined) update.portal_visible = body.portalVisible
+
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+  }
 
   const { data, error } = await db
     .from('tracked_keywords')
@@ -60,6 +72,7 @@ export const DELETE = withErrorHandler('rank-tracker/keywords/[id] DELETE', asyn
   const { id } = await params
   const db = createServiceClient()
 
+  await db.from('competitor_rank_snapshots').delete().eq('tracked_keyword_id', id)
   await db.from('keyword_rank_history').delete().eq('tracked_keyword_id', id)
   const { error } = await db.from('tracked_keywords').delete().eq('id', id)
   if (error) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { chatCompletion, buildToolResultMessage, buildAssistantMessage, type AiMessage, type AiToolDef } from '@/lib/ai-client'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -843,7 +844,7 @@ Keep the tone professional but approachable. Be specific about deliverables. Use
 
 // ─── Main handler ───────────────────────────────────────────────────────────
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('ai/chat POST', async (req) => {
   try {
     const callerEmail = await getAuthenticatedEmail(req)
     if (!callerEmail) {
@@ -954,4 +955,4 @@ Guidelines:
     const message = err instanceof Error ? err.message : 'Internal server error'
     return NextResponse.json({ reply: `AI error: ${message}`, source: 'error' }, { status: 200 })
   }
-}
+})

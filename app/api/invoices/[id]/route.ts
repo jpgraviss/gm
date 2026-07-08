@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError, INVOICE_STATUSES } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // PATCH updates invoice status/payment data
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('invoices/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
 
   let body: Record<string, unknown>
@@ -43,8 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error } = await db.from('invoices').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[invoices/:id PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update invoice' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update invoice')
   }
 
   if (body.status === 'Paid') {
@@ -54,4 +54,4 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   return NextResponse.json(data)
-}
+})

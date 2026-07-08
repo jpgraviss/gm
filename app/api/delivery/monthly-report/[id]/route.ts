@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const GET = withErrorHandler('delivery/monthly-report/[id] GET', async (_req, ctx) => {
+  const { id } = await ctx!.params
   if (!id) return NextResponse.json({ error: 'Missing workflow id' }, { status: 400 })
 
   const db = createServiceClient()
@@ -14,8 +15,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .single()
 
   if (wfErr) {
-    const status = wfErr.code === 'PGRST116' ? 404 : 500
-    return NextResponse.json({ error: wfErr.message }, { status })
+    if (wfErr.code === 'PGRST116') {
+      return NextResponse.json({ error: wfErr.message }, { status: 404 })
+    }
+    throw new Error(wfErr.message)
   }
 
   const companyName = workflow.company_name as string
@@ -195,4 +198,4 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   result.changelog = changelog
 
   return NextResponse.json(result)
-}
+})

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { buildClientReport, saveReportSnapshot, type ClientReportConfig } from '@/lib/client-reports'
 
 /**
@@ -18,7 +19,7 @@ import { buildClientReport, saveReportSnapshot, type ClientReportConfig } from '
  *   save?: boolean
  * }
  */
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('client-reports POST', async (req) => {
   const body = (await req.json().catch(() => ({}))) as Partial<ClientReportConfig> & { save?: boolean }
 
   if (!body.companyName || !body.startDate || !body.endDate) {
@@ -28,27 +29,19 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  try {
-    const report = await buildClientReport({
-      companyName:      body.companyName,
-      companyId:        body.companyId,
-      gscSiteUrl:       body.gscSiteUrl,
-      ga4PropertyId:    body.ga4PropertyId,
-      gbpLocationName:  body.gbpLocationName,
-      startDate:        body.startDate,
-      endDate:          body.endDate,
-    })
+  const report = await buildClientReport({
+    companyName:      body.companyName,
+    companyId:        body.companyId,
+    gscSiteUrl:       body.gscSiteUrl,
+    ga4PropertyId:    body.ga4PropertyId,
+    gbpLocationName:  body.gbpLocationName,
+    startDate:        body.startDate,
+    endDate:          body.endDate,
+  })
 
-    if (body.save) {
-      await saveReportSnapshot(report)
-    }
-
-    return NextResponse.json(report)
-  } catch (err) {
-    console.error('[client-reports POST]', err)
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to build report' },
-      { status: 500 },
-    )
+  if (body.save) {
+    await saveReportSnapshot(report)
   }
-}
+
+  return NextResponse.json(report)
+})

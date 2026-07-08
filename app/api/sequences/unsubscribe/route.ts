@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('sequences/unsubscribe GET', async (req: NextRequest) => {
   const email = req.nextUrl.searchParams.get('email') ?? ''
   const seq = req.nextUrl.searchParams.get('seq') ?? ''
 
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
   return new NextResponse(html, {
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   })
-}
+})
 
 function escapeHtml(str: string): string {
   return str
@@ -67,7 +68,7 @@ function escapeHtml(str: string): string {
     .replace(/"/g, '&quot;')
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('sequences/unsubscribe POST', async (req: NextRequest) => {
   let body: { email?: string; seq?: string }
   try {
     body = await req.json()
@@ -146,4 +147,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, unsubscribed: email })
-}
+})

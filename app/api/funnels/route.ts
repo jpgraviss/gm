@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { slugifyForm } from '@/lib/forms'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET() {
+export const GET = withErrorHandler('funnels GET', async () => {
   const db = createServiceClient()
   const { data, error } = await db
     .from('funnels')
@@ -11,8 +12,7 @@ export async function GET() {
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('[funnels GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   const funnels = (data ?? []).map((f) => {
@@ -36,9 +36,9 @@ export async function GET() {
   })
 
   return NextResponse.json(funnels)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('funnels POST', async (req) => {
   const body = await req.json()
   if (!body.name || typeof body.name !== 'string') {
     return NextResponse.json({ error: 'name is required' }, { status: 400 })
@@ -67,8 +67,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[funnels POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   const pageId = `fp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
@@ -83,4 +82,4 @@ export async function POST(req: NextRequest) {
 
   logAudit({ userName: 'system', action: 'created_funnel', module: 'funnels', type: 'action', metadata: { funnelId: data.id, name: data.name } })
   return NextResponse.json({ ...data, pages: [{ id: pageId, name: 'Landing Page', slug: 'landing', blocks: [], sort_order: 0, views: 0, conversions: 0 }] }, { status: 201 })
-}
+})

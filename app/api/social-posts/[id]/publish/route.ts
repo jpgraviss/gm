@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { publishSocialPost } from '@/lib/social-publish'
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withErrorHandler('social-posts/[id]/publish POST', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
 
   const result = await publishSocialPost(id)
@@ -16,7 +17,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Post has no target platforms' }, { status: 400 })
   }
   if (result.reason === 'db_error') {
-    return NextResponse.json({ error: result.error ?? 'Failed to publish' }, { status: 500 })
+    throw new Error(result.error ?? 'Failed to publish')
   }
 
   // Surface a 502 when nothing published so the client shows the failure
@@ -29,4 +30,4 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   }
 
   return NextResponse.json({ ...result.post, partial: result.partial })
-}
+})

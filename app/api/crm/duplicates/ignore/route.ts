@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 
 const SETTINGS_ID = 'global'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('crm/duplicates/ignore POST', async (req) => {
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
 
@@ -36,9 +37,8 @@ export async function POST(req: NextRequest) {
     .upsert({ id: SETTINGS_ID, dismissed_duplicates: dismissed }, { onConflict: 'id' })
 
   if (error) {
-    console.error('[duplicates/ignore POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to ignore duplicate')
   }
 
   return NextResponse.json({ ok: true })
-}
+})

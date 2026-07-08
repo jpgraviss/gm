@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(
-  _req: NextRequest,
+export const GET = withErrorHandler('broadcasts/[id]/clicks GET', async (
+  _req,
   { params }: { params: Promise<{ id: string }> },
-) {
+) => {
   const { id } = await params
   const db = createServiceClient()
 
@@ -14,8 +15,7 @@ export async function GET(
     .eq('broadcast_id', id)
 
   if (error) {
-    console.error('[broadcast clicks GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   const urlMap = new Map<string, { totalClicks: number; emails: Set<string> }>()
@@ -39,4 +39,4 @@ export async function GET(
     .sort((a, b) => b.totalClicks - a.totalClicks)
 
   return NextResponse.json(result)
-}
+})

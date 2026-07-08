@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTask(row: any) {
@@ -27,7 +28,7 @@ function mapTask(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('tasks GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
   const status     = searchParams.get('status')
   const assignedTo = searchParams.get('assignedTo')
@@ -43,18 +44,17 @@ export async function GET(req: NextRequest) {
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
-    console.error('[tasks GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch tasks' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch tasks')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapTask), nextCursor)
-}
+})
 
 const VALID_STATUSES = ['Pending', 'In Progress', 'Completed']
 const VALID_PRIORITIES = ['High', 'Medium', 'Low']
 const VALID_CATEGORIES = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'Email', 'General']
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('tasks POST', async (req: NextRequest) => {
   const body = await req.json()
 
   if (!body.title || typeof body.title !== 'string' || !body.title.trim()) {
@@ -99,8 +99,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[tasks POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create task' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create task')
   }
   return NextResponse.json(mapTask(data), { status: 201 })
-}
+})

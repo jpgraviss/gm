@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
@@ -23,15 +24,15 @@ function mapBinding(row: any) {
   }
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('client-integrations/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { data } = await db.from('client_integrations').select('*').eq('id', id).single()
   if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(mapBinding(data))
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('client-integrations/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -60,13 +61,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .single()
 
   if (error || !data) {
-    console.error('[client-integrations PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update')
   }
   return NextResponse.json(mapBinding(data))
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('client-integrations/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -74,9 +74,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const db = createServiceClient()
   const { error } = await db.from('client_integrations').delete().eq('id', id)
   if (error) {
-    console.error('[client-integrations DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   logAudit({ userName: 'system', action: 'client_integration_deleted', module: 'integrations', type: 'warning', metadata: { id } })
   return NextResponse.json({ deleted: id })
-}
+})

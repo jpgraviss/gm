@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { mapTracked } from '@/lib/rank-tracker'
 import type { TrackedKeyword } from '@/lib/rank-tracker'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('rank-tracker/export GET', async (req) => {
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to export keywords')
   }
 
   const rows: TrackedKeyword[] = (data ?? []).map(mapTracked)
@@ -56,4 +57,4 @@ export async function GET(req: NextRequest) {
       'Content-Disposition': `attachment; filename="rank-tracker-export-${new Date().toISOString().slice(0, 10)}.csv"`,
     },
   })
-}
+})

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 
 export interface TimelineEntry {
@@ -13,8 +14,8 @@ export interface TimelineEntry {
   metadata?: Record<string, unknown>
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const GET = withErrorHandler('crm/contacts/[id]/timeline GET', async (_req, ctx) => {
+  const { id } = await ctx!.params
   const db = createServiceClient()
 
   const { data: contact } = await db
@@ -223,4 +224,4 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     engagementBreakdown: { emailsOpened, linksClicked, proposalsViewed, meetings },
     engagementPoints: pts,
   })
-}
+})

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('funnels/[id] GET', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db
@@ -29,9 +30,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     updatedAt: data.updated_at,
     pages,
   })
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('funnels/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()
@@ -43,20 +44,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error } = await db.from('funnels').update(update).eq('id', id).select().single()
   if (error || !data) {
-    console.error('[funnels PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update funnel' }, { status: 500 })
+    throw new Error(String(error) || 'Failed to update funnel')
   }
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('funnels/[id] DELETE', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('funnels').delete().eq('id', id)
   if (error) {
-    console.error('[funnels DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(String(error))
   }
   logAudit({ userName: 'system', action: 'deleted_funnel', module: 'funnels', type: 'warning', metadata: { funnelId: id } })
   return NextResponse.json({ deleted: id })
-}
+})

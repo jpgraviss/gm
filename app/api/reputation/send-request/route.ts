@@ -3,8 +3,9 @@ import { randomBytes } from 'crypto'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('reputation/send-request POST', async (req) => {
   const body = await req.json()
   const { name, email, companyName: reqCompanyName } = body as {
     name?: string
@@ -58,11 +59,7 @@ export async function POST(req: NextRequest) {
   })
 
   if (insertErr) {
-    console.error('[reputation/send-request] insert error:', insertErr)
-    return NextResponse.json(
-      { error: 'Failed to create review request' },
-      { status: 500 },
-    )
+    throw new Error(insertErr?.message || 'Failed to create review request')
   }
 
   // Build the review link pointing to the public review page
@@ -104,12 +101,8 @@ export async function POST(req: NextRequest) {
   })
 
   if (!result.success) {
-    console.error('[reputation/send-request]', result.error)
-    return NextResponse.json(
-      { error: result.error || 'Failed to send email' },
-      { status: 500 },
-    )
+    throw new Error(result.error || 'Failed to send email')
   }
 
   return NextResponse.json({ success: true, id: result.id, token })
-}
+})

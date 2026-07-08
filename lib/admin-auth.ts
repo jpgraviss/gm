@@ -1,25 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { extractSupabaseToken } from '@/lib/extract-token'
 
 export async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
   const db = createServiceClient()
-
-  const authHeader = req.headers.get('authorization')
-  let token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-
-  if (!token) {
-    const sbCookie = req.cookies.getAll().find(c =>
-      c.name.startsWith('sb-') && c.name.endsWith('-auth-token')
-    )
-    if (sbCookie) {
-      try {
-        const parsed = JSON.parse(Buffer.from(sbCookie.value, 'base64').toString())
-        token = parsed?.access_token ?? parsed?.[0]?.access_token ?? null
-      } catch {
-        token = sbCookie.value || null
-      }
-    }
-  }
+  const token = extractSupabaseToken(req)
 
   if (!token) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -45,24 +30,7 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
 
 export async function getAuthenticatedEmail(req: NextRequest): Promise<string | null> {
   const db = createServiceClient()
-
-  const authHeader = req.headers.get('authorization')
-  let token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-
-  if (!token) {
-    const sbCookie = req.cookies.getAll().find(c =>
-      c.name.startsWith('sb-') && c.name.endsWith('-auth-token')
-    )
-    if (sbCookie) {
-      try {
-        const parsed = JSON.parse(Buffer.from(sbCookie.value, 'base64').toString())
-        token = parsed?.access_token ?? parsed?.[0]?.access_token ?? null
-      } catch {
-        token = sbCookie.value || null
-      }
-    }
-  }
-
+  const token = extractSupabaseToken(req)
   if (!token) return null
 
   const { data: { user }, error } = await db.auth.getUser(token)

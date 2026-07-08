@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 /**
  * POST /api/auth/verify-email
  * Checks if an email exists in team_members or portal_clients.
  * Used before sending magic links to prevent sending emails to unknown addresses.
  */
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('auth/verify-email POST', async (req) => {
   try {
     const { email } = await req.json()
     if (!email || typeof email !== 'string') {
@@ -42,4 +43,4 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ exists: false })
   }
-}
+})

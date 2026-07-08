@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
 function mapRecord(row: any) {
   return {
@@ -20,7 +21,7 @@ function mapRecord(row: any) {
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('maintenance/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
   const result = validate(body, {
@@ -44,19 +45,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.startDate !== undefined)          update.start_date = body.startDate
   const { data, error } = await db.from('maintenance_records').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[maintenance/:id PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update maintenance record' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update maintenance record')
   }
   return NextResponse.json(mapRecord(data))
-}
+})
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('maintenance/[id] DELETE', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('maintenance_records').delete().eq('id', id)
   if (error) {
-    console.error('[maintenance/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete maintenance record' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete maintenance record')
   }
   return NextResponse.json({ deleted: id })
-}
+})

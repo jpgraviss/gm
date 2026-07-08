@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { listConnectionStatuses, saveConnection, removeConnection } from '@/lib/social-connections'
 import type { SocialPlatform } from '@/lib/social-media'
 import { logAudit } from '@/lib/audit'
@@ -6,13 +7,13 @@ import { logAudit } from '@/lib/audit'
 const VALID: SocialPlatform[] = ['facebook', 'instagram', 'linkedin', 'google_business']
 
 /** GET /api/social/connections — current status for every platform. */
-export async function GET() {
+export const GET = withErrorHandler('social/connections GET', async () => {
   const statuses = await listConnectionStatuses()
   return NextResponse.json(statuses)
-}
+})
 
 /** POST /api/social/connections — save a selected publish target. */
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('social/connections POST', async (req) => {
   let body: { platform?: string; externalId?: string; accountLabel?: string; token?: string }
   try {
     body = await req.json()
@@ -36,10 +37,10 @@ export async function POST(req: NextRequest) {
   })
   logAudit({ userName: 'admin', action: 'connected_social_account', module: 'social_media', type: 'action', metadata: { platform, account: body.accountLabel } })
   return NextResponse.json({ ok: true })
-}
+})
 
 /** DELETE /api/social/connections?platform=facebook — disconnect a platform. */
-export async function DELETE(req: NextRequest) {
+export const DELETE = withErrorHandler('social/connections DELETE', async (req) => {
   const platform = new URL(req.url).searchParams.get('platform') as SocialPlatform | null
   if (!platform || !VALID.includes(platform)) {
     return NextResponse.json({ error: 'Invalid platform' }, { status: 400 })
@@ -47,4 +48,4 @@ export async function DELETE(req: NextRequest) {
   await removeConnection(platform)
   logAudit({ userName: 'admin', action: 'disconnected_social_account', module: 'social_media', type: 'action', metadata: { platform } })
   return NextResponse.json({ ok: true })
-}
+})

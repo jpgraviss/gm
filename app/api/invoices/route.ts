@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { validate, validationError, INVOICE_STATUSES } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapInvoice(row: any) {
@@ -19,7 +20,7 @@ function mapInvoice(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('invoices GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const contractId = searchParams.get('contractId')
   const status     = searchParams.get('status')
@@ -35,14 +36,13 @@ export async function GET(req: NextRequest) {
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
-    console.error('[invoices GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch invoices' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch invoices')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapInvoice), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('invoices POST', async (req) => {
   const body = await req.json()
 
   const result = validate(body, {
@@ -75,9 +75,8 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[invoices POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create invoice' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create invoice')
   }
 
   return NextResponse.json(mapInvoice(data), { status: 201 })
-}
+})

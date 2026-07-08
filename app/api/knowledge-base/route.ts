@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('knowledge-base GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const category = searchParams.get('category')
   const search = searchParams.get('search')
@@ -19,13 +20,12 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[knowledge-base GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch knowledge articles')
   }
   return NextResponse.json(data ?? [])
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('knowledge-base POST', async (req) => {
   const body = await req.json()
 
   if (!body.title || typeof body.title !== 'string' || !body.title.trim()) {
@@ -47,8 +47,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await db.from('knowledge_articles').insert(row).select().single()
   if (error) {
-    console.error('[knowledge-base POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create knowledge article')
   }
   return NextResponse.json(data, { status: 201 })
-}
+})

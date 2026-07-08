@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 
@@ -9,7 +10,7 @@ const BUCKETS = [
   { name: 'deliverables', public: false },
 ] as const
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('storage/setup POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -36,4 +37,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ buckets: results })
-}
+})

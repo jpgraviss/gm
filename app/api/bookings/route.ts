@@ -6,9 +6,10 @@ import {
   type CalendarSettings,
 } from '@/lib/google-calendar'
 import { getSettings } from '@/lib/settings'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // GET /api/bookings?slug=jaycee-graviss&status=confirmed
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('bookings GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const slug   = searchParams.get('slug')
   const status = searchParams.get('status')
@@ -25,11 +26,10 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[bookings GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch bookings' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch bookings')
   }
   return NextResponse.json(data)
-}
+})
 
 // Simple rate limiter: max 5 booking attempts per IP per 15 minutes
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
@@ -49,7 +49,7 @@ function checkRateLimit(ip: string): boolean {
 }
 
 // POST /api/bookings — create a new booking
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('bookings POST', async (req) => {
   // Rate limiting
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
   if (!checkRateLimit(ip)) {
@@ -162,8 +162,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (insertErr) {
-    console.error('[bookings POST]', insertErr)
-    return NextResponse.json({ error: insertErr?.message || 'Failed to create booking' }, { status: 500 })
+    throw new Error(insertErr?.message || 'Failed to create booking')
   }
 
   // Send confirmation email via Resend (best-effort)
@@ -210,4 +209,4 @@ export async function POST(req: NextRequest) {
   } catch (e) { console.warn('Booking confirmation email failed:', e) }
 
   return NextResponse.json(booking, { status: 201 })
-}
+})

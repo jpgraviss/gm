@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapAutomation(row: any, runStats?: { total: number; succeeded: number; failed: number; lastRunAt: string | null }) {
@@ -19,15 +20,14 @@ function mapAutomation(row: any, runStats?: { total: number; succeeded: number; 
   }
 }
 
-export async function GET() {
+export const GET = withErrorHandler('automations GET', async () => {
   const db = createServiceClient()
   const { data, error } = await db
     .from('automations')
     .select('*')
     .order('created_at', { ascending: false })
   if (error) {
-    console.error('[automations GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch automations' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch automations')
   }
 
   const automationIds = (data ?? []).map((a: { id: string }) => a.id)
@@ -52,9 +52,9 @@ export async function GET() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return NextResponse.json((data ?? []).map((row: any) => mapAutomation(row, statsMap.get(row.id))))
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('automations POST', async (req) => {
   const body = await req.json()
 
   const result = validate(body, {
@@ -79,8 +79,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[automations POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create automation' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create automation')
   }
   return NextResponse.json(mapAutomation(data), { status: 201 })
-}
+})

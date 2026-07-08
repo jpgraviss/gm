@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { replyToGBPReview } from '@/lib/google-business-profile'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 /**
  * POST /api/integrations/gbp/reply
  * Body: { location, reviewId, comment }
  */
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('integrations/gbp/reply POST', async (req) => {
   let body: { location?: string; reviewId?: string; comment?: string }
   try {
     body = await req.json()
@@ -22,23 +23,15 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  try {
-    const reply = await replyToGBPReview(location, reviewId, comment)
+  const reply = await replyToGBPReview(location, reviewId, comment)
 
-    await logAudit({
-      userName: 'system',
-      action:   'gbp.review.reply',
-      module:   'reputation',
-      type:     'action',
-      metadata: { location, reviewId, comment },
-    })
+  await logAudit({
+    userName: 'system',
+    action:   'gbp.review.reply',
+    module:   'reputation',
+    type:     'action',
+    metadata: { location, reviewId, comment },
+  })
 
-    return NextResponse.json({ ok: true, reply })
-  } catch (err) {
-    console.error('[gbp/reply]', err)
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to reply to review' },
-      { status: 500 },
-    )
-  }
-}
+  return NextResponse.json({ ok: true, reply })
+})

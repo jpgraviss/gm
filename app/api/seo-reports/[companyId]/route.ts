@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { sendSingleReport } from '@/lib/seo-report-sender'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ companyId: string }> }) {
+export const GET = withErrorHandler('seo-reports/[companyId] GET', async (_req, { params }: { params: Promise<{ companyId: string }> }) => {
   const { companyId } = await params
   const db = createServiceClient()
 
@@ -15,7 +16,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ com
     .limit(50)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to fetch snapshots')
   }
 
   const grouped: Record<string, Record<string, unknown>> = {}
@@ -26,9 +27,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ com
   }
 
   return NextResponse.json(Object.values(grouped))
-}
+})
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ companyId: string }> }) {
+export const POST = withErrorHandler('seo-reports/[companyId] POST', async (req, { params }: { params: Promise<{ companyId: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -48,15 +49,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ com
   const body = await req.json().catch(() => ({}))
   const { recipientOverride, preview } = body as { recipientOverride?: string; preview?: boolean }
 
-  try {
-    const result = await sendSingleReport(
-      (integration as { company_name: string }).company_name,
-      { recipientOverride, preview },
-    )
-    return NextResponse.json(result)
-  } catch (err) {
-    console.error('[seo-reports companyId POST]', err)
-    const message = err instanceof Error ? err.message : 'Failed'
-    return NextResponse.json({ error: message }, { status: 500 })
-  }
-}
+  const result = await sendSingleReport(
+    (integration as { company_name: string }).company_name,
+    { recipientOverride, preview },
+  )
+  return NextResponse.json(result)
+})

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const HUBSPOT_CONTACTS_URL = 'https://api.hubapi.com/crm/v3/objects/contacts'
 
@@ -197,7 +198,7 @@ function buildHubspotData(p: Record<string, string | null>): Record<string, stri
 
 // ─── GET: Fetch contacts from HubSpot (read-only preview) ───────────────────
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('integrations/hubspot/contacts GET', async (req) => {
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(
@@ -234,11 +235,11 @@ export async function GET(req: NextRequest) {
     nextAfter: data.paging?.next?.after ?? null,
     total: contacts.length,
   })
-}
+})
 
 // ─── POST: Import contacts HubSpot → GravHub (one-way sync) ────────────────
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('integrations/hubspot/contacts POST', async (req) => {
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(
@@ -395,4 +396,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ inserted, updated, skipped, errors, totalFetched })
-}
+})

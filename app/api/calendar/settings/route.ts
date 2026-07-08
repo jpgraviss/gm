@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // GET /api/calendar/settings?email=...
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('calendar/settings GET', async (req) => {
   const email = req.nextUrl.searchParams.get('email')
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
@@ -15,14 +16,13 @@ export async function GET(req: NextRequest) {
 
   if (error?.code === 'PGRST116') return NextResponse.json(null) // not found
   if (error) {
-    console.error('[calendar/settings GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch calendar settings' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch calendar settings')
   }
   return NextResponse.json(data)
-}
+})
 
 // POST /api/calendar/settings — create or update calendar settings
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('calendar/settings POST', async (req) => {
   const body = await req.json()
   const {
     userEmail, userName, slug, title, description,
@@ -50,15 +50,14 @@ export async function POST(req: NextRequest) {
   }, { onConflict: 'user_email' }).select().single()
 
   if (error) {
-    console.error('[calendar/settings POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to save calendar settings' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to save calendar settings')
   }
   return NextResponse.json(data)
-}
+})
 
 // DELETE /api/calendar/settings — delete a booking link / calendar settings
 // Bookings cascade-delete via FK on calendar_settings(slug)
-export async function DELETE(req: NextRequest) {
+export const DELETE = withErrorHandler('calendar/settings DELETE', async (req) => {
   const { email } = await req.json()
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
@@ -69,8 +68,7 @@ export async function DELETE(req: NextRequest) {
     .eq('user_email', email)
 
   if (error) {
-    console.error('[calendar/settings DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete calendar settings' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete calendar settings')
   }
   return NextResponse.json({ deleted: true })
-}
+})

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 interface Params {
   params: Promise<{ token: string }>
 }
 
 /** GET — look up a review request by token (used by the public review page) */
-export async function GET(_req: NextRequest, { params }: Params) {
+export const GET = withErrorHandler('reputation/review-request/[token] GET', async (_req, { params }: Params) => {
   const { token } = await params
 
   if (!token) {
@@ -25,10 +26,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 
   return NextResponse.json(data)
-}
+})
 
 /** POST — submit a rating (and optional feedback) for a review request */
-export async function POST(req: NextRequest, { params }: Params) {
+export const POST = withErrorHandler('reputation/review-request/[token] POST', async (req, { params }: Params) => {
   const { token } = await params
 
   if (!token) {
@@ -81,8 +82,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     .eq('token', token)
 
   if (updateErr) {
-    console.error('[review-request POST] update error:', updateErr)
-    return NextResponse.json({ error: 'Failed to save review' }, { status: 500 })
+    throw new Error(updateErr?.message || 'Failed to save review')
   }
 
   // If rating is 1-3 (negative/neutral), save as internal feedback in the reviews table
@@ -112,4 +112,4 @@ export async function POST(req: NextRequest, { params }: Params) {
     isPositive,
     googleReviewUrl: isPositive ? googleReviewUrl : null,
   })
-}
+})

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { slugifyForm } from '@/lib/forms'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('funnels/[id]/pages GET', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db
@@ -12,13 +13,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .order('sort_order', { ascending: true })
 
   if (error) {
-    console.error('[funnel_pages GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(String(error))
   }
   return NextResponse.json(data ?? [])
-}
+})
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withErrorHandler('funnels/[id]/pages POST', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
   if (!body.name) {
@@ -51,13 +51,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .single()
 
   if (error) {
-    console.error('[funnel_pages POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(String(error))
   }
   return NextResponse.json(data, { status: 201 })
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('funnels/[id]/pages PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
 
@@ -83,8 +82,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .single()
 
   if (error || !data) {
-    console.error('[funnel_pages PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update page' }, { status: 500 })
+    throw new Error(String(error) || 'Failed to update page')
   }
   return NextResponse.json(data)
-}
+})

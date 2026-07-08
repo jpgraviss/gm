@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { mapPost } from '@/lib/social-media'
 import { logAudit } from '@/lib/audit'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('social-posts GET', async (req) => {
   const pag = parsePagination(req)
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
@@ -20,14 +21,13 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[social-posts GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch social posts')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapPost), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('social-posts POST', async (req) => {
   const body = await req.json()
   if (!body.companyName || !body.content || !body.platforms?.length) {
     return NextResponse.json(
@@ -57,8 +57,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[social-posts POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create social post')
   }
   logAudit({
     userName: 'system',
@@ -68,4 +67,4 @@ export async function POST(req: NextRequest) {
     metadata: { postId: id, company: body.companyName },
   })
   return NextResponse.json(mapPost(data), { status: 201 })
-}
+})

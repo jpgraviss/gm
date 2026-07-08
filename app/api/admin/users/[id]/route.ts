@@ -3,8 +3,9 @@ import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PUT = withErrorHandler('admin/users/[id] PUT', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -38,14 +39,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (body.deletedAt !== undefined)       update.deleted_at = body.deletedAt
   const { data, error } = await db.from('team_members').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[admin/users/:id PUT]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update user' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update user')
   }
   logAudit({ userName: 'admin', action: `updated_user_${body.status ?? 'info'}`, module: 'admin', type: 'action', metadata: { userId: id } })
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('admin/users/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -58,9 +58,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     .select()
     .single()
   if (error) {
-    console.error('[admin/users/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to deactivate user' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to deactivate user')
   }
   logAudit({ userName: 'admin', action: 'deleted_user', module: 'admin', type: 'warning', metadata: { userId: id } })
   return NextResponse.json(data)
-}
+})

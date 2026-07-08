@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validateSubmission, submissionToContact } from '@/lib/forms'
 import { getResend } from '@/lib/resend'
 import { fireTrigger } from '@/lib/automation-triggers'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // CORS — forms get embedded on external websites
 const corsHeaders = {
@@ -19,7 +20,7 @@ export async function OPTIONS() {
  * GET — public form schema for client-side rendering.
  * Returns only safe fields (no notify emails, no owner).
  */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+export const GET = withErrorHandler('forms/public/[slug] GET', async (_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) => {
   const { slug } = await params
   const db = createServiceClient()
   const { data: form } = await db
@@ -49,13 +50,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     },
     { headers: corsHeaders },
   )
-}
+})
 
 /**
  * POST — public submission. No auth required.
  * Validates against form schema, creates submission + optional CRM contact.
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+export const POST = withErrorHandler('forms/public/[slug] POST', async (req: NextRequest, { params }: { params: Promise<{ slug: string }> }) => {
   const { slug } = await params
 
   let body: Record<string, unknown>
@@ -140,8 +141,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   })
 
   if (insertErr) {
-    console.error('[forms public POST]', insertErr)
-    return NextResponse.json({ error: 'Failed to save submission' }, { status: 500, headers: corsHeaders })
+    throw insertErr instanceof Error ? insertErr : new Error('Failed to save submission')
   }
 
   // Bump submissions count
@@ -220,4 +220,4 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     },
     { status: 201, headers: corsHeaders },
   )
-}
+})

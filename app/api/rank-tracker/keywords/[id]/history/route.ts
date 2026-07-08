@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getKeywordHistory } from '@/lib/rank-tracker'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('rank-tracker/keywords/[id]/history GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const { searchParams } = new URL(req.url)
   const daysParam = searchParams.get('days')
@@ -9,4 +10,4 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const history = await getKeywordHistory(id, days)
   return NextResponse.json({ trackedKeywordId: id, days, points: history })
-}
+})

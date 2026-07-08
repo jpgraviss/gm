@@ -4,51 +4,50 @@ import { requireAdmin } from '@/lib/admin-auth'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('portal-clients/approve POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
-  try {
-    const { clientId, approved } = await req.json()
-    if (!clientId || typeof approved !== 'boolean') {
-      return NextResponse.json({ error: 'clientId and approved (boolean) are required' }, { status: 400 })
-    }
+  const { clientId, approved } = await req.json()
+  if (!clientId || typeof approved !== 'boolean') {
+    return NextResponse.json({ error: 'clientId and approved (boolean) are required' }, { status: 400 })
+  }
 
-    const db = createServiceClient()
-    const settings = await getSettings()
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+  const db = createServiceClient()
+  const settings = await getSettings()
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
 
-    const { data: client, error: fetchErr } = await db
+  const { data: client, error: fetchErr } = await db
+    .from('portal_clients')
+    .select('id, email, company, contact')
+    .eq('id', clientId)
+    .single()
+
+  if (fetchErr || !client) {
+    return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+  }
+
+  if (approved) {
+    const { error: updateErr } = await db
       .from('portal_clients')
-      .select('id, email, company, contact')
+      .update({
+        pending_approval: false,
+        access: 'Active',
+        approved_by: 'admin',
+        approved_at: new Date().toISOString(),
+      })
       .eq('id', clientId)
-      .single()
 
-    if (fetchErr || !client) {
-      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    if (updateErr) {
+      throw new Error(updateErr?.message || 'Failed to approve client')
     }
 
-    if (approved) {
-      const { error: updateErr } = await db
-        .from('portal_clients')
-        .update({
-          pending_approval: false,
-          access: 'Active',
-          approved_by: 'admin',
-          approved_at: new Date().toISOString(),
-        })
-        .eq('id', clientId)
-
-      if (updateErr) {
-        console.error('[approve POST] update error:', updateErr)
-        return NextResponse.json({ error: 'Failed to approve client' }, { status: 500 })
-      }
-
-      await sendEmail({
-        to: client.email,
-        subject: `Your ${settings.company.name} portal access is approved!`,
-        html: `<!DOCTYPE html>
+    await sendEmail({
+      to: client.email,
+      subject: `Your ${settings.company.name} portal access is approved!`,
+      html: `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@400;500;600;700;800&display=swap');</style></head>
@@ -97,33 +96,32 @@ export async function POST(req: NextRequest) {
   </table>
 </body>
 </html>`,
+    })
+
+    logAudit({
+      userName: 'admin',
+      action: `portal_client_approved: ${client.contact} (${client.company})`,
+      module: 'portal',
+      type: 'success',
+      metadata: { clientId, email: client.email, company: client.company },
+    })
+  } else {
+    const { error: updateErr } = await db
+      .from('portal_clients')
+      .update({
+        pending_approval: false,
+        access: 'Disabled',
       })
+      .eq('id', clientId)
 
-      logAudit({
-        userName: 'admin',
-        action: `portal_client_approved: ${client.contact} (${client.company})`,
-        module: 'portal',
-        type: 'success',
-        metadata: { clientId, email: client.email, company: client.company },
-      })
-    } else {
-      const { error: updateErr } = await db
-        .from('portal_clients')
-        .update({
-          pending_approval: false,
-          access: 'Disabled',
-        })
-        .eq('id', clientId)
+    if (updateErr) {
+      throw new Error(updateErr?.message || 'Failed to deny client')
+    }
 
-      if (updateErr) {
-        console.error('[approve POST] deny update error:', updateErr)
-        return NextResponse.json({ error: 'Failed to deny client' }, { status: 500 })
-      }
-
-      await sendEmail({
-        to: client.email,
-        subject: `${settings.company.name} portal access update`,
-        html: `<!DOCTYPE html>
+    await sendEmail({
+      to: client.email,
+      subject: `${settings.company.name} portal access update`,
+      html: `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@400;500;600;700;800&display=swap');</style></head>
@@ -157,20 +155,16 @@ export async function POST(req: NextRequest) {
   </table>
 </body>
 </html>`,
-      })
+    })
 
-      logAudit({
-        userName: 'admin',
-        action: `portal_client_denied: ${client.contact} (${client.company})`,
-        module: 'portal',
-        type: 'warning',
-        metadata: { clientId, email: client.email, company: client.company },
-      })
-    }
-
-    return NextResponse.json({ success: true, approved })
-  } catch (err) {
-    console.error('[approve POST]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    logAudit({
+      userName: 'admin',
+      action: `portal_client_denied: ${client.contact} (${client.company})`,
+      module: 'portal',
+      type: 'warning',
+      metadata: { clientId, email: client.email, company: client.company },
+    })
   }
-}
+
+  return NextResponse.json({ success: true, approved })
+})

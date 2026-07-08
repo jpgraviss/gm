@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { sendViaGmail } from '@/lib/gmail-send'
 import { fireAutomations } from '@/lib/automations-engine'
 import { getSettings, type AppSettings } from '@/lib/settings'
+import { withErrorHandler } from '@/lib/api-handler'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.gravissmarketing.com'
 
 // ─── Merge-field replacement ─────────────────────────────────────────────────
@@ -325,7 +326,7 @@ async function isActiveInOtherSequence(
 
 // ─── Main execution endpoint ─────────────────────────────────────────────────
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('sequences/execute POST', async (req: NextRequest) => {
   // Verify cron secret
   const authHeader = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
@@ -345,11 +346,7 @@ export async function POST(req: NextRequest) {
     .lte('next_send_at', now.toISOString())
 
   if (fetchErr) {
-    console.error('[sequences/execute POST]', fetchErr)
-    return NextResponse.json(
-      { error: fetchErr?.message || 'Failed to execute sequences' },
-      { status: 500 },
-    )
+    throw new Error(fetchErr?.message || 'Failed to execute sequences')
   }
   if (!enrollments?.length) {
     return NextResponse.json({ processed: 0, sent: 0, completed: 0, skipped: 0 })
@@ -720,5 +717,5 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ processed: enrollments.length, sent, completed, skipped })
-}
+})
 

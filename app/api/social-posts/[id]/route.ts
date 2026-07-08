@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { mapPost } from '@/lib/social-media'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('social-posts/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { data } = await db.from('social_posts').select('*').eq('id', id).single()
   if (!data) return NextResponse.json({ error: 'Social post not found' }, { status: 404 })
   return NextResponse.json(mapPost(data))
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('social-posts/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()
@@ -40,16 +41,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error } = await db.from('social_posts').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[social-posts/:id PATCH]', error)
     if (error.code === 'PGRST116') {
       return NextResponse.json({ error: 'Social post not found' }, { status: 404 })
     }
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update social post')
   }
   return NextResponse.json(mapPost(data))
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('social-posts/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -57,8 +57,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const db = createServiceClient()
   const { error } = await db.from('social_posts').delete().eq('id', id)
   if (error) {
-    console.error('[social-posts/:id DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete social post')
   }
   logAudit({
     userName: 'system',
@@ -68,4 +67,4 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     metadata: { postId: id },
   })
   return NextResponse.json({ deleted: id })
-}
+})

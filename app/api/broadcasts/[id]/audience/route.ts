@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { applyAudienceFilter } from '@/lib/broadcasts'
+import { withErrorHandler } from '@/lib/api-handler'
 
 /**
  * Preview audience — returns count + sample emails for the current
  * broadcast's audience filter.
  */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('broadcasts/[id]/audience GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
 
@@ -75,8 +76,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: contacts, count, error } = await query.limit(100)
   if (error) {
-    console.error('[broadcasts audience GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   // Filter out recently-contacted contacts client-side
@@ -117,4 +117,4 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       name: c.full_name ?? '',
     })),
   })
-}
+})

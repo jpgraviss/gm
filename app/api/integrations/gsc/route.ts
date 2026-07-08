@@ -6,8 +6,9 @@ import {
   getGSCIndexCoverage,
   getGSCCoreWebVitals,
 } from '@/lib/google-search-console'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('integrations/gsc GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const type = searchParams.get('type') ?? 'analytics'
   const siteUrl = searchParams.get('siteUrl')
@@ -56,10 +57,6 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: `Unknown type: ${type}` }, { status: 400 })
     }
   } catch (err) {
-    console.error('[gsc route]', err)
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'GSC request failed' },
-      { status: 500 },
-    )
+    throw err instanceof Error ? err : new Error('GSC request failed')
   }
-}
+})

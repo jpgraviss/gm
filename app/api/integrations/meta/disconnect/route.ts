@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { disconnectMeta } from '@/lib/meta-ads'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 /**
  * POST /api/integrations/meta/disconnect
  * Leadership-only. Clears stored Meta tokens.
  */
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('integrations/meta/disconnect POST', async (req) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -20,4 +21,4 @@ export async function POST(req: NextRequest) {
     metadata: {},
   })
   return NextResponse.json({ disconnected: true })
-}
+})

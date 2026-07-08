@@ -3,86 +3,83 @@ import { createServiceClient } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
-  try {
-    const { email, password, displayName } = await req.json()
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
+export const POST = withErrorHandler('portal-clients/complete-setup POST', async (req) => {
+  const { email, password, displayName } = await req.json()
+  if (!email || !password) {
+    return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
+  }
+
+  if (password.length < 8) {
+    return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
+  }
+
+  const db = createServiceClient()
+  const normalizedEmail = email.toLowerCase().trim()
+
+  const { data: client, error: clientErr } = await db
+    .from('portal_clients')
+    .select('id, company, contact')
+    .ilike('email', normalizedEmail)
+    .maybeSingle()
+
+  if (clientErr || !client) {
+    return NextResponse.json({ error: 'No portal account found' }, { status: 404 })
+  }
+
+  const { data: { users }, error: listErr } = await db.auth.admin.listUsers()
+  if (listErr) {
+    throw new Error(listErr?.message || 'Failed to list users')
+  }
+
+  const authUser = users?.find(u => u.email?.toLowerCase() === normalizedEmail)
+  if (authUser) {
+    const { error: updateErr } = await db.auth.admin.updateUserById(authUser.id, { password })
+    if (updateErr) {
+      throw new Error(updateErr?.message || 'Failed to set password')
     }
+  }
 
-    if (password.length < 8) {
-      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
-    }
+  const update: Record<string, unknown> = {
+    setup_completed: true,
+    pending_approval: true,
+    verification_code: null,
+    verification_expires: null,
+  }
+  if (displayName) update.contact = displayName
 
-    const db = createServiceClient()
-    const normalizedEmail = email.toLowerCase().trim()
+  const { error: updateClientErr } = await db
+    .from('portal_clients')
+    .update(update)
+    .eq('id', client.id)
 
-    const { data: client, error: clientErr } = await db
-      .from('portal_clients')
-      .select('id, company, contact')
-      .ilike('email', normalizedEmail)
+  if (updateClientErr) {
+    throw new Error(updateClientErr?.message || 'Failed to complete setup')
+  }
+
+  const settings = await getSettings()
+
+  const { data: admins } = await db
+    .from('team_members')
+    .select('email, name')
+    .eq('is_admin', true)
+
+  if (admins && admins.length > 0) {
+    const { data: settingsRow } = await db
+      .from('app_settings')
+      .select('approval_config')
+      .eq('id', 'global')
       .maybeSingle()
-
-    if (clientErr || !client) {
-      return NextResponse.json({ error: 'No portal account found' }, { status: 404 })
-    }
-
-    const { data: { users }, error: listErr } = await db.auth.admin.listUsers()
-    if (listErr) {
-      console.error('[complete-setup POST] list users error:', listErr)
-      return NextResponse.json({ error: 'Failed to update account' }, { status: 500 })
-    }
-
-    const authUser = users?.find(u => u.email?.toLowerCase() === normalizedEmail)
-    if (authUser) {
-      const { error: updateErr } = await db.auth.admin.updateUserById(authUser.id, { password })
-      if (updateErr) {
-        console.error('[complete-setup POST] update password error:', updateErr)
-        return NextResponse.json({ error: 'Failed to set password' }, { status: 500 })
-      }
-    }
-
-    const update: Record<string, unknown> = {
-      setup_completed: true,
-      pending_approval: true,
-      verification_code: null,
-      verification_expires: null,
-    }
-    if (displayName) update.contact = displayName
-
-    const { error: updateClientErr } = await db
-      .from('portal_clients')
-      .update(update)
-      .eq('id', client.id)
-
-    if (updateClientErr) {
-      console.error('[complete-setup POST] update client error:', updateClientErr)
-      return NextResponse.json({ error: 'Failed to complete setup' }, { status: 500 })
-    }
-
-    const settings = await getSettings()
-
-    const { data: admins } = await db
-      .from('team_members')
-      .select('email, name')
-      .eq('is_admin', true)
-
-    if (admins && admins.length > 0) {
-      const { data: settingsRow } = await db
-        .from('app_settings')
-        .select('approval_config')
-        .eq('id', 'global')
-        .maybeSingle()
-      const approvalConfig = settingsRow?.approval_config as { portalClientApprovals?: string[] } | null
-      const configuredEmails = approvalConfig?.portalClientApprovals
-      const adminEmails = (configuredEmails?.length ? configuredEmails : admins.map(a => a.email)).filter(Boolean)
-      const clientName = displayName || client.contact || normalizedEmail
-      for (const adminEmail of adminEmails) {
-        await sendEmail({
-          to: adminEmail,
-          subject: `Portal Client Pending Approval: ${clientName}`,
-          html: `<!DOCTYPE html>
+    const approvalConfig = settingsRow?.approval_config as { portalClientApprovals?: string[] } | null
+    const configuredEmails = approvalConfig?.portalClientApprovals
+    const adminEmails = (configuredEmails?.length ? configuredEmails : admins.map(a => a.email)).filter(Boolean)
+    const clientName = displayName || client.contact || normalizedEmail
+    for (const adminEmail of adminEmails) {
+      await sendEmail({
+        to: adminEmail,
+        subject: `Portal Client Pending Approval: ${clientName}`,
+        html: `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@400;500;600;700;800&display=swap');</style></head>
@@ -148,21 +145,17 @@ export async function POST(req: NextRequest) {
   </table>
 </body>
 </html>`,
-        })
-      }
+      })
     }
-
-    logAudit({
-      userName: displayName || client.contact || normalizedEmail,
-      action: 'portal_client_setup_completed',
-      module: 'portal',
-      type: 'info',
-      metadata: { email: normalizedEmail, company: client.company },
-    })
-
-    return NextResponse.json({ success: true })
-  } catch (err) {
-    console.error('[complete-setup POST]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-}
+
+  logAudit({
+    userName: displayName || client.contact || normalizedEmail,
+    action: 'portal_client_setup_completed',
+    module: 'portal',
+    type: 'info',
+    metadata: { email: normalizedEmail, company: client.company },
+  })
+
+  return NextResponse.json({ success: true })
+})

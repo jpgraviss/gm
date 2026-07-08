@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { slugifyForm } from '@/lib/forms'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapForm(row: any) {
@@ -38,7 +39,7 @@ function mapForm(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('forms GET', async (req: NextRequest) => {
   const pag = parsePagination(req)
   const db = createServiceClient()
 
@@ -49,14 +50,13 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[forms GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(String(error))
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapForm), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('forms POST', async (req: NextRequest) => {
   const body = await req.json()
 
   if (!body.name || typeof body.name !== 'string') {
@@ -106,10 +106,9 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[forms POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(String(error))
   }
 
   logAudit({ userName: 'system', action: 'created_form', module: 'forms', type: 'action', metadata: { formId: data.id, name: data.name } })
   return NextResponse.json(mapForm(data), { status: 201 })
-}
+})

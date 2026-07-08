@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('tasks/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()
@@ -22,19 +23,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.sortOrder !== undefined)     update.sort_order = body.sortOrder
   const { data, error } = await db.from('app_tasks').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[tasks/:id PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update task' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update task')
   }
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('tasks/[id] DELETE', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('app_tasks').delete().eq('id', id)
   if (error) {
-    console.error('[tasks/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete task' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete task')
   }
   return NextResponse.json({ deleted: id })
-}
+})

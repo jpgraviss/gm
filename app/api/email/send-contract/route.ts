@@ -3,13 +3,13 @@ import { sendEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase'
 import { getSettings } from '@/lib/settings'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('email/send-contract POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
-  try {
-    const { contractId } = await req.json()
+  const { contractId } = await req.json()
 
     if (!contractId) {
       return NextResponse.json({ error: 'contractId is required' }, { status: 400 })
@@ -61,16 +61,11 @@ export async function POST(req: NextRequest) {
     })
 
     if (!result.success) {
-      console.error('[email/send-contract POST]', result.error)
-      return NextResponse.json({ error: result.error || 'Failed to send contract email' }, { status: 500 })
+      throw new Error(result.error || 'Failed to send contract email')
     }
 
     return NextResponse.json({ success: true, id: result.id, sentTo: recipientEmail })
-  } catch (err) {
-    console.error('Send contract email error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+})
 
 function contractEmailHtml({
   contactName,

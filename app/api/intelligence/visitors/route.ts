@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listPeople, getPerson, getPersonEvents } from '@/lib/maverick'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('intelligence/visitors GET', async (req) => {
   const params = new URL(req.url).searchParams
   const id = params.get('id')
   const events = params.get('events')
@@ -24,7 +25,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(result)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
-    const status = msg.includes('429') ? 429 : msg.includes('401') || msg.includes('403') ? 403 : 500
-    return NextResponse.json({ error: msg }, { status })
+    if (msg.includes('429')) {
+      return NextResponse.json({ error: msg }, { status: 429 })
+    }
+    if (msg.includes('401') || msg.includes('403')) {
+      return NextResponse.json({ error: msg }, { status: 403 })
+    }
+    throw err instanceof Error ? err : new Error('Operation failed')
   }
-}
+})

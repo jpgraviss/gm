@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const DEFAULT_PIPELINES = [
   {
@@ -49,7 +50,7 @@ interface Pipeline {
   stages: PipelineStage[]
 }
 
-export async function GET() {
+export const GET = withErrorHandler('pipelines GET', async () => {
   const db = createServiceClient()
   const { data } = await db
     .from('app_settings')
@@ -63,9 +64,9 @@ export async function GET() {
   }
 
   return NextResponse.json(DEFAULT_PIPELINES)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('pipelines POST', async (req) => {
   const body = await req.json()
 
   if (Array.isArray(body)) {
@@ -74,8 +75,7 @@ export async function POST(req: NextRequest) {
       .from('app_settings')
       .upsert({ id: 'global', pipelines: body, updated_at: new Date().toISOString() }, { onConflict: 'id' })
     if (error) {
-      console.error('[pipelines POST batch]', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      throw new Error(error?.message || 'Failed to save pipelines')
     }
     return NextResponse.json(body, { status: 201 })
   }
@@ -110,9 +110,8 @@ export async function POST(req: NextRequest) {
     .upsert({ id: 'global', pipelines: updated, updated_at: new Date().toISOString() }, { onConflict: 'id' })
 
   if (error) {
-    console.error('[pipelines POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to save pipeline')
   }
 
   return NextResponse.json({ id: pipelineId, name: name.trim() }, { status: 201 })
-}
+})

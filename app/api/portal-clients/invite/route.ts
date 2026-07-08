@@ -5,8 +5,9 @@ import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('portal-clients/invite POST', async (req) => {
   let body: Record<string, unknown>
   try {
     body = await req.json()
@@ -45,8 +46,7 @@ export async function POST(req: NextRequest) {
     email_confirm: true,
   })
   if (authError && !authError.message.includes('already')) {
-    console.error('[portal invite] auth error:', authError)
-    return NextResponse.json({ error: authError?.message || 'Failed to create auth account' }, { status: 500 })
+    throw new Error(authError?.message || 'Failed to create auth account')
   }
 
   let portalConfig = null
@@ -80,8 +80,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (insertErr) {
-    console.error('[portal invite] insert error:', insertErr)
-    return NextResponse.json({ error: insertErr?.message || 'Failed to create portal account' }, { status: 500 })
+    throw new Error(insertErr?.message || 'Failed to create portal account')
   }
 
   const settings = await getSettings()
@@ -164,4 +163,4 @@ export async function POST(req: NextRequest) {
     email: newClient.email,
     role,
   }, { status: 201 })
-}
+})

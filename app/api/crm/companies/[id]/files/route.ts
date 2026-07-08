@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('crm/companies/[id]/files GET', async (
+  _req,
+  { params }: { params: Promise<{ id: string }> },
+) => {
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db
@@ -11,13 +15,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('[company files GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   return NextResponse.json(data)
-}
+})
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withErrorHandler('crm/companies/[id]/files POST', async (
+  req,
+  { params }: { params: Promise<{ id: string }> },
+) => {
   const { id } = await params
   const formData = await req.formData()
   const file = formData.get('file') as File | null
@@ -41,8 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
 
   if (uploadError) {
-    console.error('[company files upload]', uploadError)
-    return NextResponse.json({ error: uploadError.message }, { status: 500 })
+    throw new Error(uploadError.message)
   }
 
   const { data: urlData } = db.storage
@@ -67,14 +72,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .single()
 
   if (error) {
-    console.error('[company files insert]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   return NextResponse.json(data, { status: 201 })
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('crm/companies/[id]/files DELETE', async (
+  req,
+  { params }: { params: Promise<{ id: string }> },
+) => {
   const { id } = await params
   const { fileId } = await req.json()
   if (!fileId) {
@@ -101,9 +108,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     .eq('company_id', id)
 
   if (error) {
-    console.error('[company files DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   return NextResponse.json({ deleted: fileId })
-}
+})

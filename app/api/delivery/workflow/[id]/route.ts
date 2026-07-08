@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('delivery/workflow/[id] GET', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   if (!id) return NextResponse.json({ error: 'Missing workflow id' }, { status: 400 })
 
@@ -13,18 +14,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   ])
 
   if (workflowRes.error) {
-    console.error('[delivery/workflow GET]', workflowRes.error)
-    const status = workflowRes.error.code === 'PGRST116' ? 404 : 500
-    return NextResponse.json({ error: workflowRes.error.message }, { status })
+    if (workflowRes.error.code === 'PGRST116') {
+      return NextResponse.json({ error: workflowRes.error.message }, { status: 404 })
+    }
+    throw new Error(workflowRes.error.message || 'Failed to fetch workflow')
   }
 
   return NextResponse.json({
     ...workflowRes.data,
     events: eventsRes.data ?? [],
   })
-}
+})
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('delivery/workflow/[id] DELETE', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   if (!id) return NextResponse.json({ error: 'Missing workflow id' }, { status: 400 })
 
@@ -32,9 +34,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { error } = await db.from('delivery_workflows').delete().eq('id', id)
 
   if (error) {
-    console.error('[delivery/workflow DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to delete workflow')
   }
 
   return NextResponse.json({ deleted: true })
-}
+})

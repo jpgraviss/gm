@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chatCompletion } from '@/lib/ai-client'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
-  try {
+export const POST = withErrorHandler('ai/analyze-website POST', async (req) => {
     const { url } = await req.json()
 
     if (!url || typeof url !== 'string') {
@@ -29,7 +29,7 @@ Based on the URL and your knowledge of this company/website, infer the following
     })
 
     if (result.source === 'none') {
-      return NextResponse.json({ error: 'No AI provider configured' }, { status: 500 })
+      throw new Error('No AI provider configured')
     }
 
     const jsonMatch = result.text.match(/\{[\s\S]*\}/)
@@ -47,8 +47,4 @@ Based on the URL and your knowledge of this company/website, infer the following
       annualRevenue: parsed.annualRevenue ?? '',
       phone: parsed.phone ?? '',
     })
-  } catch (error) {
-    console.error('analyze-website error:', error)
-    return NextResponse.json({ error: 'Failed to analyze website' }, { status: 500 })
-  }
-}
+})

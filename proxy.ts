@@ -48,6 +48,7 @@ const PUBLIC_PREFIXES = [
   '/api/intelligence/track',
   '/api/intelligence/script',
   '/api/wordpress/seo/',
+  '/api/wordpress/plugin/download',
 ]
 
 function getClientIp(req: NextRequest): string {
@@ -106,12 +107,13 @@ function proxyImpl(req: NextRequest): NextResponse {
   }
 
   // ── All other API routes: require authentication ─────────────────────────
-  const hasAuthCookie = req.cookies.getAll().some(c =>
+  const hasSupabaseCookie = req.cookies.getAll().some(c =>
     c.name.startsWith('sb-') && c.name.endsWith('-auth-token')
   )
+  const hasBridgeCookie = req.cookies.has('gravhub-auth')
   const hasAuthHeader = !!req.headers.get('authorization')
 
-  if (!hasAuthCookie && !hasAuthHeader) {
+  if (!hasSupabaseCookie && !hasBridgeCookie && !hasAuthHeader) {
     return NextResponse.json(
       { error: 'Authentication required' },
       { status: 401 }

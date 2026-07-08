@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
+import { withErrorHandler } from '@/lib/api-handler'
 
 interface ScoreRow {
   score: number
@@ -20,7 +21,7 @@ interface HealthRow {
   last_reported_at: string | null
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('wordpress/seo/reports POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
       generatedAt: new Date().toISOString(),
     },
   })
-}
+})
 
 async function generateSiteReport(db: ReturnType<typeof createServiceClient>, siteUrl: string) {
   const [healthResult, scoresResult] = await Promise.all([
@@ -134,7 +135,7 @@ async function generateSiteReport(db: ReturnType<typeof createServiceClient>, si
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('wordpress/seo/reports GET', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -161,4 +162,4 @@ export async function GET(req: NextRequest) {
   )
 
   return NextResponse.json(reports)
-}
+})

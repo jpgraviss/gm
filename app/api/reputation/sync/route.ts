@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getGBPReviews, STAR_TO_NUMBER } from '@/lib/google-business-profile'
 import type { GBPStarRating } from '@/lib/google-business-profile'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST() {
+export const POST = withErrorHandler('reputation/sync POST', async () => {
   const db = createServiceClient()
 
   const { data: settings } = await db
@@ -100,10 +101,6 @@ export async function POST() {
       lastSyncAt: now,
     })
   } catch (err) {
-    console.error('[reputation/sync]', err)
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Sync failed' },
-      { status: 500 },
-    )
+    throw new Error(err instanceof Error ? err.message : 'Sync failed')
   }
-}
+})

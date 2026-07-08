@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('sequences/[id]/enrollments GET', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db
@@ -10,8 +11,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .eq('sequence_id', id)
     .order('enrolled_at', { ascending: false })
   if (error) {
-    console.error('[enrollments GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch enrollments' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch enrollments')
   }
   return NextResponse.json(
     (data ?? []).map(r => ({
@@ -34,9 +34,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       abVariant: r.ab_variant,
     }))
   )
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('sequences/[id]/enrollments DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const { enrollmentIds } = await req.json() as { enrollmentIds: string[] }
 
@@ -63,8 +63,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     .in('id', enrollmentIds)
 
   if (error) {
-    console.error('[enrollments DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to remove enrollments' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to remove enrollments')
   }
 
   // Update sequence counts
@@ -88,4 +87,4 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   return NextResponse.json({ removed: totalRemoved })
-}
+})

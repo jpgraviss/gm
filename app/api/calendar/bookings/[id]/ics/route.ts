@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { generateICS } from '@/lib/ics-generator'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const GET = withErrorHandler('calendar/bookings/[id]/ics GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
 
   const db = createServiceClient()
@@ -51,4 +49,4 @@ export async function GET(
       'Content-Disposition': `attachment; filename="booking.ics"`,
     },
   })
-}
+})

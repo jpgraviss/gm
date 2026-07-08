@@ -3,96 +3,91 @@ import { sendEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase'
 import { getSettings } from '@/lib/settings'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('email/invite POST', async (req: NextRequest) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
-  try {
-    const settings = await getSettings()
-    const { name, email, role, unit, invitedBy } = await req.json()
+  const settings = await getSettings()
+  const { name, email, role, unit, invitedBy } = await req.json()
 
-    if (!name || !email) {
-      return NextResponse.json({ error: 'name and email are required' }, { status: 400 })
-    }
-
-    const db = createServiceClient()
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
-
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString()
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-
-    await db
-      .from('team_members')
-      .update({
-        verification_code: verificationCode,
-        verification_expires: verificationExpires,
-      })
-      .ilike('email', email.toLowerCase().trim())
-
-    const setupUrl = `${appUrl}/setup-account?email=${encodeURIComponent(email)}&token=${verificationCode}`
-
-    const { data: linkData, error: linkError } = await db.auth.admin.generateLink({
-      type: 'magiclink',
-      email,
-      options: { redirectTo: `${appUrl}/auth/confirm` },
-    })
-
-    let magicLinkUrl = `${appUrl}/team-login`
-    if (!linkError && linkData?.properties?.hashed_token) {
-      const token = linkData.properties.hashed_token
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-      magicLinkUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=magiclink&redirect_to=${encodeURIComponent(`${appUrl}/auth/confirm`)}`
-    }
-
-    const result = await sendEmail({
-      to: email,
-      subject: `You've been invited to ${settings.branding.appName}`,
-      html: inviteEmailHtml({
-        name,
-        role,
-        unit,
-        invitedBy: invitedBy ?? `the ${settings.branding.appName} admin`,
-        signInUrl: magicLinkUrl,
-        setupUrl,
-        verificationCode,
-        settings,
-      }),
-    })
-
-    if (!result.success) {
-      console.error('[email/invite POST]', result.error)
-      return NextResponse.json({ error: result.error || 'Failed to send invite email' }, { status: 500 })
-    }
-
-    const { data: admins } = await db
-      .from('team_members')
-      .select('email, name')
-      .eq('is_admin', true)
-      .eq('status', 'active')
-
-    if (admins && admins.length > 0) {
-      const { data: settingsRow } = await db
-        .from('app_settings')
-        .select('approval_config')
-        .eq('id', 'global')
-        .maybeSingle()
-      const approvalConfig = settingsRow?.approval_config as { teamMemberApprovals?: string[] } | null
-      const configuredEmails = approvalConfig?.teamMemberApprovals
-      const adminEmails = (configuredEmails?.length ? configuredEmails : admins.map((a: { email: string }) => a.email)).filter(Boolean)
-      await sendEmail({
-        to: adminEmails,
-        subject: `New team member setup: ${name}`,
-        html: adminNotificationHtml({ name, email, role, unit, verificationCode, settings }),
-      })
-    }
-
-    return NextResponse.json({ success: true, id: result.id })
-  } catch (err) {
-    console.error('Invite email error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  if (!name || !email) {
+    return NextResponse.json({ error: 'name and email are required' }, { status: 400 })
   }
-}
+
+  const db = createServiceClient()
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+
+  const verificationCode = Math.floor(100000 + Math.random() * 900000).toString()
+  const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+
+  await db
+    .from('team_members')
+    .update({
+      verification_code: verificationCode,
+      verification_expires: verificationExpires,
+    })
+    .ilike('email', email.toLowerCase().trim())
+
+  const setupUrl = `${appUrl}/setup-account?email=${encodeURIComponent(email)}&token=${verificationCode}`
+
+  const { data: linkData, error: linkError } = await db.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+    options: { redirectTo: `${appUrl}/auth/confirm` },
+  })
+
+  let magicLinkUrl = `${appUrl}/team-login`
+  if (!linkError && linkData?.properties?.hashed_token) {
+    const token = linkData.properties.hashed_token
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    magicLinkUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=magiclink&redirect_to=${encodeURIComponent(`${appUrl}/auth/confirm`)}`
+  }
+
+  const result = await sendEmail({
+    to: email,
+    subject: `You've been invited to ${settings.branding.appName}`,
+    html: inviteEmailHtml({
+      name,
+      role,
+      unit,
+      invitedBy: invitedBy ?? `the ${settings.branding.appName} admin`,
+      signInUrl: magicLinkUrl,
+      setupUrl,
+      verificationCode,
+      settings,
+    }),
+  })
+
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to send invite email')
+  }
+
+  const { data: admins } = await db
+    .from('team_members')
+    .select('email, name')
+    .eq('is_admin', true)
+    .eq('status', 'active')
+
+  if (admins && admins.length > 0) {
+    const { data: settingsRow } = await db
+      .from('app_settings')
+      .select('approval_config')
+      .eq('id', 'global')
+      .maybeSingle()
+    const approvalConfig = settingsRow?.approval_config as { teamMemberApprovals?: string[] } | null
+    const configuredEmails = approvalConfig?.teamMemberApprovals
+    const adminEmails = (configuredEmails?.length ? configuredEmails : admins.map((a: { email: string }) => a.email)).filter(Boolean)
+    await sendEmail({
+      to: adminEmails,
+      subject: `New team member setup: ${name}`,
+      html: adminNotificationHtml({ name, email, role, unit, verificationCode, settings }),
+    })
+  }
+
+  return NextResponse.json({ success: true, id: result.id })
+})
 
 function inviteEmailHtml({
   name,

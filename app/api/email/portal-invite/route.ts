@@ -2,67 +2,62 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase'
 import { getSettings } from '@/lib/settings'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
-  try {
-    const settings = await getSettings()
-    const { company, contactName, email, service, isResend: isResendInvite } = await req.json()
+export const POST = withErrorHandler('email/portal-invite POST', async (req: NextRequest) => {
+  const settings = await getSettings()
+  const { company, contactName, email, service, isResend: isResendInvite } = await req.json()
 
-    if (!company || !email) {
-      return NextResponse.json({ error: 'company and email are required' }, { status: 400 })
-    }
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
-    const db = createServiceClient()
-
-    const verificationCode = String(Math.floor(100000 + Math.random() * 900000))
-    const verificationExpires = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
-
-    await db
-      .from('portal_clients')
-      .update({
-        verification_code: verificationCode,
-        verification_expires: verificationExpires,
-      })
-      .ilike('email', email.toLowerCase().trim())
-
-    const setupUrl = `${appUrl}/portal/setup?email=${encodeURIComponent(email)}&token=invite`
-
-    const result = await sendEmail({
-      to: email,
-      subject: isResendInvite
-        ? `Reminder: Your ${company} client portal is ready`
-        : `Your ${settings.company.name} client portal is ready`,
-      html: portalInviteHtml({ company, contactName, email, service, signInUrl: setupUrl, isResend: isResendInvite, settings, verificationCode }),
-    })
-
-    if (!result.success) {
-      console.error('[email/portal-invite POST]', result.error)
-      return NextResponse.json({ error: result.error || 'Failed to send portal invite email' }, { status: 500 })
-    }
-
-    const { data: admins } = await db
-      .from('team_members')
-      .select('email, name')
-      .eq('is_admin', true)
-
-    if (admins && admins.length > 0) {
-      for (const admin of admins) {
-        if (!admin.email) continue
-        await sendEmail({
-          to: admin.email,
-          subject: `New portal client invited: ${contactName || email} (${company})`,
-          html: adminNotifyHtml({ company, contactName, email, settings }),
-        })
-      }
-    }
-
-    return NextResponse.json({ success: true, id: result.id })
-  } catch (err) {
-    console.error('Portal invite error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  if (!company || !email) {
+    return NextResponse.json({ error: 'company and email are required' }, { status: 400 })
   }
-}
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+  const db = createServiceClient()
+
+  const verificationCode = String(Math.floor(100000 + Math.random() * 900000))
+  const verificationExpires = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+
+  await db
+    .from('portal_clients')
+    .update({
+      verification_code: verificationCode,
+      verification_expires: verificationExpires,
+    })
+    .ilike('email', email.toLowerCase().trim())
+
+  const setupUrl = `${appUrl}/portal/setup?email=${encodeURIComponent(email)}&token=invite`
+
+  const result = await sendEmail({
+    to: email,
+    subject: isResendInvite
+      ? `Reminder: Your ${company} client portal is ready`
+      : `Your ${settings.company.name} client portal is ready`,
+    html: portalInviteHtml({ company, contactName, email, service, signInUrl: setupUrl, isResend: isResendInvite, settings, verificationCode }),
+  })
+
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to send portal invite email')
+  }
+
+  const { data: admins } = await db
+    .from('team_members')
+    .select('email, name')
+    .eq('is_admin', true)
+
+  if (admins && admins.length > 0) {
+    for (const admin of admins) {
+      if (!admin.email) continue
+      await sendEmail({
+        to: admin.email,
+        subject: `New portal client invited: ${contactName || email} (${company})`,
+        html: adminNotifyHtml({ company, contactName, email, settings }),
+      })
+    }
+  }
+
+  return NextResponse.json({ success: true, id: result.id })
+})
 
 function adminNotifyHtml({
   company,

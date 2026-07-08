@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('portal/seo GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   if (!company) {
@@ -26,4 +27,4 @@ export async function GET(req: NextRequest) {
     strategy: seoStrategy,
     showSeo: config.show_seo === true,
   })
-}
+})

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getRecommendations } from '@/lib/ai/recommendations'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('ai/recommendations GET', async (req) => {
   const companyId = req.nextUrl.searchParams.get('companyId') ?? undefined
   const db = createServiceClient()
 
@@ -96,4 +97,4 @@ export async function GET(req: NextRequest) {
   })
 
   return NextResponse.json(recommendations)
-}
+})

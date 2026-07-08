@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { getCompetitors, addCompetitor } from '@/lib/rank-tracker'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET() {
+export const GET = withErrorHandler('rank-tracker/competitors GET', async () => {
   const competitors = await getCompetitors()
   return NextResponse.json(competitors)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('rank-tracker/competitors POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -17,19 +18,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'domain is required' }, { status: 400 })
   }
 
-  try {
-    const competitor = await addCompetitor(body.domain, body.label)
-    logAudit({
-      userName: 'system',
-      action:   'added_competitor',
-      module:   'rank-tracker',
-      type:     'action',
-      metadata: { id: competitor.id, domain: competitor.domain },
-    })
-    return NextResponse.json(competitor, { status: 201 })
-  } catch (err) {
-    console.error('[rank-tracker competitors POST]', err)
-    const message = err instanceof Error ? err.message : 'Failed to add competitor'
-    return NextResponse.json({ error: message }, { status: 500 })
-  }
-}
+  const competitor = await addCompetitor(body.domain, body.label)
+  logAudit({
+    userName: 'system',
+    action:   'added_competitor',
+    module:   'rank-tracker',
+    type:     'action',
+    metadata: { id: competitor.id, domain: competitor.domain },
+  })
+  return NextResponse.json(competitor, { status: 201 })
+})

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(
-  _req: NextRequest,
+export const GET = withErrorHandler('track/click/[token] GET', async (
+  _req,
   { params }: { params: Promise<{ token: string }> },
-) {
+) => {
   const { token } = await params
 
   let payload: { broadcastId: string; contactId: string; email: string; url: string }
@@ -53,4 +54,4 @@ export async function GET(
   }
 
   return NextResponse.redirect(url, 302)
-}
+})

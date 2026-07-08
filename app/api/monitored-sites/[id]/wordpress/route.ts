@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { runAndStoreWPCheck } from '@/lib/wordpress'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withErrorHandler('monitored-sites/[id]/wordpress POST', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
 
@@ -16,18 +17,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Site not found' }, { status: 404 })
   }
 
-  try {
-    const result = await runAndStoreWPCheck(id)
-    return NextResponse.json(result)
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'WordPress check failed' },
-      { status: 500 },
-    )
-  }
-}
+  const result = await runAndStoreWPCheck(id)
+  return NextResponse.json(result)
+})
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('monitored-sites/[id]/wordpress GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
 
@@ -40,7 +34,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .maybeSingle()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch WordPress check')
   }
 
   if (!data) {
@@ -60,4 +54,4 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     xmlRpcEnabled: data.xmlrpc_enabled,
     checkedAt: data.checked_at,
   })
-}
+})

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCompany(row: any) {
@@ -26,7 +27,7 @@ function mapCompany(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('crm/companies GET', async (req) => {
   const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
@@ -35,14 +36,13 @@ export async function GET(req: NextRequest) {
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
-    console.error('[crm/companies GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch companies' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch companies')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapCompany), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('crm/companies POST', async (req) => {
   const body = await req.json()
 
   const result = validate(body, {
@@ -79,8 +79,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[crm/companies POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create company' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create company')
   }
   return NextResponse.json(mapCompany(data), { status: 201 })
-}
+})

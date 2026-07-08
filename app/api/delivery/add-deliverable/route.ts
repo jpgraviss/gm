@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('delivery/add-deliverable POST', async (req) => {
   const body = await req.json()
   const result = validate(body, {
     workflowId: { required: true, type: 'string', maxLength: 100 },
@@ -22,9 +23,10 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (fetchErr) {
-    console.error('[delivery/add-deliverable POST]', fetchErr)
-    const status = fetchErr.code === 'PGRST116' ? 404 : 500
-    return NextResponse.json({ error: fetchErr.message }, { status })
+    if (fetchErr.code === 'PGRST116') {
+      return NextResponse.json({ error: fetchErr.message }, { status: 404 })
+    }
+    throw new Error(fetchErr.message)
   }
 
   const existing = (workflow.step_07_deliverables ?? []) as Record<string, unknown>[]
@@ -49,8 +51,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[delivery/add-deliverable POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   await db.from('delivery_events').insert({
@@ -64,4 +65,4 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json(data, { status: 201 })
-}
+})

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('sequences/analytics GET', async (req: NextRequest) => {
   const sequenceId = req.nextUrl.searchParams.get('sequenceId')
   if (!sequenceId) {
     return NextResponse.json({ error: 'sequenceId is required' }, { status: 400 })
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
     .eq('sequence_id', sequenceId)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to fetch analytics')
   }
 
   const rows = activities ?? []
@@ -157,4 +158,4 @@ export async function GET(req: NextRequest) {
     dailySends,
     ...(abResults ? { abResults } : {}),
   })
-}
+})

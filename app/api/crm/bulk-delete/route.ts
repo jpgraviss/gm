@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const TABLE_MAP: Record<string, string> = {
   companies: 'crm_companies',
@@ -11,7 +12,7 @@ const TABLE_MAP: Record<string, string> = {
   tickets: 'tickets',
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('crm/bulk-delete POST', async (req) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
 
     const { error, count } = await db.from('crm_companies').delete({ count: 'exact' }).in('id', ids)
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      throw new Error(error.message)
     }
     deleted = count ?? 0
 
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
   } else {
     const { error, count } = await db.from(table).delete({ count: 'exact' }).in('id', ids)
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      throw new Error(error.message)
     }
     deleted = count ?? 0
   }
@@ -64,4 +65,4 @@ export async function POST(req: NextRequest) {
   }).then(() => {}, () => {})
 
   return NextResponse.json({ deleted })
-}
+})

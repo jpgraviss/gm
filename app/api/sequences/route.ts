@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSequence(row: any) {
@@ -39,20 +40,19 @@ function mapSequence(row: any) {
   }
 }
 
-export async function GET() {
+export const GET = withErrorHandler('sequences GET', async () => {
   const db = createServiceClient()
   const { data, error } = await db
     .from('sequences')
     .select('*')
     .order('created_at', { ascending: false })
   if (error) {
-    console.error('[sequences GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch sequences' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch sequences')
   }
   return NextResponse.json((data ?? []).map(mapSequence))
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('sequences POST', async (req: NextRequest) => {
   const body = await req.json()
 
   const result = validate(body, {
@@ -99,8 +99,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[sequences POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create sequence' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create sequence')
   }
   return NextResponse.json(mapSequence(data), { status: 201 })
-}
+})

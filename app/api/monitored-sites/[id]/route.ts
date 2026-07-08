@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSite(row: any) {
@@ -25,7 +26,7 @@ function mapSite(row: any) {
   }
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('monitored-sites/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db.from('monitored_sites').select('*').eq('id', id).single()
@@ -59,9 +60,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       errorMessage:   c.error_message,
     })),
   })
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('monitored-sites/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -96,13 +97,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .select()
     .single()
   if (error || !data) {
-    console.error('[monitored-sites PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update monitored site')
   }
   return NextResponse.json(mapSite(data))
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('monitored-sites/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -110,8 +110,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const db = createServiceClient()
   const { error } = await db.from('monitored_sites').delete().eq('id', id)
   if (error) {
-    console.error('[monitored-sites DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete monitored site')
   }
   logAudit({
     userName: 'system',
@@ -121,4 +120,4 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     metadata: { siteId: id },
   })
   return NextResponse.json({ deleted: id })
-}
+})

@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { generateICS } from '@/lib/ics-generator'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ userId: string }> },
-) {
+export const GET = withErrorHandler('calendar/feed/[userId] GET', async (_req, { params }: { params: Promise<{ userId: string }> }) => {
   const { userId } = await params
 
   const db = createServiceClient()
@@ -97,4 +95,4 @@ export async function GET(
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     },
   })
-}
+})

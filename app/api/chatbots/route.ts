@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 
-export async function GET() {
+export const GET = withErrorHandler('chatbots GET', async () => {
   const db = createServiceClient()
   const { data, error } = await db
     .from('chatbots')
@@ -9,8 +10,7 @@ export async function GET() {
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('[chatbots GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   const bots = (data ?? []).map(b => ({
@@ -20,9 +20,9 @@ export async function GET() {
   }))
 
   return NextResponse.json(bots)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('chatbots POST', async (req) => {
   const body = await req.json()
 
   if (!body.name || typeof body.name !== 'string' || !body.name.trim()) {
@@ -47,8 +47,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await db.from('chatbots').insert(row).select().single()
   if (error) {
-    console.error('[chatbots POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   return NextResponse.json(data, { status: 201 })
-}
+})

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -7,11 +8,11 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 }
 
-export async function OPTIONS() {
+export const OPTIONS = withErrorHandler('intelligence/track OPTIONS', async () => {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS })
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('intelligence/track POST', async (req) => {
   let body: Record<string, unknown>
   try {
     const text = await req.text()
@@ -100,4 +101,4 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json({ ok: true }, { headers: CORS_HEADERS })
-}
+})

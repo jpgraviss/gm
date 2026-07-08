@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { buildClientReport } from '@/lib/client-reports'
 import { requirePortalClient } from '@/lib/portal-auth'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('portal/insights GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const companyName = searchParams.get('company')
   const days = parseInt(searchParams.get('days') ?? '28', 10)
@@ -34,34 +35,26 @@ export async function GET(req: NextRequest) {
   const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000)
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
 
-  try {
-    const report = await buildClientReport({
-      companyName,
-      companyId:       binding.company_id ?? undefined,
-      gscSiteUrl:      binding.gsc_site_url ?? undefined,
-      ga4PropertyId:   binding.ga4_property_id ?? undefined,
-      gbpLocationName: binding.gbp_location_name ?? undefined,
-      startDate: fmt(start),
-      endDate:   fmt(end),
-    })
+  const report = await buildClientReport({
+    companyName,
+    companyId:       binding.company_id ?? undefined,
+    gscSiteUrl:      binding.gsc_site_url ?? undefined,
+    ga4PropertyId:   binding.ga4_property_id ?? undefined,
+    gbpLocationName: binding.gbp_location_name ?? undefined,
+    startDate: fmt(start),
+    endDate:   fmt(end),
+  })
 
-    const allowed = new Set<string>(binding.portal_widgets ?? [])
-    const filtered: Record<string, unknown> = {
-      company: report.company,
-      period:  report.period,
-    }
-    if (allowed.has('seo')        && report.seo)         filtered.seo = report.seo
-    if (allowed.has('traffic')    && report.traffic)     filtered.traffic = report.traffic
-    if (allowed.has('reputation') && report.reputation)  filtered.reputation = report.reputation
-    if (allowed.has('rankings')   && report.ranking)     filtered.ranking = report.ranking
-    if (allowed.has('uptime')     && report.uptime)      filtered.uptime = report.uptime
-
-    return NextResponse.json(filtered)
-  } catch (err) {
-    console.error('[portal/insights]', err)
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to load insights' },
-      { status: 500 },
-    )
+  const allowed = new Set<string>(binding.portal_widgets ?? [])
+  const filtered: Record<string, unknown> = {
+    company: report.company,
+    period:  report.period,
   }
-}
+  if (allowed.has('seo')        && report.seo)         filtered.seo = report.seo
+  if (allowed.has('traffic')    && report.traffic)     filtered.traffic = report.traffic
+  if (allowed.has('reputation') && report.reputation)  filtered.reputation = report.reputation
+  if (allowed.has('rankings')   && report.ranking)     filtered.ranking = report.ranking
+  if (allowed.has('uptime')     && report.uptime)      filtered.uptime = report.uptime
+
+  return NextResponse.json(filtered)
+})

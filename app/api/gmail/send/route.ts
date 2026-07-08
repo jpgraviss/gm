@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { sendViaGmail } from '@/lib/gmail-send'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // POST /api/gmail/send — send an email via the authenticated user's Gmail
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('gmail/send POST', async (req) => {
   try {
     const body = await req.json()
     const { userEmail, to, subject, htmlBody, cc, bcc, replyTo } = body
@@ -61,8 +62,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, messageId })
   } catch (err) {
-    console.error('[gmail/send POST]', err)
-    const message = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    throw err instanceof Error ? err : new Error('Operation failed')
   }
-}
+})

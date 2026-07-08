@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { listAccounts } from '@/lib/mercury'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET() {
+export const GET = withErrorHandler('mercury/accounts GET', async () => {
   try {
     const accounts = await listAccounts()
     return NextResponse.json({ accounts })
@@ -10,4 +11,4 @@ export async function GET() {
     const status = msg.includes('not configured') ? 400 : 502
     return NextResponse.json({ error: msg }, { status })
   }
-}
+})

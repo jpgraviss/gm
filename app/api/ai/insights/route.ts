@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chatCompletion } from '@/lib/ai-client'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
-  try {
+export const POST = withErrorHandler('ai/insights POST', async (req) => {
     const { type, name, context } = await req.json() as {
       type: 'company' | 'contact'
       name: string
@@ -49,11 +49,7 @@ One concrete recommended next step based on their current deal stage, last activ
     }
 
     return NextResponse.json({ insights: result.text, source: result.source })
-  } catch (err) {
-    console.error('[ai/insights]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+})
 
 function generateTemplateFallback(type: 'company' | 'contact', name: string, context: string): string {
   const lines = context.split('\n').filter(Boolean)

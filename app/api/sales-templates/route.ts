@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTemplate(row: any) {
@@ -21,7 +22,7 @@ function mapTemplate(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('sales-templates GET', async (req) => {
   const pag = parsePagination(req)
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
@@ -35,14 +36,13 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[sales-templates GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to fetch templates')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapTemplate), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('sales-templates POST', async (req) => {
   const body = await req.json()
 
   if (!body.title || typeof body.title !== 'string') {
@@ -69,8 +69,7 @@ export async function POST(req: NextRequest) {
       .select()
       .single()
     if (error || !data) {
-      console.error('[sales-templates POST useTemplate update]', error)
-      return NextResponse.json({ error: error?.message || 'Failed to increment usage' }, { status: 500 })
+      throw new Error(error?.message || 'Failed to increment usage')
     }
     return NextResponse.json(mapTemplate(data))
   }
@@ -93,10 +92,9 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[sales-templates POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to create template')
   }
 
   logAudit({ userName: 'system', action: 'created_sales_template', module: 'sales-templates', type: 'action', metadata: { templateId: data.id, title: data.title } })
   return NextResponse.json(mapTemplate(data), { status: 201 })
-}
+})

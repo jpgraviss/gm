@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('intelligence/identify GET', async (req) => {
   const params = new URL(req.url).searchParams
   const visitorId = params.get('visitor_id')
   const limit = parseInt(params.get('limit') ?? '50')
@@ -47,8 +48,8 @@ export async function GET(req: NextRequest) {
   const { data, count, error } = await query
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to fetch visitors')
   }
 
   return NextResponse.json({ data: data ?? [], total: count ?? 0 })
-}
+})

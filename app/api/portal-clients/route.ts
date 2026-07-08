@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapClient(row: any) {
@@ -21,7 +22,7 @@ function mapClient(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('portal-clients GET', async (req) => {
   const db = createServiceClient()
   const companyFilter = req.nextUrl.searchParams.get('company')
   const pendingFilter = req.nextUrl.searchParams.get('pending_approval')
@@ -39,8 +40,7 @@ export async function GET(req: NextRequest) {
     query = query.eq('pending_approval', true)
     const { data, error } = await query
     if (error) {
-      console.error('[portal-clients GET pending]', error)
-      return NextResponse.json({ error: error?.message || 'Failed to fetch pending portal clients' }, { status: 500 })
+      throw new Error(error?.message || 'Failed to fetch pending portal clients')
     }
     return NextResponse.json(
       (data ?? []).map(row => ({
@@ -55,13 +55,12 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[portal-clients GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch portal clients' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch portal clients')
   }
   return NextResponse.json((data ?? []).map(mapClient))
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('portal-clients POST', async (req) => {
   let body: Record<string, unknown>
   try {
     body = await req.json()
@@ -86,8 +85,7 @@ export async function POST(req: NextRequest) {
       email_confirm: true,
     })
     if (authError && !authError.message.includes('already')) {
-      console.error('[portal-clients POST] auth error:', authError)
-      return NextResponse.json({ error: authError?.message || 'Failed to create client auth account' }, { status: 500 })
+      throw new Error(authError?.message || 'Failed to create client auth account')
     }
   }
 
@@ -121,15 +119,14 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[portal-clients POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create portal client' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create portal client')
   }
   logAudit({ userName: 'admin', action: 'created_portal_client', module: 'portal', type: 'action', metadata: { email: body.email, company: body.company } })
   return NextResponse.json({ ...mapClient(data), tempPassword }, { status: 201 })
-}
+})
 
 // DELETE /api/portal-clients?company=... — delete all portal clients for a company
-export async function DELETE(req: NextRequest) {
+export const DELETE = withErrorHandler('portal-clients DELETE', async (req) => {
   const company = req.nextUrl.searchParams.get('company')
   if (!company) {
     return NextResponse.json({ error: 'company query parameter is required' }, { status: 400 })
@@ -143,10 +140,9 @@ export async function DELETE(req: NextRequest) {
     .select('id, email')
 
   if (error) {
-    console.error('[portal-clients DELETE company]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete portal' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete portal')
   }
 
   logAudit({ userName: 'admin', action: 'deleted_portal_company', module: 'portal', type: 'action', metadata: { company, deletedCount: deleted?.length ?? 0 } })
   return NextResponse.json({ deleted: deleted?.length ?? 0, company })
-}
+})

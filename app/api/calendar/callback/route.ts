@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { exchangeCodeForTokens } from '@/lib/google-calendar'
 import { createServiceClient } from '@/lib/supabase'
 import { encrypt } from '@/lib/encryption'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // GET /api/calendar/callback?code=...&state=...
 // Handles the Google OAuth redirect, stores tokens, redirects to settings page
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('calendar/callback GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const code  = searchParams.get('code')
   const state = searchParams.get('state')
@@ -67,4 +68,4 @@ export async function GET(req: NextRequest) {
       `${origin}/settings/calendar?error=${encodeURIComponent('Connection failed. Check server logs for details.')}`,
     )
   }
-}
+})

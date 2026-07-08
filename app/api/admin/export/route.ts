@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { requireAdmin } from '@/lib/admin-auth'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const ENTITY_CONFIGS: Record<string, { table: string; columns: string }> = {
   contacts:    { table: 'crm_contacts',  columns: 'id, first_name, last_name, title, company_name, created_at' },
@@ -24,7 +25,7 @@ function toCsvRow(values: string[]): string {
   }).join(',')
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('admin/export POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -90,4 +91,4 @@ export async function POST(req: NextRequest) {
       'Content-Disposition': `attachment; filename="gravhub-export-${Date.now()}.csv"`,
     },
   })
-}
+})

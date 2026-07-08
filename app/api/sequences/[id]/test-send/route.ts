@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { Resend } from 'resend'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withErrorHandler('sequences/[id]/test-send POST', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const { email } = await req.json()
 
@@ -61,20 +62,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   </div>
 </body></html>`
 
-  try {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    const fromName = seq.from_name || 'Graviss Marketing'
-    const fromEmail = seq.from_email || 'noreply@gravissmarketing.com'
+  const resend = new Resend(process.env.RESEND_API_KEY)
+  const fromName = seq.from_name || 'Graviss Marketing'
+  const fromEmail = seq.from_email || 'noreply@gravissmarketing.com'
 
-    await resend.emails.send({
-      from: `${fromName} <${fromEmail}>`,
-      to: email,
-      subject,
-      html,
-    })
+  await resend.emails.send({
+    from: `${fromName} <${fromEmail}>`,
+    to: email,
+    subject,
+    html,
+  })
 
-    return NextResponse.json({ success: true, subject })
-  } catch {
-    return NextResponse.json({ error: 'Failed to send test email' }, { status: 500 })
-  }
-}
+  return NextResponse.json({ success: true, subject })
+})

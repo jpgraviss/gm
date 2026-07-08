@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapEnrollment(row: any) {
@@ -20,10 +21,10 @@ function mapEnrollment(row: any) {
   }
 }
 
-export async function GET(
-  _req: NextRequest,
+export const GET = withErrorHandler('courses/[id]/enrollments/[enrollmentId] GET', async (
+  _req,
   { params }: { params: Promise<{ id: string; enrollmentId: string }> },
-) {
+) => {
   const { id, enrollmentId } = await params
   const db = createServiceClient()
 
@@ -39,12 +40,12 @@ export async function GET(
   }
 
   return NextResponse.json(mapEnrollment(data))
-}
+})
 
-export async function PATCH(
-  req: NextRequest,
+export const PATCH = withErrorHandler('courses/[id]/enrollments/[enrollmentId] PATCH', async (
+  req,
   { params }: { params: Promise<{ id: string; enrollmentId: string }> },
-) {
+) => {
   const { id, enrollmentId } = await params
   const body = await req.json()
   const db = createServiceClient()
@@ -68,8 +69,7 @@ export async function PATCH(
     .single()
 
   if (error || !data) {
-    console.error('[enrollment PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update enrollment' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update enrollment')
   }
 
   if (body.completed === true) {
@@ -77,12 +77,12 @@ export async function PATCH(
   }
 
   return NextResponse.json(mapEnrollment(data))
-}
+})
 
-export async function DELETE(
-  req: NextRequest,
+export const DELETE = withErrorHandler('courses/[id]/enrollments/[enrollmentId] DELETE', async (
+  req,
   { params }: { params: Promise<{ id: string; enrollmentId: string }> },
-) {
+) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -96,8 +96,7 @@ export async function DELETE(
     .eq('course_id', id)
 
   if (error) {
-    console.error('[enrollment DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   const { data: course } = await db
@@ -115,4 +114,4 @@ export async function DELETE(
 
   logAudit({ userName: 'system', action: 'unenrolled_student', module: 'courses', type: 'info', metadata: { courseId: id, enrollmentId } })
   return NextResponse.json({ deleted: enrollmentId })
-}
+})

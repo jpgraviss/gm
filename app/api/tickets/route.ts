@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TASK_PRIORITIES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTicket(row: any) {
@@ -27,7 +28,7 @@ function mapTicket(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('tickets GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
   const company = searchParams.get('company')
@@ -41,12 +42,11 @@ export async function GET(req: NextRequest) {
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
-    console.error('[tickets GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch tickets' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch tickets')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapTicket), nextCursor)
-}
+})
 
 async function applyRoutingRules(
   db: ReturnType<typeof createServiceClient>,
@@ -97,7 +97,7 @@ async function applyRoutingRules(
   return null
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('tickets POST', async (req: NextRequest) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -145,8 +145,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[tickets POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create ticket' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create ticket')
   }
   return NextResponse.json(mapTicket(data), { status: 201 })
-}
+})

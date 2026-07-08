@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('automations/[id]/runs GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
 
@@ -49,4 +50,4 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   })
 
   return NextResponse.json(mapped)
-}
+})

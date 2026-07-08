@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { extractSupabaseToken } from '@/lib/extract-token'
 
 /**
  * Role hierarchy — higher roles inherit the permissions of lower roles.
@@ -32,32 +33,9 @@ export interface AuthenticatedUser {
   isAdmin: boolean
 }
 
-/**
- * Extract the current user from the request (cookie or bearer token).
- * Returns null if unauthenticated.
- */
 async function getCurrentUser(req: NextRequest): Promise<AuthenticatedUser | null> {
   const db = createServiceClient()
-
-  // Bearer token
-  const authHeader = req.headers.get('authorization')
-  let token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-
-  // Supabase session cookie
-  if (!token) {
-    const sbCookie = req.cookies.getAll().find(c =>
-      c.name.startsWith('sb-') && c.name.endsWith('-auth-token')
-    )
-    if (sbCookie) {
-      try {
-        const parsed = JSON.parse(Buffer.from(sbCookie.value, 'base64').toString())
-        token = parsed?.access_token ?? parsed?.[0]?.access_token ?? null
-      } catch {
-        token = sbCookie.value || null
-      }
-    }
-  }
-
+  const token = extractSupabaseToken(req)
   if (!token) return null
 
   const { data: { user }, error } = await db.auth.getUser(token)
@@ -81,37 +59,17 @@ async function getCurrentUser(req: NextRequest): Promise<AuthenticatedUser | nul
   }
 }
 
-/**
- * Require the current user to have at least the given role. Returns a
- * NextResponse (to return from your handler) if access is denied, or
- * null if the user is authorized.
- *
- * Usage in API route:
- *   const denied = await requireRole(req, 'Leadership')
- *   if (denied) return denied
- */
 export async function requireRole(
   req: NextRequest,
   minRole: UserRole,
 ): Promise<NextResponse | null> {
   const user = await getCurrentUser(req)
 
-  // No user → fall through to the proxy's cookie check. If the gravhub-auth
-  // bridge cookie is present the proxy already authenticated the request;
-  // trust it for the minimum tier but still block privileged actions.
   if (!user) {
-    const hasGravhub = req.cookies.has('gravhub-auth')
-    if (!hasGravhub) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    // gravhub-auth cookie present — proxy already verified auth.
-    // We can't determine the exact role from the cookie alone, so
-    // allow the request through. The proxy is the primary auth gate;
-    // RBAC here is defense-in-depth, not the sole check.
-    return null
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  if (user.isAdmin) return null // Super Admin short-circuit
+  if (user.isAdmin) return null
 
   if (roleLevel(user.role) < roleLevel(minRole)) {
     return NextResponse.json(
@@ -123,11 +81,6 @@ export async function requireRole(
   return null
 }
 
-/**
- * Load the current authenticated user for use inside a handler
- * (e.g. to scope a query by assigned_rep or to log who did what).
- * Returns null if no user can be identified.
- */
 export async function getAuthUser(req: NextRequest): Promise<AuthenticatedUser | null> {
   return getCurrentUser(req)
 }

@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapUser(row: any) {
@@ -25,7 +26,7 @@ function mapUser(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('admin/users GET', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -35,13 +36,12 @@ export async function GET(req: NextRequest) {
     .select('*')
     .order('name')
   if (error) {
-    console.error('[admin/users GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch users' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch users')
   }
   return NextResponse.json((data ?? []).map(mapUser))
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('admin/users POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -71,8 +71,7 @@ export async function POST(req: NextRequest) {
     user_metadata: { name: String(body.name), role: String(body.role), unit: String(body.unit ?? '') },
   })
   if (authError) {
-    console.error('[admin/users POST] auth error:', authError)
-    return NextResponse.json({ error: authError?.message || 'Failed to create auth user' }, { status: 500 })
+    throw new Error(authError?.message || 'Failed to create auth user')
   }
 
   const userId = authData.user?.id ?? `tm-${Date.now()}`
@@ -92,9 +91,8 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[admin/users POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create team member profile' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create team member profile')
   }
   logAudit({ userName: 'admin', action: 'created_user', module: 'admin', type: 'action', metadata: { email: body.email, role: body.role } })
   return NextResponse.json(mapUser(data), { status: 201 })
-}
+})

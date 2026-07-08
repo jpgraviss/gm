@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { checkSite, recordCheck, computeUptime30d } from '@/lib/uptime'
+import { withErrorHandler } from '@/lib/api-handler'
 
 /**
  * POST /api/monitored-sites/:id/check — manually trigger a check for a
  * single site. Returns the check result.
  */
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withErrorHandler('monitored-sites/[id]/check POST', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
 
@@ -27,4 +28,4 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const uptime30d = await computeUptime30d(id)
 
   return NextResponse.json({ ...result, uptime30d })
-}
+})

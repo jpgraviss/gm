@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
 const SETTINGS_ID = 'global'
 
-export async function GET() {
+export const GET = withErrorHandler('training GET', async () => {
   const db = createServiceClient()
   const { data, error } = await db
     .from('app_settings')
@@ -18,9 +19,9 @@ export async function GET() {
   }
 
   return NextResponse.json({ modules: data?.training_modules ?? [] })
-}
+})
 
-export async function PUT(req: NextRequest) {
+export const PUT = withErrorHandler('training PUT', async (req) => {
   let body: { modules: unknown[] }
   try {
     body = await req.json()
@@ -47,9 +48,8 @@ export async function PUT(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[training PUT]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   return NextResponse.json({ modules: data.training_modules ?? [] })
-}
+})

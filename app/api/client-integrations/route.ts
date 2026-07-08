@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
@@ -25,7 +26,7 @@ function mapBinding(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('client-integrations GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   const db = createServiceClient()
@@ -35,13 +36,12 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query.order('company_name')
   if (error) {
-    console.error('[client-integrations GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   return NextResponse.json((data ?? []).map(mapBinding))
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('client-integrations POST', async (req) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
 
@@ -77,10 +77,9 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[client-integrations POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   logAudit({ userName: 'system', action: 'client_integration_bound', module: 'integrations', type: 'action', metadata: { companyName: body.companyName } })
   return NextResponse.json(mapBinding(data), { status: 201 })
-}
+})

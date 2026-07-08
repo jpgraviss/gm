@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const { contacts } = await req.json() as { contacts: { id?: string; name: string; email: string }[] }
 
@@ -82,8 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { error: insertErr } = await db.from('sequence_enrollments').insert(rows)
   if (insertErr) {
-    console.error('[sequences/enroll POST]', insertErr)
-    return NextResponse.json({ error: insertErr?.message || 'Failed to enroll contacts' }, { status: 500 })
+    throw new Error(insertErr?.message || 'Failed to enroll contacts')
   }
 
   // Update contact sequence tracking
@@ -107,4 +107,4 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .eq('id', id)
 
   return NextResponse.json({ enrolled: toEnroll.length })
-}
+})

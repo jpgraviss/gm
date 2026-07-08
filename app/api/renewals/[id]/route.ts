@@ -3,8 +3,9 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('renewals/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
   const result = validate(body, {
@@ -24,22 +25,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.company !== undefined)       update.company = body.company
   const { data, error } = await db.from('renewals').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[renewals/:id PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update renewal' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update renewal')
   }
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('renewals/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
   const db = createServiceClient()
   const { error } = await db.from('renewals').delete().eq('id', id)
   if (error) {
-    console.error('[renewals/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete renewal' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete renewal')
   }
   logAudit({ userName: 'system', action: 'deleted_renewal', module: 'renewals', type: 'warning', metadata: { renewalId: id } })
   return NextResponse.json({ deleted: id })
-}
+})

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('crm/merge POST', async (req) => {
   const denied = await requireRole(req, 'Dept Manager')
   if (denied) return denied
 
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
     if (pErr || !primary) return NextResponse.json({ error: 'Primary contact not found' }, { status: 404 })
 
     const { data: mergeRecords, error: mErr } = await db.from('crm_contacts').select('*').in('id', mergeIds)
-    if (mErr) return NextResponse.json({ error: mErr.message }, { status: 500 })
+    if (mErr) throw new Error(mErr.message || 'Merge query failed')
     if (!mergeRecords?.length) return NextResponse.json({ error: 'No merge records found' }, { status: 404 })
 
     const allEmails = new Set<string>(primary.emails ?? [])
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { error: updateErr } = await db.from('crm_contacts').update(updates).eq('id', primaryId)
-    if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+    if (updateErr) throw new Error(updateErr.message || 'Merge update failed')
 
     for (const mergeId of mergeIds) {
       await db.from('crm_activities').update({ contact_id: primaryId }).eq('contact_id', mergeId)
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { error: deleteErr } = await db.from('crm_contacts').delete().in('id', mergeIds)
-    if (deleteErr) return NextResponse.json({ error: deleteErr.message }, { status: 500 })
+    if (deleteErr) throw new Error(deleteErr.message || 'Merge delete failed')
 
     await logAudit({
       userName: 'System',
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
     if (pErr || !primary) return NextResponse.json({ error: 'Primary company not found' }, { status: 404 })
 
     const { data: mergeRecords, error: mErr } = await db.from('crm_companies').select('*').in('id', mergeIds)
-    if (mErr) return NextResponse.json({ error: mErr.message }, { status: 500 })
+    if (mErr) throw new Error(mErr.message || 'Merge query failed')
     if (!mergeRecords?.length) return NextResponse.json({ error: 'No merge records found' }, { status: 404 })
 
     const allTags = new Set<string>(primary.tags ?? [])
@@ -111,7 +112,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { error: updateErr } = await db.from('crm_companies').update(updates).eq('id', primaryId)
-    if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+    if (updateErr) throw new Error(updateErr.message || 'Merge update failed')
 
     for (const mergeId of mergeIds) {
       const mergeRec = mergeRecords.find(r => r.id === mergeId)
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { error: deleteErr } = await db.from('crm_companies').delete().in('id', mergeIds)
-    if (deleteErr) return NextResponse.json({ error: deleteErr.message }, { status: 500 })
+    if (deleteErr) throw new Error(deleteErr.message || 'Merge delete failed')
 
     await logAudit({
       userName: 'System',
@@ -141,7 +142,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ error: 'Invalid type' }, { status: 400 })
-}
+})
 
 function camelToSnake(str: string): string {
   return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)

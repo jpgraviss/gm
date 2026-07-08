@@ -45,6 +45,47 @@ const companyStatusColors: Record<CompanyStatus, string> = {
 
 const companyStatuses: CompanyStatus[] = ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned']
 
+const INDUSTRIES = [
+  'Automotive',
+  'Business Supplies & Equipment',
+  'Capital Markets',
+  'Commercial Real Estate',
+  'Construction',
+  'Consulting',
+  'Consumer Electronics',
+  'Consumer Services',
+  'Education',
+  'Electronics Manufacturing',
+  'Energy',
+  'Engineering',
+  'Entertainment',
+  'Financial Services',
+  'Graphic Design',
+  'Healthcare',
+  'Hospitality',
+  'Human Resources',
+  'Information Technology',
+  'Insurance',
+  'Internet',
+  'Legal Services',
+  'Machinery',
+  'Marketing & Advertising',
+  'Media & Broadcasting',
+  'Media Production',
+  'Nonprofit',
+  'Online Media',
+  'OOH',
+  'Printing',
+  'Professional Training',
+  'Real Estate',
+  'Recreation',
+  'Research',
+  'Retail',
+  'Software & Technology',
+  'Venture Capital',
+  'Other',
+]
+
 // ─── Company Files Tab ───────────────────────────────────────────────────────
 
 interface CompanyFile {
@@ -424,7 +465,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                 <div className="flex flex-col gap-2.5">
                   <InfoRow icon={<Building2 size={14} />} label="Industry" value={company.industry} />
                   <InfoRow icon={<MapPin size={14} />} label="HQ" value={company.hq} />
-                  <InfoRow icon={<Users size={14} />} label="Size" value={`${company.size} employees`} />
+                  <InfoRow icon={<Users size={14} />} label="Size" value={company.size ? `${company.size} employees` : ''} />
                   {company.annualRevenue && (
                     <InfoRow icon={<DollarSign size={14} />} label="Annual Revenue" value={formatCurrency(company.annualRevenue)} />
                   )}
@@ -989,7 +1030,7 @@ function EditCompanyPanel({
     })
   }
 
-  const canSave = form.name.trim() && form.industry.trim() && form.hq.trim()
+  const canSave = form.name.trim() && form.industry.trim()
 
   return (
     <div className="fixed inset-0 z-[60] flex pointer-events-none">
@@ -1031,8 +1072,12 @@ function EditCompanyPanel({
                   </button>
                 )}
               </label>
-              <input value={form.industry} onChange={e => { set('industry', e.target.value); clearEnriched('industry') }}
-                className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${ec('industry')}`} />
+              <select value={form.industry} onChange={e => { set('industry', e.target.value); clearEnriched('industry') }}
+                className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${ec('industry')}`}>
+                <option value="">Select industry...</option>
+                {(!INDUSTRIES.includes(form.industry) && form.industry) && <option value={form.industry}>{form.industry}</option>}
+                {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</label>
@@ -1059,8 +1104,18 @@ function EditCompanyPanel({
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Employees</label>
-              <input type="number" value={form.size} onChange={e => set('size', e.target.value)} min="1"
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              <select value={form.size} onChange={e => set('size', e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                <option value="">Select range</option>
+                <option value="1-10">1-10</option>
+                <option value="11-50">11-50</option>
+                <option value="51-200">51-200</option>
+                <option value="201-500">201-500</option>
+                <option value="501-1000">501-1,000</option>
+                <option value="1001-5000">1,001-5,000</option>
+                <option value="5001-10000">5,001-10,000</option>
+                <option value="10001+">10,001+</option>
+              </select>
             </div>
           </div>
 
@@ -1207,11 +1262,25 @@ export default function CompaniesPage() {
     setLocalCompanies(prev => prev.map(c => c.id === updated.id ? updated : c))
     setEditingCompany(null)
     if (selectedCompany?.id === updated.id) setSelectedCompany(updated)
-    await fetch(`/api/crm/companies/${updated.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => toast('Failed to save company changes', 'error'))
+    try {
+      const res = await fetch(`/api/crm/companies/${updated.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Failed to save' }))
+        toast(err.error || 'Failed to save company changes', 'error')
+        fetchCrmCompanies().then(data => setLocalCompanies(data))
+        return
+      }
+      const saved = await res.json()
+      setLocalCompanies(prev => prev.map(c => c.id === saved.id ? saved : c))
+      if (selectedCompany?.id === saved.id) setSelectedCompany(saved)
+    } catch {
+      toast('Failed to save company changes', 'error')
+      fetchCrmCompanies().then(data => setLocalCompanies(data))
+    }
   }
 
   async function handleNewCompany(data: NewCompanyFormData) {

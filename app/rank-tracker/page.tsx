@@ -288,8 +288,7 @@ export default function RankTrackerPage() {
       if (!res.ok) { toast('Failed to delete', 'error'); return }
       setRows(prev => prev.filter(r => r.id !== id))
       if (selected?.id === id) setSelected(null)
-      selectedIds.delete(id)
-      setSelectedIds(new Set(selectedIds))
+      setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next })
       toast('Keyword deleted', 'success')
     } catch { toast('Failed to delete', 'error') }
   }
@@ -1392,6 +1391,12 @@ function CompetitorsTab({ competitors, keywords, onUpdate }: {
   const [label, setLabel] = useState('')
   const [adding, setAdding] = useState(false)
 
+  // TODO: Wire up competitor snapshot data once an API route is available.
+  // `getCompetitorSnapshots` exists in lib/rank-tracker.ts but is not exposed
+  // via any API route. A GET handler needs to be added (e.g. at
+  // /api/rank-tracker/competitors/[id]/snapshots) before this can be fetched.
+  const [competitorSnapshots, setCompetitorSnapshots] = useState<Record<string, Record<string, number | null>>>({})
+
   async function addComp() {
     if (!domain.trim()) { toast('Domain is required', 'error'); return }
     setAdding(true)
@@ -1412,7 +1417,8 @@ function CompetitorsTab({ competitors, keywords, onUpdate }: {
   async function removeComp(id: string) {
     if (!confirm('Remove this competitor?')) return
     try {
-      await fetch(`/api/rank-tracker/competitors/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/rank-tracker/competitors/${id}`, { method: 'DELETE' })
+      if (!res.ok) { toast('Failed to remove competitor', 'error'); return }
       onUpdate()
       toast('Competitor removed', 'success')
     } catch { toast('Failed to remove', 'error') }
@@ -1509,14 +1515,26 @@ function CompetitorsTab({ competitors, keywords, onUpdate }: {
                     <td className="px-4 py-2 text-right">
                       <PositionBadge position={kw.currentPosition} />
                     </td>
-                    {competitors.map(c => (
-                      <td key={c.id} className="px-4 py-2 text-right text-gray-400 text-xs">{'—'}</td>
-                    ))}
+                    {competitors.map(c => {
+                      const pos = competitorSnapshots[kw.id]?.[c.id] ?? null
+                      return (
+                        <td key={c.id} className="px-4 py-2 text-right">
+                          {pos != null
+                            ? <PositionBadge position={pos} />
+                            : <span className="text-gray-400 text-xs">{'—'}</span>}
+                        </td>
+                      )
+                    })}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {keywords.length > 50 && (
+            <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-xs text-gray-500">
+              Showing 50 of {keywords.length} keywords
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1544,7 +1562,8 @@ function ReportsTab() {
   async function deleteReport(id: string) {
     if (!confirm('Delete this scheduled report?')) return
     try {
-      await fetch(`/api/rank-tracker/reports/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/rank-tracker/reports/${id}`, { method: 'DELETE' })
+      if (!res.ok) { toast('Failed to delete report', 'error'); return }
       setReports(prev => prev.filter(r => r.id !== id))
       toast('Report deleted', 'success')
     } catch { toast('Failed to delete', 'error') }
@@ -1626,9 +1645,15 @@ function CreateReportModal({ onClose, onCreated }: {
   const [saving, setSaving] = useState(false)
 
   async function submit() {
-    const recipients = recipientText.split(/[,\n]/).map(e => e.trim()).filter(Boolean)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const rawRecipients = recipientText.split(/[,\n]/).map(e => e.trim()).filter(Boolean)
+    const recipients = rawRecipients.filter(e => emailRegex.test(e))
+    const invalidCount = rawRecipients.length - recipients.length
+    if (invalidCount > 0) {
+      toast(`Removed ${invalidCount} invalid email${invalidCount > 1 ? 's' : ''}`, 'error')
+    }
     if (!name.trim() || recipients.length === 0) {
-      toast('Name and at least one recipient email are required', 'error'); return
+      toast('Name and at least one valid recipient email are required', 'error'); return
     }
     setSaving(true)
     try {

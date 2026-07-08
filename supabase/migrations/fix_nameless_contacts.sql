@@ -39,7 +39,7 @@ WHERE id = 'ct-hs-unknown-nspencer-a0c98e';
 UPDATE crm_contacts SET first_name = 'A', last_name = 'Ray', full_name = 'A Ray'
 WHERE id = 'ct-hs-unknown-aray-daba6e';
 
-UPDATE crm_contacts SET first_name = 'B', last_name = 'Baer', full_name = 'B Baer'
+UPDATE crm_contacts SET first_name = 'Brent', last_name = 'Baer', full_name = 'Brent Baer'
 WHERE id = 'ct-hs-unknown-bbaer-2a2faa';
 
 UPDATE crm_contacts SET first_name = 'Milano', last_name = 'D', full_name = 'Milano D'

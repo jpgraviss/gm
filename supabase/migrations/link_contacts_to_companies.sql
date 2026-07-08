@@ -15,7 +15,24 @@ FROM crm_companies co
 WHERE LOWER(TRIM(c.company_name)) = LOWER(TRIM(co.name))
   AND (c.company_id IS NULL OR c.company_id = '');
 
--- Step 3: Sync each company's contact_ids array from linked contacts
+-- Step 3: Match by email domain = company website domain (skip free email providers)
+UPDATE crm_contacts c
+SET company_id = co.id
+FROM crm_companies co
+WHERE (c.company_id IS NULL OR c.company_id = '')
+  AND co.website IS NOT NULL AND co.website != ''
+  AND EXISTS (
+    SELECT 1 FROM unnest(c.emails) AS email
+    WHERE split_part(email, '@', 2) NOT IN (
+      'gmail.com','yahoo.com','hotmail.com','aol.com','outlook.com',
+      'comcast.net','icloud.com','me.com','msn.com','live.com',
+      'att.net','sbcglobal.net','verizon.net','mail.com','protonmail.com'
+    )
+    AND split_part(email, '@', 2) =
+        regexp_replace(regexp_replace(co.website, '^https?://(www\.)?', ''), '/.*$', '')
+  );
+
+-- Step 4: Sync each company's contact_ids array from linked contacts
 UPDATE crm_companies co
 SET contact_ids = sub.ids
 FROM (

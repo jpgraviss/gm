@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('wordpress/seo/sync POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     : process.env.WORDPRESS_API_KEY
 
   if (!apiKey) {
-    return NextResponse.json({ error: 'No WordPress API key configured' }, { status: 500 })
+    throw new Error('No WordPress API key configured')
   }
 
   const base = siteUrl.replace(/\/+$/, '')
@@ -74,4 +75,4 @@ export async function POST(req: NextRequest) {
       error: err instanceof Error ? err.message : 'Connection failed',
     })
   }
-}
+})

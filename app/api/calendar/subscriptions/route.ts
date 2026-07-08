@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parseICS } from '@/lib/ical-parser'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('calendar/subscriptions GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const userEmail = searchParams.get('email')
   const db = createServiceClient()
@@ -15,11 +16,11 @@ export async function GET(req: NextRequest) {
   if (userEmail) query = query.eq('user_email', userEmail)
 
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) throw new Error(error.message)
   return NextResponse.json(data ?? [])
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('calendar/subscriptions POST', async (req) => {
   const { url, name, userEmail, action } = await req.json()
 
   if (action === 'sync-all') {
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
     event_count: cal.events.length,
   })
 
-  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
+  if (insertError) throw new Error(insertError.message)
 
   let imported = 0
   for (const event of cal.events) {
@@ -91,9 +92,9 @@ export async function POST(req: NextRequest) {
     imported,
     total: cal.events.length,
   }, { status: 201 })
-}
+})
 
-export async function DELETE(req: NextRequest) {
+export const DELETE = withErrorHandler('calendar/subscriptions DELETE', async (req) => {
   const { id } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
@@ -101,10 +102,10 @@ export async function DELETE(req: NextRequest) {
 
   await db.from('bookings').delete().eq('subscription_id', id)
   const { error } = await db.from('calendar_subscriptions').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) throw new Error(error.message)
 
   return NextResponse.json({ deleted: true })
-}
+})
 
 async function syncSubscription(db: ReturnType<typeof createServiceClient>, sub: { id: string; ical_url: string; name: string }) {
   const res = await fetch(sub.ical_url, { headers: { Accept: 'text/calendar' } })
@@ -188,7 +189,7 @@ async function syncAllSubscriptions(userEmail?: string) {
   return NextResponse.json({ synced: totalSynced, errors, subscriptions: subs.length })
 }
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withErrorHandler('calendar/subscriptions PATCH', async (req) => {
   const { id } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
@@ -200,6 +201,6 @@ export async function PATCH(req: NextRequest) {
     const imported = await syncSubscription(db, sub)
     return NextResponse.json({ synced: imported })
   } catch (err) {
-    return NextResponse.json({ error: `Sync failed: ${err instanceof Error ? err.message : 'unknown'}` }, { status: 500 })
+    throw new Error(`Sync failed: ${err instanceof Error ? err.message : 'unknown'}`)
   }
-}
+})

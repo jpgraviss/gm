@@ -80,7 +80,7 @@ export const PATCH = withErrorHandler('forms/[id] PATCH', async (req: NextReques
 
   const { data, error } = await db.from('forms').update(update).eq('id', id).select().single()
   if (error || !data) {
-    throw error instanceof Error ? error : new Error(error?.message || 'Failed to update form')
+    throw new Error(String(error) || 'Failed to update form')
   }
   return NextResponse.json(mapForm(data))
 })
@@ -93,7 +93,7 @@ export const DELETE = withErrorHandler('forms/[id] DELETE', async (req: NextRequ
   const db = createServiceClient()
   const { error } = await db.from('forms').delete().eq('id', id)
   if (error) {
-    throw error instanceof Error ? error : new Error(error.message)
+    throw new Error(String(error))
   }
   logAudit({ userName: 'system', action: 'deleted_form', module: 'forms', type: 'warning', metadata: { formId: id } })
   return NextResponse.json({ deleted: id })

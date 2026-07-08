@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
@@ -25,7 +26,7 @@ function mapContract(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('contracts GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   const pag = parsePagination(req)
@@ -37,14 +38,13 @@ export async function GET(req: NextRequest) {
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
-    console.error('[contracts GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch contracts' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch contracts')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapContract), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('contracts POST', async (req) => {
   const body = await req.json()
 
   const result = validate(body, {
@@ -81,8 +81,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[contracts POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create contract' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create contract')
   }
   return NextResponse.json(mapContract(data), { status: 201 })
-}
+})

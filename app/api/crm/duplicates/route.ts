@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 
 function normalizePhone(phone: string): string {
@@ -22,7 +23,7 @@ interface DuplicateGroup {
   matchType: 'email' | 'name' | 'phone' | 'domain'
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('crm/duplicates GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const type = searchParams.get('type')
 
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
 
   if (type === 'contacts') {
     const { data, error } = await db.from('crm_contacts').select('*').order('created_at', { ascending: false })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) throw new Error(error.message || 'Failed to fetch contacts')
     const contacts = data ?? []
 
     const groups: DuplicateGroup[] = []
@@ -118,7 +119,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data, error } = await db.from('crm_companies').select('*').order('created_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) throw new Error(error.message || 'Failed to fetch companies')
   const companies = data ?? []
 
   const groups: DuplicateGroup[] = []
@@ -164,7 +165,7 @@ export async function GET(req: NextRequest) {
   const filteredGroups = groups.filter(g => !dismissedKeys.has(g.key))
   filteredGroups.sort((a, b) => b.records.length - a.records.length)
   return NextResponse.json({ groups: filteredGroups })
-}
+})
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {

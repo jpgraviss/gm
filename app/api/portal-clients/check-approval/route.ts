@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('portal-clients/check-approval GET', async (req) => {
   const email = req.nextUrl.searchParams.get('email')
   if (!email) {
     return NextResponse.json({ error: 'Email is required' }, { status: 400 })
@@ -23,4 +24,4 @@ export async function GET(req: NextRequest) {
     pending: client.pending_approval,
     setupCompleted: client.setup_completed,
   })
-}
+})

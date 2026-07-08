@@ -40,7 +40,7 @@ export const GET = withErrorHandler('files GET', async (req: NextRequest) => {
   })
 
   if (error) {
-    throw error instanceof Error ? error : new Error(error?.message || 'Failed to list files')
+    throw new Error(String(error) || 'Failed to list files')
   }
 
   // Generate signed URLs for each file
@@ -89,7 +89,7 @@ export const POST = withErrorHandler('files POST', async (req: NextRequest) => {
   })
 
   if (error) {
-    throw error instanceof Error ? error : new Error(error?.message || 'Failed to upload file')
+    throw new Error(String(error) || 'Failed to upload file')
   }
 
   const { data: urlData } = await db.storage.from(BUCKET).createSignedUrl(filePath, 3600)
@@ -114,7 +114,7 @@ export const DELETE = withErrorHandler('files DELETE', async (req: NextRequest) 
   const { error } = await db.storage.from(BUCKET).remove([path])
 
   if (error) {
-    throw error instanceof Error ? error : new Error(error?.message || 'Failed to delete file')
+    throw new Error(String(error) || 'Failed to delete file')
   }
 
   return NextResponse.json({ ok: true })

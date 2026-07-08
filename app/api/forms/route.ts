@@ -50,7 +50,7 @@ export const GET = withErrorHandler('forms GET', async (req: NextRequest) => {
 
   const { data, error } = await query
   if (error) {
-    throw error instanceof Error ? error : new Error(error.message)
+    throw new Error(String(error))
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapForm), nextCursor)
@@ -106,7 +106,7 @@ export const POST = withErrorHandler('forms POST', async (req: NextRequest) => {
     .single()
 
   if (error) {
-    throw error instanceof Error ? error : new Error(error.message)
+    throw new Error(String(error))
   }
 
   logAudit({ userName: 'system', action: 'created_form', module: 'forms', type: 'action', metadata: { formId: data.id, name: data.name } })

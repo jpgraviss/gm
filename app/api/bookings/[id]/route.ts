@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getValidAccessToken, deleteGoogleEvent, createGoogleEvent, type CalendarSettings } from '@/lib/google-calendar'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // PATCH /api/bookings/[id] — cancel or update a booking
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('bookings/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id }  = await params
   const body    = await req.json()
   const db      = createServiceClient()
@@ -122,7 +123,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .select()
       .single()
 
-    if (updateErr) return NextResponse.json({ error: 'Failed to reschedule' }, { status: 500 })
+    if (updateErr) throw new Error('Failed to reschedule')
 
     // Send reschedule email (best-effort)
     try {
@@ -175,13 +176,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .single()
 
   if (error) {
-    console.error('[bookings PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update booking' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update booking')
   }
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('bookings/[id] DELETE', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
 
@@ -192,4 +192,4 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'Event not found' }, { status: 404 })
   }
   return NextResponse.json({ ok: true })
-}
+})

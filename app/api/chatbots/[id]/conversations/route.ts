@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('chatbots/[id]/conversations GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
   const { id } = await params
@@ -27,8 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { data, error } = await query
 
   if (error) {
-    console.error('[chatbot/conversations GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   let results = data ?? []
@@ -44,9 +44,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   return NextResponse.json(results)
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('chatbots/[id]/conversations PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
   const { id } = await params
@@ -75,13 +75,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .single()
 
   if (error) {
-    console.error('[chatbot/conversations PATCH]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('chatbots/[id]/conversations DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
   const { id } = await params
@@ -100,8 +99,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     .eq('chatbot_id', id)
 
   if (error) {
-    console.error('[chatbot/conversations DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   return NextResponse.json({ success: true })
-}
+})

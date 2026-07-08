@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError } from '@/lib/validation'
@@ -32,7 +33,7 @@ function mapContact(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('crm/contacts GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const companyId = searchParams.get('companyId')
   const pag = parsePagination(req)
@@ -44,14 +45,13 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[crm/contacts GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch contacts' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch contacts')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapContact), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('crm/contacts POST', async (req) => {
   const body = await req.json()
 
   const result = validate(body, {
@@ -128,10 +128,9 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[crm/contacts POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create contact' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create contact')
   }
   fireAutomations('contact_created', { contactId: data.id, company: data.company_name, ...data })
 
   return NextResponse.json(mapContact(data), { status: 201 })
-}
+})

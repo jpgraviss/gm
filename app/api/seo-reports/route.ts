@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { sendSingleReport } from '@/lib/seo-report-sender'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET() {
+export const GET = withErrorHandler('seo-reports GET', async () => {
   const db = createServiceClient()
   const { data, error } = await db
     .from('client_integrations')
@@ -11,13 +12,13 @@ export async function GET() {
     .order('company_name')
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to fetch integrations')
   }
 
   return NextResponse.json(data ?? [])
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('seo-reports POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -32,17 +33,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'companyName is required' }, { status: 400 })
   }
 
-  try {
-    const result = await sendSingleReport(companyName, { recipientOverride, preview })
-    return NextResponse.json(result)
-  } catch (err) {
-    console.error('[seo-reports POST]', err)
-    const message = err instanceof Error ? err.message : 'Failed to generate report'
-    return NextResponse.json({ error: message }, { status: 500 })
-  }
-}
+  const result = await sendSingleReport(companyName, { recipientOverride, preview })
+  return NextResponse.json(result)
+})
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withErrorHandler('seo-reports PATCH', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -70,8 +65,8 @@ export async function PATCH(req: NextRequest) {
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message || 'Failed to update integration')
   }
 
   return NextResponse.json(data)
-}
+})

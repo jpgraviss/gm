@@ -44,7 +44,7 @@ export const PATCH = withErrorHandler('funnels/[id] PATCH', async (req: NextRequ
 
   const { data, error } = await db.from('funnels').update(update).eq('id', id).select().single()
   if (error || !data) {
-    throw error instanceof Error ? error : new Error(error?.message || 'Failed to update funnel')
+    throw new Error(String(error) || 'Failed to update funnel')
   }
   return NextResponse.json(data)
 })
@@ -54,7 +54,7 @@ export const DELETE = withErrorHandler('funnels/[id] DELETE', async (_req: NextR
   const db = createServiceClient()
   const { error } = await db.from('funnels').delete().eq('id', id)
   if (error) {
-    throw error instanceof Error ? error : new Error(error.message)
+    throw new Error(String(error))
   }
   logAudit({ userName: 'system', action: 'deleted_funnel', module: 'funnels', type: 'warning', metadata: { funnelId: id } })
   return NextResponse.json({ deleted: id })

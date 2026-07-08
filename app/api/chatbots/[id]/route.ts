@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withErrorHandler('chatbots/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db.from('chatbots').select('*').eq('id', id).single()
@@ -10,9 +11,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Chatbot not found' }, { status: 404 })
   }
   return NextResponse.json(data)
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('chatbots/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
   const { id } = await params
@@ -27,24 +28,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error } = await db.from('chatbots').update(updates).eq('id', id).select().single()
   if (error) {
-    console.error('[chatbots PATCH]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   if (!data) {
     return NextResponse.json({ error: 'Chatbot not found' }, { status: 404 })
   }
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('chatbots/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('chatbots').delete().eq('id', id)
   if (error) {
-    console.error('[chatbots DELETE]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   return NextResponse.json({ success: true })
-}
+})

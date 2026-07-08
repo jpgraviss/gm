@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('email/sign-request POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
-  try {
-    const settings = await getSettings()
+  const settings = await getSettings()
     const { token, signerEmail, signerName, company, value } = await req.json()
 
     if (!token || !signerEmail) {
@@ -28,16 +28,11 @@ export async function POST(req: NextRequest) {
     })
 
     if (!result.success) {
-      console.error('[email/sign-request POST]', result.error)
-      return NextResponse.json({ error: result.error || 'Failed to send email' }, { status: 500 })
+      throw new Error(result.error || 'Failed to send email')
     }
 
     return NextResponse.json({ success: true, id: result.id })
-  } catch (err) {
-    console.error('Sign-request email error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+})
 
 function signRequestEmailHtml({
   contactName,

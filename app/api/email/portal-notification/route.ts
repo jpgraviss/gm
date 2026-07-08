@@ -1,36 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
-  try {
-    const settings = await getSettings()
-    const { to, clientName, title, message, link } = await req.json()
+export const POST = withErrorHandler('email/portal-notification POST', async (req: NextRequest) => {
+  const settings = await getSettings()
+  const { to, clientName, title, message, link } = await req.json()
 
-    if (!to || !title) {
-      return NextResponse.json({ error: 'to and title are required' }, { status: 400 })
-    }
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
-    const portalLink = link || `${appUrl}/portal`
-
-    const result = await sendEmail({
-      to,
-      subject: title,
-      html: notificationEmailHtml({ clientName, title, message, portalLink, appUrl, settings }),
-    })
-
-    if (!result.success) {
-      console.error('[email/portal-notification POST]', result.error)
-      return NextResponse.json({ error: result.error || 'Failed to send notification email' }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, id: result.id })
-  } catch (err) {
-    console.error('Portal notification email error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  if (!to || !title) {
+    return NextResponse.json({ error: 'to and title are required' }, { status: 400 })
   }
-}
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+  const portalLink = link || `${appUrl}/portal`
+
+  const result = await sendEmail({
+    to,
+    subject: title,
+    html: notificationEmailHtml({ clientName, title, message, portalLink, appUrl, settings }),
+  })
+
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to send notification email')
+  }
+
+  return NextResponse.json({ success: true, id: result.id })
+})
 
 function notificationEmailHtml({
   clientName,

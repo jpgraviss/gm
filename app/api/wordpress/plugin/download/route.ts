@@ -3,8 +3,9 @@ import { requireAdmin } from '@/lib/admin-auth'
 import path from 'path'
 import fs from 'fs'
 import { PassThrough } from 'stream'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('wordpress/plugin/download GET', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
 
@@ -41,4 +42,4 @@ export async function GET(req: NextRequest) {
       'Content-Length': String(buffer.length),
     },
   })
-}
+})

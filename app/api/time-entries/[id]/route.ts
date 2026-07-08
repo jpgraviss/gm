@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('time-entries/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
   const result = validate(body, {
@@ -32,19 +32,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error } = await db.from('time_entries').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[time-entries PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update time entry' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update time entry')
   }
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('time-entries/[id] DELETE', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('time_entries').delete().eq('id', id)
   if (error) {
-    console.error('[time-entries DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete time entry' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete time entry')
   }
   return NextResponse.json({ deleted: id })
-}
+})

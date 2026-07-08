@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('automations/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const body = await req.json()
 
@@ -23,19 +24,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.lastRun !== undefined) update.last_run = body.lastRun
   const { data, error } = await db.from('automations').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[automations/:id PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update automation' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update automation')
   }
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('automations/[id] DELETE', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('automations').delete().eq('id', id)
   if (error) {
-    console.error('[automations/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete automation' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete automation')
   }
   return NextResponse.json({ deleted: id })
-}
+})

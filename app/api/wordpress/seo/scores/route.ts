@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireWordPressAuth } from '@/lib/wordpress-auth'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('wordpress/seo/scores POST', async (req) => {
   const denied = await requireWordPressAuth(req)
   if (denied) return denied
 
@@ -44,14 +45,13 @@ export async function POST(req: NextRequest) {
     .upsert(rows, { onConflict: 'site_url,page_path' })
 
   if (error) {
-    console.error('[wordpress/seo/scores POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   return NextResponse.json({ updated: rows.length })
-}
+})
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('wordpress/seo/scores GET', async (req) => {
   const denied = await requireWordPressAuth(req)
   if (denied) return denied
 
@@ -68,8 +68,8 @@ export async function GET(req: NextRequest) {
     .order('score', { ascending: true })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   return NextResponse.json(data ?? [])
-}
+})

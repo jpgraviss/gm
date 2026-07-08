@@ -24,7 +24,7 @@ function mapEntry(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('time-entries GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
   const weekStart = searchParams.get('weekStart')
   const weekEnd   = searchParams.get('weekEnd')
@@ -42,14 +42,13 @@ export async function GET(req: NextRequest) {
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
-    console.error('[time-entries GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch time entries' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch time entries')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapEntry), nextCursor)
-}
+})
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withErrorHandler('time-entries PATCH', async (req: NextRequest) => {
   const body = await req.json()
   const { ids, approvalStatus, approvedBy, rejectionNote } = body as {
     ids: string[]
@@ -82,13 +81,12 @@ export async function PATCH(req: NextRequest) {
     .select()
 
   if (error) {
-    console.error('[time-entries bulk PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to bulk update' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to bulk update')
   }
   return NextResponse.json((data ?? []).map(mapEntry))
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('time-entries POST', async (req: NextRequest) => {
   const body = await req.json()
   const result = validate(body, {
     date: { required: true, type: 'string', maxLength: 20 },
@@ -121,8 +119,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[time-entries POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create time entry' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create time entry')
   }
   return NextResponse.json(mapEntry(data), { status: 201 })
-}
+})

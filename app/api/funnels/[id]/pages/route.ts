@@ -13,7 +13,7 @@ export const GET = withErrorHandler('funnels/[id]/pages GET', async (_req: NextR
     .order('sort_order', { ascending: true })
 
   if (error) {
-    throw error instanceof Error ? error : new Error(error.message)
+    throw new Error(String(error))
   }
   return NextResponse.json(data ?? [])
 })
@@ -51,7 +51,7 @@ export const POST = withErrorHandler('funnels/[id]/pages POST', async (req: Next
     .single()
 
   if (error) {
-    throw error instanceof Error ? error : new Error(error.message)
+    throw new Error(String(error))
   }
   return NextResponse.json(data, { status: 201 })
 })
@@ -82,7 +82,7 @@ export const PATCH = withErrorHandler('funnels/[id]/pages PATCH', async (req: Ne
     .single()
 
   if (error || !data) {
-    throw error instanceof Error ? error : new Error(error?.message || 'Failed to update page')
+    throw new Error(String(error) || 'Failed to update page')
   }
   return NextResponse.json(data)
 })

@@ -68,7 +68,7 @@ function escapeHtml(str: string): string {
     .replace(/"/g, '&quot;')
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('sequences/unsubscribe POST', async (req: NextRequest) => {
   let body: { email?: string; seq?: string }
   try {
     body = await req.json()
@@ -147,4 +147,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, unsubscribed: email })
-}
+})

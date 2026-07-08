@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapBrandKit(row: any) {
@@ -20,7 +21,7 @@ function mapBrandKit(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('brand-kits GET', async (req) => {
   const pag = parsePagination(req)
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
@@ -34,14 +35,13 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) {
-    console.error('[brand-kits GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapBrandKit), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('brand-kits POST', async (req) => {
   const body = await req.json()
   if (!body.companyName) {
     return NextResponse.json({ error: 'companyName is required' }, { status: 400 })
@@ -71,8 +71,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[brand-kits POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
   return NextResponse.json(mapBrandKit(data), { status: 201 })
-}
+})

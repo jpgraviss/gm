@@ -3,8 +3,9 @@ import { createServiceClient } from '@/lib/supabase'
 import { getResend } from '@/lib/resend'
 import { logAudit } from '@/lib/audit'
 import { getSettings } from '@/lib/settings'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('portal-clients/reset-password POST', async (req) => {
   const settings = await getSettings()
   const { email } = await req.json()
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
@@ -20,8 +21,7 @@ export async function POST(req: NextRequest) {
   })
 
   if (linkError) {
-    console.error('[portal-clients/reset-password POST]', linkError)
-    return NextResponse.json({ error: linkError?.message || 'Failed to generate sign-in link' }, { status: 500 })
+    throw new Error(linkError?.message || 'Failed to generate sign-in link')
   }
 
   let magicLinkUrl = `${appUrl}/login`
@@ -86,10 +86,9 @@ export async function POST(req: NextRequest) {
   })
 
   if (emailError) {
-    console.error('[portal-clients/reset-password POST] email error:', emailError)
-    return NextResponse.json({ error: 'Failed to send sign-in link' }, { status: 500 })
+    throw new Error('Failed to send sign-in link')
   }
 
   logAudit({ userName: 'system', action: 'client_magic_link_sent', module: 'portal', type: 'info', metadata: { email } })
   return NextResponse.json({ success: true })
-}
+})

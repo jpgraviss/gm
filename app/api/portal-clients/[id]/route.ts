@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('portal-clients/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   let body: Record<string, unknown>
   try {
@@ -40,19 +41,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.companyId    !== undefined) update.company_id    = body.companyId
   const { data, error } = await db.from('portal_clients').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[portal-clients/:id PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update portal client' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update portal client')
   }
   return NextResponse.json(data)
-}
+})
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('portal-clients/[id] DELETE', async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('portal_clients').delete().eq('id', id)
   if (error) {
-    console.error('[portal-clients/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete portal client' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete portal client')
   }
   return NextResponse.json({ deleted: id })
-}
+})

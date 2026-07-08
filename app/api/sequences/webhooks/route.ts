@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import * as crypto from 'crypto'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // Resend webhook event types we handle
 type ResendEventType =
@@ -75,7 +76,7 @@ function verifySignature(body: string, req: NextRequest, secret: string): boolea
   return false
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('sequences/webhooks POST', async (req: NextRequest) => {
   const rawBody = await req.text()
 
   // Optional signature verification
@@ -398,7 +399,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, event: eventType, enrollment_id: enrollment.id })
-}
+})
 
 // Recalculate rates from actual activity counts instead of naive incrementing
 async function recalculateRate(

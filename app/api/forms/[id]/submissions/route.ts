@@ -29,7 +29,7 @@ export const GET = withErrorHandler('forms/[id]/submissions GET', async (req: Ne
 
   const { data, error } = await query
   if (error) {
-    throw error instanceof Error ? error : new Error(error.message)
+    throw new Error(String(error))
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapSubmission), nextCursor)

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireWordPressAuth } from '@/lib/wordpress-auth'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('wordpress/seo/settings GET', async (req) => {
   const denied = await requireWordPressAuth(req)
   if (denied) return denied
 
@@ -19,13 +20,13 @@ export async function GET(req: NextRequest) {
     .order('page_path')
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   return NextResponse.json(data ?? [])
-}
+})
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withErrorHandler('wordpress/seo/settings PATCH', async (req) => {
   const denied = await requireWordPressAuth(req)
   if (denied) return denied
 
@@ -55,9 +56,8 @@ export async function PATCH(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[wordpress/seo/settings PATCH]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   return NextResponse.json(data)
-}
+})

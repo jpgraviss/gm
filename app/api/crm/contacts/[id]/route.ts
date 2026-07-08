@@ -105,16 +105,15 @@ export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx
   return NextResponse.json(mapContact(data))
 })
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const DELETE = withErrorHandler('crm/contacts/[id] DELETE', async (req, ctx) => {
+  const { id } = await ctx!.params
   const denied = await requireRole(req, 'Dept Manager')
   if (denied) return denied
   const db = createServiceClient()
   const { error } = await db.from('crm_contacts').delete().eq('id', id)
   if (error) {
-    console.error('[crm/contacts/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete contact' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete contact')
   }
   logAudit({ userName: 'system', action: 'deleted_contact', module: 'crm', type: 'warning', metadata: { contactId: id } })
   return NextResponse.json({ success: true })
-}
+})

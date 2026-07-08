@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
@@ -38,7 +39,7 @@ function mapContract(row: any) {
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'Invalid contract id' }, { status: 400 })
@@ -101,11 +102,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error } = await db.from('contracts').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[contracts/:id PATCH]', error)
     if (error.code === 'PGRST116') {
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
     }
-    return NextResponse.json({ error: error?.message || 'Failed to update contract' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update contract')
   }
 
   if (body.status === 'Fully Executed') {
@@ -119,9 +119,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   return NextResponse.json(mapContract(data))
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandler('contracts/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
@@ -132,9 +132,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const db = createServiceClient()
   const { error } = await db.from('contracts').delete().eq('id', id)
   if (error) {
-    console.error('[contracts/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete contract' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete contract')
   }
   logAudit({ userName: 'system', action: 'deleted_contract', module: 'contracts', type: 'warning', metadata: { contractId: id } })
   return NextResponse.json({ deleted: id })
-}
+})

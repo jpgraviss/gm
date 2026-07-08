@@ -4,53 +4,52 @@ import { createServiceClient } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { logAudit } from '@/lib/audit'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest) {
-  try {
-    const { email } = await req.json()
-    if (!email || typeof email !== 'string') {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 })
-    }
+export const POST = withErrorHandler('portal-clients/magic-link POST', async (req) => {
+  const { email } = await req.json()
+  if (!email || typeof email !== 'string') {
+    return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+  }
 
-    const db = createServiceClient()
-    const normalizedEmail = email.toLowerCase().trim()
+  const db = createServiceClient()
+  const normalizedEmail = email.toLowerCase().trim()
 
-    const { data: client } = await db
-      .from('portal_clients')
-      .select('id, company, contact')
-      .ilike('email', normalizedEmail)
-      .limit(1)
-      .maybeSingle()
+  const { data: client } = await db
+    .from('portal_clients')
+    .select('id, company, contact')
+    .ilike('email', normalizedEmail)
+    .limit(1)
+    .maybeSingle()
 
-    if (!client) {
-      return NextResponse.json({ error: 'No portal account found for this email' }, { status: 404 })
-    }
+  if (!client) {
+    return NextResponse.json({ error: 'No portal account found for this email' }, { status: 404 })
+  }
 
-    const token = crypto.randomUUID()
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+  const token = crypto.randomUUID()
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
 
-    const { error: tokenErr } = await db.from('portal_magic_tokens').insert({
-      id: `pmt-${Date.now()}`,
-      token,
-      email: normalizedEmail,
-      portal_client_id: client.id,
-      expires_at: expiresAt,
-      used: false,
-    })
+  const { error: tokenErr } = await db.from('portal_magic_tokens').insert({
+    id: `pmt-${Date.now()}`,
+    token,
+    email: normalizedEmail,
+    portal_client_id: client.id,
+    expires_at: expiresAt,
+    used: false,
+  })
 
-    if (tokenErr) {
-      console.error('[magic-link POST] token insert error:', tokenErr)
-      return NextResponse.json({ error: 'Failed to create magic link' }, { status: 500 })
-    }
+  if (tokenErr) {
+    throw new Error(tokenErr?.message || 'Failed to create magic link')
+  }
 
-    const settings = await getSettings()
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
-    const magicUrl = `${appUrl}/portal/auth/verify?token=${token}`
+  const settings = await getSettings()
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+  const magicUrl = `${appUrl}/portal/auth/verify?token=${token}`
 
-    const result = await sendEmail({
-      to: normalizedEmail,
-      subject: `Your ${settings.company.name} portal sign-in link`,
-      html: `<!DOCTYPE html>
+  const result = await sendEmail({
+    to: normalizedEmail,
+    subject: `Your ${settings.company.name} portal sign-in link`,
+    html: `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Montserrat:wght@400;500;600;700;800&display=swap');</style></head>
@@ -96,17 +95,12 @@ export async function POST(req: NextRequest) {
   </table>
 </body>
 </html>`,
-    })
+  })
 
-    if (!result.success) {
-      console.error('[magic-link POST] email error:', result.error)
-      return NextResponse.json({ error: 'Failed to send magic link email' }, { status: 500 })
-    }
-
-    logAudit({ userName: 'system', action: 'portal_magic_link_sent', module: 'portal', type: 'info', metadata: { email: normalizedEmail } })
-    return NextResponse.json({ success: true })
-  } catch (err) {
-    console.error('[magic-link POST] unexpected:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to send magic link email')
   }
-}
+
+  logAudit({ userName: 'system', action: 'portal_magic_link_sent', module: 'portal', type: 'info', metadata: { email: normalizedEmail } })
+  return NextResponse.json({ success: true })
+})

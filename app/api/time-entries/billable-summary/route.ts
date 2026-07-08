@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET() {
+export const GET = withErrorHandler('time-entries/billable-summary GET', async () => {
   const db = createServiceClient()
 
   const { data, error } = await db
@@ -13,8 +13,7 @@ export async function GET() {
     .order('date', { ascending: false })
 
   if (error) {
-    console.error('[time-entries/billable-summary GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch billable summary' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch billable summary')
   }
 
   // Group by project/company
@@ -60,4 +59,4 @@ export async function GET() {
   }))
 
   return NextResponse.json(summary)
-}
+})

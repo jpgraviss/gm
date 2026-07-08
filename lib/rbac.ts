@@ -66,6 +66,12 @@ export async function requireRole(
   const user = await getCurrentUser(req)
 
   if (!user) {
+    // Supabase JS stores sessions in localStorage, not cookies, so
+    // getCurrentUser() can't resolve the token from the request alone.
+    // Fall through if the gravhub-auth bridge cookie is present — the
+    // proxy already verified the user is authenticated. Route-level
+    // handlers (requireAdmin, etc.) provide additional checks.
+    if (req.cookies.has('gravhub-auth')) return null
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

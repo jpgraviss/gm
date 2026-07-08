@@ -264,7 +264,7 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
   }
 
   // ─── Save ─────────────────────────────────────────────────────────────────
-  const canSave = form.name.trim() && form.industry && form.hq.trim()
+  const canSave = form.name.trim() && form.industry
 
   function handleSave() {
     if (!canSave) return

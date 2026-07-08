@@ -1030,7 +1030,7 @@ function EditCompanyPanel({
     })
   }
 
-  const canSave = form.name.trim() && form.industry.trim() && form.hq.trim()
+  const canSave = form.name.trim() && form.industry.trim()
 
   return (
     <div className="fixed inset-0 z-[60] flex pointer-events-none">

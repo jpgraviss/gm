@@ -149,3 +149,5 @@ export function proxy(req: NextRequest): NextResponse {
 export const config = {
   matcher: '/api/:path*',
 }
+
+export default proxy

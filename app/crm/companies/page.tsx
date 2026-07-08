@@ -424,7 +424,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                 <div className="flex flex-col gap-2.5">
                   <InfoRow icon={<Building2 size={14} />} label="Industry" value={company.industry} />
                   <InfoRow icon={<MapPin size={14} />} label="HQ" value={company.hq} />
-                  <InfoRow icon={<Users size={14} />} label="Size" value={`${company.size} employees`} />
+                  <InfoRow icon={<Users size={14} />} label="Size" value={company.size ? `${company.size} employees` : ''} />
                   {company.annualRevenue && (
                     <InfoRow icon={<DollarSign size={14} />} label="Annual Revenue" value={formatCurrency(company.annualRevenue)} />
                   )}
@@ -1059,8 +1059,18 @@ function EditCompanyPanel({
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Employees</label>
-              <input type="number" value={form.size} onChange={e => set('size', e.target.value)} min="1"
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              <select value={form.size} onChange={e => set('size', e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                <option value="">Select range</option>
+                <option value="1-10">1-10</option>
+                <option value="11-50">11-50</option>
+                <option value="51-200">51-200</option>
+                <option value="201-500">201-500</option>
+                <option value="501-1000">501-1,000</option>
+                <option value="1001-5000">1,001-5,000</option>
+                <option value="5001-10000">5,001-10,000</option>
+                <option value="10001+">10,001+</option>
+              </select>
             </div>
           </div>
 

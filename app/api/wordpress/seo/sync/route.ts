@@ -21,9 +21,10 @@ export const POST = withErrorHandler('wordpress/seo/sync POST', async (req) => {
     .eq('id', 'global')
     .maybeSingle()
 
-  const wp = settings?.wordpress as { apiKeys?: string[] } | null
-  const apiKey = (wp && Array.isArray(wp.apiKeys) && wp.apiKeys[0])
-    ? wp.apiKeys[0]
+  const wp = settings?.wordpress as { apiKeys?: Array<string | { key: string }> } | null
+  const firstKey = wp?.apiKeys?.[0]
+  const apiKey = firstKey
+    ? (typeof firstKey === 'string' ? firstKey : firstKey.key)
     : process.env.WORDPRESS_API_KEY
 
   if (!apiKey) {

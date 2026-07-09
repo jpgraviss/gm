@@ -29,6 +29,12 @@ interface SiteHealth {
   last_reported_at: string | null
 }
 
+interface ApiKey {
+  key: string
+  label: string
+  createdAt: string
+}
+
 interface SeoScore {
   id: string
   site_url: string
@@ -156,9 +162,10 @@ export default function WordPressSeoPage() {
   const [syncing, setSyncing] = useState(false)
   const [report, setReport] = useState<SiteReport | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
-  const [apiKeys, setApiKeys] = useState<string[]>([])
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
   const [showKeys, setShowKeys] = useState(false)
   const [generatingKey, setGeneratingKey] = useState(false)
+  const [newKeyLabel, setNewKeyLabel] = useState('')
 
   useEffect(() => {
     fetch('/api/wordpress/seo/health')
@@ -170,8 +177,12 @@ export default function WordPressSeoPage() {
     fetch('/api/settings')
       .then(r => r.ok ? r.json() : {})
       .then((data: Record<string, unknown>) => {
-        const wp = data.wordpress as { apiKeys?: string[] } | undefined
-        if (wp?.apiKeys) setApiKeys(wp.apiKeys)
+        const wp = data.wordpress as { apiKeys?: Array<string | ApiKey> } | undefined
+        if (wp?.apiKeys) {
+          setApiKeys(wp.apiKeys.map(k =>
+            typeof k === 'string' ? { key: k, label: '', createdAt: '' } : k
+          ))
+        }
       })
       .catch(() => {})
   }, [toast])
@@ -279,11 +290,16 @@ export default function WordPressSeoPage() {
   }
 
   async function generateApiKey() {
+    if (!newKeyLabel.trim()) {
+      toast('Give the key a title first', 'error')
+      return
+    }
     setGeneratingKey(true)
     try {
       const newKey = 'ghk_' + Array.from(crypto.getRandomValues(new Uint8Array(24)))
         .map(b => b.toString(16).padStart(2, '0')).join('')
-      const updated = [...apiKeys, newKey]
+      const entry: ApiKey = { key: newKey, label: newKeyLabel.trim(), createdAt: new Date().toISOString() }
+      const updated = [...apiKeys, entry]
       const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -292,6 +308,7 @@ export default function WordPressSeoPage() {
       if (!res.ok) throw new Error('Failed')
       setApiKeys(updated)
       setShowKeys(true)
+      setNewKeyLabel('')
       await navigator.clipboard.writeText(newKey)
       toast('API key generated and copied to clipboard', 'success')
     } catch {
@@ -453,14 +470,24 @@ export default function WordPressSeoPage() {
                           Generate API keys for the GravHub SEO WordPress plugin. Enter these in the plugin settings.
                         </p>
                       </div>
-                      <button
-                        onClick={generateApiKey}
-                        disabled={generatingKey}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                        style={{ background: '#015035' }}
-                      >
-                        <Plus size={13} /> {generatingKey ? 'Generating...' : 'Generate Key'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newKeyLabel}
+                          onChange={e => setNewKeyLabel(e.target.value)}
+                          placeholder="e.g. Graviss Marketing — main site"
+                          className="text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-gray-400 w-56"
+                          onKeyDown={e => { if (e.key === 'Enter') generateApiKey() }}
+                        />
+                        <button
+                          onClick={generateApiKey}
+                          disabled={generatingKey}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50 whitespace-nowrap"
+                          style={{ background: '#015035' }}
+                        >
+                          <Plus size={13} /> {generatingKey ? 'Generating...' : 'Generate Key'}
+                        </button>
+                      </div>
                     </div>
 
                     {apiKeys.length === 0 ? (
@@ -480,13 +507,18 @@ export default function WordPressSeoPage() {
                             {showKeys ? 'Hide' : 'Show'} keys
                           </button>
                         </div>
-                        {apiKeys.map((key, i) => (
+                        {apiKeys.map((entry, i) => (
                           <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-xl px-4 py-3">
-                            <code className="text-xs text-gray-700 flex-1 font-mono">
-                              {showKeys ? key : `${key.slice(0, 8)}${'*'.repeat(32)}${key.slice(-4)}`}
-                            </code>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-gray-700 truncate">
+                                {entry.label || 'Untitled key'}
+                              </p>
+                              <code className="text-xs text-gray-500 font-mono">
+                                {showKeys ? entry.key : `${entry.key.slice(0, 8)}${'*'.repeat(32)}${entry.key.slice(-4)}`}
+                              </code>
+                            </div>
                             <button
-                              onClick={() => copyToClipboard(key)}
+                              onClick={() => copyToClipboard(entry.key)}
                               className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600"
                               title="Copy"
                             >

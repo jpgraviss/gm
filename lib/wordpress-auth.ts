@@ -14,8 +14,11 @@ export async function requireWordPressAuth(req: NextRequest): Promise<NextRespon
       .maybeSingle()
 
     if (data) {
-      const wp = data.wordpress as { apiKeys?: string[] } | null
-      if (wp && Array.isArray(wp.apiKeys) && wp.apiKeys.includes(key)) return null
+      const wp = data.wordpress as { apiKeys?: Array<string | { key: string }> } | null
+      if (wp && Array.isArray(wp.apiKeys)) {
+        const match = wp.apiKeys.some(k => (typeof k === 'string' ? k : k.key) === key)
+        if (match) return null
+      }
     }
 
     if (key === process.env.WORDPRESS_API_KEY) return null

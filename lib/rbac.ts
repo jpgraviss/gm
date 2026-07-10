@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { extractSupabaseToken } from '@/lib/extract-token'
+import { verifySessionCookie } from '@/lib/session-cookie'
 
 /**
  * Role hierarchy — higher roles inherit the permissions of lower roles.
@@ -33,18 +34,27 @@ export interface AuthenticatedUser {
   isAdmin: boolean
 }
 
-async function getCurrentUser(req: NextRequest): Promise<AuthenticatedUser | null> {
+async function resolveVerifiedEmail(req: NextRequest): Promise<string | null> {
   const db = createServiceClient()
   const token = extractSupabaseToken(req)
-  if (!token) return null
+  if (token) {
+    const { data: { user }, error } = await db.auth.getUser(token)
+    if (!error && user?.email) return user.email.toLowerCase()
+  }
 
-  const { data: { user }, error } = await db.auth.getUser(token)
-  if (error || !user?.email) return null
+  const session = await verifySessionCookie(req.cookies.get('gravhub-auth')?.value)
+  return session?.email.toLowerCase() ?? null
+}
+
+async function getCurrentUser(req: NextRequest): Promise<AuthenticatedUser | null> {
+  const db = createServiceClient()
+  const email = await resolveVerifiedEmail(req)
+  if (!email) return null
 
   const { data: member } = await db
     .from('team_members')
     .select('id, name, email, role, unit, is_admin')
-    .eq('email', user.email)
+    .eq('email', email)
     .maybeSingle()
 
   if (!member) return null
@@ -66,12 +76,6 @@ export async function requireRole(
   const user = await getCurrentUser(req)
 
   if (!user) {
-    // Supabase JS stores sessions in localStorage, not cookies, so
-    // getCurrentUser() can't resolve the token from the request alone.
-    // Fall through if the gravhub-auth bridge cookie is present — the
-    // proxy already verified the user is authenticated. Route-level
-    // handlers (requireAdmin, etc.) provide additional checks.
-    if (req.cookies.has('gravhub-auth')) return null
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

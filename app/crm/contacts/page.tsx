@@ -440,6 +440,22 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
     return () => { cancelled = true }
   }, [contact.id])
 
+  function persistNotes(notes: ContactNote[]) {
+    fetch(`/api/crm/contacts/${contact.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contactNotes: notes }),
+    }).catch(() => toast('Failed to save note', 'error'))
+  }
+
+  function persistTasks(tasks: ContactTask[]) {
+    fetch(`/api/crm/contacts/${contact.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contactTasks: tasks }),
+    }).catch(() => toast('Failed to save task', 'error'))
+  }
+
   function handleAddNote() {
     if (!newNoteBody.trim()) return
     const note: ContactNote = {
@@ -448,9 +464,11 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       date: new Date().toISOString().split('T')[0],
       author: 'You',
     }
-    setLocalNotes(prev => [note, ...prev])
+    const updated = [note, ...localNotes]
+    setLocalNotes(updated)
     setNewNoteBody('')
     setAddingNote(false)
+    persistNotes(updated)
   }
 
   function handleAddTask() {
@@ -464,12 +482,14 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       priority: newTaskPriority,
       assignedTo: 'You',
     }
-    setLocalTasks(prev => [task, ...prev])
+    const updated = [task, ...localTasks]
+    setLocalTasks(updated)
     setNewTaskTitle('')
     setNewTaskDue('')
     setNewTaskType('follow_up')
     setNewTaskPriority('medium')
     setAddingTask(false)
+    persistTasks(updated)
   }
 
   async function handleSaveActivity(activity: LoggedActivity) {

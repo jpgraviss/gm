@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { buildSessionCookie } from '@/lib/session-cookie'
 
 export const POST = withErrorHandler('portal-clients/magic-link/verify POST', async (req) => {
   const { token } = await req.json()
@@ -49,17 +50,25 @@ export const POST = withErrorHandler('portal-clients/magic-link/verify POST', as
   const names = (client.contact ?? '').split(' ')
   logAudit({ userName: client.contact || client.email, action: 'portal_magic_link_login', module: 'portal', type: 'info', metadata: { email: client.email, company: client.company } })
 
-  return NextResponse.json({
-    user: {
-      id:       client.id,
-      email:    client.email,
-      name:     client.contact ?? client.email,
-      role:     'Client',
-      unit:     'Client',
-      initials: names.map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'CL',
-      isAdmin:  false,
-      userType: 'client',
-      company:  client.company,
-    },
-  })
+  const user = {
+    id:       client.id,
+    email:    client.email,
+    name:     client.contact ?? client.email,
+    role:     'Client',
+    unit:     'Client',
+    initials: names.map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'CL',
+    isAdmin:  false,
+    userType: 'client' as const,
+    company:  client.company,
+  }
+
+  const res = NextResponse.json({ user })
+  res.cookies.set(await buildSessionCookie({
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    isAdmin: user.isAdmin,
+    userType: user.userType,
+  }))
+  return res
 })

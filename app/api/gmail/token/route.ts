@@ -14,6 +14,17 @@ async function verifyOwnership(req: NextRequest, targetEmail: string): Promise<N
   return null
 }
 
+// BCC-log domain. Must be a dedicated subdomain configured with Resend
+// Inbound (MX records) — cannot reuse the outbound sending domain, which
+// already has SPF/DKIM and likely shares MX with real company mail.
+const BCC_DOMAIN = 'log.gravissmarketing.com'
+
+function generateBccEmail(name: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'user'
+  const suffix = Math.random().toString(36).slice(2, 8)
+  return `${slug}-${suffix}@${BCC_DOMAIN}`
+}
+
 // GET /api/gmail/token?email=user@example.com — retrieve stored Gmail token
 export const GET = withErrorHandler('gmail/token GET', async (req) => {
   const email = new URL(req.url).searchParams.get('email')
@@ -25,7 +36,7 @@ export const GET = withErrorHandler('gmail/token GET', async (req) => {
   const db = createServiceClient()
   const { data, error } = await db
     .from('team_members')
-    .select('gmail_access_token, gmail_email, gmail_token_expires_at, gmail_settings')
+    .select('id, name, gmail_access_token, gmail_email, gmail_token_expires_at, gmail_settings, bcc_email')
     .eq('email', email)
     .single()
 
@@ -33,12 +44,22 @@ export const GET = withErrorHandler('gmail/token GET', async (req) => {
     return NextResponse.json({ gmailToken: null, gmailEmail: null })
   }
 
+  let bccEmail = data.bcc_email
+  if (!bccEmail) {
+    bccEmail = generateBccEmail(data.name)
+    const { error: bccErr } = await db.from('team_members').update({ bcc_email: bccEmail }).eq('id', data.id)
+    // A unique-constraint collision is vanishingly unlikely given the random
+    // suffix; if it happens, just skip persisting rather than fail the whole
+    // request — the caller sees no bcc_email this time and retries later.
+    if (bccErr) bccEmail = null
+  }
+
   // Check if token is expired (with 5-minute buffer)
   if (data.gmail_token_expires_at) {
     const expiresAt = new Date(data.gmail_token_expires_at)
     const buffer = new Date(Date.now() + 5 * 60 * 1000)
     if (expiresAt < buffer) {
-      return NextResponse.json({ gmailToken: null, gmailEmail: data.gmail_email, expired: true })
+      return NextResponse.json({ gmailToken: null, gmailEmail: data.gmail_email, expired: true, bccEmail })
     }
   }
 
@@ -46,6 +67,7 @@ export const GET = withErrorHandler('gmail/token GET', async (req) => {
     gmailToken: data.gmail_access_token,
     gmailEmail: data.gmail_email,
     gmailSettings: data.gmail_settings ?? null,
+    bccEmail,
   })
 })
 

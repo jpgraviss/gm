@@ -24,6 +24,7 @@ function mapCompany(row: any) {
     totalDealValue: row.total_deal_value ?? 0,
     createdDate:    row.created_date ?? '',
     lastActivity:   row.last_activity ?? undefined,
+    notes:          row.notes ?? undefined,
   }
 }
 

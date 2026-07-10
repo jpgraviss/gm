@@ -91,6 +91,8 @@ export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx
 
   const result = validate(body, {
     tags: { type: 'array' },
+    contactNotes: { type: 'array' },
+    contactTasks: { type: 'array' },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -98,6 +100,8 @@ export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx
   const updates: Record<string, unknown> = {}
   if (body.tags !== undefined) updates.tags = body.tags
   if (body.lastActivity !== undefined) updates.last_activity = body.lastActivity
+  if (body.contactNotes !== undefined) updates.contact_notes = body.contactNotes
+  if (body.contactTasks !== undefined) updates.contact_tasks = body.contactTasks
   const { data, error } = await db
     .from('crm_contacts')
     .update(updates)

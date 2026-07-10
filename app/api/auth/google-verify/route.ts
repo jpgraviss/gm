@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { buildSessionCookie, type SessionPayload } from '@/lib/session-cookie'
+
+async function respondWithUser(user: SessionPayload & { name: string; unit: string; initials: string; avatar?: string; company?: string }) {
+  const res = NextResponse.json({ user })
+  res.cookies.set(await buildSessionCookie({
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    isAdmin: user.isAdmin,
+    userType: user.userType,
+  }))
+  return res
+}
 
 /**
  * POST /api/auth/google-verify
@@ -105,18 +118,16 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   }
 
   if (teamRow) {
-    return NextResponse.json({
-      user: {
-        id:       teamRow.id,
-        email:    teamRow.email,
-        name:     teamRow.name,
-        role:     teamRow.role,
-        unit:     teamRow.unit,
-        initials: teamRow.initials ?? '',
-        isAdmin:  teamRow.is_admin ?? false,
-        avatar:   payload.picture,
-        userType: 'staff',
-      },
+    return respondWithUser({
+      id:       teamRow.id,
+      email:    teamRow.email,
+      name:     teamRow.name,
+      role:     teamRow.role,
+      unit:     teamRow.unit,
+      initials: teamRow.initials ?? '',
+      isAdmin:  teamRow.is_admin ?? false,
+      avatar:   payload.picture,
+      userType: 'staff',
     })
   }
 
@@ -150,18 +161,16 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
           .ilike('email', email)
           .maybeSingle()
         if (existing) {
-          return NextResponse.json({
-            user: {
-              id:       existing.id,
-              email:    existing.email,
-              name:     existing.name,
-              role:     existing.role,
-              unit:     existing.unit,
-              initials: existing.initials ?? '',
-              isAdmin:  existing.is_admin ?? false,
-              avatar:   payload.picture,
-              userType: 'staff',
-            },
+          return respondWithUser({
+            id:       existing.id,
+            email:    existing.email,
+            name:     existing.name,
+            role:     existing.role,
+            unit:     existing.unit,
+            initials: existing.initials ?? '',
+            isAdmin:  existing.is_admin ?? false,
+            avatar:   payload.picture,
+            userType: 'staff',
           })
         }
       }
@@ -169,18 +178,16 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
     }
 
     if (newRow) {
-      return NextResponse.json({
-        user: {
-          id:       newRow.id,
-          email:    newRow.email,
-          name:     newRow.name,
-          role:     newRow.role,
-          unit:     newRow.unit,
-          initials: newRow.initials ?? '',
-          isAdmin:  newRow.is_admin ?? false,
-          avatar:   payload.picture,
-          userType: 'staff',
-        },
+      return respondWithUser({
+        id:       newRow.id,
+        email:    newRow.email,
+        name:     newRow.name,
+        role:     newRow.role,
+        unit:     newRow.unit,
+        initials: newRow.initials ?? '',
+        isAdmin:  newRow.is_admin ?? false,
+        avatar:   payload.picture,
+        userType: 'staff',
       })
     }
   }
@@ -211,18 +218,16 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   }
 
   const names = (clientRow.contact ?? '').split(' ')
-  return NextResponse.json({
-    user: {
-      id:       clientRow.id,
-      email:    clientRow.email,
-      name:     clientRow.contact ?? clientRow.email,
-      role:     'Client',
-      unit:     'Client',
-      initials: names.map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'CL',
-      isAdmin:  false,
-      avatar:   payload.picture,
-      userType: 'client',
-      company:  clientRow.company,
-    },
+  return respondWithUser({
+    id:       clientRow.id,
+    email:    clientRow.email,
+    name:     clientRow.contact ?? clientRow.email,
+    role:     'Client',
+    unit:     'Client',
+    initials: names.map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'CL',
+    isAdmin:  false,
+    avatar:   payload.picture,
+    userType: 'client',
+    company:  clientRow.company,
   })
 })

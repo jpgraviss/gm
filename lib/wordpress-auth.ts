@@ -28,7 +28,5 @@ export async function requireWordPressAuth(req: NextRequest): Promise<NextRespon
   const email = await getAuthenticatedEmail(req)
   if (email) return null
 
-  if (req.cookies.has('gravhub-auth')) return null
-
   return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
 }

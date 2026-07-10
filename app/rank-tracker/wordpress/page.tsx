@@ -15,6 +15,7 @@ import {
 interface SiteHealth {
   id: string
   company_name: string
+  company_id: string | null
   site_url: string
   wp_version: string | null
   php_version: string | null
@@ -27,6 +28,11 @@ interface SiteHealth {
     sitemap_found?: boolean
   }
   last_reported_at: string | null
+}
+
+interface CompanyOption {
+  id: string
+  name: string
 }
 
 interface ApiKey {
@@ -166,6 +172,8 @@ export default function WordPressSeoPage() {
   const [showKeys, setShowKeys] = useState(false)
   const [generatingKey, setGeneratingKey] = useState(false)
   const [newKeyLabel, setNewKeyLabel] = useState('')
+  const [companies, setCompanies] = useState<CompanyOption[]>([])
+  const [assigningCompany, setAssigningCompany] = useState(false)
 
   useEffect(() => {
     fetch('/api/wordpress/seo/health')
@@ -173,6 +181,11 @@ export default function WordPressSeoPage() {
       .then(data => { if (Array.isArray(data)) setSites(data) })
       .catch(() => toast('Failed to load WordPress sites', 'error'))
       .finally(() => setLoading(false))
+
+    fetch('/api/crm/companies?limit=500')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setCompanies(data) })
+      .catch(() => {})
 
     fetch('/api/settings')
       .then(r => r.ok ? r.json() : {})
@@ -203,6 +216,26 @@ export default function WordPressSeoPage() {
       .catch(() => toast('Failed to load site data', 'error'))
       .finally(() => setScoresLoading(false))
   }, [toast])
+
+  async function assignCompany(siteId: string, companyId: string) {
+    setAssigningCompany(true)
+    try {
+      const res = await fetch('/api/wordpress/seo/health', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: siteId, companyId: companyId || null }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      const updated = await res.json()
+      setSites(prev => prev.map(s => s.id === siteId ? updated : s))
+      setSelectedSite(prev => prev && prev.id === siteId ? updated : prev)
+      toast(companyId ? 'Site assigned to client' : 'Site unassigned', 'success')
+    } catch {
+      toast('Failed to update client assignment', 'error')
+    } finally {
+      setAssigningCompany(false)
+    }
+  }
 
   function startEditMeta(setting: SeoSetting) {
     setEditingMeta(setting)
@@ -446,6 +479,13 @@ export default function WordPressSeoPage() {
                     <span className="text-sm font-semibold text-gray-900 truncate">{site.company_name}</span>
                   </div>
                   <p className="text-[11px] text-gray-400 truncate">{site.site_url}</p>
+                  {site.company_id ? (
+                    <p className="text-[10px] text-emerald-600 font-medium mt-1 truncate">
+                      {companies.find(c => c.id === site.company_id)?.name ?? 'Linked to client'}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-amber-600 font-medium mt-1">Unassigned</p>
+                  )}
                   {site.last_reported_at && (
                     <p className="text-[10px] text-gray-300 mt-1">
                       Last report: {new Date(site.last_reported_at).toLocaleDateString()}
@@ -560,6 +600,27 @@ export default function WordPressSeoPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {/* Client assignment */}
+                  <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3">
+                    <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Client</span>
+                    <select
+                      value={selectedSite.company_id ?? ''}
+                      onChange={e => assignCompany(selectedSite.id, e.target.value)}
+                      disabled={assigningCompany}
+                      className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035] disabled:opacity-50"
+                    >
+                      <option value="">Unassigned</option>
+                      {companies.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    {!selectedSite.company_id && (
+                      <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded-full whitespace-nowrap">
+                        Not linked to a client
+                      </span>
+                    )}
+                  </div>
+
                   {/* Tabs */}
                   <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
                     {([

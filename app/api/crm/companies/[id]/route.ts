@@ -25,6 +25,7 @@ function mapCompany(row: any) {
     totalDealValue: row.total_deal_value ?? 0,
     createdDate:    row.created_date ?? '',
     lastActivity:   row.last_activity ?? undefined,
+    notes:          row.notes ?? undefined,
   }
 }
 
@@ -64,6 +65,7 @@ export const PUT = withErrorHandler('crm/companies/[id] PUT', async (
       deal_ids:         body.dealIds ?? [],
       total_deal_value: body.totalDealValue ?? 0,
       last_activity:    body.lastActivity ?? null,
+      notes:            body.notes ?? null,
     })
     .eq('id', id)
     .select()
@@ -84,6 +86,7 @@ export const PATCH = withErrorHandler('crm/companies/[id] PATCH', async (
   const result = validate(body, {
     status: { type: 'string', enum: ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned'] },
     tags:   { type: 'array' },
+    notes:  { type: 'string', maxLength: 20000 },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -92,6 +95,7 @@ export const PATCH = withErrorHandler('crm/companies/[id] PATCH', async (
   if (body.tags !== undefined) updates.tags = body.tags
   if (body.status !== undefined) updates.status = body.status
   if (body.lastActivity !== undefined) updates.last_activity = body.lastActivity
+  if (body.notes !== undefined) updates.notes = body.notes
   const { data, error } = await db
     .from('crm_companies')
     .update(updates)

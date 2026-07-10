@@ -64,6 +64,34 @@ final class GravHub_SEO {
 		add_action( 'wp_head', array( $this->meta_manager, 'output_meta_tags' ), 1 );
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
 		add_action( 'gravhub_daily_report', array( $this->health_reporter, 'send_report' ) );
+		add_action( 'admin_init', array( $this, 'self_heal_activation' ) );
+	}
+
+	/**
+	 * Re-applies everything the activation hook normally sets up: the
+	 * manage_gravhub_seo capability and the daily report cron schedule.
+	 *
+	 * register_activation_hook() only fires on a true WordPress
+	 * activate/deactivate cycle — it does NOT run when the plugin files are
+	 * simply overwritten in place (e.g. uploading a new zip directly via
+	 * FTP/SFTP, or replacing files without deactivating first). When that
+	 * happens the capability is never granted and the cron never scheduled,
+	 * which silently breaks every "Test Connection" / "Run Analysis" /
+	 * "Send Health Report" button (permission_callback checks the missing
+	 * capability) and the automatic daily health report (never scheduled).
+	 * Running this idempotently on every admin page load makes the plugin
+	 * self-heal the next time any administrator visits wp-admin, regardless
+	 * of how it was installed.
+	 */
+	public function self_heal_activation() {
+		$role = get_role( 'administrator' );
+		if ( $role && ! $role->has_cap( 'manage_gravhub_seo' ) ) {
+			$role->add_cap( 'manage_gravhub_seo' );
+		}
+
+		if ( ! wp_next_scheduled( 'gravhub_daily_report' ) ) {
+			wp_schedule_event( time(), 'daily', 'gravhub_daily_report' );
+		}
 	}
 
 	public function register_rest_routes() {

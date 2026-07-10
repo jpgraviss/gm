@@ -434,6 +434,7 @@ export interface CRMCompany {
   createdDate: string
   lastActivity?: string
   totalDealValue: number
+  notes?: string
 }
 
 export interface CRMActivity {

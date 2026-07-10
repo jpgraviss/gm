@@ -318,12 +318,16 @@ export default function SettingsPage() {
     trackClicks: false, insertSignature: true, notifyOnReply: true, notifyOnOpen: false,
   })
   const [gmailPrefsSaving, setGmailPrefsSaving] = useState(false)
+  const [bccEmail, setBccEmail] = useState<string | null>(null)
 
   useEffect(() => {
     if (user?.email) {
       fetch(`/api/gmail/token?email=${encodeURIComponent(user.email)}`)
         .then(r => r.json())
-        .then(d => { if (d.gmailSettings) setGmailPrefs(p => ({ ...p, ...d.gmailSettings })) })
+        .then(d => {
+          if (d.gmailSettings) setGmailPrefs(p => ({ ...p, ...d.gmailSettings }))
+          if (d.bccEmail) setBccEmail(d.bccEmail)
+        })
         .catch(() => {})
     }
   }, [user?.email])
@@ -1801,6 +1805,28 @@ export default function SettingsPage() {
                             <p className="text-xs text-gray-700 font-medium">gravissmarketing.com</p>
                             <p className="text-xs text-gray-500">{user.email}</p>
                           </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* BCC-to-log */}
+                    {bccEmail && (
+                      <div className="p-5 border-b border-gray-100">
+                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">BCC to Log</h4>
+                        <p className="text-[11px] text-gray-400 mb-3">
+                          BCC this address on any client email to automatically log it against their contact and company record.
+                        </p>
+                        <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                          <code className="text-xs text-gray-700 flex-1 font-mono truncate">{bccEmail}</code>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(bccEmail)
+                              toast('Copied to clipboard', 'success')
+                            }}
+                            className="text-xs font-semibold px-2 py-1 rounded-lg hover:bg-gray-200 text-gray-500"
+                          >
+                            Copy
+                          </button>
                         </div>
                       </div>
                     )}

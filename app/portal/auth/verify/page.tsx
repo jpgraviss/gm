@@ -35,7 +35,8 @@ function VerifyContent() {
         setStatus('Signing you in...')
         try {
           localStorage.setItem('gravhub_user', JSON.stringify(data.user))
-          document.cookie = 'gravhub-auth=1; path=/; max-age=604800; SameSite=Lax'
+          // Signed session cookie was already set server-side (Set-Cookie)
+          // by /api/portal-clients/magic-link/verify.
         } catch {/* ignore */}
 
         router.replace('/client')

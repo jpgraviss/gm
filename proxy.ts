@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifySessionCookie } from '@/lib/session-cookie'
 
 // ── Rate limiters ────────────────────────────────────────────────────────────
 // In-memory only. Upstash Redis was removed because module-load failures
@@ -40,6 +41,7 @@ const PUBLIC_PREFIXES = [
   '/api/forms/public/',
   '/api/sequences/webhooks',
   '/api/sequences/unsubscribe',
+  '/api/email/inbound',
   '/api/unsubscribe/',
   '/api/track/',
   '/api/chatbots/',
@@ -54,7 +56,7 @@ function getClientIp(req: NextRequest): string {
   return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
 }
 
-function proxyImpl(req: NextRequest): NextResponse {
+async function proxyImpl(req: NextRequest): Promise<NextResponse> {
   const { pathname } = req.nextUrl
 
   // Only apply to API routes
@@ -106,13 +108,18 @@ function proxyImpl(req: NextRequest): NextResponse {
   }
 
   // ── All other API routes: require authentication ─────────────────────────
+  // This is a fast outer gate, not the sole line of defense — route handlers
+  // that need real identity/role (requireAdmin, requireRole, requirePortalClient)
+  // independently re-verify. But the gravhub-auth cookie itself must be
+  // cryptographically verified here too, not just checked for presence —
+  // otherwise `Cookie: gravhub-auth=1` would forge past this gate entirely.
   const hasSupabaseCookie = req.cookies.getAll().some(c =>
     c.name.startsWith('sb-') && c.name.endsWith('-auth-token')
   )
-  const hasBridgeCookie = req.cookies.has('gravhub-auth')
+  const hasValidBridgeCookie = (await verifySessionCookie(req.cookies.get('gravhub-auth')?.value)) !== null
   const hasAuthHeader = !!req.headers.get('authorization')
 
-  if (!hasSupabaseCookie && !hasBridgeCookie && !hasAuthHeader) {
+  if (!hasSupabaseCookie && !hasValidBridgeCookie && !hasAuthHeader) {
     return NextResponse.json(
       { error: 'Authentication required' },
       { status: 401 }
@@ -137,9 +144,9 @@ function proxyImpl(req: NextRequest): NextResponse {
  * with MIDDLEWARE_INVOCATION_FAILED. The proxy MUST never block the
  * entire site.
  */
-export function proxy(req: NextRequest): NextResponse {
+export async function proxy(req: NextRequest): Promise<NextResponse> {
   try {
-    return proxyImpl(req)
+    return await proxyImpl(req)
   } catch (err) {
     console.error('[proxy] unhandled error, falling through:', err)
     return NextResponse.next()

@@ -8,9 +8,10 @@ import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronLeft, Edit2, Copy, TrendingUp, Search, MoreHorizontal,
   Eye, Trash2, ArrowUpDown, UserMinus, UserPlus, Phone,
-  Linkedin, AlertCircle, Send,
+  Linkedin, AlertCircle, Send, ChevronUp, ChevronDown,
 } from 'lucide-react'
 import type { SequenceStatus, SequenceStepType, SequenceStep, EmailSequence } from '@/lib/types'
+import SequenceStepEditor from '@/components/crm/SequenceStepEditor'
 
 type StepType = SequenceStepType
 
@@ -315,6 +316,8 @@ export default function SequenceDetailPage() {
   const [showDeleteSeqModal, setShowDeleteSeqModal] = useState(false)
   const [showRemoveModal, setShowRemoveModal] = useState(false)
   const [testSending, setTestSending] = useState(false)
+  const [editingStep, setEditingStep] = useState<SequenceStep | 'new' | null>(null)
+  const [savingSteps, setSavingSteps] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -326,6 +329,7 @@ export default function SequenceDetailPage() {
         const seqs = await seqRes.json()
         const found = Array.isArray(seqs) ? seqs.find((s: EmailSequence) => s.id === sequenceId) : null
         setSequence(found ?? null)
+        if (found && found.steps.length === 0) setTab('steps')
       }
       if (enrollRes.ok) {
         const data = await enrollRes.json()
@@ -356,6 +360,74 @@ export default function SequenceDetailPage() {
     await fetch(`/api/sequences/${sequenceId}`, { method: 'DELETE' })
     toast('Sequence deleted', 'success')
     router.push('/crm/sequences')
+  }
+
+  // Reordering/deleting/cloning can leave `day` (cumulative offset from
+  // enrollment, consumed by execute/route.ts as an absolute schedule) out of
+  // order relative to array position. Force it non-decreasing so the executor
+  // never computes a zero/negative gap between consecutive steps.
+  function normalizeStepDays(steps: SequenceStep[]): SequenceStep[] {
+    let minDay = 0
+    return steps.map((s, i) => {
+      const day = i === 0 ? s.day : Math.max(s.day, minDay)
+      minDay = day + 1
+      return day === s.day ? s : { ...s, day }
+    })
+  }
+
+  async function persistSteps(rawSteps: SequenceStep[]) {
+    if (!sequence) return
+    const steps = normalizeStepDays(rawSteps)
+    const previous = sequence.steps
+    setSequence({ ...sequence, steps })
+    setSavingSteps(true)
+    try {
+      const res = await fetch(`/api/sequences/${sequenceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ steps }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      toast('Failed to save steps — reverted', 'error')
+      setSequence(prev => prev ? { ...prev, steps: previous } : prev)
+    } finally {
+      setSavingSteps(false)
+    }
+  }
+
+  function handleSaveStep(step: SequenceStep) {
+    if (!sequence) return
+    const exists = sequence.steps.some(s => s.id === step.id)
+    const nextSteps = exists
+      ? sequence.steps.map(s => s.id === step.id ? step : s)
+      : [...sequence.steps, step]
+    persistSteps(nextSteps)
+    setEditingStep(null)
+  }
+
+  function handleDeleteStep(id: string) {
+    if (!sequence) return
+    persistSteps(sequence.steps.filter(s => s.id !== id))
+  }
+
+  function handleCloneStep(step: SequenceStep) {
+    if (!sequence) return
+    const clone: SequenceStep = { ...step, id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` }
+    const idx = sequence.steps.findIndex(s => s.id === step.id)
+    const nextSteps = [...sequence.steps]
+    nextSteps.splice(idx + 1, 0, clone)
+    persistSteps(nextSteps)
+  }
+
+  function handleMoveStep(id: string, direction: 'up' | 'down') {
+    if (!sequence) return
+    const idx = sequence.steps.findIndex(s => s.id === id)
+    const swapWith = direction === 'up' ? idx - 1 : idx + 1
+    if (idx < 0 || swapWith < 0 || swapWith >= sequence.steps.length) return
+    const nextSteps = [...sequence.steps]
+    ;[nextSteps[idx], nextSteps[swapWith]] = [nextSteps[swapWith], nextSteps[idx]]
+    persistSteps(nextSteps)
   }
 
   async function removeEnrollments() {
@@ -737,21 +809,38 @@ export default function SequenceDetailPage() {
         {/* Steps Tab */}
         {tab === 'steps' && (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs text-gray-400">{savingSteps ? 'Saving…' : `${sequence.steps.length} step${sequence.steps.length === 1 ? '' : 's'}`}</p>
+              <button
+                onClick={() => setEditingStep('new')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-semibold hover:opacity-90"
+                style={{ background: '#015035' }}
+              >
+                <Plus size={13} /> Add Step
+              </button>
+            </div>
             {sequence.steps.length === 0 ? (
               <div className="text-center py-12">
                 <Mail size={28} className="text-gray-300 mx-auto mb-2" />
                 <p className="text-sm text-gray-500">No steps configured</p>
-                <p className="text-xs text-gray-400 mt-1">Add steps to define your outreach sequence</p>
+                <p className="text-xs text-gray-400 mt-1 mb-4">Add steps to define your outreach sequence</p>
+                <button
+                  onClick={() => setEditingStep('new')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90"
+                  style={{ background: '#015035' }}
+                >
+                  <Plus size={14} /> Add First Step
+                </button>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
                 {sequence.steps.map((step, i) => {
                   const config = stepTypeConfig[step.type]
                   return (
-                    <div key={step.id} className="flex items-start gap-4">
+                    <div key={step.id} className="flex items-start gap-4 group">
                       <div className="flex flex-col items-center">
                         <div
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-white"
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0"
                           style={{ background: config.color }}
                         >
                           {config.icon}
@@ -760,13 +849,34 @@ export default function SequenceDetailPage() {
                           <div className="w-0.5 h-8 bg-gray-200 mt-1" />
                         )}
                       </div>
-                      <div className="flex-1 pb-4">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-gray-900">Day {step.day} — {config.label}</p>
+                      <div className="flex-1 pb-4 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {i === 0 && step.day === 0 ? 'Send now' : `Day ${step.day}`} — {config.label}
+                          </p>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                            <button onClick={() => handleMoveStep(step.id, 'up')} disabled={i === 0} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30" title="Move up">
+                              <ChevronUp size={13} className="text-gray-500" />
+                            </button>
+                            <button onClick={() => handleMoveStep(step.id, 'down')} disabled={i === sequence.steps.length - 1} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30" title="Move down">
+                              <ChevronDown size={13} className="text-gray-500" />
+                            </button>
+                            <button onClick={() => setEditingStep(step)} className="p-1 rounded hover:bg-gray-100" title="Edit">
+                              <Edit2 size={13} className="text-gray-500" />
+                            </button>
+                            <button onClick={() => handleCloneStep(step)} className="p-1 rounded hover:bg-gray-100" title="Clone">
+                              <Copy size={13} className="text-gray-500" />
+                            </button>
+                            <button onClick={() => handleDeleteStep(step.id)} className="p-1 rounded hover:bg-red-50" title="Delete">
+                              <Trash2 size={13} className="text-red-400" />
+                            </button>
+                          </div>
                         </div>
-                        {step.subject && <p className="text-xs text-gray-600 mt-1">Subject: {step.subject}</p>}
-                        {step.type === 'wait' && <p className="text-xs text-gray-500 mt-1">Wait {step.waitDays || step.day} day(s)</p>}
-                        {step.taskTitle && <p className="text-xs text-gray-500 mt-1">Task: {step.taskTitle}</p>}
+                        {step.subject && <p className="text-xs text-gray-600 mt-1 truncate">Subject: {step.subject}</p>}
+                        {step.taskTitle && <p className="text-xs text-gray-500 mt-1 truncate">Task: {step.taskTitle}</p>}
+                        {step.type !== 'email' && step.pauseUntilComplete && (
+                          <span className="inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">PAUSES SEQUENCE</span>
+                        )}
                         {step.linkedinAction && <p className="text-xs text-gray-500 mt-1">LinkedIn: {step.linkedinAction}</p>}
                       </div>
                     </div>
@@ -823,6 +933,21 @@ export default function SequenceDetailPage() {
       </div>
 
       {/* Modals */}
+      {editingStep && (
+        <SequenceStepEditor
+          step={editingStep === 'new' ? null : editingStep}
+          previousStepDay={(() => {
+            if (editingStep === 'new') {
+              return sequence.steps.length > 0 ? sequence.steps[sequence.steps.length - 1].day : null
+            }
+            const idx = sequence.steps.findIndex(s => s.id === editingStep.id)
+            return idx > 0 ? sequence.steps[idx - 1].day : null
+          })()}
+          onSave={handleSaveStep}
+          onClose={() => setEditingStep(null)}
+        />
+      )}
+
       {showEnrollModal && (
         <EnrollContactsModal
           sequenceId={sequenceId}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
@@ -375,6 +375,11 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   )
   const [localNotes, setLocalNotes] = useState<ContactNote[]>(contact.contactNotes ?? [])
   const [localTasks, setLocalTasks] = useState<ContactTask[]>(contact.contactTasks ?? [])
+  // Mirrors localNotes/localTasks synchronously so rapid consecutive adds
+  // (before a re-render flushes) read the true latest array instead of a
+  // stale closure value, which would otherwise silently drop entries.
+  const localNotesRef = useRef(localNotes)
+  const localTasksRef = useRef(localTasks)
   const [addingNote, setAddingNote] = useState(false)
   const [newNoteBody, setNewNoteBody] = useState('')
   const [addingTask, setAddingTask] = useState(false)
@@ -464,7 +469,8 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       date: new Date().toISOString().split('T')[0],
       author: 'You',
     }
-    const updated = [note, ...localNotes]
+    const updated = [note, ...localNotesRef.current]
+    localNotesRef.current = updated
     setLocalNotes(updated)
     setNewNoteBody('')
     setAddingNote(false)
@@ -482,7 +488,8 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       priority: newTaskPriority,
       assignedTo: 'You',
     }
-    const updated = [task, ...localTasks]
+    const updated = [task, ...localTasksRef.current]
+    localTasksRef.current = updated
     setLocalTasks(updated)
     setNewTaskTitle('')
     setNewTaskDue('')
@@ -864,7 +871,11 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                             onClick={() => setTaskDone(prev => {
                               const next = new Set(prev)
                               next.add(task.id)
-                              setLocalTasks(ts => ts.map(t => t.id === task.id ? { ...t, completed: true } : t))
+                              setLocalTasks(ts => {
+                                const updated = ts.map(t => t.id === task.id ? { ...t, completed: true } : t)
+                                localTasksRef.current = updated
+                                return updated
+                              })
                               return next
                             })}
                           >
@@ -1828,6 +1839,7 @@ export default function ContactsPage() {
 
       {selectedContact && (
         <ContactPanel
+          key={selectedContact.id}
           contact={localContacts.find(c => c.id === selectedContact.id) ?? selectedContact}
           crmCompanies={crmCompanies}
           deals={deals}

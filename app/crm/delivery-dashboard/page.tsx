@@ -61,7 +61,7 @@ function getStepPhase(step: number, totalSteps: number = 8): 'onboarding' | 'act
 }
 
 function isWorkflowCompleted(w: Workflow): boolean {
-  return w.steps.every(s => s.status === 'completed')
+  return (w.steps ?? []).length > 0 && w.steps.every(s => s.status === 'completed')
 }
 
 function getWorkflowCategory(w: Workflow, totalSteps: number = 8): FilterTab {

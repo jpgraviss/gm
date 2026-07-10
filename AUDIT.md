@@ -1,0 +1,68 @@
+# GravHub Audit Log
+
+Tracks holes found by `/audit` runs: incomplete features, fake/stub data presented as real,
+security gaps, and silent failures. This file is meant to be edited directly — change `Status`,
+add to `Notes`, or add new rows by hand at any time. Re-running `/audit` adds newly-found items
+and never overwrites your edits to existing ones (matched by the finding's title).
+
+**Status values:** `Open` · `Fixed` · `In Progress` · `Won't Fix` · `Needs Decision`
+
+---
+
+## Critical / High — Security & Data Integrity
+
+| # | Finding | Location | Status | Notes |
+|---|---|---|---|---|
+| 1 | BCC email webhook accepted unsigned payloads when `RESEND_WEBHOOK_SECRET` unset — could inject fake CRM activities | `app/api/email/inbound/route.ts` | Fixed | Now fails closed in production, matching `SESSION_SIGNING_KEY` pattern |
+| 2 | `admin/seed-clients` and `admin/data-audit` POST had zero auth — could overwrite real client/contract data | `app/api/admin/seed-clients/route.ts`, `app/api/admin/data-audit/route.ts` | Fixed | Added `requireAdmin` to both |
+| 3 | Service worker cached authenticated `/api/*` responses in a shared, unscoped, un-purged cache — risk of leaking one user's data to the next on a shared device or after login/logout | `public/sw.js` | Fixed | Removed API response caching entirely; `Cache-Control: no-store` doesn't stop manual `cache.put()` |
+| 4 | Company/Contact detail panels didn't reset local state when switching records without closing the panel — editing notes on record A while B's data was stale in state could overwrite B's real notes with A's | `app/crm/companies/page.tsx`, `app/crm/contacts/page.tsx` | Fixed | Added `key={record.id}` to force remount on selection change |
+| 5 | `handleAddNote`/`handleAddTask` read stale closure state — two rapid additions before a re-render could silently drop one | `app/crm/contacts/page.tsx` | Fixed | Added `useRef` mirrors so persistence always reads the true latest array |
+| 6 | WordPress plugin API-key retry loop aborted entirely on the first key's network error instead of trying the next key | `app/api/wordpress/seo/sync/route.ts` | Fixed | Per-candidate try/catch |
+| 7 | Service worker precached `/favicon.ico`, which 404s — `cache.addAll()` fails atomically, silently breaking SW install/activate entirely | `public/sw.js` | Fixed | Found while verifying PWA Stage A; removed dead entry, also fixed same dead path in push-notification icons |
+| 8 | Delivery Dashboard crashes (`TypeError`) as soon as any real workflow exists — API returns raw DB row shape, UI expects a transformed `{steps: [...]}` shape | `app/crm/delivery-dashboard/page.tsx`, `app/api/delivery/workflow/route.ts` | Fixed | Added a server-side `mapWorkflow()` transform on both GET and POST; also added a defensive empty-array guard in `isWorkflowCompleted` |
+| 9 | GravIntel `visit_count` self-resets to 1 on nearly every event because the upsert unconditionally writes `visit_count: 1` regardless of event type | `app/api/intelligence/track/route.ts` | Fixed | Split into an insert-only upsert (`ignoreDuplicates: true`) for first-visit defaults, plus a separate update for mutable per-visit fields that never touches `visit_count` |
+| 10 | GravIntel lead scoring (`gi_score_visitor` SQL function) is never called anywhere — `lead_score`/`is_hot_lead` permanently sit at defaults while the UI renders a live-looking score bar and 🔥 flame | `app/api/intelligence/track/route.ts`, `app/intelligence/page.tsx` | Fixed | Now called after every tracked event so score/hot-lead flag stay current |
+| 11 | Email-to-ticket conversion queries `app_settings.gmail_access_token`, a column that doesn't exist — Gmail tokens are stored per-user on `team_members`. Fails 100% of the time, silently, every cron tick | `app/api/tickets/from-email/route.ts` | Fixed | Now checks every team member's connected, non-expired Gmail account instead of a nonexistent global token |
+| 12 | Automation builder never sends per-action config (email subject, tag name, task assignee, etc.) to the backend — `automations.actions` is just `text[]`, no config column exists. Actions execute with no real parameters and mostly no-op | `app/automation/builder/page.tsx`, `lib/automations-engine.ts` | Needs Decision | Requires a schema change (`config jsonb` column) + engine rewrite to read from it instead of trigger context — sizable, not attempted this pass |
+| 13 | "Wait / Delay" automation action doesn't pause anything — falls through immediately, and its resume mechanism (`automation_pending_steps`) is fed blank `automation_id`/`run_id` that nothing ever populates, so cron resume always fails | `lib/automations-engine.ts` | Needs Decision | Needs a real scheduling design, not a quick patch |
+| 14 | 4 action types and 6 trigger types were selectable in the automation UI (including in 4 of 8 built-in templates) but had no matching implementation — automations built with them silently no-op'd forever | `app/automation/page.tsx`, `lib/automations-engine.ts` | Fixed | Removed the dead options and the 4 templates that relied on dead triggers, matching UI to what `lib/automations-engine.ts` actually implements. The bigger issue in #12/#13 (builder config not persisting) remains open |
+| 15 | `app/api/portal-clients/[id]/route.ts` PATCH/DELETE has no per-resource authorization — any authenticated caller can modify or delete any portal client by ID | `app/api/portal-clients/[id]/route.ts` | Open | Predates this session; found adjacent to the auth review |
+
+## Medium
+
+| # | Finding | Location | Status | Notes |
+|---|---|---|---|---|
+| 16 | Uptime monitoring UI promises checks "every 5 minutes" / configurable interval, but the cron that drives it only runs once a day (`vercel.json`) — a site going down and back up between runs is never detected | `app/monitoring/page.tsx`, `vercel.json` | Open | Needs either a paid Vercel cron tier or an external scheduler trigger — infra/cost decision |
+| 17 | WordPress credential fields (`wpUsername`/`wpAppPassword`) are fully implemented server-side for plugin/theme scanning, but there's no UI input to actually enter them | `app/monitoring/page.tsx` | Open | Small UI addition |
+| 18 | Funnel conversion tracking always credits the funnel's first page regardless of which step the form was actually on — skews per-step conversion/drop-off analytics for multi-step funnels | `app/api/forms/public/funnel-submit/route.ts` | Open | |
+| 19 | Admin "System Health" panel hardcodes Authentication/Database rows to always show "Operational"/"Healthy" — never actually checked | `app/admin/page.tsx` | Open | |
+| 20 | Admin "Permissions" role×module matrix is fully static/decorative — no fetch, no save, no `onChange`; doesn't reflect the real (much simpler) RBAC hierarchy in `lib/rbac.ts` | `app/admin/page.tsx` | Open | Either wire it to real per-module permissions or relabel as informational-only |
+| 21 | Renewals page "Renewal Sequence" panel describes automatic 60/30/14/7-day notifications to rep + client; only 90/30-day triggers actually exist, and even those require a manually-built Active automation to send anything | `app/renewals/page.tsx` | Open | Misleading copy — either build the described behavior or fix the copy |
+| 22 | Settings' "Delivery Steps" claims to be a configurable list (add/remove/reorder), but the backend hard-locks to exactly 8 fixed-semantic steps tied to specific DB columns | `app/settings/page.tsx`, `app/api/delivery/workflow/[id]/step/route.ts` | Open | |
+| 23 | No Gmail refresh-token usage anywhere despite `gmail_refresh_token` being stored — tokens silently stop working ~1hr after connecting until the user manually reconnects (affects sequence reply-detection and inbox) | `app/api/sequences/reply-check/route.ts`, `contexts/AuthContext.tsx` | Open | |
+| 24 | A/B testing for email sequences is dead scaffolding — types, analytics computation, and enrollment fields exist, but no editor UI to configure a variant and no execution code that ever assigns/sends one | `app/crm/sequences/page.tsx`, `app/api/sequences/analytics/route.ts` | Open | |
+| 25 | `proxy.ts`'s outer auth gate fails open (`NextResponse.next()`) on any unhandled exception, and `crm/companies/[id]` and `crm/contacts/[id]` PUT/PATCH have no independent auth check of their own — if the proxy ever throws, those become briefly unauthenticated | `proxy.ts`, `app/api/crm/companies/[id]/route.ts`, `app/api/crm/contacts/[id]/route.ts` | Open | Add `requireRole` directly to those two routes as defense-in-depth |
+| 26 | Logout doesn't await/verify the server-side cookie-clear call — if it fails (network blip, tab closed), the UI shows "logged out" but the signed cookie remains valid for up to 7 days with no revocation mechanism | `contexts/AuthContext.tsx` | Open | Inherent to stateless HMAC cookies; could add a server-side revocation list if this matters enough |
+| 27 | Google Sign-In audience check silently no-ops if both `GOOGLE_CLIENT_ID`/`NEXT_PUBLIC_GOOGLE_CLIENT_ID` are unset — would accept a validly-signed token from any Google OAuth client, not just this app | `app/api/auth/google-verify/route.ts` | Open | Low practical exploitability but should fail closed like the other checks |
+
+## Low
+
+| # | Finding | Location | Status | Notes |
+|---|---|---|---|---|
+| 28 | "Add Deliverable" button in Delivery Dashboard timeline is a no-op toast despite a working API existing | `app/crm/delivery-dashboard/page.tsx:387` | Open | |
+| 29 | Monthly/client report "Recommendations" section always hard-coded to `[]` | `app/api/delivery/monthly-report/[id]/route.ts`, `lib/seo-report-sender.ts` | Open | |
+| 30 | Sales-enablement training completion/checklist/quiz progress lives only in `localStorage` — no team-wide visibility, lost on storage clear or device switch | `app/sales-enablement/page.tsx` | Open | |
+| 31 | Time-entry edit (PATCH) failures are silently swallowed client-side — optimistic UI shows success even if the server rejected it | `app/time-tracking/page.tsx` | Open | |
+| 32 | CSRF check is skipped for the entire `/api/wordpress/seo/` prefix (needed for the plugin's own unauthenticated calls), including the staff-only company-assignment PATCH | `proxy.ts` | Open | Mitigated by `SameSite=Lax`; tightening would mean carving the PATCH route out of the public prefix |
+| 33 | GravIntel visitor geolocation/ISP fields (`city`, `region`, `country`, `rdns_company`, `isp`) are rendered in the UI but never populated — no IP lookup exists | `app/api/intelligence/track/route.ts`, `app/intelligence/page.tsx` | Open | |
+| 34 | `withErrorHandler` returns raw `err.message` to the client on any thrown error, including internal config errors — minor information disclosure about deployment misconfig | `lib/api-handler.ts` | Open | |
+
+---
+
+## Confirmed working (no action needed)
+
+Verified real and functioning during the 2026-07 audit pass — listed so future runs don't re-flag them:
+Google Calendar OAuth/sync/availability/booking emails, public booking widget, delivery-dashboard backend CRUD, sales-enablement playbooks/templates, all six `/reports` pages' underlying math, renewals/maintenance CRUD, Gmail inbox integration, unified inbox, uptime-check engine logic itself (only the trigger cadence is the problem), WordPress security/plugin scanning logic itself, email marketing/broadcasts (full audience filtering, A/B subject tests, real sends), funnel builder + public serving (except conversion attribution), Maverick visitor intelligence, GravIntel event capture pipeline itself (except visit_count/scoring), operations/admin dashboard KPIs, data-audit computations, core automation dispatch + the ~25 action types that ARE reachable from real triggers, the full email-sequence send pipeline (throttling, windows, merge fields, dual-channel send, webhook engagement tracking), ticket CRUD + routing rules, time-entry CRUD + approval workflow, knowledge-base CRUD + portal-scoped visibility.
+
+Plus everything from the prior (2026-07, earlier) pass: social publishing, Resend/email, Mercury, Maverick, HubSpot import, e-signing, global search, the WordPress plugin as an installable artifact, CRM core, forms, proposals, rank tracker, billing/invoices core, portal, reputation management.

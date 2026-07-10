@@ -1711,6 +1711,7 @@ export default function CompaniesPage() {
 
       {selectedCompany && (
         <CompanyPanel
+          key={selectedCompany.id}
           company={localCompanies.find(c => c.id === selectedCompany.id) ?? selectedCompany}
           crmContacts={crmContacts}
           deals={deals}

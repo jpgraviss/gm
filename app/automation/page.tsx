@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight, GitBranch, Briefcase, FileText, Target, UserCheck, MessageSquare, Inbox, ArrowRightLeft, Trash2 } from 'lucide-react'
+import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight, GitBranch, FileText, Inbox, ArrowRightLeft, Trash2 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
 type AutoStatus = 'Active' | 'Triggered' | 'Paused'
@@ -27,15 +27,26 @@ const statusConfig: Record<AutoStatus, { badge: string; icon: React.ReactNode; d
   Paused:    { badge: 'bg-gray-100 text-gray-500',     icon: <Pause size={12} className="text-gray-400" />,         dot: '#9ca3af' },
 }
 
+// Only triggers that something in the app actually fires (see TRIGGER_MAP
+// and fireAutomations()/fireTrigger() call sites in lib/automations-engine.ts
+// and lib/automation-triggers.ts). Options previously listed here that
+// nothing ever fires ("Invoice Overdue by 3 Days", "Project Status =
+// Launched", "Deal Created", "Ticket Created", "Client Onboarded",
+// "Milestone Completed") were removed — automations built against them
+// would sit at "Active" with runs: 0 forever, looking healthy while being
+// completely inert.
 const TRIGGER_OPTIONS = [
   'Proposal Accepted', 'Proposal Declined', 'Contract Fully Executed',
-  'Contract Sent', 'Invoice Paid', 'Invoice Overdue', 'Invoice Overdue by 3 Days',
-  'Project Status = Launched', 'Renewal Date Within 90 Days',
-  'Renewal Date Within 30 Days', 'Deal Stage Changed', 'Contact Created',
-  'Deal Created', 'Form Submitted', 'Ticket Created', 'Client Onboarded',
-  'Milestone Completed',
+  'Contract Sent', 'Invoice Paid', 'Invoice Overdue',
+  'Renewal Date Within 90 Days', 'Renewal Date Within 30 Days',
+  'Deal Stage Changed', 'Contact Created', 'Form Submitted',
 ]
 
+// Only actions with a matching case in executeAction() (lib/automations-engine.ts).
+// "Create Welcome Task", "Create CRM Contact", "Send Welcome Sequence", and
+// "Notify Client" were removed — they had no implementation and silently
+// no-op'd (hit the switch's default case), including inside 3 of the
+// built-in templates below.
 const ACTION_OPTIONS = [
   'Create Draft Contract', 'Create Billing Task', 'Create Project Record',
   'Create Maintenance Record', 'Create Renewal Task', 'Notify Sales Rep',
@@ -43,8 +54,7 @@ const ACTION_OPTIONS = [
   'Send Email Reminder', 'Send Follow-up Email', 'Log Activity',
   'Log Touchpoint', 'Flag in Dashboard', 'Update Revenue Metrics',
   'Apply Service Template', 'Update Client Portal', 'Escalate if 7+ Days',
-  'Create Welcome Task', 'Create CRM Contact', 'Send Notification',
-  'Send Welcome Sequence', 'Notify Client', 'Create Task',
+  'Send Notification', 'Create Task',
 ]
 
 // ─── Automation Templates ────────────────────────────────────────────────────
@@ -58,15 +68,12 @@ interface AutomationTemplate {
   actions: string[]
 }
 
+// Four templates were removed here (New Deal Welcome, Project Milestone
+// Complete, Ticket Submitted, Client Onboarded) — each relied on a trigger
+// ("Deal Created", "Milestone Completed", "Ticket Created", "Client
+// Onboarded") that nothing in the app ever fires, so they'd sit at "Active"
+// forever and never run. See TRIGGER_OPTIONS above for what's real.
 const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
-  {
-    id: 'new_deal_welcome',
-    name: 'New Deal Welcome',
-    description: 'Create a welcome task and notify the team when a deal is created.',
-    icon: <Briefcase size={20} />,
-    trigger: 'Deal Created',
-    actions: ['Create Welcome Task', 'Send Notification'],
-  },
   {
     id: 'invoice_overdue_reminder',
     name: 'Invoice Overdue Reminder',
@@ -86,34 +93,10 @@ const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   {
     id: 'new_form_submission',
     name: 'New Form Submission',
-    description: 'Create a CRM contact and notify sales when a form is submitted.',
+    description: 'Notify sales when a form is submitted.',
     icon: <Inbox size={20} />,
     trigger: 'Form Submitted',
-    actions: ['Create CRM Contact', 'Notify Sales Rep'],
-  },
-  {
-    id: 'project_milestone_complete',
-    name: 'Project Milestone Complete',
-    description: 'Log activity and notify the client when a milestone is completed.',
-    icon: <Target size={20} />,
-    trigger: 'Milestone Completed',
-    actions: ['Log Activity', 'Notify Client'],
-  },
-  {
-    id: 'ticket_submitted',
-    name: 'Ticket Submitted',
-    description: 'Create a task and notify the assigned team when a ticket comes in.',
-    icon: <MessageSquare size={20} />,
-    trigger: 'Ticket Created',
-    actions: ['Create Task', 'Notify Delivery Team'],
-  },
-  {
-    id: 'client_onboarded',
-    name: 'Client Onboarded',
-    description: 'Send a welcome sequence when a new client is onboarded.',
-    icon: <UserCheck size={20} />,
-    trigger: 'Client Onboarded',
-    actions: ['Send Welcome Sequence'],
+    actions: ['Notify Sales Rep'],
   },
   {
     id: 'proposal_accepted_followup',

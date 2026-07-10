@@ -1,4 +1,4 @@
-var CACHE_NAME = 'gravhub-v2'
+var CACHE_NAME = 'gravhub-v3'
 // /favicon.ico is NOT served (Next.js App Router serves the favicon via
 // app/icon.png through its own generated route) — cache.addAll() fails
 // atomically if any entry 404s, which was silently breaking install/activate
@@ -39,26 +39,15 @@ self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET') return
   if (url.origin !== self.location.origin) return
 
-  // API requests: network-first with 3s timeout, fall back to cache
+  // API requests: pass straight through, no caching.
+  // Nearly every route in this app is authenticated and can return
+  // per-user/per-company data (including plaintext secrets on some admin
+  // routes) — Cache Storage here is a single shared, origin-wide store with
+  // no per-session scoping and no purge-on-logout, so caching API responses
+  // risked serving one user's cached data to whoever loads the page next on
+  // a shared device, or after a session switch. Manual cache.put() also
+  // ignores Cache-Control: no-store, so response-level opt-outs didn't help.
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      Promise.race([
-        fetch(event.request).then(function (response) {
-          if (response.ok) {
-            var clone = response.clone()
-            caches.open(CACHE_NAME).then(function (cache) {
-              cache.put(event.request, clone)
-            })
-          }
-          return response
-        }),
-        new Promise(function (_, reject) {
-          setTimeout(function () { reject(new Error('timeout')) }, 3000)
-        })
-      ]).catch(function () {
-        return caches.match(event.request)
-      })
-    )
     return
   }
 
@@ -113,8 +102,8 @@ self.addEventListener('push', function (event) {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
       data: { url: data.url || '/' },
     })
   )

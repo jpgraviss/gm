@@ -33,15 +33,17 @@ export const POST = withErrorHandler('wordpress/seo/sync POST', async (req) => {
 
   const base = siteUrl.replace(/\/+$/, '')
 
-  try {
-    // The site only accepts the specific key configured in its own plugin
-    // settings — with multiple keys now possible (one per site), don't
-    // assume index 0 is the right one. Try each until the site accepts one.
-    let apiKey: string | null = null
-    let status: unknown = null
-    let lastErrorStatus = 0
+  // The site only accepts the specific key configured in its own plugin
+  // settings — with multiple keys now possible (one per site), don't
+  // assume index 0 is the right one. Try each until the site accepts one.
+  // Each candidate is tried independently — a network error on key #1
+  // (timeout, DNS blip) must not prevent trying key #2.
+  let apiKey: string | null = null
+  let status: unknown = null
+  let lastError = ''
 
-    for (const candidate of candidateKeys) {
+  for (const candidate of candidateKeys) {
+    try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 10000)
       const heartbeat = await fetch(`${base}/wp-json/gravhub-seo/v1/heartbeat`, {
@@ -55,18 +57,22 @@ export const POST = withErrorHandler('wordpress/seo/sync POST', async (req) => {
         status = await heartbeat.json()
         break
       }
-      lastErrorStatus = heartbeat.status
+      lastError = `HTTP ${heartbeat.status}`
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'request failed'
     }
+  }
 
-    if (!apiKey) {
-      return NextResponse.json({
-        connected: false,
-        error: candidateKeys.length > 1
-          ? `Plugin rejected all ${candidateKeys.length} configured API keys (last: HTTP ${lastErrorStatus}). Check which key is actually saved in the plugin's settings on the site.`
-          : `Plugin returned HTTP ${lastErrorStatus}`,
-      })
-    }
+  if (!apiKey) {
+    return NextResponse.json({
+      connected: false,
+      error: candidateKeys.length > 1
+        ? `Plugin rejected all ${candidateKeys.length} configured API keys (last: ${lastError}). Check which key is actually saved in the plugin's settings on the site.`
+        : `Connection failed: ${lastError}`,
+    })
+  }
 
+  try {
     const syncController = new AbortController()
     const syncTimeout = setTimeout(() => syncController.abort(), 60000)
     const syncRes = await fetch(`${base}/wp-json/gravhub-seo/v1/remote-sync`, {

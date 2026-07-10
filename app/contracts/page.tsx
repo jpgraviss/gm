@@ -785,8 +785,8 @@ function ContractPanel({
   )
 }
 
-type ViewFilter = 'Active' | 'Terminated' | 'All'
-const viewTabs: ViewFilter[] = ['Active', 'Terminated', 'All']
+type ViewFilter = 'Active' | 'Terminated' | 'All' | 'Ready to Generate'
+const viewTabs: ViewFilter[] = ['Active', 'Terminated', 'All', 'Ready to Generate']
 const filterTabs: Array<ContractStatus | 'All'> = ['All', 'Draft', 'Sent', 'Fully Executed', 'Expired']
 
 export default function ContractsPage() {
@@ -809,6 +809,13 @@ export default function ContractsPage() {
   const [viewFilter, setViewFilter] = useState<ViewFilter>('Active')
   const [showTerminateModal, setShowTerminateModal] = useState(false)
   const [terminateReason, setTerminateReason] = useState('')
+  const [generateFromProposalId, setGenerateFromProposalId] = useState<string | undefined>(undefined)
+
+  // Proposals not yet converted into a contract — same eligibility rule as
+  // NewContractPanel's own proposal picker (exclude declined).
+  const readyProposals = proposals.filter(p =>
+    p.status !== 'Declined' && !localContracts.some(c => c.proposalId === p.id)
+  )
 
   useEffect(() => {
     fetch('/api/contracts')
@@ -1057,6 +1064,7 @@ export default function ContractsPage() {
       }
       setLocalContracts(prev => [created, ...prev])
       setCreatingContract(false)
+      setGenerateFromProposalId(undefined)
       toast('Contract created', 'success')
     } catch {
       toast('Failed to create contract', 'error')
@@ -1067,7 +1075,9 @@ export default function ContractsPage() {
     ? localContracts.filter(c => c.status !== 'Terminated')
     : viewFilter === 'Terminated'
       ? localContracts.filter(c => c.status === 'Terminated')
-      : localContracts
+      : viewFilter === 'Ready to Generate'
+        ? []
+        : localContracts
   const byStatus = statusFilter === 'All' ? byView : byView.filter(c => c.status === statusFilter)
   const filtered = searchQuery
     ? byStatus.filter(c => c.company.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -1151,7 +1161,9 @@ export default function ContractsPage() {
                   ? localContracts.filter(c => c.status !== 'Terminated').length
                   : tab === 'Terminated'
                     ? localContracts.filter(c => c.status === 'Terminated').length
-                    : localContracts.length
+                    : tab === 'Ready to Generate'
+                      ? readyProposals.length
+                      : localContracts.length
                 return (
                   <button
                     key={tab}
@@ -1160,13 +1172,15 @@ export default function ContractsPage() {
                       viewFilter === tab
                         ? tab === 'Terminated'
                           ? 'bg-red-100 text-red-800'
-                          : 'text-white shadow-sm'
+                          : tab === 'Ready to Generate'
+                            ? 'bg-purple-100 text-purple-800'
+                            : 'text-white shadow-sm'
                         : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                     }`}
-                    style={viewFilter === tab && tab !== 'Terminated' ? { background: '#015035' } : undefined}
+                    style={viewFilter === tab && tab !== 'Terminated' && tab !== 'Ready to Generate' ? { background: '#015035' } : undefined}
                   >
                     {tab}
-                    <span className={`ml-1.5 text-[10px] ${viewFilter === tab ? (tab === 'Terminated' ? 'text-red-600' : 'text-white/70') : 'text-gray-400'}`}>
+                    <span className={`ml-1.5 text-[10px] ${viewFilter === tab ? (tab === 'Terminated' ? 'text-red-600' : tab === 'Ready to Generate' ? 'text-purple-600' : 'text-white/70') : 'text-gray-400'}`}>
                       {count}
                     </span>
                   </button>
@@ -1174,7 +1188,7 @@ export default function ContractsPage() {
               })}
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              {viewFilter !== 'Terminated' && (
+              {viewFilter !== 'Terminated' && viewFilter !== 'Ready to Generate' && (
               <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
                 {filterTabs.map(tab => (
                   <button
@@ -1218,6 +1232,38 @@ export default function ContractsPage() {
             </div>
           </div>
 
+          {viewFilter === 'Ready to Generate' ? (
+            <div className="p-2">
+              {readyProposals.length === 0 ? (
+                <div className="py-20 flex flex-col items-center justify-center text-center px-4">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#7c3aed10' }}>
+                    <FileText size={24} className="text-purple-600" />
+                  </div>
+                  <p className="text-sm font-semibold text-gray-700 mb-1">No proposals waiting on a contract</p>
+                  <p className="text-xs text-gray-400 max-w-xs">Sent or accepted proposals that don&apos;t have a contract yet will show up here.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5 p-3">
+                  {readyProposals.map(p => (
+                    <div key={p.id} className="flex items-center justify-between gap-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{p.company}</p>
+                        <p className="text-xs text-gray-500">{p.id.toUpperCase()} · {p.serviceType} · {p.status} · {formatCurrency(p.value)}</p>
+                      </div>
+                      <button
+                        onClick={() => { setGenerateFromProposalId(p.id); setCreatingContract(true) }}
+                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-white text-xs font-semibold hover:opacity-90"
+                        style={{ background: '#015035' }}
+                      >
+                        <FilePlus2 size={13} /> Generate Contract
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="data-table min-w-[800px]">
               <thead>
@@ -1355,6 +1401,8 @@ export default function ContractsPage() {
               )}
             </div>
           )}
+          </>
+          )}
         </div>
       </div>
 
@@ -1379,7 +1427,11 @@ export default function ContractsPage() {
         />
       )}
       {creatingContract && (
-        <NewContractPanel onSave={handleNewContract} onClose={() => setCreatingContract(false)} />
+        <NewContractPanel
+          onSave={handleNewContract}
+          onClose={() => { setCreatingContract(false); setGenerateFromProposalId(undefined) }}
+          initialProposalId={generateFromProposalId}
+        />
       )}
       {creatingAddendum && (
         <NewAddendumPanel

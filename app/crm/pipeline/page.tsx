@@ -22,7 +22,7 @@ import {
   X, Phone, Mail, Calendar, TrendingUp, DollarSign,
   FileText, ScrollText, User, ChevronRight, ChevronLeft, Plus,
   CheckCircle2, Circle, AlertCircle, Settings, Upload,
-  GripVertical, Pencil, Trash2, Check, Download,
+  GripVertical, Pencil, Trash2, Check, Download, Search, Link2,
 } from 'lucide-react'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
@@ -89,27 +89,25 @@ function DealCard({
           className={`deal-card cursor-grab active:cursor-grabbing select-none ${snapshot.isDragging ? 'shadow-xl rotate-1 opacity-90' : ''} ${selected ? 'ring-2 ring-[#015035] bg-emerald-50/30' : ''}`}
           onClick={onClick}
         >
-          <div className="flex items-start justify-between mb-2">
-            <div className="flex items-start gap-2">
-              {onToggleSelect && (
-                <input
-                  type="checkbox"
-                  checked={!!selected}
-                  onChange={e => { e.stopPropagation(); onToggleSelect() }}
-                  onClick={e => e.stopPropagation()}
-                  className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer mt-0.5 flex-shrink-0"
-                />
-              )}
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{deal.company}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{deal.contact.name}</p>
-              </div>
+          <div className="flex items-start gap-2 mb-2 min-w-0">
+            {onToggleSelect && (
+              <input
+                type="checkbox"
+                checked={!!selected}
+                onChange={e => { e.stopPropagation(); onToggleSelect() }}
+                onClick={e => e.stopPropagation()}
+                className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer mt-0.5 flex-shrink-0"
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-900 truncate" title={deal.company}>{deal.company}</p>
+              <p className="text-xs text-gray-400 mt-0.5 truncate" title={deal.contact.name}>{deal.contact.name}</p>
             </div>
-            <div className="flex flex-wrap gap-1 justify-end">
-              {(deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]).map(st => (
-                <StatusBadge key={st} label={st} colorClass={serviceTypeColors[st] ?? 'bg-gray-100 text-gray-600'} />
-              ))}
-            </div>
+          </div>
+          <div className="flex flex-wrap gap-1 mb-2">
+            {(deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]).map(st => (
+              <StatusBadge key={st} label={st} colorClass={serviceTypeColors[st] ?? 'bg-gray-100 text-gray-600'} />
+            ))}
           </div>
           <div className="flex items-center justify-between mt-3">
             <span className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
@@ -176,6 +174,8 @@ function DealPanel({
   const [creatingProposal, setCreatingProposal] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<'deal' | 'company' | null>(null)
   const [editing, setEditing] = useState(false)
+  const [linkingContact, setLinkingContact] = useState(false)
+  const [contactSearch, setContactSearch] = useState('')
   const dealServiceTypes = deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]
   const [editForm, setEditForm] = useState({
     value: String(deal.value),
@@ -222,6 +222,29 @@ function DealPanel({
     setEditing(false)
   }
 
+  function handleLinkContact(contact: CRMContact) {
+    if (!onUpdateDeal) return
+    onUpdateDeal(deal.id, {
+      contactId: contact.id,
+      contact: {
+        id: contact.id,
+        name: contact.fullName || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
+        email: contact.emails?.[0] ?? '',
+        phone: contact.phones?.[0] ?? '',
+        title: contact.title ?? '',
+      },
+    } as Partial<LocalDeal>)
+    setLinkingContact(false)
+    setContactSearch('')
+    toast(`Linked to ${contact.fullName || contact.firstName}`, 'success')
+  }
+
+  const contactSearchResults = contactSearch.trim().length > 0
+    ? crmContacts
+        .filter(c => (c.fullName || `${c.firstName ?? ''} ${c.lastName ?? ''}`).toLowerCase().includes(contactSearch.trim().toLowerCase()))
+        .slice(0, 8)
+    : linkedContacts.slice(0, 8)
+
   function handleSaveActivity(activity: LoggedActivity) {
     setLocalActivities(prev => [{
       id: activity.id,
@@ -264,7 +287,9 @@ function DealPanel({
               <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-heading)' }}>
                 {deal.company}
               </h2>
-              <p className="text-gray-500 text-sm mt-0.5">{deal.contact.title} — {deal.contact.name}</p>
+              <p className="text-gray-500 text-sm mt-0.5">
+                {deal.contact?.name ? `${deal.contact.title ? `${deal.contact.title} — ` : ''}${deal.contact.name}` : 'No contact linked'}
+              </p>
             </div>
             <div className="flex items-center gap-1">
               {onUpdateDeal && (
@@ -412,25 +437,92 @@ function DealPanel({
                     </Link>
                   )}
                 </div>
-                <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-100">
-                  <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
-                    {deal.contact.name.split(' ').map((n: string) => n[0]).join('')}
+
+                {!dealAny.contactId ? (
+                  <div className="p-3 bg-white rounded-lg border border-dashed border-amber-300">
+                    {!linkingContact ? (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">
+                            {deal.contact?.name || 'No contact linked'}
+                          </p>
+                          <p className="text-xs text-amber-600">Not connected to a CRM contact record</p>
+                        </div>
+                        {onUpdateDeal && (
+                          <button
+                            onClick={() => setLinkingContact(true)}
+                            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-semibold hover:opacity-90"
+                            style={{ background: '#015035' }}
+                          >
+                            <Link2 size={12} /> Connect
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <div className="relative">
+                          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                          <input
+                            autoFocus
+                            value={contactSearch}
+                            onChange={e => setContactSearch(e.target.value)}
+                            placeholder="Search contacts by name…"
+                            className="w-full text-sm border border-gray-200 rounded-lg pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+                          {contactSearchResults.length === 0 ? (
+                            <p className="text-xs text-gray-400 px-1 py-2">
+                              {contactSearch.trim() ? 'No matching contacts' : 'No contacts at this company yet — try searching by name'}
+                            </p>
+                          ) : (
+                            contactSearchResults.map(c => (
+                              <button
+                                key={c.id}
+                                onClick={() => handleLinkContact(c)}
+                                className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 text-left"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-800 truncate">{c.fullName}</p>
+                                  <p className="text-xs text-gray-400 truncate">{c.title || c.companyName}</p>
+                                </div>
+                                <Check size={13} className="text-gray-300 flex-shrink-0" />
+                              </button>
+                            ))
+                          )}
+                        </div>
+                        <button
+                          onClick={() => { setLinkingContact(false); setContactSearch('') }}
+                          className="self-start text-xs text-gray-500 hover:text-gray-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">{deal.contact.name}</p>
-                    <p className="text-xs text-gray-400">{deal.contact.title}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <a href={`mailto:${deal.contact.email}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
-                      <Mail size={13} />
-                    </a>
-                    <a href={`tel:${deal.contact.phone}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
-                      <Phone size={13} />
-                    </a>
-                  </div>
-                </div>
-                {linkedContacts.length > 1 && (
-                  <p className="text-xs text-gray-400 mt-2">+{linkedContacts.length - 1} more contacts at this company</p>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-100">
+                      <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
+                        {deal.contact.name.split(' ').map((n: string) => n[0]).join('')}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900">{deal.contact.name}</p>
+                        <p className="text-xs text-gray-400">{deal.contact.title}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <a href={`mailto:${deal.contact.email}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                          <Mail size={13} />
+                        </a>
+                        <a href={`tel:${deal.contact.phone}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                          <Phone size={13} />
+                        </a>
+                      </div>
+                    </div>
+                    {linkedContacts.length > 1 && (
+                      <p className="text-xs text-gray-400 mt-2">+{linkedContacts.length - 1} more contacts at this company</p>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -1138,7 +1230,7 @@ export default function PipelinePage() {
               const stageDeals = filteredDeals.filter(d => d.stage === stage.name)
               const stageTotal = stageDeals.reduce((s, d) => s + d.value, 0)
               return (
-                <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col min-h-0 bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 340, maxHeight: 'calc(100vh - 280px)' }}>
+                <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col min-h-0 bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 360, maxHeight: 'calc(100vh - 280px)' }}>
                   <div className="flex items-center justify-between mb-2 px-1 pb-2 border-b border-gray-100 flex-shrink-0">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
@@ -1188,7 +1280,7 @@ export default function PipelinePage() {
         </DragDropContext> : (
           <div className="flex gap-3 overflow-x-auto flex-1 min-h-0 pb-2">
             {activeStages.map(stage => (
-              <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col min-h-0 bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 340, maxHeight: 'calc(100vh - 280px)' }}>
+              <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col min-h-0 bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 360, maxHeight: 'calc(100vh - 280px)' }}>
                 <div className="flex items-center gap-2 mb-3 px-1 flex-shrink-0">
                   <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
                   <span className="text-xs font-semibold text-gray-700">{stage.name}</span>

@@ -33,6 +33,7 @@ export const GET = withErrorHandler('tasks GET', async (req: NextRequest) => {
   const status     = searchParams.get('status')
   const assignedTo = searchParams.get('assignedTo')
   const projectId  = searchParams.get('projectId')
+  const companyId  = searchParams.get('companyId')
   const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
@@ -41,6 +42,7 @@ export const GET = withErrorHandler('tasks GET', async (req: NextRequest) => {
   if (status)     query = query.eq('status', status)
   if (assignedTo) query = query.eq('assigned_to', assignedTo)
   if (projectId)  query = query.eq('project_id', projectId)
+  if (companyId)  query = query.eq('company_id', companyId)
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {

@@ -48,9 +48,10 @@ function Select({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectEle
 interface Props {
   onSave: (data: NewContractFormData) => void
   onClose: () => void
+  initialProposalId?: string
 }
 
-export default function NewContractPanel({ onSave, onClose }: Props) {
+export default function NewContractPanel({ onSave, onClose, initialProposalId }: Props) {
   const REPS = useTeamMembers()
   const today = new Date().toISOString().split('T')[0]
   const [form, setForm] = useState<NewContractFormData>({
@@ -68,7 +69,16 @@ export default function NewContractPanel({ onSave, onClose }: Props) {
   const [showProposalPicker, setShowProposalPicker] = useState(false)
   const [linkedProposal, setLinkedProposal] = useState<Proposal | null>(null)
 
-  useEffect(() => { fetchProposals().then(setProposals) }, [])
+  useEffect(() => {
+    fetchProposals().then(fetched => {
+      setProposals(fetched)
+      if (initialProposalId) {
+        const match = fetched.find(p => p.id === initialProposalId)
+        if (match) selectProposal(match)
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Proposals eligible to be converted to contracts: exclude declined.
   const eligibleProposals = useMemo(

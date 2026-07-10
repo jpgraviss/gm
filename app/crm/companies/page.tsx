@@ -18,7 +18,7 @@ import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
-import type { CRMCompany, CRMContact, CompanyStatus, Deal, Contract, Invoice, Project, CRMActivity } from '@/lib/types'
+import type { CRMCompany, CRMContact, CompanyStatus, Deal, Contract, Invoice, Project, CRMActivity, AppTask } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
 import { downloadCsv } from '@/lib/csv-export'
 import {
@@ -26,6 +26,7 @@ import {
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
   ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload, BarChart3,
   Monitor, Loader2, Sparkles, Wand2, Share2, Brain, Download, GitMerge, ArrowUpDown,
+  CheckSquare, Circle, CheckCircle2,
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
@@ -261,7 +262,7 @@ function CompanyFilesTab({ companyId }: { companyId: string }) {
 function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, crmContacts, deals, contracts, invoices, projects, crmActivities }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void; onOpenIntegrations?: () => void; crmContacts: CRMContact[]; deals: Deal[]; contracts: Contract[]; invoices: Invoice[]; projects: Project[]; crmActivities: CRMActivity[] }) {
   const { toast } = useToast()
   const router = useRouter()
-  const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'files' | 'activity'>('overview')
+  const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'files' | 'activity' | 'tasks'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
   const [creatingProposal, setCreatingProposal] = useState(false)
@@ -284,6 +285,96 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const [localNotes, setLocalNotes] = useState(company.notes ?? '')
   const [savingNotes, setSavingNotes] = useState(false)
   const lastSavedNotesRef = useRef(company.notes ?? '')
+  const [companyTasks, setCompanyTasks] = useState<AppTask[]>([])
+  const [tasksLoading, setTasksLoading] = useState(false)
+  const [tasksLoaded, setTasksLoaded] = useState(false)
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskAssignee, setNewTaskAssignee] = useState('')
+  const [newTaskDueDate, setNewTaskDueDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [aiDraftContent, setAiDraftContent] = useState<string | null>(null)
+  const [aiDraftRecipientId, setAiDraftRecipientId] = useState<string | null>(null)
+  const teamMembers = useTeamMembers()
+
+  useEffect(() => {
+    if (tab !== 'tasks' || tasksLoaded) return
+    setTasksLoading(true)
+    fetch(`/api/tasks?companyId=${encodeURIComponent(company.id)}`)
+      .then(r => r.ok ? r.json() : { items: [] })
+      .then(data => setCompanyTasks(Array.isArray(data) ? data : (data.items ?? [])))
+      .catch(() => toast('Failed to load tasks', 'error'))
+      .finally(() => { setTasksLoading(false); setTasksLoaded(true) })
+  }, [tab, tasksLoaded, company.id, toast])
+
+  async function handleAddCompanyTask() {
+    if (!newTaskTitle.trim()) return
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newTaskTitle.trim(),
+          company: company.name,
+          companyId: company.id,
+          assignedTo: newTaskAssignee || undefined,
+          dueDate: newTaskDueDate,
+          category: 'General',
+        }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      const created = await res.json()
+      setCompanyTasks(prev => [created, ...prev])
+      setShowAddTask(false)
+      setNewTaskTitle('')
+    } catch {
+      toast('Failed to add task', 'error')
+    }
+  }
+
+  async function handleToggleCompanyTask(task: AppTask) {
+    const nextStatus = task.status === 'Completed' ? 'Pending' : 'Completed'
+    setCompanyTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: nextStatus } : t))
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus, completedDate: nextStatus === 'Completed' ? new Date().toISOString().split('T')[0] : null }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      toast('Failed to update task — reverted', 'error')
+      setCompanyTasks(prev => prev.map(t => t.id === task.id ? task : t))
+    }
+  }
+
+  async function handleGenerateAiDraft() {
+    if (!draftRecipient) {
+      toast('Add a contact to this company first', 'error')
+      return
+    }
+    setAiGenerating(true)
+    setAiDraftContent(null)
+    try {
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'follow_up',
+          context: {
+            recipient: draftRecipient.fullName,
+            company: company.name,
+            lastInteraction: draftRecipient.lastActivity ? `Last active ${new Date(draftRecipient.lastActivity).toLocaleDateString()}` : 'initial outreach',
+            goal: openDeals.length > 0 ? `Progress ${openDeals[0].stage} deal` : 'Re-engage client',
+          },
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAiDraftContent(data.content)
+      }
+    } catch { /* ignore */ }
+    setAiGenerating(false)
+  }
 
   useEffect(() => {
     fetch(`/api/wordpress/seo/health?companyId=${encodeURIComponent(company.id)}`)
@@ -394,6 +485,9 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
 
   // Cross-linked data
   const companyContacts = crmContacts.filter(c => c.companyId === company.id)
+  const draftRecipient = companyContacts.find(c => c.id === aiDraftRecipientId)
+    ?? companyContacts.find(c => c.isPrimary)
+    ?? companyContacts[0]
   const companyDeals = deals.filter(d => d.company === company.name)
   const companyContracts = contracts.filter(c => c.company === company.name)
   const companyInvoices = invoices.filter(i => i.company === company.name)
@@ -480,7 +574,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
 
         {/* Tabs */}
         <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
-          {(['overview', 'contacts', 'deals', 'contracts', 'files', 'activity'] as const).map(t => (
+          {(['overview', 'contacts', 'deals', 'contracts', 'files', 'activity', 'tasks'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}>{t}</button>
           ))}
         </div>
@@ -992,7 +1086,118 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               <ActivityTimeline activities={localActivities} />
             </div>
           )}
+
+          {/* ── Tasks ── */}
+          {tab === 'tasks' && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tasks for {company.name}</p>
+                <button
+                  onClick={() => setShowAddTask(v => !v)}
+                  className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+                >
+                  <Plus size={12} /> New Task
+                </button>
+              </div>
+
+              {showAddTask && (
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl flex flex-col gap-2">
+                  <input
+                    autoFocus
+                    value={newTaskTitle}
+                    onChange={e => setNewTaskTitle(e.target.value)}
+                    placeholder="Task title"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={newTaskAssignee}
+                      onChange={e => setNewTaskAssignee(e.target.value)}
+                      className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Unassigned</option>
+                      {teamMembers.map(name => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                    <input
+                      type="date"
+                      value={newTaskDueDate}
+                      onChange={e => setNewTaskDueDate(e.target.value)}
+                      className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleAddCompanyTask} disabled={!newTaskTitle.trim()} className="flex-1 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>
+                      Add Task
+                    </button>
+                    <button onClick={() => { setShowAddTask(false); setNewTaskTitle('') }} className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {tasksLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 size={18} className="animate-spin text-gray-300" />
+                </div>
+              ) : companyTasks.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-6">No tasks for this company yet.</p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {companyTasks.map(t => (
+                    <div key={t.id} className="flex items-center gap-2.5 p-2.5 bg-gray-50 rounded-lg">
+                      <button onClick={() => handleToggleCompanyTask(t)} className="flex-shrink-0">
+                        {t.status === 'Completed'
+                          ? <CheckCircle2 size={16} className="text-emerald-600" />
+                          : <Circle size={16} className="text-gray-300" />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm ${t.status === 'Completed' ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{t.title}</p>
+                        <p className="text-[11px] text-gray-400">{t.assignedTo || 'Unassigned'}{t.dueDate ? ` · Due ${new Date(t.dueDate).toLocaleDateString()}` : ''}</p>
+                      </div>
+                      <StatusBadge label={t.priority} colorClass={t.priority === 'High' ? 'bg-red-50 text-red-600' : t.priority === 'Low' ? 'bg-gray-100 text-gray-500' : 'bg-amber-50 text-amber-600'} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {aiDraftContent && (
+          <div className="px-5 pt-3 flex-shrink-0">
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Sparkles size={12} className="text-purple-600 flex-shrink-0" />
+                  <span className="text-xs font-semibold text-purple-800 truncate">AI Draft — to {draftRecipient?.fullName}</span>
+                </div>
+                <button onClick={() => setAiDraftContent(null)} className="text-purple-400 hover:text-purple-600 flex-shrink-0">
+                  <X size={12} />
+                </button>
+              </div>
+              {companyContacts.length > 1 && (
+                <select
+                  value={draftRecipient?.id ?? ''}
+                  onChange={e => setAiDraftRecipientId(e.target.value)}
+                  className="w-full text-xs border border-purple-200 rounded-lg px-2 py-1.5 mb-2 bg-white focus:outline-none"
+                >
+                  {companyContacts.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+                </select>
+              )}
+              <pre className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-sans">{aiDraftContent}</pre>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(aiDraftContent)
+                  toast('Copied to clipboard', 'success')
+                }}
+                className="mt-2 text-xs font-semibold text-purple-700 hover:text-purple-900"
+              >
+                Copy to clipboard
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Log Activity form or footer */}
         {loggingActivity ? (
@@ -1008,6 +1213,14 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               style={{ background: '#015035' }}
             >
               <Plus size={14} /> Log Activity
+            </button>
+            <button
+              onClick={handleGenerateAiDraft}
+              disabled={aiGenerating}
+              title="AI Draft"
+              className="px-3 py-2.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-600 hover:bg-purple-100 disabled:opacity-50"
+            >
+              {aiGenerating ? <div className="w-4 h-4 rounded-full border-2 border-purple-200 border-t-purple-600 animate-spin" /> : <Wand2 size={16} />}
             </button>
             <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
               Close

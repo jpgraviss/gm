@@ -172,6 +172,7 @@ export const POST = withErrorHandler('delivery/send-template POST', async (req) 
   if (format === 'pdf') {
     const pdfBlob = generatePdf(html, {
       title: SUBJECT_MAP[templateType] ?? 'Graviss Marketing',
+      eyebrow: 'Client Delivery Update',
       filename: `${templateType}-${workflowId}`,
       orientation: 'portrait',
     })

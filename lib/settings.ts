@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase'
+import { BRAND_COLORS, BRAND_NAME } from '@/lib/brand'
 
 export interface AppSettings {
   company: {
@@ -56,14 +57,14 @@ const DEFAULTS: AppSettings = {
     fiscalYearStart: 'January',
   },
   branding: {
-    primaryColor: '#015035',
-    secondaryColor: '#FFF3EA',
-    accentColor: '#CC7853',
-    inkColor: '#1B211D',
-    stoneColor: '#8C8478',
-    darkBg: '#012b1e',
-    logoText: 'GravHub',
-    appName: 'GravHub',
+    primaryColor: BRAND_COLORS.primary,
+    secondaryColor: BRAND_COLORS.secondary,
+    accentColor: BRAND_COLORS.accent,
+    inkColor: BRAND_COLORS.ink,
+    stoneColor: BRAND_COLORS.stone,
+    darkBg: BRAND_COLORS.darkBg,
+    logoText: BRAND_NAME.app,
+    appName: BRAND_NAME.app,
   },
   email: {
     fromName: 'GravHub',

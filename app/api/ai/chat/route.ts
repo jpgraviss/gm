@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { chatCompletion, buildToolResultMessage, buildAssistantMessage, type AiMessage, type AiToolDef } from '@/lib/ai-client'
 import { withErrorHandler } from '@/lib/api-handler'
+import { PROJECT_STATUSES } from '@/lib/validation'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -334,7 +335,7 @@ const TOOLS = [
       properties: {
         company: { type: 'string', description: 'Company name (required)' },
         service_type: { type: 'string', description: 'Type of service' },
-        status: { type: 'string', enum: ['Planning', 'In Progress', 'Awaiting Client', 'Completed', 'On Hold'], description: 'Project status (default: Planning)' },
+        status: { type: 'string', enum: [...PROJECT_STATUSES], description: 'Project status (default: Not Started)' },
         start_date: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
         launch_date: { type: 'string', description: 'Target launch date (YYYY-MM-DD)' },
         assigned_team: { type: 'array', items: { type: 'string' }, description: 'Team members assigned' },
@@ -727,11 +728,18 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
 
     case 'create_project': {
       const id = `project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const requestedStatus = input.status as string | undefined
+      // Guard against a bad status ever reaching the row — a value outside
+      // PROJECT_STATUSES silently falls out of every filter tab on the
+      // Projects page (Active/Completed/On Hold), only ever showing under "All".
+      const status = requestedStatus && (PROJECT_STATUSES as readonly string[]).includes(requestedStatus)
+        ? requestedStatus
+        : 'Not Started'
       const record = {
         id,
         company: input.company as string,
         service_type: (input.service_type as string) || null,
-        status: (input.status as string) || 'Planning',
+        status,
         start_date: (input.start_date as string) || null,
         launch_date: (input.launch_date as string) || null,
         assigned_team: (input.assigned_team as string[]) || [],

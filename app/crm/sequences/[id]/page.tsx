@@ -10,8 +10,9 @@ import {
   Eye, Trash2, ArrowUpDown, UserMinus, UserPlus, Phone,
   Linkedin, AlertCircle, Send, ChevronUp, ChevronDown,
 } from 'lucide-react'
-import type { SequenceStatus, SequenceStepType, SequenceStep, EmailSequence } from '@/lib/types'
+import type { SequenceStatus, SequenceStepType, SequenceStep, EmailSequence, TeamMember } from '@/lib/types'
 import SequenceStepEditor from '@/components/crm/SequenceStepEditor'
+import { fetchTeamMembers } from '@/lib/supabase'
 
 type StepType = SequenceStepType
 
@@ -318,6 +319,9 @@ export default function SequenceDetailPage() {
   const [testSending, setTestSending] = useState(false)
   const [editingStep, setEditingStep] = useState<SequenceStep | 'new' | null>(null)
   const [savingSteps, setSavingSteps] = useState(false)
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [settingsForm, setSettingsForm] = useState<Partial<EmailSequence> | null>(null)
+  const [savingSettings, setSavingSettings] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -343,6 +347,45 @@ export default function SequenceDetailPage() {
   }, [sequenceId, toast])
 
   useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { fetchTeamMembers().then(setTeamMembers).catch(() => {}) }, [])
+  useEffect(() => {
+    if (sequence && !settingsForm) {
+      setSettingsForm({
+        sendVia: sequence.sendVia,
+        fromName: sequence.fromName,
+        fromEmail: sequence.fromEmail,
+        assignedRepId: sequence.assignedRepId,
+        timezone: sequence.timezone,
+        sendWindowStart: sequence.sendWindowStart,
+        sendWindowEnd: sequence.sendWindowEnd,
+        sendOnWeekends: sequence.sendOnWeekends,
+        dailySendLimit: sequence.dailySendLimit,
+        perMinuteLimit: sequence.perMinuteLimit,
+        threadMode: sequence.threadMode,
+        sharing: sequence.sharing,
+      })
+    }
+  }, [sequence, settingsForm])
+
+  async function saveSettings() {
+    if (!sequence || !settingsForm) return
+    setSavingSettings(true)
+    try {
+      const res = await fetch(`/api/sequences/${sequenceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsForm),
+      })
+      if (!res.ok) throw new Error('Failed')
+      const updated = await res.json()
+      setSequence(prev => prev ? { ...prev, ...updated } : prev)
+      toast('Settings saved', 'success')
+    } catch {
+      toast('Failed to save settings', 'error')
+    } finally {
+      setSavingSettings(false)
+    }
+  }
 
   async function toggleStatus() {
     if (!sequence) return
@@ -888,37 +931,191 @@ export default function SequenceDetailPage() {
         )}
 
         {/* Settings Tab */}
-        {tab === 'settings' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="text-sm font-bold text-gray-900 mb-4">Sequence Settings</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Name</p>
-                <p className="text-gray-900">{sequence.name}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Status</p>
-                <p className="text-gray-900">{sequence.status}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Trigger</p>
-                <p className="text-gray-900">{sequence.trigger || 'Manual enrollment'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Target Segment</p>
-                <p className="text-gray-900">{sequence.targetSegment || 'All contacts'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Created</p>
-                <p className="text-gray-900">{sequence.createdDate}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Last Modified</p>
-                <p className="text-gray-900">{sequence.lastModified}</p>
+        {tab === 'settings' && settingsForm && (
+          <div className="flex flex-col gap-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-1">Overview</h3>
+              <div className="grid grid-cols-2 gap-4 text-sm mt-3">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Name</p>
+                  <p className="text-gray-900">{sequence.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Status</p>
+                  <p className="text-gray-900">{sequence.status}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Created</p>
+                  <p className="text-gray-900">{sequence.createdDate}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Last Modified</p>
+                  <p className="text-gray-900">{sequence.lastModified}</p>
+                </div>
               </div>
             </div>
 
-            <div className="border-t border-gray-100 mt-6 pt-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-3">Sender</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Send via</label>
+                  <select
+                    value={settingsForm.sendVia}
+                    onChange={e => setSettingsForm(f => f ? { ...f, sendVia: e.target.value as 'gmail' | 'resend' } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="gmail">Gmail (rep's own inbox)</option>
+                    <option value="resend">Resend</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Default rep</label>
+                  <select
+                    value={settingsForm.assignedRepId ?? ''}
+                    onChange={e => setSettingsForm(f => f ? { ...f, assignedRepId: e.target.value || null } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">Sequence's fromEmail only</option>
+                    {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">From Name</label>
+                  <input
+                    value={settingsForm.fromName ?? ''}
+                    onChange={e => setSettingsForm(f => f ? { ...f, fromName: e.target.value } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">From Email</label>
+                  <input
+                    value={settingsForm.fromEmail ?? ''}
+                    onChange={e => setSettingsForm(f => f ? { ...f, fromEmail: e.target.value } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-3">
+                When a default rep is set, per-enrollment sending still prefers that enrollment's own assigned rep first — this is only the fallback.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-3">Timing</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Timezone</label>
+                  <input
+                    value={settingsForm.timezone ?? ''}
+                    onChange={e => setSettingsForm(f => f ? { ...f, timezone: e.target.value } : f)}
+                    placeholder="America/New_York"
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div className="flex items-end pb-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settingsForm.sendOnWeekends ?? false}
+                      onChange={e => setSettingsForm(f => f ? { ...f, sendOnWeekends: e.target.checked } : f)}
+                      className="accent-emerald-600 w-4 h-4"
+                    />
+                    <span className="text-sm text-gray-700">Send on weekends</span>
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Send window start (hour, 0-23)</label>
+                  <input
+                    type="number" min={0} max={23}
+                    value={settingsForm.sendWindowStart ?? 8}
+                    onChange={e => setSettingsForm(f => f ? { ...f, sendWindowStart: Math.min(23, Math.max(0, parseInt(e.target.value) || 0)) } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Send window end (hour, 0-23)</label>
+                  <input
+                    type="number" min={0} max={23}
+                    value={settingsForm.sendWindowEnd ?? 18}
+                    onChange={e => setSettingsForm(f => f ? { ...f, sendWindowEnd: Math.min(23, Math.max(0, parseInt(e.target.value) || 0)) } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-[11px] text-amber-700">
+                  The sequence engine currently only runs once a day (via the shared daily cron), so a step can only ever
+                  advance once per ~24h regardless of these settings — they take effect once the run cadence is increased.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-3">Limits & Sharing</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Daily send limit</label>
+                  <input
+                    type="number" min={1}
+                    value={settingsForm.dailySendLimit ?? 200}
+                    onChange={e => setSettingsForm(f => f ? { ...f, dailySendLimit: Math.max(1, parseInt(e.target.value) || 1) } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Per-minute limit</label>
+                  <input
+                    type="number" min={1}
+                    value={settingsForm.perMinuteLimit ?? 3}
+                    onChange={e => setSettingsForm(f => f ? { ...f, perMinuteLimit: Math.max(1, parseInt(e.target.value) || 1) } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Sharing</label>
+                  <div className="flex gap-2">
+                    {(['private', 'everyone'] as const).map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setSettingsForm(f => f ? { ...f, sharing: s } : f)}
+                        className={`flex-1 py-2 rounded-xl text-sm font-medium border capitalize transition-colors ${
+                          settingsForm.sharing === s ? 'text-white border-transparent' : 'text-gray-600 border-gray-200 hover:bg-gray-50'
+                        }`}
+                        style={settingsForm.sharing === s ? { background: '#015035' } : undefined}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-end pb-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settingsForm.threadMode ?? true}
+                      onChange={e => setSettingsForm(f => f ? { ...f, threadMode: e.target.checked } : f)}
+                      className="accent-emerald-600 w-4 h-4"
+                    />
+                    <span className="text-sm text-gray-700">Reply in same thread</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={saveSettings}
+                disabled={savingSettings}
+                className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 hover:opacity-90"
+                style={{ background: '#015035' }}
+              >
+                {savingSettings ? 'Saving…' : 'Save Settings'}
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h4 className="text-sm font-bold text-red-600 mb-2">Danger Zone</h4>
               <p className="text-xs text-gray-500 mb-3">Deleting a sequence will remove all enrolled contacts and cannot be undone.</p>
               <button

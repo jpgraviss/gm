@@ -1,53 +1,52 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withErrorHandler('proposals/[id]/share POST', async (req, ctx) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
-  const { id } = await params
+  const { id } = await ctx!.params
 
-  try {
-    const { clientEmail } = await req.json()
+  const { clientEmail } = await req.json()
 
-    if (!clientEmail || typeof clientEmail !== 'string') {
-      return NextResponse.json({ error: 'clientEmail is required' }, { status: 400 })
-    }
+  if (!clientEmail || typeof clientEmail !== 'string') {
+    return NextResponse.json({ error: 'clientEmail is required' }, { status: 400 })
+  }
 
-    const db = createServiceClient()
+  const db = createServiceClient()
 
-    // Check proposal exists
-    const { data: proposal, error: fetchErr } = await db
-      .from('proposals')
-      .select('*')
-      .eq('id', id)
-      .single()
+  // Check proposal exists
+  const { data: proposal, error: fetchErr } = await db
+    .from('proposals')
+    .select('*')
+    .eq('id', id)
+    .single()
 
-    if (fetchErr || !proposal) {
-      return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
-    }
+  if (fetchErr || !proposal) {
+    return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
+  }
 
-    // Generate token if not already present
-    const token = proposal.token || crypto.randomUUID()
+  // Generate token if not already present
+  const token = proposal.token || crypto.randomUUID()
 
-    // Update proposal with token and client email
-    const { error: updateErr } = await db
-      .from('proposals')
-      .update({
-        token,
-        client_email: clientEmail,
-        status: proposal.status === 'Draft' || proposal.status === 'Approved' ? 'Sent' : proposal.status,
-        sent_date: proposal.sent_date || new Date().toISOString().split('T')[0],
-      })
-      .eq('id', id)
+  // Update proposal with token and client email
+  const { error: updateErr } = await db
+    .from('proposals')
+    .update({
+      token,
+      client_email: clientEmail,
+      status: proposal.status === 'Draft' || proposal.status === 'Approved' ? 'Sent' : proposal.status,
+      sent_date: proposal.sent_date || new Date().toISOString().split('T')[0],
+    })
+    .eq('id', id)
 
-    if (updateErr) {
-      console.error('[proposals/:id/share POST]', updateErr)
-      return NextResponse.json({ error: 'Failed to update proposal' }, { status: 500 })
-    }
+  if (updateErr) {
+    throw new Error(updateErr?.message || 'Failed to update proposal')
+  }
 
     // Send email with viewing link
     const settings = await getSettings()
@@ -105,13 +104,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
 
     if (!result.success) {
-      console.error('[proposals/:id/share email]', result.error)
       return NextResponse.json({ error: result.error || 'Failed to send email' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, token, viewUrl, emailId: result.id })
-  } catch (err) {
-    console.error('[proposals/:id/share POST] unexpected error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+})

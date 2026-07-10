@@ -3361,7 +3361,7 @@ function ApolloIntegrationSection() {
         </div>
         <div>
           <p className="text-sm font-bold text-gray-800">Apollo.io</p>
-          <p className="text-xs text-gray-500">Sales intelligence, lead enrichment, and prospecting data</p>
+          <p className="text-xs text-gray-500">API key connection only — not yet used by any enrichment or prospecting feature</p>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           {status === 'connected' && <CheckCircle size={13} className="text-emerald-600" />}
@@ -3423,6 +3423,12 @@ function ApolloIntegrationSection() {
             {saving ? 'Saving...' : 'Save Key'}
           </button>
         </div>
+
+        <p className="text-[11px] text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+          This only verifies the API key is valid. CRM contact/company enrichment currently
+          uses website scraping + AI (see &quot;Enrich from website&quot; on a contact), not Apollo —
+          wiring Apollo into enrichment is a separate build, not yet done.
+        </p>
       </div>
     </div>
   )

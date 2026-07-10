@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROJECT_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProject(row: any) {
@@ -29,8 +30,8 @@ function mapProject(row: any) {
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const PATCH = withErrorHandler('projects/[id] PATCH', async (req, ctx) => {
+  const { id } = await ctx!.params
   const body = await req.json()
   const result = validate(body, {
     status: { type: 'string', enum: [...PROJECT_STATUSES] },
@@ -61,22 +62,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.companyId !== undefined)            update.company_id = body.companyId
   const { data, error } = await db.from('projects').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[projects/:id PATCH]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to update project' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update project')
   }
   return NextResponse.json(mapProject(data))
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const DELETE = withErrorHandler('projects/[id] DELETE', async (req, ctx) => {
+  const { id } = await ctx!.params
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
   const db = createServiceClient()
   const { error } = await db.from('projects').delete().eq('id', id)
   if (error) {
-    console.error('[projects/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete project' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete project')
   }
   logAudit({ userName: 'system', action: 'deleted_project', module: 'projects', type: 'warning', metadata: { projectId: id } })
   return NextResponse.json({ deleted: id })
-}
+})

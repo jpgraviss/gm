@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROPOSAL_STATUSES } from '@/lib/validation'
 import { fireAutomations } from '@/lib/automations-engine'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProposal(row: any) {
@@ -31,8 +32,8 @@ function mapProposal(row: any) {
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) => {
+  const { id } = await ctx!.params
   const body = await req.json()
 
   // Input validation
@@ -75,11 +76,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error } = await db.from('proposals').update(update).eq('id', id).select().single()
   if (error) {
-    console.error('[proposals/:id PATCH]', error)
     if (error.code === 'PGRST116') {
       return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
     }
-    return NextResponse.json({ error: error?.message || 'Failed to update proposal' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to update proposal')
   }
 
   // Fire automation triggers on status changes
@@ -94,18 +94,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   return NextResponse.json(mapProposal(data))
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const DELETE = withErrorHandler('proposals/[id] DELETE', async (req, ctx) => {
+  const { id } = await ctx!.params
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
   const db = createServiceClient()
   const { error } = await db.from('proposals').delete().eq('id', id)
   if (error) {
-    console.error('[proposals/:id DELETE]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to delete proposal' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to delete proposal')
   }
   logAudit({ userName: 'system', action: 'deleted_proposal', module: 'proposals', type: 'warning', metadata: { proposalId: id } })
   return NextResponse.json({ deleted: id })
-}
+})

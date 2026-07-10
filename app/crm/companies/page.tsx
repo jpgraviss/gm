@@ -657,7 +657,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                       <div className="flex flex-col gap-3">
                         <div className="flex flex-wrap gap-2">
                           {socialAnalysis.platforms.map(p => (
-                            <div key={p.name} className="flex items-center gap-1.5">
+                            <div key={p.name} className="flex items-center gap-1.5" title={p.status === 'active' ? 'URL on file — not verified live' : 'No URL on file'}>
                               <div className={`w-2 h-2 rounded-full ${p.status === 'active' ? 'bg-green-500' : 'bg-gray-300'}`} />
                               {p.url ? (
                                 <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-blue-600 hover:underline">{p.name}</a>

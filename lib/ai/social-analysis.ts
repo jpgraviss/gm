@@ -22,8 +22,10 @@ export async function analyzeSocialPresence(
     platforms.push({
       name: name.charAt(0).toUpperCase() + name.slice(1),
       url,
+      // "active" here only means a URL is on file — it isn't checked to
+      // confirm the profile actually resolves or is actively maintained.
       status: 'active',
-      notes: `Profile found at ${url}`,
+      notes: `URL on file: ${url} (not verified live)`,
     })
   }
 

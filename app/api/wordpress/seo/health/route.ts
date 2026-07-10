@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireWordPressAuth } from '@/lib/wordpress-auth'
 import { withErrorHandler } from '@/lib/api-handler'
+import { validate, validationError } from '@/lib/validation'
+import { requireRole } from '@/lib/rbac'
 
 export const POST = withErrorHandler('wordpress/seo/health POST', async (req) => {
   const denied = await requireWordPressAuth(req)
@@ -66,15 +68,47 @@ export const GET = withErrorHandler('wordpress/seo/health GET', async (req) => {
   const denied = await requireWordPressAuth(req)
   if (denied) return denied
 
+  const companyId = req.nextUrl.searchParams.get('companyId')
+
   const db = createServiceClient()
-  const { data, error } = await db
+  let query = db
     .from('wordpress_site_health')
     .select('*')
     .order('company_name')
+  if (companyId) query = query.eq('company_id', companyId)
+  const { data, error } = await query
 
   if (error) {
     throw new Error(error.message)
   }
 
   return NextResponse.json(data ?? [])
+})
+
+// Staff-only: assign (or clear) a connected site's CRM company. Deliberately
+// NOT gated by requireWordPressAuth — the plugin's own X-GravHub-Key must
+// not be able to reassign which client it's billed against.
+export const PATCH = withErrorHandler('wordpress/seo/health PATCH', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
+  const body = await req.json()
+  const result = validate(body, {
+    id: { required: true, type: 'string' },
+  })
+  if (!result.valid) return validationError(result.error)
+
+  const db = createServiceClient()
+  const { data, error } = await db
+    .from('wordpress_site_health')
+    .update({ company_id: body.companyId ?? null })
+    .eq('id', body.id)
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return NextResponse.json(data)
 })

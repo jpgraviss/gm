@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
@@ -280,6 +280,17 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const [recsOpen, setRecsOpen] = useState(false)
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiProposalContent, setAiProposalContent] = useState<string | null>(null)
+  const [wpSite, setWpSite] = useState<{ id: string; site_url: string; last_reported_at: string | null } | null>(null)
+  const [localNotes, setLocalNotes] = useState(company.notes ?? '')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const lastSavedNotesRef = useRef(company.notes ?? '')
+
+  useEffect(() => {
+    fetch(`/api/wordpress/seo/health?companyId=${encodeURIComponent(company.id)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data) && data.length > 0) setWpSite(data[0]) })
+      .catch(() => {/* non-blocking */})
+  }, [company.id])
 
   function persistTags(tags: string[]) {
     fetch(`/api/crm/companies/${company.id}`, {
@@ -287,6 +298,24 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tags }),
     }).catch(() => toast('Failed to save company tags', 'error'))
+  }
+
+  async function saveNotes() {
+    if (localNotes === lastSavedNotesRef.current) return
+    setSavingNotes(true)
+    try {
+      const res = await fetch(`/api/crm/companies/${company.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: localNotes }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      lastSavedNotesRef.current = localNotes
+    } catch {
+      toast('Failed to save notes', 'error')
+    } finally {
+      setSavingNotes(false)
+    }
   }
 
   function handleAddTag() {
@@ -711,6 +740,29 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                 </div>
               )}
 
+              {/* Connected WordPress site */}
+              {wpSite && (
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">WordPress SEO</p>
+                    <Link href="/rank-tracker/wordpress" className="text-xs text-blue-500 hover:underline flex items-center gap-1">
+                      View <ChevronRight size={11} />
+                    </Link>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-gray-100">
+                    <Globe size={14} className="text-gray-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{wpSite.site_url}</p>
+                      <p className="text-[11px] text-gray-400">
+                        {wpSite.last_reported_at
+                          ? `Last report: ${new Date(wpSite.last_reported_at).toLocaleDateString()}`
+                          : 'Connected — no data reported yet'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Active project */}
               {companyProject && (
                 <div className="p-4 bg-gray-50 rounded-xl">
@@ -922,7 +974,23 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
 
           {/* ── Activity ── */}
           {tab === 'activity' && (
-            <ActivityTimeline activities={localActivities} />
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Notes</p>
+                  {savingNotes && <span className="text-[10px] text-gray-400">Saving...</span>}
+                </div>
+                <textarea
+                  value={localNotes}
+                  onChange={e => setLocalNotes(e.target.value)}
+                  onBlur={saveNotes}
+                  placeholder="Persistent notes about this client — visible to your whole team."
+                  rows={4}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y bg-white"
+                />
+              </div>
+              <ActivityTimeline activities={localActivities} />
+            </div>
           )}
         </div>
 

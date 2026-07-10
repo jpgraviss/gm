@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/Toast'
 import {
   Activity, X, Trash2, RefreshCw, Pause, Play, Pencil, Globe, AlertCircle,
   CheckCircle2, Clock, Shield, ShieldAlert, Puzzle, Palette, ChevronDown,
-  ChevronUp, AlertTriangle, Lock,
+  ChevronUp, AlertTriangle, Lock, Eye, EyeOff,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -59,6 +59,7 @@ interface WPData {
   loginPageExposed: boolean
   xmlRpcEnabled: boolean
   checkedAt: string | null
+  hasCredentials?: boolean
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -727,10 +728,12 @@ function SiteDetailPanel({
             ) : (
               <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
                 <WordPressTab
+                  siteId={detail.id}
                   wpData={wpData}
                   wpLoading={wpLoading}
                   wpChecking={wpChecking}
                   onRunCheck={runWPCheck}
+                  onCredentialsSaved={() => loadWPData(detail.id)}
                 />
               </div>
             )}
@@ -766,16 +769,131 @@ function SiteDetailPanel({
 
 // ─── WordPress Tab ────────────────────────────────────────────────────────────
 
+function WPCredentialsForm({
+  siteId,
+  hasCredentials,
+  onSaved,
+}: {
+  siteId: string
+  hasCredentials: boolean
+  onSaved: () => void
+}) {
+  const { toast } = useToast()
+  const [editing, setEditing] = useState(false)
+  const [username, setUsername] = useState('')
+  const [appPassword, setAppPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    if (!username.trim() || !appPassword.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/monitored-sites/${siteId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wpUsername: username.trim(), wpAppPassword: appPassword.trim() }),
+      })
+      if (!res.ok) {
+        toast('Failed to save credentials', 'error')
+        return
+      }
+      toast('WordPress credentials saved', 'success')
+      setUsername('')
+      setAppPassword('')
+      setEditing(false)
+      onSaved()
+    } catch {
+      toast('Failed to save credentials', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="p-3 bg-gray-50 border border-gray-100 rounded-xl">
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+          <Lock size={11} /> WordPress Credentials
+        </label>
+        {!editing && (
+          <button
+            onClick={() => setEditing(true)}
+            className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+          >
+            <Pencil size={11} /> {hasCredentials ? 'Update' : 'Add'}
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <div className="flex flex-col gap-2 mt-2">
+          <input
+            value={username}
+            onChange={e => setUsername(e.target.value)}
+            placeholder="WordPress admin username"
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={appPassword}
+              onChange={e => setAppPassword(e.target.value)}
+              placeholder="Application Password (xxxx xxxx xxxx xxxx)"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 pr-9 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(s => !s)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-400">
+            Generate one in WP Admin → Users → Profile → Application Passwords. Stored to authenticate plugin/theme scans only.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={save}
+              disabled={saving || !username.trim() || !appPassword.trim()}
+              className="px-3 py-1.5 rounded-lg text-white text-xs font-semibold disabled:opacity-50"
+              style={{ background: FOREST }}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              onClick={() => { setEditing(false); setUsername(''); setAppPassword('') }}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-100"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-gray-600 mt-1">
+          {hasCredentials
+            ? 'Application Password configured — plugin/theme scans are authenticated.'
+            : 'Not configured — plugin/theme details are limited to what’s publicly visible.'}
+        </p>
+      )}
+    </section>
+  )
+}
+
 function WordPressTab({
+  siteId,
   wpData,
   wpLoading,
   wpChecking,
   onRunCheck,
+  onCredentialsSaved,
 }: {
+  siteId: string
   wpData: WPData | null
   wpLoading: boolean
   wpChecking: boolean
   onRunCheck: () => void
+  onCredentialsSaved: () => void
 }) {
   const [pluginsOpen, setPluginsOpen] = useState(true)
   const [themesOpen, setThemesOpen] = useState(false)
@@ -786,19 +904,22 @@ function WordPressTab({
 
   if (!wpData?.checked) {
     return (
-      <div className="text-center py-12">
-        <Globe size={32} className="text-gray-300 mx-auto mb-3" />
-        <p className="text-sm font-medium text-gray-600 mb-1">No WordPress check yet</p>
-        <p className="text-xs text-gray-400 mb-4">Run a check to detect if this site is WordPress and scan for plugins, themes, and security issues.</p>
-        <button
-          onClick={onRunCheck}
-          disabled={wpChecking}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
-          style={{ background: FOREST }}
-        >
-          <RefreshCw size={13} className={wpChecking ? 'animate-spin' : ''} />
-          {wpChecking ? 'Checking…' : 'Run WordPress Check'}
-        </button>
+      <div className="flex flex-col gap-5">
+        <div className="text-center py-8">
+          <Globe size={32} className="text-gray-300 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-600 mb-1">No WordPress check yet</p>
+          <p className="text-xs text-gray-400 mb-4">Run a check to detect if this site is WordPress and scan for plugins, themes, and security issues.</p>
+          <button
+            onClick={onRunCheck}
+            disabled={wpChecking}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+            style={{ background: FOREST }}
+          >
+            <RefreshCw size={13} className={wpChecking ? 'animate-spin' : ''} />
+            {wpChecking ? 'Checking…' : 'Run WordPress Check'}
+          </button>
+        </div>
+        <WPCredentialsForm siteId={siteId} hasCredentials={!!wpData?.hasCredentials} onSaved={onCredentialsSaved} />
       </div>
     )
   }
@@ -955,11 +1076,13 @@ function WordPressTab({
 
       {/* No plugins/themes (unauthenticated) */}
       {wpData.plugins.length === 0 && wpData.themes.length === 0 && (
-        <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+        <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
           <p className="text-xs font-medium text-blue-800 mb-1">Plugin & theme details require authentication</p>
-          <p className="text-[11px] text-blue-600">Add WordPress Application Password credentials in the site settings to see installed plugins and themes with update status.</p>
+          <p className="text-[11px] text-blue-600">Add WordPress Application Password credentials below to see installed plugins and themes with update status.</p>
         </div>
       )}
+
+      <WPCredentialsForm siteId={siteId} hasCredentials={!!wpData.hasCredentials} onSaved={onCredentialsSaved} />
     </>
   )
 }

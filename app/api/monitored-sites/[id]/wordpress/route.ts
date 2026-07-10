@@ -25,6 +25,13 @@ export const GET = withErrorHandler('monitored-sites/[id]/wordpress GET', async 
   const { id } = await params
   const db = createServiceClient()
 
+  const { data: site } = await db
+    .from('monitored_sites')
+    .select('wp_username, wp_app_password')
+    .eq('id', id)
+    .maybeSingle()
+  const hasCredentials = !!(site?.wp_username && site?.wp_app_password)
+
   const { data, error } = await db
     .from('wordpress_checks')
     .select('*')
@@ -38,7 +45,7 @@ export const GET = withErrorHandler('monitored-sites/[id]/wordpress GET', async 
   }
 
   if (!data) {
-    return NextResponse.json({ checked: false })
+    return NextResponse.json({ checked: false, hasCredentials })
   }
 
   return NextResponse.json({
@@ -53,5 +60,6 @@ export const GET = withErrorHandler('monitored-sites/[id]/wordpress GET', async 
     loginPageExposed: data.login_page_exposed,
     xmlRpcEnabled: data.xmlrpc_enabled,
     checkedAt: data.checked_at,
+    hasCredentials,
   })
 })

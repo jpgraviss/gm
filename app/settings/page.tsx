@@ -1752,9 +1752,9 @@ export default function SettingsPage() {
                     <p className="text-xs text-gray-500">Read your inbox, log emails as CRM activities, and send from GravHub</p>
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${gmailToken ? 'text-emerald-600' : 'text-gray-400'}`}>
+                    <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${gmailToken ? 'text-emerald-600' : gmailEmail ? 'text-amber-600' : 'text-gray-400'}`}>
                       {gmailToken ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
-                      {gmailToken ? 'Connected' : 'Not Connected'}
+                      {gmailToken ? 'Connected' : gmailEmail ? 'Reconnect needed' : 'Not Connected'}
                     </span>
                     <ChevronDown size={14} className={`text-gray-400 transition-transform ${gmailSettingsOpen ? 'rotate-180' : ''}`} />
                   </div>
@@ -1779,6 +1779,20 @@ export default function SettingsPage() {
                           </div>
                           <button onClick={disconnectGmail} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-200 transition-colors flex-shrink-0">Disconnect</button>
                         </div>
+                      ) : gmailEmail ? (
+                        <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-500">
+                            <Mail size={16} className="text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-900">{gmailEmail}</p>
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 bg-amber-500 rounded-full" />
+                              <span className="text-[11px] text-amber-700">Access expired — reconnect to keep sending, reading, and reply-detection working.</span>
+                            </div>
+                          </div>
+                          <button onClick={connectGmail} className="text-xs font-medium px-3 py-1.5 rounded-lg text-white flex-shrink-0 transition-colors" style={{ background: '#015035' }}>Reconnect</button>
+                        </div>
                       ) : (
                         <div className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                           <div className="w-9 h-9 rounded-full flex items-center justify-center bg-gray-200 flex-shrink-0">
@@ -1791,6 +1805,10 @@ export default function SettingsPage() {
                           <button onClick={connectGmail} className="text-xs font-medium px-4 py-2 rounded-lg text-white flex-shrink-0 transition-colors" style={{ background: '#015035' }}>Connect Gmail</button>
                         </div>
                       )}
+                      <p className="text-[11px] text-gray-400 mt-2">
+                        Gmail access expires roughly every hour and currently requires manually reconnecting — Google&apos;s
+                        browser-based sign-in doesn&apos;t issue a renewable token the way a server-side OAuth flow would.
+                      </p>
                     </div>
 
                     {/* GravHub Account */}

@@ -14,7 +14,7 @@ export async function OPTIONS() {
 
 export const POST = withErrorHandler('forms/public/funnel-submit POST', async (req: NextRequest) => {
   const body = await req.json()
-  const { funnelSlug, data } = body
+  const { funnelSlug, pageId, data } = body
 
   if (!funnelSlug || !data) {
     return NextResponse.json({ error: 'Missing funnelSlug or data' }, { status: 400, headers: corsHeaders })
@@ -41,19 +41,35 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
     status: 'new',
   })
 
-  const { data: firstPage } = await db
-    .from('funnel_pages')
-    .select('id, conversions')
-    .eq('funnel_id', funnel.id)
-    .order('sort_order', { ascending: true })
-    .limit(1)
-    .single()
+  // Credit the page the form was actually submitted from. Falls back to the
+  // funnel's first page only if the caller didn't send pageId (e.g. a stale
+  // cached embed) or sent one that doesn't belong to this funnel.
+  let targetPage: { id: string; conversions: number | null } | null = null
+  if (pageId) {
+    const { data: page } = await db
+      .from('funnel_pages')
+      .select('id, conversions')
+      .eq('id', pageId)
+      .eq('funnel_id', funnel.id)
+      .maybeSingle()
+    targetPage = page
+  }
+  if (!targetPage) {
+    const { data: firstPage } = await db
+      .from('funnel_pages')
+      .select('id, conversions')
+      .eq('funnel_id', funnel.id)
+      .order('sort_order', { ascending: true })
+      .limit(1)
+      .single()
+    targetPage = firstPage
+  }
 
-  if (firstPage) {
+  if (targetPage) {
     await db
       .from('funnel_pages')
-      .update({ conversions: (firstPage.conversions ?? 0) + 1 })
-      .eq('id', firstPage.id)
+      .update({ conversions: (targetPage.conversions ?? 0) + 1 })
+      .eq('id', targetPage.id)
   }
 
   return NextResponse.json({ success: true, id: submissionId }, { status: 201, headers: corsHeaders })

@@ -184,11 +184,22 @@ async function autoProvisionTeamMember(
 }
 
 // ── Auth cookie helpers ────────────────────────────────────────────────────
-function setAuthCookie() {
-  try { document.cookie = 'gravhub-auth=1; path=/; max-age=604800; SameSite=Lax' } catch {/* SSR guard */}
+// The signed gravhub-auth session cookie is issued server-side (httpOnly) by
+// /api/auth/google-verify, /api/portal-clients/magic-link/verify, and
+// /api/auth/session — never set directly by client JS, since a client-set
+// value can't be cryptographically verified server-side. This function just
+// asks the server to (re-)issue one whenever we have a live Supabase session.
+async function establishSessionCookie(accessToken: string) {
+  try {
+    await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+  } catch {/* non-blocking */}
 }
 function clearAuthCookie() {
   try { document.cookie = 'gravhub-auth=; path=/; max-age=0; SameSite=Lax' } catch {/* SSR guard */}
+  fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {/* non-blocking */})
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -231,8 +242,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const supabase = getSupabaseClient()
 
-    // Helper: load profile and set user + cookie
-    const restoreProfile = async (email: string, avatar?: string) => {
+    // Helper: load profile, set user, and establish a real signed session
+    // cookie via the server (requires a live Supabase access token — this
+    // path only runs when we have a real Supabase session, e.g. password
+    // login, magic-link-via-Supabase, or session restore/refresh).
+    const restoreProfile = async (email: string, accessToken?: string, avatar?: string) => {
       let profile = await loadProfileByEmail(email, avatar)
       // Auto-provision on session restore for @gravissmarketing.com users
       if (!profile && email.toLowerCase().endsWith('@gravissmarketing.com')) {
@@ -249,7 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAccessBlocked(blocked)
         }
         setUser(profile)
-        setAuthCookie()
+        if (accessToken) await establishSessionCookie(accessToken)
         try { localStorage.setItem('gravhub_user', JSON.stringify(profile)) } catch {/* ignore */}
         if (profile.userType === 'staff') fetchMembers()
         if (profile.userType === 'client' && profile.id) {
@@ -264,7 +278,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return profile
     }
 
-    // Also try to restore Google SSO users (no Supabase session, profile in localStorage)
+    // Also try to restore Google SSO users (no Supabase session, profile in
+    // localStorage). Their signed session cookie was already set server-side
+    // during the original /api/auth/google-verify login and persists in the
+    // browser's cookie jar across reloads — nothing to (re-)issue here.
     const tryRestoreGoogleUser = () => {
       try {
         const stored = localStorage.getItem('gravhub_user')
@@ -272,7 +289,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const parsed = JSON.parse(stored) as AuthUser
           if (parsed?.email && parsed?.id) {
             setUser(parsed)
-            setAuthCookie()
             if (parsed.userType === 'staff') fetchMembers()
             return true
           }
@@ -311,7 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ])
     sessionWithTimeout.then(async ({ data: { session } }) => {
       if (session?.user?.email) {
-        const profile = await restoreProfile(session.user.email)
+        const profile = await restoreProfile(session.user.email, session.access_token)
         // Defer gmail token restoration — not needed for initial render
         if (profile) restoreGmailToken(profile.email)
       } else if (!hadCachedUser) {
@@ -341,7 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearAuthCookie()
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session?.user?.email) {
-          await restoreProfile(session.user.email)
+          await restoreProfile(session.user.email, session.access_token)
         }
       }
     })
@@ -380,7 +396,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const profile: AuthUser = data.user
       setUser(profile)
-      setAuthCookie()
+      // Signed session cookie was already set server-side (Set-Cookie) by
+      // /api/auth/google-verify — nothing to do client-side.
       try { localStorage.setItem('gravhub_user', JSON.stringify(profile)) } catch {/* ignore */}
       if (profile.userType === 'staff') fetchMembers()
       try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}

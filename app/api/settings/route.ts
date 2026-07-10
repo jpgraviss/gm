@@ -7,7 +7,10 @@ import { requireAdmin } from '@/lib/admin-auth'
 
 const SETTINGS_ID = 'global'
 
-export const GET = withErrorHandler('settings GET', async () => {
+export const GET = withErrorHandler('settings GET', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('app_settings')
@@ -17,8 +20,9 @@ export const GET = withErrorHandler('settings GET', async () => {
   if (error) {
     throw new Error(error?.message || 'Failed to fetch settings')
   }
+  // Admin-only, but never cache a response carrying plaintext API keys.
   return NextResponse.json(data ?? {}, {
-    headers: { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=600' },
+    headers: { 'Cache-Control': 'private, no-store' },
   })
 })
 

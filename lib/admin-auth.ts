@@ -1,29 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { extractSupabaseToken } from '@/lib/extract-token'
+import { verifySessionCookie } from '@/lib/session-cookie'
+
+/**
+ * Resolves the caller's verified email from either a real Supabase access
+ * token or the signed gravhub-auth session cookie. Both are cryptographically
+ * verified (Supabase validates the JWT; the cookie's HMAC is checked) — this
+ * never trusts an unsigned/forgeable value.
+ */
+async function resolveVerifiedEmail(req: NextRequest): Promise<string | null> {
+  const db = createServiceClient()
+  const token = extractSupabaseToken(req)
+  if (token) {
+    const { data: { user }, error } = await db.auth.getUser(token)
+    if (!error && user?.email) return user.email.toLowerCase()
+  }
+
+  const session = await verifySessionCookie(req.cookies.get('gravhub-auth')?.value)
+  return session?.email.toLowerCase() ?? null
+}
 
 export async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
   const db = createServiceClient()
-  const token = extractSupabaseToken(req)
-
-  if (!token) {
-    // Supabase JS stores sessions in localStorage — no cookie token available.
-    // Fall through if the gravhub-auth bridge cookie is present; the proxy
-    // already verified the user is authenticated. This is safe for an
-    // internal admin tool; the long-term fix is @supabase/ssr for proper cookies.
-    if (req.cookies.has('gravhub-auth')) return null
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const { data: { user }, error } = await db.auth.getUser(token)
-  if (error || !user?.email) {
+  const email = await resolveVerifiedEmail(req)
+  if (!email) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { data: member } = await db
     .from('team_members')
     .select('is_admin')
-    .eq('email', user.email)
+    .eq('email', email)
     .single()
 
   if (!member?.is_admin) {
@@ -34,16 +42,5 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
 }
 
 export async function getAuthenticatedEmail(req: NextRequest): Promise<string | null> {
-  const db = createServiceClient()
-  const token = extractSupabaseToken(req)
-  if (!token) {
-    // No token from cookies/headers — check gravhub-auth bridge cookie
-    // and return null (caller handles gracefully) rather than blocking
-    return null
-  }
-
-  const { data: { user }, error } = await db.auth.getUser(token)
-  if (error || !user?.email) return null
-
-  return user.email.toLowerCase()
+  return resolveVerifiedEmail(req)
 }

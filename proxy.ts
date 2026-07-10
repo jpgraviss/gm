@@ -41,6 +41,7 @@ const PUBLIC_PREFIXES = [
   '/api/forms/public/',
   '/api/sequences/webhooks',
   '/api/sequences/unsubscribe',
+  '/api/email/inbound',
   '/api/unsubscribe/',
   '/api/track/',
   '/api/chatbots/',

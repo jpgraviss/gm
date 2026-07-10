@@ -30,6 +30,11 @@ interface AutomationRow {
   name: string
   trigger: string
   actions: string[]
+  // Scoped to single-action automations (e.g. built from the sequence-level
+  // Automate tab) — merged into the trigger context before the action runs.
+  // Not a general fix for AUDIT.md #12 (multi-action config), see the
+  // migration comment on automations.config.
+  config?: Record<string, unknown>
   status: string
   runs: number
 }
@@ -98,6 +103,14 @@ export async function executeWorkflow(
   triggerData: Record<string, unknown>,
   db?: SupabaseClient,
 ) {
+  // Form-submission automations can be scoped to one specific form
+  // (config.formScope === 'specific') rather than "any form" — the trigger
+  // fetch above only matches on trigger label, so this is the only place
+  // that actually narrows it to the configured form.
+  if (automation.config?.formScope === 'specific' && automation.config?.formId !== triggerData.formId) {
+    return { runId: null, status: 'skipped' as const, steps: [] }
+  }
+
   const supabase = db ?? createServiceClient()
   const runId = `run-${uid()}`
   const startedAt = new Date().toISOString()
@@ -126,7 +139,11 @@ export async function executeWorkflow(
 
       const stepStart = Date.now()
       try {
-        await executeAction(action, triggerData, supabase)
+        // Config only ever supplies fields the real trigger event doesn't
+        // have (e.g. which sequence to enroll into) — actual event data
+        // always wins on conflict.
+        const context = { ...automation.config, ...triggerData }
+        await executeAction(action, context, supabase, automation.id)
         steps.push({
           name: action,
           status: 'success',
@@ -183,7 +200,7 @@ export async function executeWorkflow(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function executeAction(action: string, context: Record<string, unknown>, db: any) {
+async function executeAction(action: string, context: Record<string, unknown>, db: any, automationId?: string) {
   const company = (context.company as string) ?? ''
   const today = new Date().toISOString().split('T')[0]
 
@@ -621,18 +638,29 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     }
 
     case 'Enroll in Sequence': {
+      // sequenceId (from automation.config, set by the sequence-level
+      // Automate tab) is preferred — sequenceName is kept only for any
+      // caller that still passes a name directly via trigger context.
+      const seqId = (context.sequenceId as string) ?? ''
       const seqName = (context.sequenceName as string) ?? ''
-      if (!seqName) break
-      const { data: targetSeq } = await db
-        .from('sequences')
-        .select('id, steps, enrolled_count, active_count')
-        .eq('name', seqName)
-        .eq('status', 'Active')
-        .single()
+      if (!seqId && !seqName) break
+      let seqQuery = db.from('sequences').select('id, steps, enrolled_count, active_count').eq('status', 'Active')
+      seqQuery = seqId ? seqQuery.eq('id', seqId) : seqQuery.eq('name', seqName)
+      const { data: targetSeq } = await seqQuery.single()
       if (!targetSeq) break
 
-      const contactEmail = (context.contactEmail as string) ?? ''
-      const contactName = (context.contactName as string) ?? ''
+      let contactEmail = (context.contactEmail as string) ?? ''
+      let contactName = (context.contactName as string) ?? ''
+      const contactId = (context.contactId as string) ?? null
+      // Some triggers (e.g. form_submitted) only pass contactId, with the
+      // submitted email/name buried in a per-form data blob rather than a
+      // standard field — resolve from the CRM record instead of trying to
+      // guess a form's field names.
+      if (!contactEmail && contactId) {
+        const { data: contactRow } = await db.from('crm_contacts').select('emails, full_name').eq('id', contactId).maybeSingle()
+        contactEmail = contactRow?.emails?.[0] ?? ''
+        contactName = contactName || contactRow?.full_name || ''
+      }
       if (!contactEmail) break
 
       const { data: suppressed } = await db
@@ -642,13 +670,29 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         .single()
       if (suppressed) break
 
-      const { data: existing } = await db
+      // One active sequence at a time — same rule enforced by the manual
+      // enrollment route (app/api/sequences/[id]/enroll/route.ts).
+      const { data: activeElsewhere } = await db
         .from('sequence_enrollments')
         .select('id')
-        .eq('sequence_id', targetSeq.id)
         .eq('contact_email', contactEmail)
+        .eq('status', 'active')
         .single()
-      if (existing) break
+      if (activeElsewhere) break
+
+      // Dynamic sender resolution — set by the automation's config.senderType.
+      // 'contact_owner': send from whoever this contact's assigned rep is
+      // (crm_contacts.owner_id). 'specific_user': always the configured user.
+      // Neither: leave null, execute/route.ts falls back to the sequence's
+      // own default assigned_rep_id.
+      let enrollmentRepId: string | null = null
+      const senderType = context.senderType as string | undefined
+      if (senderType === 'contact_owner' && contactId) {
+        const { data: contactRow } = await db.from('crm_contacts').select('owner_id').eq('id', contactId).maybeSingle()
+        enrollmentRepId = contactRow?.owner_id ?? null
+      } else if (senderType === 'specific_user') {
+        enrollmentRepId = (context.senderUserId as string) ?? null
+      }
 
       const seqSteps = targetSeq.steps ?? []
       const firstDay = seqSteps[0]?.day ?? 0
@@ -657,13 +701,14 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       await db.from('sequence_enrollments').insert({
         id: `enr-auto-${uid()}`,
         sequence_id: targetSeq.id,
-        contact_id: (context.contactId as string) ?? null,
+        contact_id: contactId,
         contact_name: contactName,
         contact_email: contactEmail,
         current_step: 0,
         status: 'active',
         next_send_at: new Date(now.getTime() + firstDay * 86400000).toISOString(),
         company: company || null,
+        assigned_rep_id: enrollmentRepId,
       })
 
       await db.from('sequences').update({
@@ -674,7 +719,12 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     }
 
     case 'Unenroll from Sequence': {
-      const contactEmail = (context.contactEmail as string) ?? ''
+      let contactEmail = (context.contactEmail as string) ?? ''
+      const unenrollContactId = (context.contactId as string) ?? null
+      if (!contactEmail && unenrollContactId) {
+        const { data: contactRow } = await db.from('crm_contacts').select('emails').eq('id', unenrollContactId).maybeSingle()
+        contactEmail = contactRow?.emails?.[0] ?? ''
+      }
       if (!contactEmail) break
       const { data: activeEnrollments } = await db
         .from('sequence_enrollments')
@@ -695,6 +745,41 @@ async function executeAction(action: string, context: Record<string, unknown>, d
             .eq('id', enr.sequence_id)
         }
       }
+      break
+    }
+
+    case 'Rotate Contact Owner': {
+      // config.unit: which team_members.unit to rotate across (e.g. 'Sales').
+      // Rotation position is tracked durably in rotation_state, keyed by
+      // this automation's id, so it survives across cold starts instead of
+      // resetting to the same first rep every run.
+      const unit = context.unit as string | undefined
+      const contactId = (context.contactId as string) ?? null
+      if (!unit || !contactId || !automationId) break
+
+      const { data: members } = await db
+        .from('team_members')
+        .select('id, name')
+        .eq('unit', unit)
+        .eq('status', 'Active')
+        .order('id', { ascending: true })
+      if (!members || members.length === 0) break
+
+      const { data: rotationRow } = await db
+        .from('rotation_state')
+        .select('last_index')
+        .eq('automation_id', automationId)
+        .maybeSingle()
+      const nextIndex = ((rotationRow?.last_index ?? -1) + 1) % members.length
+      const nextRep = members[nextIndex]
+
+      await db.from('crm_contacts').update({ owner_id: nextRep.id, owner: nextRep.name }).eq('id', contactId)
+      await db.from('rotation_state').upsert({
+        id: `rot-${automationId}`,
+        automation_id: automationId,
+        last_index: nextIndex,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'automation_id' })
       break
     }
 

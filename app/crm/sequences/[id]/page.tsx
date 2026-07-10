@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import type { SequenceStatus, SequenceStepType, SequenceStep, EmailSequence, TeamMember } from '@/lib/types'
 import SequenceStepEditor from '@/components/crm/SequenceStepEditor'
+import SequenceAutomateTab from '@/components/crm/SequenceAutomateTab'
 import { fetchTeamMembers } from '@/lib/supabase'
 
 type StepType = SequenceStepType
@@ -309,7 +310,7 @@ export default function SequenceDetailPage() {
   const [loading, setLoading] = useState(true)
   const [sequence, setSequence] = useState<EmailSequence | null>(null)
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
-  const [tab, setTab] = useState<'people' | 'steps' | 'settings'>('people')
+  const [tab, setTab] = useState<'people' | 'steps' | 'automate' | 'settings'>('people')
   const [enrollSearch, setEnrollSearch] = useState('')
   const [enrollStatusFilter, setEnrollStatusFilter] = useState<'all' | 'active' | 'completed' | 'paused'>('all')
   const [selectedEnrollments, setSelectedEnrollments] = useState<Set<string>>(new Set())
@@ -650,7 +651,7 @@ export default function SequenceDetailPage() {
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-gray-200 mb-5">
-          {(['people', 'steps', 'settings'] as const).map(t => (
+          {(['people', 'steps', 'automate', 'settings'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -928,6 +929,11 @@ export default function SequenceDetailPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Automate Tab */}
+        {tab === 'automate' && (
+          <SequenceAutomateTab sequenceId={sequenceId} />
         )}
 
         {/* Settings Tab */}

@@ -644,6 +644,20 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
         task: step.body || '',
       }
 
+      // Resolve company_id from the contact — sequence_enrollments.company is
+      // a denormalized name, not an FK, and CompanyPanel's Activity tab filters
+      // strictly on crm_activities.company_id, so without this the task never
+      // surfaces on the company record.
+      let stepCompanyId: string | null = null
+      if (enrollment.contact_id) {
+        const { data: contactRow } = await db
+          .from('crm_contacts')
+          .select('company_id')
+          .eq('id', enrollment.contact_id)
+          .maybeSingle()
+        stepCompanyId = contactRow?.company_id ?? null
+      }
+
       const activityId = `seq-${seq.id}-${enrollment.id}-step${enrollment.current_step}`
       await db.from('crm_activities').upsert({
         id: activityId,
@@ -652,6 +666,7 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
         body: taskBodies[step.type] || null,
         contact_id: enrollment.contact_id || null,
         contact_name: enrollment.contact_name || '',
+        company_id: stepCompanyId,
         company_name: enrollment.company || '',
         user_name: 'Sequence',
         timestamp: now.toISOString(),

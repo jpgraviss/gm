@@ -262,21 +262,34 @@ export const POST = withErrorHandler('sequences/webhooks POST', async (req: Next
       .eq('id', enrollment.id)
   }
 
-  // Mirror engagement events to the CRM contact timeline
+  // Mirror engagement events to the CRM activity timeline. Resolved against
+  // the contact's company_id so the activity surfaces on the company record
+  // (CompanyPanel's Activity tab filters strictly on crm_activities.company_id)
+  // rather than only ever showing up under the contact —
+  // sequence_enrollments.company is a denormalized name, not an FK, so it
+  // can't be used directly. This insert previously used column names
+  // (description/logged_by) that don't exist on crm_activities, so it was
+  // silently failing on every event.
   if (enrollment.contact_id && (type === 'email.opened' || type === 'email.clicked' || type === 'email.bounced')) {
-    const descriptionMap: Record<string, string> = {
-      'email.opened': `Opened sequence email`,
+    const titleMap: Record<string, string> = {
+      'email.opened': 'Opened sequence email',
       'email.clicked': `Clicked link in sequence email${metadata.link ? ` (${metadata.link})` : ''}`,
-      'email.bounced': `Sequence email bounced`,
+      'email.bounced': 'Sequence email bounced',
     }
+    const { data: contactRow } = await db
+      .from('crm_contacts')
+      .select('company_id, full_name')
+      .eq('id', enrollment.contact_id)
+      .maybeSingle()
     await db.from('crm_activities').insert({
       id: `act-seq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      type: 'Email',
-      description: descriptionMap[type],
+      type: 'email',
+      title: titleMap[type],
+      company_id: contactRow?.company_id ?? null,
       contact_id: enrollment.contact_id,
-      company_id: null,
+      contact_name: contactRow?.full_name ?? enrollment.contact_name ?? null,
+      user_name: 'System',
       timestamp: new Date().toISOString(),
-      logged_by: 'System',
     })
   }
 

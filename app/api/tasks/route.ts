@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthUser } from '@/lib/rbac'
+import { TASK_DEPARTMENTS, departmentForUnit } from '@/lib/task-department'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTask(row: any) {
@@ -25,10 +27,16 @@ function mapTask(row: any) {
     projectId:       row.project_id ?? undefined,
     section:         row.section ?? undefined,
     sortOrder:       row.sort_order ?? 0,
+    department:      row.department ?? null,
   }
 }
 
 export const GET = withErrorHandler('tasks GET', async (req: NextRequest) => {
+  const user = await getAuthUser(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const { searchParams } = new URL(req.url)
   const status     = searchParams.get('status')
   const assignedTo = searchParams.get('assignedTo')
@@ -43,6 +51,20 @@ export const GET = withErrorHandler('tasks GET', async (req: NextRequest) => {
   if (assignedTo) query = query.eq('assigned_to', assignedTo)
   if (projectId)  query = query.eq('project_id', projectId)
   if (companyId)  query = query.eq('company_id', companyId)
+
+  // Department visibility: Leadership/Super Admin/admins see everything.
+  // Everyone else only sees CRM/General/untagged tasks (cross-functional,
+  // company-scoped work), tasks in their own mapped department, and
+  // anything explicitly assigned to them — never another department's
+  // internal task list (e.g. Operations never sees Finance tasks).
+  const unrestricted = user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin'
+  if (!unrestricted) {
+    const dept = departmentForUnit(user.unit)
+    const safeDepts = Array.from(new Set(['CRM', 'General', ...(dept ? [dept] : [])]))
+    const safeName = user.name.replace(/[,()]/g, '')
+    query = query.or(`department.is.null,department.in.(${safeDepts.join(',')}),assigned_to.eq.${safeName}`)
+  }
+
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
@@ -74,6 +96,9 @@ export const POST = withErrorHandler('tasks POST', async (req: NextRequest) => {
   if (body.category && !VALID_CATEGORIES.includes(body.category)) {
     return NextResponse.json({ error: 'Invalid category' }, { status: 400 })
   }
+  if (body.department && !(TASK_DEPARTMENTS as readonly string[]).includes(body.department)) {
+    return NextResponse.json({ error: 'Invalid department' }, { status: 400 })
+  }
 
   const db = createServiceClient()
   const { data, error } = await db
@@ -97,6 +122,7 @@ export const POST = withErrorHandler('tasks POST', async (req: NextRequest) => {
       project_id:        body.projectId ?? null,
       section:           body.section ?? null,
       sort_order:        body.sortOrder ?? 0,
+      department:        body.department ?? (body.companyId ? 'CRM' : null),
     })
     .select()
     .single()

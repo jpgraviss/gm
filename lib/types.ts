@@ -319,6 +319,7 @@ export interface AppTask {
   section?: string
   sortOrder?: number
   companyId?: string | null
+  department?: string | null
 }
 
 // ─── Full CRM Types ──────────────────────────────────────────────────────────

@@ -34,6 +34,9 @@ function mapContact(row: any) {
 }
 
 export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await ctx!.params
   const body = await req.json()
 
@@ -86,6 +89,9 @@ export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) =>
 })
 
 export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await ctx!.params
   const body = await req.json()
 

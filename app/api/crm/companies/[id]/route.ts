@@ -33,6 +33,9 @@ export const PUT = withErrorHandler('crm/companies/[id] PUT', async (
   req,
   { params }: { params: Promise<{ id: string }> },
 ) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const body = await req.json()
 
@@ -80,6 +83,9 @@ export const PATCH = withErrorHandler('crm/companies/[id] PATCH', async (
   req,
   { params }: { params: Promise<{ id: string }> },
 ) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const body = await req.json()
 

@@ -2,14 +2,45 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
+import { requireRole } from '@/lib/rbac'
+
+// Fields a portal client is allowed to set on their OWN record without
+// staff privileges — matches the one legitimate self-service call site
+// (contexts/AuthContext.tsx marks itself Active + stamps lastLogin on
+// session restore). Anything else — company, companyId, access beyond
+// "Active", portalRole, email, services — must go through staff, otherwise
+// a client could self-escalate or hop into another company's portal scope.
+const SELF_SERVICE_FIELDS = new Set(['lastLogin', 'access'])
 
 export const PATCH = withErrorHandler('portal-clients/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
+  const db = createServiceClient()
+
+  const email = await getAuthenticatedEmail(req)
+  if (!email) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
+  const { data: staffRow } = await db.from('team_members').select('id').ilike('email', email).maybeSingle()
+  const isStaff = !!staffRow
+
   let body: Record<string, unknown>
   try {
     body = await req.json()
   } catch {
     return validationError('Invalid JSON body')
+  }
+
+  if (!isStaff) {
+    const { data: ownRow } = await db.from('portal_clients').select('id, email').eq('id', id).maybeSingle()
+    if (!ownRow || ownRow.email?.toLowerCase() !== email.toLowerCase()) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    const disallowed = Object.keys(body).filter(k => !SELF_SERVICE_FIELDS.has(k))
+    if (disallowed.length > 0) {
+      return NextResponse.json({ error: `Cannot self-update: ${disallowed.join(', ')}` }, { status: 403 })
+    }
   }
 
   const result = validate(body, {
@@ -19,7 +50,6 @@ export const PATCH = withErrorHandler('portal-clients/[id] PATCH', async (req, {
   })
   if (!result.valid) return validationError(result.error)
 
-  const db = createServiceClient()
   const update: Record<string, unknown> = {}
   if (body.company      !== undefined) update.company       = body.company
   if (body.service      !== undefined) update.service       = body.service
@@ -46,7 +76,10 @@ export const PATCH = withErrorHandler('portal-clients/[id] PATCH', async (req, {
   return NextResponse.json(data)
 })
 
-export const DELETE = withErrorHandler('portal-clients/[id] DELETE', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withErrorHandler('portal-clients/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('portal_clients').delete().eq('id', id)

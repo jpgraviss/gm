@@ -1,6 +1,9 @@
-var CACHE_NAME = 'gravhub-v1'
+var CACHE_NAME = 'gravhub-v2'
+// /favicon.ico is NOT served (Next.js App Router serves the favicon via
+// app/icon.png through its own generated route) — cache.addAll() fails
+// atomically if any entry 404s, which was silently breaking install/activate
+// entirely. Bumped the cache name so existing installs pick up the fix.
 var STATIC_ASSETS = [
-  '/favicon.ico',
   '/icon-192.png',
   '/icon-512.png',
   '/manifest.json',

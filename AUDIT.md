@@ -51,13 +51,13 @@ and never overwrites your edits to existing ones (matched by the finding's title
 
 | # | Finding | Location | Status | Notes |
 |---|---|---|---|---|
-| 28 | "Add Deliverable" button in Delivery Dashboard timeline is a no-op toast despite a working API existing | `app/crm/delivery-dashboard/page.tsx:387` | Open | |
-| 29 | Monthly/client report "Recommendations" section always hard-coded to `[]` | `app/api/delivery/monthly-report/[id]/route.ts`, `lib/seo-report-sender.ts` | Open | |
-| 30 | Sales-enablement training completion/checklist/quiz progress lives only in `localStorage` — no team-wide visibility, lost on storage clear or device switch | `app/sales-enablement/page.tsx` | Open | |
-| 31 | Time-entry edit (PATCH) failures are silently swallowed client-side — optimistic UI shows success even if the server rejected it | `app/time-tracking/page.tsx` | Open | |
-| 32 | CSRF check is skipped for the entire `/api/wordpress/seo/` prefix (needed for the plugin's own unauthenticated calls), including the staff-only company-assignment PATCH | `proxy.ts` | Open | Mitigated by `SameSite=Lax`; tightening would mean carving the PATCH route out of the public prefix |
-| 33 | GravIntel visitor geolocation/ISP fields (`city`, `region`, `country`, `rdns_company`, `isp`) are rendered in the UI but never populated — no IP lookup exists | `app/api/intelligence/track/route.ts`, `app/intelligence/page.tsx` | Open | |
-| 34 | `withErrorHandler` returns raw `err.message` to the client on any thrown error, including internal config errors — minor information disclosure about deployment misconfig | `lib/api-handler.ts` | Open | |
+| 28 | "Add Deliverable" button in Delivery Dashboard timeline is a no-op toast despite a working API existing | `app/crm/delivery-dashboard/page.tsx:387` | Fixed | Button now opens a real modal (name/type/file URL/description) that POSTs to the existing `/api/delivery/add-deliverable` |
+| 29 | Monthly/client report "Recommendations" section always hard-coded to `[]` | `app/api/delivery/monthly-report/[id]/route.ts`, `lib/seo-report-sender.ts` | Fixed | Added `buildReportRecommendations()` to `lib/client-reports.ts` — rule-based thresholds against the real metrics already computed for the report (traffic/SEO trend, keyword ranking declines, review activity, uptime incidents), shared across all three call sites so none of them fabricate anything not backed by the data on the report |
+| 30 | Sales-enablement training completion/checklist/quiz progress lives only in `localStorage` — no team-wide visibility, lost on storage clear or device switch | `app/sales-enablement/page.tsx` | Open | Needs a backend table + API — bigger than a quick fix, flagged for a decision |
+| 31 | Time-entry edit (PATCH) failures are silently swallowed client-side — optimistic UI shows success even if the server rejected it | `app/time-tracking/page.tsx` | Fixed | `handleSave`/`handleDelete` now check `res.ok` and revert the optimistic update with an error toast if the server rejected it, instead of only catching network-level failures |
+| 32 | CSRF check is skipped for the entire `/api/wordpress/seo/` prefix (needed for the plugin's own unauthenticated calls), including the staff-only company-assignment PATCH | `proxy.ts` | Open | Security-sensitive carve-out — flagged for a decision rather than changed without review |
+| 33 | GravIntel visitor geolocation/ISP fields (`city`, `region`, `country`, `rdns_company`, `isp`) are rendered in the UI but never populated — no IP lookup exists | `app/api/intelligence/track/route.ts`, `app/intelligence/page.tsx` | Open | Needs a paid IP geolocation service — flagged for a decision |
+| 34 | `withErrorHandler` returns raw `err.message` to the client on any thrown error, including internal config errors — minor information disclosure about deployment misconfig | `lib/api-handler.ts` | Fixed | Client now gets a generic "Internal server error" message when `NODE_ENV === 'production'`; full detail still goes to console + Sentry. Dev/test behavior unchanged |
 
 ---
 

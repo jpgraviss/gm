@@ -322,6 +322,74 @@ export interface AppTask {
   department?: string | null
 }
 
+// ─── Sequences (multi-step email/task cadences) ───────────────────────────────
+
+export type SequenceStatus = 'Active' | 'Paused' | 'Draft' | 'Completed'
+export type SequenceStepType = 'email' | 'manual_email' | 'wait' | 'task' | 'condition' | 'linkedin' | 'call'
+export type SequenceHtmlTemplate = 'branded' | 'minimal' | 'plain'
+
+export interface SequenceStep {
+  id: string
+  type: SequenceStepType
+  day: number
+  subject?: string
+  body?: string
+  htmlTemplate?: SequenceHtmlTemplate
+  cc?: string[]
+  bcc?: string[]
+  replyTo?: string
+  fromName?: string
+  fromEmail?: string
+  waitDays?: number
+  taskTitle?: string
+  taskPriority?: TaskPriority
+  pauseUntilComplete?: boolean
+  condition?: string
+  // A/B testing — declared, not yet executed (see AUDIT.md #24)
+  abEnabled?: boolean
+  variantB?: { subject?: string; body?: string }
+  abSplit?: number // percentage for variant A (default 50)
+  abWinner?: 'A' | 'B' | null
+  // LinkedIn — UI placeholder only, no Sales Navigator integration
+  linkedinAction?: 'connect' | 'inmail' | 'view_profile'
+  linkedinMessage?: string
+  callScript?: string
+}
+
+export interface EmailSequence {
+  id: string
+  name: string
+  status: SequenceStatus
+  trigger: string
+  targetSegment: string
+  enrolledCount: number
+  activeCount: number
+  completedCount: number
+  openRate: number
+  clickRate: number
+  replyRate: number
+  meetingRate?: number
+  bounceRate?: number
+  unsubscribeRate?: number
+  steps: SequenceStep[]
+  createdDate: string
+  lastModified: string
+  sendVia: 'gmail' | 'resend'
+  fromName?: string
+  fromEmail?: string
+  assignedRepId?: string | null
+  owner?: string
+  dailySendLimit?: number
+  perMinuteLimit?: number
+  sendWindowStart?: number
+  sendWindowEnd?: number
+  sendOnWeekends?: boolean
+  timezone?: string
+  threadMode?: boolean
+  sharing?: 'private' | 'everyone'
+  folder?: string | null
+}
+
 // ─── Full CRM Types ──────────────────────────────────────────────────────────
 
 export interface SignatureRequest {
@@ -406,6 +474,7 @@ export interface CRMContact {
   website?: string
   isPrimary: boolean
   owner: string
+  ownerId?: string | null
   tags: string[]
   notes?: string
   contactNotes?: ContactNote[]

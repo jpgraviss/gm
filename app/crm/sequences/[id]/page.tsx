@@ -10,46 +10,9 @@ import {
   Eye, Trash2, ArrowUpDown, UserMinus, UserPlus, Phone,
   Linkedin, AlertCircle, Send,
 } from 'lucide-react'
+import type { SequenceStatus, SequenceStepType, SequenceStep, EmailSequence } from '@/lib/types'
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
-
-type SequenceStatus = 'Active' | 'Paused' | 'Draft' | 'Completed'
-type StepType = 'email' | 'manual_email' | 'wait' | 'task' | 'condition' | 'linkedin' | 'call'
-
-interface SequenceStep {
-  id: string
-  type: StepType
-  day: number
-  subject?: string
-  body?: string
-  waitDays?: number
-  taskTitle?: string
-  condition?: string
-  linkedinAction?: 'connect' | 'inmail' | 'view_profile'
-  linkedinMessage?: string
-  callScript?: string
-}
-
-interface EmailSequence {
-  id: string
-  name: string
-  status: SequenceStatus
-  trigger: string
-  targetSegment: string
-  enrolledCount: number
-  activeCount: number
-  completedCount: number
-  openRate: number
-  clickRate: number
-  replyRate: number
-  steps: SequenceStep[]
-  createdDate: string
-  lastModified: string
-  sendVia: 'gmail' | 'resend'
-  fromName: string
-  fromEmail: string
-  assignedRepId: string | null
-}
+type StepType = SequenceStepType
 
 interface Enrollment {
   id: string

@@ -10,60 +10,9 @@ import {
   Eye, MousePointerClick, Trash2, ArrowUpDown, Filter,
   Phone, Linkedin, BarChart3,
 } from 'lucide-react'
+import type { SequenceStatus, SequenceStepType, SequenceStep, EmailSequence } from '@/lib/types'
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
-
-type SequenceStatus = 'Active' | 'Paused' | 'Draft' | 'Completed'
-type StepType = 'email' | 'manual_email' | 'wait' | 'task' | 'condition' | 'linkedin' | 'call'
-type HtmlTemplate = 'branded' | 'minimal' | 'plain'
-
-interface SequenceStep {
-  id: string
-  type: StepType
-  day: number
-  subject?: string
-  body?: string
-  htmlTemplate?: HtmlTemplate
-  cc?: string
-  bcc?: string
-  replyTo?: string
-  waitDays?: number
-  taskTitle?: string
-  condition?: string
-  // A/B testing
-  abEnabled?: boolean
-  variantB?: { subject?: string; body?: string }
-  abSplit?: number // percentage for variant A (default 50)
-  abWinner?: 'A' | 'B' | null
-  // Multichannel
-  linkedinAction?: 'connect' | 'inmail' | 'view_profile'
-  linkedinMessage?: string
-  callScript?: string
-}
-
-interface EmailSequence {
-  id: string
-  name: string
-  status: SequenceStatus
-  trigger: string
-  targetSegment: string
-  enrolledCount: number
-  activeCount: number
-  completedCount: number
-  openRate: number
-  clickRate: number
-  replyRate: number
-  steps: SequenceStep[]
-  createdDate: string
-  lastModified: string
-  sendVia: 'gmail' | 'resend'
-  fromName?: string
-  // New fields
-  meetingRate?: number
-  bounceRate?: number
-  unsubscribeRate?: number
-  owner?: string
-}
+type StepType = SequenceStepType
 
 const statusColors: Record<SequenceStatus, { bg: string; text: string; dot: string }> = {
   Active:    { bg: 'bg-green-50',  text: 'text-green-700',  dot: '#015035' },

@@ -5,6 +5,8 @@ import { sendViaGmail } from '@/lib/gmail-send'
 import { fireAutomations } from '@/lib/automations-engine'
 import { getSettings, type AppSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
+import { departmentForUnit } from '@/lib/task-department'
+import type { SequenceStep, SequenceHtmlTemplate } from '@/lib/types'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.gravissmarketing.com'
 
 // ─── Merge-field replacement ─────────────────────────────────────────────────
@@ -53,7 +55,7 @@ function appendUnsubscribeFooter(html: string, email: string, sequenceId: string
 
 // ─── HTML template renderers ─────────────────────────────────────────────────
 
-type HtmlTemplate = 'branded' | 'minimal' | 'plain'
+type HtmlTemplate = SequenceHtmlTemplate
 
 function renderEmailHtml(
   template: HtmlTemplate,
@@ -184,6 +186,7 @@ async function lookupGmailToken(
 interface RepInfo {
   name: string
   email: string
+  unit: string | null
 }
 
 async function lookupRep(
@@ -193,7 +196,7 @@ async function lookupRep(
   if (!repId) return null
   const { data } = await db
     .from('team_members')
-    .select('name, email')
+    .select('name, email, unit')
     .eq('id', repId)
     .single()
   return data ?? null
@@ -447,23 +450,7 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
     }
 
     // ── Process current step ───────────────────────────────────────────────
-    const steps: {
-      id: string
-      type: string
-      day: number
-      subject?: string
-      body?: string
-      cc?: string[]
-      bcc?: string[]
-      replyTo?: string
-      fromName?: string
-      fromEmail?: string
-      htmlTemplate?: HtmlTemplate
-      taskTitle?: string
-      linkedinAction?: string
-      linkedinMessage?: string
-      callScript?: string
-    }[] = seq.steps ?? []
+    const steps: SequenceStep[] = seq.steps ?? []
     const step = steps[enrollment.current_step]
     if (!step) continue
 
@@ -671,6 +658,33 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
         user_name: 'Sequence',
         timestamp: now.toISOString(),
         outcome: 'pending',
+      }, { onConflict: 'id' })
+
+      // Also create a real, assignable task in app_tasks — the crm_activities
+      // row above only surfaces in a company's activity feed, it has no
+      // assignee, priority, or department, so it never appears in a rep's
+      // actual Tasks queue. Without this, sequence follow-ups are invisible
+      // outside the CRM record they're attached to.
+      const stepRepId = enrollment.assigned_rep_id ?? seq.assigned_rep_id
+      if (stepRepId && !repCache.has(stepRepId)) {
+        repCache.set(stepRepId, await lookupRep(db, stepRepId))
+      }
+      const stepRep = stepRepId ? repCache.get(stepRepId) ?? null : null
+      const dueDate = now.toISOString().split('T')[0]
+      await db.from('app_tasks').upsert({
+        id: `task-${activityId}`,
+        title: taskTitles[step.type] ?? `Sequence task: ${enrollment.contact_name}`,
+        description: taskBodies[step.type] || null,
+        category: step.type === 'manual_email' ? 'Email' : 'General',
+        priority: step.taskPriority ?? 'Medium',
+        status: 'Pending',
+        company: enrollment.company || null,
+        company_id: stepCompanyId,
+        assigned_to: stepRep?.name ?? '',
+        due_date: dueDate,
+        created_date: dueDate,
+        linked_id: enrollment.id,
+        department: departmentForUnit(stepRep?.unit) ?? 'Sales',
       }, { onConflict: 'id' })
 
       await logActivity(db, {

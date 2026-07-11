@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { formatCurrency, projectStatusColors, serviceTypeColors, invoiceStatusColors, formatDate } from '@/lib/utils'
+import { formatCurrency, projectStatusColors, invoiceStatusColors, formatDate } from '@/lib/utils'
+import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import StatusBadge from '@/components/ui/StatusBadge'
 import {
   Globe, Lock, Eye, CheckCircle, Calendar, RefreshCw, FolderKanban,
@@ -26,7 +27,7 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
   const [company, setCompany] = useState('')
   const [contact, setContact] = useState('')
   const [email, setEmail] = useState('')
-  const [service, setService] = useState('Website')
+  const [service, setService] = useState<string>(SERVICE_NAMES[0])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -73,7 +74,7 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
     setCompany('')
     setContact('')
     setEmail('')
-    setService('Website')
+    setService(SERVICE_NAMES[0])
     setError('')
     setSaved(false)
   }
@@ -132,12 +133,7 @@ function AddClientPanel({ onClose, onSave, onInvite }: { onClose: () => void; on
               onChange={e => setService(e.target.value)}
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
             >
-              <option>Website</option>
-              <option>SEO</option>
-              <option>Social Media</option>
-              <option>Branding</option>
-              <option>Email Marketing</option>
-              <option>Custom</option>
+              {SERVICE_NAMES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
         </div>

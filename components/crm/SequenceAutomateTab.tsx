@@ -287,7 +287,14 @@ export default function SequenceAutomateTab({ sequenceId }: { sequenceId: string
         <h3 className="text-sm font-bold text-gray-900 mb-1">Automatic unenrollment</h3>
         <p className="text-xs text-gray-400 mb-3">Always on, can&apos;t be turned off.</p>
         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-          <p className="text-sm text-gray-700">When a contact replies to any email → Unenroll the contact from this sequence</p>
+          <div>
+            <p className="text-sm text-gray-700">When a contact replies to any email → Unenroll the contact from this sequence</p>
+            <p className="text-[11px] text-amber-600 mt-1">Only detected on Gmail-sent emails from a rep with a connected Gmail account. Sequences sending via Resend, or enrollments assigned to a rep without Gmail connected, won&apos;t auto-unenroll on reply yet.</p>
+          </div>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 flex-shrink-0 ml-3">ALWAYS ON</span>
+        </div>
+        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl mt-2">
+          <p className="text-sm text-gray-700">On a hard email bounce → Unenroll and add to the suppression list</p>
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 flex-shrink-0 ml-3">ALWAYS ON</span>
         </div>
       </div>

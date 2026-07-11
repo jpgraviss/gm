@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const PATCH = withErrorHandler('automations/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const body = await req.json()
 
@@ -30,7 +33,9 @@ export const PATCH = withErrorHandler('automations/[id] PATCH', async (req, { pa
   return NextResponse.json(data)
 })
 
-export const DELETE = withErrorHandler('automations/[id] DELETE', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withErrorHandler('automations/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('automations').delete().eq('id', id)

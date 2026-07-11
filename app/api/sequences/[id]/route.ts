@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSequence(row: any) {
@@ -41,6 +42,8 @@ function mapSequence(row: any) {
 }
 
 export const PATCH = withErrorHandler('sequences/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const body = await req.json()
 
@@ -90,7 +93,9 @@ export const PATCH = withErrorHandler('sequences/[id] PATCH', async (req: NextRe
   return NextResponse.json(mapSequence(data))
 })
 
-export const DELETE = withErrorHandler('sequences/[id] DELETE', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withErrorHandler('sequences/[id] DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('sequences').delete().eq('id', id)

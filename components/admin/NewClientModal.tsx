@@ -111,7 +111,7 @@ export default function NewClientModal({ open, onClose }: Props) {
         body: JSON.stringify({
           companyName,
           companyId: resolvedCompanyId,
-          serviceType: services[0] || 'Website',
+          serviceType: services[0] || SERVICES[0],
         }),
       })
 

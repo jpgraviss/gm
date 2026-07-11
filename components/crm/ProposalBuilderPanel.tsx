@@ -496,6 +496,7 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
   function getServiceType(): ServiceType {
     const selected: ServiceType[] = []
     if (websiteEnabled) selected.push('Website Build')
+    if (websiteMgmt) selected.push('Website Management')
     if (seoPackage !== 'none') selected.push('SEO / AEO')
     extraLines.forEach((l) => selected.push(l.service.name as ServiceType))
     if (selected.length === 1) return selected[0]

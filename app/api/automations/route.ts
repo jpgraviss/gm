@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapAutomation(row: any, runStats?: { total: number; succeeded: number; failed: number; lastRunAt: string | null }) {
@@ -56,6 +57,8 @@ export const GET = withErrorHandler('automations GET', async () => {
 })
 
 export const POST = withErrorHandler('automations POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const body = await req.json()
 
   const result = validate(body, {

@@ -337,7 +337,8 @@ export interface SequenceStep {
   taskPriority?: TaskPriority
   pauseUntilComplete?: boolean
   condition?: string
-  // A/B testing — declared, not yet executed (see AUDIT.md #24)
+  // A/B testing — fully executed by app/api/sequences/execute/route.ts's
+  // resolveAbVariant() and app/api/sequences/analytics/route.ts (see AUDIT.md #24)
   abEnabled?: boolean
   variantB?: { subject?: string; body?: string }
   abSplit?: number // percentage for variant A (default 50)

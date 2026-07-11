@@ -43,7 +43,7 @@ function AddRecordPanel({
 
   const [form, setForm] = useState({
     company: initial?.company ?? '',
-    serviceType: initial?.serviceType ?? 'Website',
+    serviceType: initial?.serviceType ?? 'Website Build',
     startDate: initial?.startDate ?? new Date().toISOString().split('T')[0],
     endDate: defaultEnd,
     monthlyFee: initial?.monthlyFee?.toString() ?? '350',

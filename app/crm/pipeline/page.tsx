@@ -16,6 +16,7 @@ import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/
 import { useToast } from '@/components/ui/Toast'
 import { downloadCsv } from '@/lib/csv-export'
 import { useTeamMembers } from '@/lib/useTeamMembers'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
 import NewClientModal from '@/components/admin/NewClientModal'
 import {
@@ -150,6 +151,8 @@ function DealListView({
   onSort,
   onSelect,
   pipelineStages,
+  selectedIds,
+  onToggleSelect,
 }: {
   deals: LocalDeal[]
   sortKey: 'company' | 'value' | 'closeDate' | 'dealScore'
@@ -157,6 +160,8 @@ function DealListView({
   onSort: (key: 'company' | 'value' | 'closeDate' | 'dealScore') => void
   onSelect: (deal: LocalDeal) => void
   pipelineStages: PipelineStage[]
+  selectedIds: Set<string>
+  onToggleSelect: (dealId: string) => void
 }) {
   const sorted = [...deals].sort((a, b) => {
     let cmp = 0
@@ -179,6 +184,7 @@ function DealListView({
       <table className="data-table w-full min-w-[760px]">
         <thead>
           <tr>
+            <th className="w-8"></th>
             {columns.map(col => (
               <th key={col.key} className="cursor-pointer select-none" onClick={() => onSort(col.key)}>
                 <span className="flex items-center gap-1">
@@ -198,6 +204,14 @@ function DealListView({
               ?? DEFAULT_STAGE_COLORS[deal.stage] ?? '#9ca3af'
             return (
               <tr key={deal.id} className="cursor-pointer" onClick={() => onSelect(deal)}>
+                <td onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(deal.id)}
+                    onChange={() => onToggleSelect(deal.id)}
+                    className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                  />
+                </td>
                 <td>
                   <p className="text-sm font-semibold text-gray-900">{deal.company}</p>
                   <div className="flex flex-wrap gap-1 mt-0.5">
@@ -227,7 +241,7 @@ function DealListView({
           })}
           {sorted.length === 0 && (
             <tr>
-              <td colSpan={7} className="text-center py-10 text-sm text-gray-400">No deals match the current filters.</td>
+              <td colSpan={8} className="text-center py-10 text-sm text-gray-400">No deals match the current filters.</td>
             </tr>
           )}
         </tbody>
@@ -1177,9 +1191,8 @@ export default function PipelinePage() {
   useEffect(() => { setMounted(true) }, []) // eslint-disable-line react-hooks/set-state-in-effect
 
   useEffect(() => {
-    fetch('/api/deals')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
+    fetchAllPages<LocalDeal>('/api/deals')
+      .then(data => setLocalDeals(data))
       .catch(() => toast('Failed to load deals', 'error'))
       .finally(() => setLoading(false))
     fetch('/api/pipelines')
@@ -1437,6 +1450,8 @@ export default function PipelinePage() {
             }}
             onSelect={setSelectedDeal}
             pipelineStages={activeStages}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
           />
         ) : mounted ? <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-3 overflow-x-auto flex-1 min-h-0 pb-2">
@@ -1538,7 +1553,7 @@ export default function PipelinePage() {
           defaultType="deals"
           onClose={() => setShowImport(false)}
           onComplete={() => {
-            fetch('/api/deals').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
+            fetchAllPages<LocalDeal>('/api/deals').then(data => setLocalDeals(data))
           }}
         />
       )}

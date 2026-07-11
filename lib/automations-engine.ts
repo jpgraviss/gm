@@ -698,7 +698,12 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       const firstDay = seqSteps[0]?.day ?? 0
       const now = new Date()
 
-      await db.from('sequence_enrollments').insert({
+      // The activeElsewhere check above is a fast pre-filter, not the
+      // source of truth — a partial unique index on sequence_enrollments
+      // (contact_email) where status='active' is the real "one sequence
+      // at a time" guarantee (AUDIT.md #44), so a conflict here just
+      // means another request won the race; skip silently.
+      const { error: enrollErr } = await db.from('sequence_enrollments').insert({
         id: `enr-auto-${uid()}`,
         sequence_id: targetSeq.id,
         contact_id: contactId,
@@ -710,6 +715,10 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         company: company || null,
         assigned_rep_id: enrollmentRepId,
       })
+      if (enrollErr) {
+        if (enrollErr.code === '23505') break
+        throw new Error(enrollErr.message || 'Failed to enroll contact')
+      }
 
       await db.from('sequences').update({
         enrolled_count: (targetSeq.enrolled_count ?? 0) + 1,
@@ -765,21 +774,17 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         .order('id', { ascending: true })
       if (!members || members.length === 0) break
 
-      const { data: rotationRow } = await db
-        .from('rotation_state')
-        .select('last_index')
-        .eq('automation_id', automationId)
-        .maybeSingle()
-      const nextIndex = ((rotationRow?.last_index ?? -1) + 1) % members.length
-      const nextRep = members[nextIndex]
+      // Atomic — the increment happens inside the DB's UPSERT so two
+      // automations firing at nearly the same instant can't both read the
+      // same last_index and assign the same rep (see AUDIT.md #43).
+      const { data: nextIndex, error: rotationErr } = await db.rpc('next_rotation_index', {
+        p_automation_id: automationId,
+        p_member_count: members.length,
+      })
+      if (rotationErr || nextIndex === null || nextIndex === undefined) break
+      const nextRep = members[nextIndex % members.length]
 
       await db.from('crm_contacts').update({ owner_id: nextRep.id, owner: nextRep.name }).eq('id', contactId)
-      await db.from('rotation_state').upsert({
-        id: `rot-${automationId}`,
-        automation_id: automationId,
-        last_index: nextIndex,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'automation_id' })
       break
     }
 

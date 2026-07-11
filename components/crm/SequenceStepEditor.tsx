@@ -190,7 +190,7 @@ export default function SequenceStepEditor({ step, previousStepDay, onSave, onCl
                     onChange={e => setDelayDays(Math.max(1, parseInt(e.target.value) || 1))}
                     className={`${inputCls} w-24`}
                   />
-                  <span className="text-sm text-gray-500">business day{delayDays === 1 ? '' : 's'}</span>
+                  <span className="text-sm text-gray-500">day{delayDays === 1 ? '' : 's'} after previous step</span>
                 </div>
               )}
             </div>

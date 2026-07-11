@@ -249,6 +249,7 @@ export const POST = withErrorHandler('sequences/webhooks POST', async (req: Next
     event_type: eventType,
     metadata,
     created_at: new Date().toISOString(),
+    variant: enrollment.ab_variant ?? null,
   })
 
   // Update enrollment delivery status on delivered event

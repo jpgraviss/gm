@@ -30,7 +30,7 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
   // Fetch all active enrollments that have message_ids (sent emails with thread references)
   const { data: enrollments, error: fetchErr } = await db
     .from('sequence_enrollments')
-    .select('id, sequence_id, contact_email, contact_name, contact_id, company, message_ids, assigned_rep_id, current_step')
+    .select('id, sequence_id, contact_email, contact_name, contact_id, company, message_ids, assigned_rep_id, current_step, ab_variant')
     .eq('status', 'active')
     .not('message_ids', 'is', null)
 
@@ -115,6 +115,7 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
             event_type: 'replied',
             metadata: { thread_id: threadId, thread_message_count: thread.messages.length },
             created_at: new Date().toISOString(),
+            variant: enrollment.ab_variant ?? null,
           })
 
           // Update sequence reply_rate and active_count

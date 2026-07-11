@@ -283,6 +283,7 @@ async function logActivity(
     eventType: 'sent' | 'failed' | 'skipped' | 'task_created'
     messageId?: string | null
     metadata?: Record<string, unknown>
+    variant?: 'A' | 'B' | null
   },
 ) {
   await db.from('sequence_activities').insert({
@@ -293,7 +294,19 @@ async function logActivity(
     event_type: params.eventType,
     message_id: params.messageId ?? null,
     metadata: params.metadata ?? {},
+    variant: params.variant ?? null,
   })
+}
+
+// A contact keeps the same A/B variant for every A/B-enabled step in a
+// sequence (assigned once, on the first such step reached) rather than being
+// re-randomized per step — sequence_enrollments.ab_variant is a single
+// column, not per-step, so this matches the schema's intent.
+function resolveAbVariant(step: SequenceStep, existingVariant: string | null | undefined): 'A' | 'B' | null {
+  if (!step.abEnabled) return null
+  if (existingVariant === 'A' || existingVariant === 'B') return existingVariant
+  const splitA = step.abSplit ?? 50
+  return Math.random() * 100 < splitA ? 'A' : 'B'
 }
 
 // ─── Suppression check ──────────────────────────────────────────────────────
@@ -464,6 +477,14 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
       }
       const rep = repId ? repCache.get(repId) ?? null : null
 
+      // A/B variant — assigned once per enrollment, reused for every
+      // A/B-enabled step (see resolveAbVariant).
+      const abVariant = resolveAbVariant(step, enrollment.ab_variant)
+      if (abVariant && abVariant !== enrollment.ab_variant) {
+        update.ab_variant = abVariant
+      }
+      const useVariantB = abVariant === 'B' && step.variantB
+
       // Build merge context
       const mergeCtx: MergeContext = {
         contactName: enrollment.contact_name ?? '',
@@ -473,12 +494,13 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
         senderEmail: rep?.email ?? '',
       }
 
-      // Apply merge fields to subject and body
+      // Apply merge fields to subject and body — variant B content when
+      // this enrollment landed in variant B of an A/B-enabled step.
       const subject = replaceMergeFields(
-        step.subject ?? `Message from ${seq.name}`,
+        (useVariantB ? step.variantB?.subject : step.subject) || `Message from ${seq.name}`,
         mergeCtx,
       )
-      const bodyText = replaceMergeFields(step.body ?? '', mergeCtx)
+      const bodyText = replaceMergeFields((useVariantB ? step.variantB?.body : step.body) ?? '', mergeCtx)
 
       // Resolve sender info (step overrides sequence overrides defaults)
       const fromName = step.fromName ?? seq.from_name ?? settings.email.fromName
@@ -601,6 +623,7 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
             subject,
             from: `${fromName} <${gmailSent ? rep?.email : fromEmail}>`,
           },
+          variant: abVariant,
         })
       } else {
         await logActivity(db, {

@@ -78,13 +78,19 @@ export default function SequenceStepEditor({ step, previousStepDay, onSave, onCl
   const [taskPriority, setTaskPriority] = useState<TaskPriority>(step?.taskPriority ?? 'Medium')
   const [pauseUntilComplete, setPauseUntilComplete] = useState(step?.pauseUntilComplete ?? true)
   const [callScript, setCallScript] = useState(step?.callScript ?? '')
+  const [abEnabled, setAbEnabled] = useState(step?.abEnabled ?? false)
+  const [abSplit, setAbSplit] = useState(step?.abSplit ?? 50)
+  const [variantBSubject, setVariantBSubject] = useState(step?.variantB?.subject ?? '')
+  const [variantBBody, setVariantBBody] = useState(step?.variantB?.body ?? '')
 
   const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const variantBBodyRef = useRef<HTMLTextAreaElement>(null)
   const insertToken = useCursorInsert(bodyRef, body, setBody)
+  const insertVariantBToken = useCursorInsert(variantBBodyRef, variantBBody, setVariantBBody)
 
   const isFirstStep = previousStepDay === null
   const canSave =
-    pickedType === 'email' ? subject.trim() && body.trim()
+    pickedType === 'email' ? !!(subject.trim() && body.trim() && (!abEnabled || (variantBSubject.trim() && variantBBody.trim())))
     : pickedType === 'manual_email' ? taskTitle.trim()
     : pickedType === 'call' ? taskTitle.trim()
     : pickedType === 'task' ? taskTitle.trim()
@@ -106,6 +112,9 @@ export default function SequenceStepEditor({ step, previousStepDay, onSave, onCl
         htmlTemplate,
         cc: cc.split(',').map(s => s.trim()).filter(Boolean),
         bcc: bcc.split(',').map(s => s.trim()).filter(Boolean),
+        abEnabled,
+        abSplit,
+        variantB: abEnabled ? { subject: variantBSubject.trim(), body: variantBBody } : undefined,
       })
     } else if (pickedType === 'manual_email') {
       onSave({ ...base, taskTitle: taskTitle.trim(), body, taskPriority, pauseUntilComplete })
@@ -216,6 +225,30 @@ export default function SequenceStepEditor({ step, previousStepDay, onSave, onCl
                     <label className={labelCls}>BCC (optional)</label>
                     <input value={bcc} onChange={e => setBcc(e.target.value)} placeholder="comma-separated" className={inputCls} />
                   </div>
+                </div>
+
+                <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={abEnabled} onChange={e => setAbEnabled(e.target.checked)} className="accent-emerald-600 w-4 h-4" />
+                    <span className="text-sm font-medium text-gray-700">Add A/B test</span>
+                  </label>
+                  {abEnabled && (
+                    <div className="mt-3 flex flex-col gap-3">
+                      <div>
+                        <label className={labelCls}>Split: {abSplit}% A / {100 - abSplit}% B</label>
+                        <input type="range" min={10} max={90} step={5} value={abSplit} onChange={e => setAbSplit(parseInt(e.target.value))} className="w-full accent-emerald-600" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Variant B — Subject</label>
+                        <input value={variantBSubject} onChange={e => setVariantBSubject(e.target.value)} placeholder="Alternate subject line" className={inputCls} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Variant B — Body</label>
+                        <textarea ref={variantBBodyRef} value={variantBBody} onChange={e => setVariantBBody(e.target.value)} rows={5} className={`${inputCls} resize-none`} />
+                        <TokenInsertBar onInsert={insertVariantBToken} />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             )}

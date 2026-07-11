@@ -921,6 +921,9 @@ export default function SequenceDetailPage() {
                         {step.type !== 'email' && step.pauseUntilComplete && (
                           <span className="inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">PAUSES SEQUENCE</span>
                         )}
+                        {step.type === 'email' && step.abEnabled && (
+                          <span className="inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">A/B TEST · {step.abSplit ?? 50}/{100 - (step.abSplit ?? 50)}</span>
+                        )}
                         {step.linkedinAction && <p className="text-xs text-gray-500 mt-1">LinkedIn: {step.linkedinAction}</p>}
                       </div>
                     </div>

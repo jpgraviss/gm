@@ -4,9 +4,16 @@ import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
+import { computeDealScore } from '@/lib/deal-score'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDeal(row: any) {
+  const { score, factors } = computeDealScore({
+    probability: row.probability ?? 0,
+    lastActivity: row.last_activity,
+    closeDate: row.close_date,
+    stage: row.stage,
+  })
   return {
     id:           row.id,
     company:      row.company,
@@ -23,6 +30,8 @@ function mapDeal(row: any) {
     pipelineId:   row.pipeline_id ?? 'client-acquisition',
     companyId:    row.company_id ?? null,
     contactId:    row.contact_id ?? null,
+    dealScore:    score,
+    dealScoreFactors: factors,
   }
 }
 

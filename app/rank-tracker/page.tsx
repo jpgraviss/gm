@@ -1501,6 +1501,15 @@ function CompetitorsTab({ competitors, keywords, onUpdate }: {
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Keyword Comparison</h3>
           </div>
+          {Object.keys(competitorSnapshots).length === 0 && (
+            <div className="px-4 py-3 bg-amber-50 border-b border-amber-100">
+              <p className="text-xs text-amber-700">
+                No competitor rank data yet — dashes below aren&apos;t missing data, they mean
+                competitor rank checking isn&apos;t connected to a live SERP data source.
+                Your own keyword positions (from Google Search Console) are still accurate.
+              </p>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">

@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROPOSAL_STATUSES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProposal(row: any) {
@@ -30,7 +31,7 @@ function mapProposal(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('proposals GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   const pag = parsePagination(req)
@@ -42,14 +43,13 @@ export async function GET(req: NextRequest) {
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
-    console.error('[proposals GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch proposals' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch proposals')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapProposal), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('proposals POST', async (req) => {
   const body = await req.json()
 
   const result = validate(body, {
@@ -82,8 +82,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[proposals POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create proposal' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create proposal')
   }
   return NextResponse.json(mapProposal(data), { status: 201 })
-}
+})

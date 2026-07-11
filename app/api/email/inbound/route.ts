@@ -60,11 +60,19 @@ function extractHeader(headers: InboundHeader[] | undefined, name: string): stri
 export const POST = withErrorHandler('email/inbound POST', async (req) => {
   const rawBody = await req.text()
 
+  // This route is intentionally public (Resend has no session to authenticate
+  // with) and writes directly into CRM activity records — the webhook
+  // signature is the ONLY thing standing between this and an attacker who
+  // knows a team member's bcc_email injecting fabricated activity content.
+  // Fail closed if the secret isn't configured, same as SESSION_SIGNING_KEY.
   const webhookSecret = process.env.RESEND_WEBHOOK_SECRET
-  if (webhookSecret) {
-    if (!verifyResendSignature(rawBody, req, webhookSecret)) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+  if (!webhookSecret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('RESEND_WEBHOOK_SECRET must be set in production')
     }
+    console.warn('[email/inbound] RESEND_WEBHOOK_SECRET not set — accepting unsigned payloads (dev only)')
+  } else if (!verifyResendSignature(rawBody, req, webhookSecret)) {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
   }
 
   let payload: InboundPayload

@@ -65,6 +65,16 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   // Server-side JWT verification via Google's tokeninfo endpoint.
   // Bounded at 5 seconds. Verification is REQUIRED — we reject if it fails.
   const expectedAud = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+  if (!expectedAud) {
+    // Fail closed, not open — without an expected audience configured, a
+    // validly-signed token from ANY Google OAuth client (not just this
+    // app's) would otherwise pass the check below unverified.
+    console.error('[google-verify] GOOGLE_CLIENT_ID/NEXT_PUBLIC_GOOGLE_CLIENT_ID not configured — rejecting sign-in')
+    return NextResponse.json(
+      { error: 'Google sign-in is not configured on this server.' },
+      { status: 500 },
+    )
+  }
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 5000)
@@ -84,7 +94,7 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
     }
 
     const tokenInfo = await tokenInfoRes.json()
-    if (expectedAud && tokenInfo.aud && tokenInfo.aud !== expectedAud) {
+    if (tokenInfo.aud && tokenInfo.aud !== expectedAud) {
       console.error('[google-verify] audience mismatch', { expected: expectedAud, actual: tokenInfo.aud })
       return NextResponse.json(
         { error: 'Sign-in token audience mismatch — check that GOOGLE_CLIENT_ID matches NEXT_PUBLIC_GOOGLE_CLIENT_ID in your environment.' },

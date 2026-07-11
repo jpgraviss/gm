@@ -5,6 +5,8 @@ import { sendViaGmail } from '@/lib/gmail-send'
 import { fireAutomations } from '@/lib/automations-engine'
 import { getSettings, type AppSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
+import { departmentForUnit } from '@/lib/task-department'
+import type { SequenceStep, SequenceHtmlTemplate } from '@/lib/types'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.gravissmarketing.com'
 
 // ─── Merge-field replacement ─────────────────────────────────────────────────
@@ -53,7 +55,7 @@ function appendUnsubscribeFooter(html: string, email: string, sequenceId: string
 
 // ─── HTML template renderers ─────────────────────────────────────────────────
 
-type HtmlTemplate = 'branded' | 'minimal' | 'plain'
+type HtmlTemplate = SequenceHtmlTemplate
 
 function renderEmailHtml(
   template: HtmlTemplate,
@@ -184,6 +186,7 @@ async function lookupGmailToken(
 interface RepInfo {
   name: string
   email: string
+  unit: string | null
 }
 
 async function lookupRep(
@@ -193,7 +196,7 @@ async function lookupRep(
   if (!repId) return null
   const { data } = await db
     .from('team_members')
-    .select('name, email')
+    .select('name, email, unit')
     .eq('id', repId)
     .single()
   return data ?? null
@@ -280,6 +283,7 @@ async function logActivity(
     eventType: 'sent' | 'failed' | 'skipped' | 'task_created'
     messageId?: string | null
     metadata?: Record<string, unknown>
+    variant?: 'A' | 'B' | null
   },
 ) {
   await db.from('sequence_activities').insert({
@@ -290,7 +294,19 @@ async function logActivity(
     event_type: params.eventType,
     message_id: params.messageId ?? null,
     metadata: params.metadata ?? {},
+    variant: params.variant ?? null,
   })
+}
+
+// A contact keeps the same A/B variant for every A/B-enabled step in a
+// sequence (assigned once, on the first such step reached) rather than being
+// re-randomized per step — sequence_enrollments.ab_variant is a single
+// column, not per-step, so this matches the schema's intent.
+function resolveAbVariant(step: SequenceStep, existingVariant: string | null | undefined): 'A' | 'B' | null {
+  if (!step.abEnabled) return null
+  if (existingVariant === 'A' || existingVariant === 'B') return existingVariant
+  const splitA = step.abSplit ?? 50
+  return Math.random() * 100 < splitA ? 'A' : 'B'
 }
 
 // ─── Suppression check ──────────────────────────────────────────────────────
@@ -447,23 +463,7 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
     }
 
     // ── Process current step ───────────────────────────────────────────────
-    const steps: {
-      id: string
-      type: string
-      day: number
-      subject?: string
-      body?: string
-      cc?: string[]
-      bcc?: string[]
-      replyTo?: string
-      fromName?: string
-      fromEmail?: string
-      htmlTemplate?: HtmlTemplate
-      taskTitle?: string
-      linkedinAction?: string
-      linkedinMessage?: string
-      callScript?: string
-    }[] = seq.steps ?? []
+    const steps: SequenceStep[] = seq.steps ?? []
     const step = steps[enrollment.current_step]
     if (!step) continue
 
@@ -477,6 +477,14 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
       }
       const rep = repId ? repCache.get(repId) ?? null : null
 
+      // A/B variant — assigned once per enrollment, reused for every
+      // A/B-enabled step (see resolveAbVariant).
+      const abVariant = resolveAbVariant(step, enrollment.ab_variant)
+      if (abVariant && abVariant !== enrollment.ab_variant) {
+        update.ab_variant = abVariant
+      }
+      const useVariantB = abVariant === 'B' && step.variantB
+
       // Build merge context
       const mergeCtx: MergeContext = {
         contactName: enrollment.contact_name ?? '',
@@ -486,12 +494,13 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
         senderEmail: rep?.email ?? '',
       }
 
-      // Apply merge fields to subject and body
+      // Apply merge fields to subject and body — variant B content when
+      // this enrollment landed in variant B of an A/B-enabled step.
       const subject = replaceMergeFields(
-        step.subject ?? `Message from ${seq.name}`,
+        (useVariantB ? step.variantB?.subject : step.subject) || `Message from ${seq.name}`,
         mergeCtx,
       )
-      const bodyText = replaceMergeFields(step.body ?? '', mergeCtx)
+      const bodyText = replaceMergeFields((useVariantB ? step.variantB?.body : step.body) ?? '', mergeCtx)
 
       // Resolve sender info (step overrides sequence overrides defaults)
       const fromName = step.fromName ?? seq.from_name ?? settings.email.fromName
@@ -614,6 +623,7 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
             subject,
             from: `${fromName} <${gmailSent ? rep?.email : fromEmail}>`,
           },
+          variant: abVariant,
         })
       } else {
         await logActivity(db, {
@@ -644,6 +654,20 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
         task: step.body || '',
       }
 
+      // Resolve company_id from the contact — sequence_enrollments.company is
+      // a denormalized name, not an FK, and CompanyPanel's Activity tab filters
+      // strictly on crm_activities.company_id, so without this the task never
+      // surfaces on the company record.
+      let stepCompanyId: string | null = null
+      if (enrollment.contact_id) {
+        const { data: contactRow } = await db
+          .from('crm_contacts')
+          .select('company_id')
+          .eq('id', enrollment.contact_id)
+          .maybeSingle()
+        stepCompanyId = contactRow?.company_id ?? null
+      }
+
       const activityId = `seq-${seq.id}-${enrollment.id}-step${enrollment.current_step}`
       await db.from('crm_activities').upsert({
         id: activityId,
@@ -652,10 +676,38 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
         body: taskBodies[step.type] || null,
         contact_id: enrollment.contact_id || null,
         contact_name: enrollment.contact_name || '',
+        company_id: stepCompanyId,
         company_name: enrollment.company || '',
         user_name: 'Sequence',
         timestamp: now.toISOString(),
         outcome: 'pending',
+      }, { onConflict: 'id' })
+
+      // Also create a real, assignable task in app_tasks — the crm_activities
+      // row above only surfaces in a company's activity feed, it has no
+      // assignee, priority, or department, so it never appears in a rep's
+      // actual Tasks queue. Without this, sequence follow-ups are invisible
+      // outside the CRM record they're attached to.
+      const stepRepId = enrollment.assigned_rep_id ?? seq.assigned_rep_id
+      if (stepRepId && !repCache.has(stepRepId)) {
+        repCache.set(stepRepId, await lookupRep(db, stepRepId))
+      }
+      const stepRep = stepRepId ? repCache.get(stepRepId) ?? null : null
+      const dueDate = now.toISOString().split('T')[0]
+      await db.from('app_tasks').upsert({
+        id: `task-${activityId}`,
+        title: taskTitles[step.type] ?? `Sequence task: ${enrollment.contact_name}`,
+        description: taskBodies[step.type] || null,
+        category: step.type === 'manual_email' ? 'Email' : 'General',
+        priority: step.taskPriority ?? 'Medium',
+        status: 'Pending',
+        company: enrollment.company || null,
+        company_id: stepCompanyId,
+        assigned_to: stepRep?.name ?? '',
+        due_date: dueDate,
+        created_date: dueDate,
+        linked_id: enrollment.id,
+        department: departmentForUnit(stepRep?.unit) ?? 'Sales',
       }, { onConflict: 'id' })
 
       await logActivity(db, {

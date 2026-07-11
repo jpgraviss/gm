@@ -8,6 +8,7 @@ import { ToastProvider } from '@/components/ui/Toast'
 import { SettingsProvider } from '@/lib/useSettings'
 import AppShell from '@/components/layout/AppShell'
 import CookieConsent from '@/components/ui/CookieConsent'
+import ServiceWorkerRegistration from '@/components/ui/ServiceWorkerRegistration'
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -37,6 +38,7 @@ export default function RootLayout({
     <html lang="en" className={`${montserrat.variable} ${syncopate.variable}`} suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icon-512.png" />
         <meta name="theme-color" content="#015035" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -55,6 +57,7 @@ export default function RootLayout({
                     {children}
                   </AppShell>
                   <CookieConsent />
+                  <ServiceWorkerRegistration />
                 </SettingsProvider>
               </ToastProvider>
             </UIProvider>

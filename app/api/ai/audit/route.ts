@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chatCompletion } from '@/lib/ai-client'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuditSystemPrompt } from '@/lib/audit-template'
+import { getGSCCoreWebVitals } from '@/lib/google-search-console'
 import { withErrorHandler } from '@/lib/api-handler'
 import type { AuditSectionResult, AuditType } from '@/lib/types'
 
@@ -41,7 +42,7 @@ const AUDIT_SECTIONS: { key: string; label: string; prompt: string }[] = [
     key: 'seo_technical',
     label: 'Technical SEO',
     prompt: `Analyze technical SEO factors for this website. Evaluate:
-- Site speed and Core Web Vitals expectations
+- Site speed and Core Web Vitals — use the REAL measured values provided below (Google PageSpeed Insights field data), do not estimate or guess these; if a value is null, PageSpeed data wasn't available for this URL, say so explicitly
 - Mobile-friendliness and responsive design
 - SSL/HTTPS implementation
 - XML sitemap presence and quality
@@ -54,9 +55,9 @@ const AUDIT_SECTIONS: { key: string; label: string; prompt: string }[] = [
   {
     key: 'seo_offpage',
     label: 'Off-Page SEO & Authority',
-    prompt: `Analyze off-page SEO and authority signals for this website. Evaluate:
-- Estimated domain authority / trust signals
-- Backlink profile quality expectations
+    prompt: `Analyze off-page SEO and authority signals for this website. IMPORTANT: you have no backlink index or measured domain authority data — do not state a specific domain authority number or precise backlink count as if measured. Frame this section as qualitative signals visible in the HTML/content only, and explicitly say domain authority and backlink profile were not measured and would require a dedicated backlink tool. Evaluate:
+- Trust signals visible in the page content (certifications, press mentions, testimonials)
+- Qualitative backlink-worthiness of the content (would other sites plausibly link to this?)
 - Local SEO presence (Google Business Profile, NAP consistency)
 - Social media presence and signals
 - Brand mentions and online reputation
@@ -190,6 +191,15 @@ export const POST = withErrorHandler('ai/audit POST', async (req) => {
 
     const pageHtml = await fetchPageHtml(url)
 
+    // Real, measured performance data — feeds the technical SEO section so
+    // it reports actual field data instead of the LLM guessing at "expected"
+    // Core Web Vitals from HTML alone.
+    const needsVitals = sectionsToRun.some(s => s.key === 'seo_technical')
+    const vitals = needsVitals ? await getGSCCoreWebVitals(url) : null
+    const vitalsBlock = vitals
+      ? `\n\n--- REAL CORE WEB VITALS (Google PageSpeed Insights field data, mobile) ---\nLCP (Largest Contentful Paint): ${vitals.lcp != null ? `${vitals.lcp}ms` : 'not available'}\nFID/INP (First Input Delay / Interaction to Next Paint): ${vitals.fid != null ? `${vitals.fid}ms` : 'not available'}\nCLS (Cumulative Layout Shift): ${vitals.cls != null ? vitals.cls : 'not available'}\nOverall status: ${vitals.status}\n--- END CORE WEB VITALS ---`
+      : ''
+
     const systemPrompt = getAuditSystemPrompt()
 
     const sectionResults: AuditSectionResult[] = []
@@ -197,6 +207,7 @@ export const POST = withErrorHandler('ai/audit POST', async (req) => {
 
     for (const section of sectionsToRun) {
       let lastResult: Awaited<ReturnType<typeof chatCompletion>> | null = null
+      const dataBlock = section.key === 'seo_technical' ? vitalsBlock : ''
 
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 2000))
@@ -205,7 +216,7 @@ export const POST = withErrorHandler('ai/audit POST', async (req) => {
           system: systemPrompt,
           messages: [{
             role: 'user',
-            content: `${section.prompt}\n\nWebsite URL: ${url}\n${companyName ? `Company: ${companyName}` : ''}\n\n--- PAGE HTML (first 30KB) ---\n${pageHtml}\n--- END HTML ---\n\nAnalyze the actual HTML above. Provide your analysis as a JSON object with score (0-100), findings (array of strings), and recommendations (array of strings).`,
+            content: `${section.prompt}\n\nWebsite URL: ${url}\n${companyName ? `Company: ${companyName}` : ''}\n\n--- PAGE HTML (first 30KB) ---\n${pageHtml}\n--- END HTML ---${dataBlock}\n\nAnalyze the actual HTML above. Provide your analysis as a JSON object with score (0-100), findings (array of strings), and recommendations (array of strings).`,
           }],
           maxTokens: 2048,
           timeoutMs: 45_000,

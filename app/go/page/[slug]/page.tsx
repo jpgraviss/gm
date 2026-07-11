@@ -43,5 +43,5 @@ export default async function FunnelPublicPage({ params, searchParams }: Props) 
     data: Record<string, unknown>
   }>
 
-  return <PublicFunnelPage blocks={blocks} funnelSlug={slug} />
+  return <PublicFunnelPage blocks={blocks} funnelSlug={slug} pageId={currentPage.id} />
 }

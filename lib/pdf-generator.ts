@@ -1,39 +1,51 @@
 import jsPDF from 'jspdf'
+import { PAGE, PDF_COLORS, drawHeaderBand, drawFooterOnAllPages, checkPageBreak, type PdfCursor } from '@/lib/pdf-brand'
 
 interface PdfOptions {
   title?: string
+  eyebrow?: string
   filename?: string
   orientation?: 'portrait' | 'landscape'
   margins?: { top: number; right: number; bottom: number; left: number }
 }
 
-const DEFAULT_MARGINS = { top: 20, right: 15, bottom: 20, left: 15 }
-
+/**
+ * Generic HTML-to-PDF export used wherever a caller only has an HTML string
+ * (not structured data) — e.g. PdfDownloadButton, delivery-template exports.
+ * Body content is still flattened to plain text (arbitrary HTML can't be
+ * faithfully re-rendered without a much larger investment — a headless
+ * browser/html2canvas pipeline this app doesn't currently depend on), but
+ * every export now gets the same branded header/footer band as the rest of
+ * the system's PDFs instead of being plain black-on-white with no
+ * branding at all. For a fully bespoke, structured export (the audit
+ * report), see lib/pdf-audit.ts instead.
+ */
 export function generatePdf(html: string, options: PdfOptions = {}): Blob {
-  const {
-    title,
-    orientation = 'portrait',
-    margins = DEFAULT_MARGINS,
-  } = options
+  const { title, eyebrow, orientation = 'portrait' } = options
+  // The branded header/footer bands (drawHeaderBand/drawFooterOnAllPages)
+  // are portrait-dimensioned, matching every real caller today (no caller
+  // in the app currently passes landscape). Landscape still produces a
+  // valid PDF, just without the brand band, rather than drawing a
+  // portrait-sized band onto a landscape page.
+  const isPortrait = orientation === 'portrait'
 
-  const doc = new jsPDF({
-    orientation,
-    unit: 'mm',
-    format: 'a4',
-  })
+  const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
 
-  if (title) {
-    doc.setFontSize(16)
-    doc.setFont('helvetica', 'bold')
-    doc.text(title, margins.left, margins.top)
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.text(new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }), margins.left, margins.top + 8)
+  const cursor: PdfCursor = {
+    y: title
+      ? (isPortrait ? drawHeaderBand(doc, { eyebrow, title, height: 38 }) : (() => {
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(16)
+          doc.setTextColor(...PDF_COLORS.ink)
+          doc.text(title, PAGE.marginLeft, PAGE.marginLeft)
+          return PAGE.marginLeft + 12
+        })())
+      : PAGE.marginLeft,
   }
 
-  const startY = title ? margins.top + 16 : margins.top
-  const pageWidth = orientation === 'portrait' ? 210 : 297
-  const maxWidth = pageWidth - margins.left - margins.right
+  const pageWidth = isPortrait ? PAGE.width : PAGE.height
+  const pageHeight = isPortrait ? PAGE.height : PAGE.width
+  const maxWidth = pageWidth - PAGE.marginLeft - PAGE.marginRight
 
   const stripped = html
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -59,20 +71,19 @@ export function generatePdf(html: string, options: PdfOptions = {}): Blob {
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 
+  doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
+  doc.setTextColor(...PDF_COLORS.ink)
   const lines = doc.splitTextToSize(stripped, maxWidth)
   const lineHeight = 4.5
-  let y = startY
-  const pageHeight = orientation === 'portrait' ? 297 : 210
 
   for (const line of lines) {
-    if (y + lineHeight > pageHeight - margins.bottom) {
-      doc.addPage()
-      y = margins.top
-    }
-    doc.text(line, margins.left, y)
-    y += lineHeight
+    checkPageBreak(doc, cursor, lineHeight, pageHeight)
+    doc.text(line, PAGE.marginLeft, cursor.y)
+    cursor.y += lineHeight
   }
+
+  if (isPortrait) drawFooterOnAllPages(doc, { label: title })
 
   return doc.output('blob')
 }

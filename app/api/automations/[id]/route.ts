@@ -19,6 +19,7 @@ export const PATCH = withErrorHandler('automations/[id] PATCH', async (req, { pa
   if (body.name    !== undefined) update.name     = body.name
   if (body.trigger !== undefined) update.trigger  = body.trigger
   if (body.actions !== undefined) update.actions  = body.actions
+  if (body.config  !== undefined) update.config   = body.config
   if (body.status  !== undefined) update.status   = body.status
   if (body.runs    !== undefined) update.runs     = body.runs
   if (body.lastRun !== undefined) update.last_run = body.lastRun

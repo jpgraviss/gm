@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
+import { buildReportRecommendations } from '@/lib/client-reports'
 
 export const GET = withErrorHandler('delivery/monthly-report/[id] GET', async (_req, ctx) => {
   const { id } = await ctx!.params
@@ -194,7 +195,7 @@ export const GET = withErrorHandler('delivery/monthly-report/[id] GET', async (_
   }
 
   result.metrics = metrics
-  result.recommendations = []
+  result.recommendations = buildReportRecommendations(metrics as Parameters<typeof buildReportRecommendations>[0])
   result.changelog = changelog
 
   return NextResponse.json(result)

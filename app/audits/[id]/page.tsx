@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
-import { generatePdf, downloadPdf } from '@/lib/pdf-generator'
+import { generateAuditPdf, downloadBlob } from '@/lib/pdf-audit'
+import { gradeColorHex } from '@/lib/brand'
 import {
   Globe, ArrowLeft, Download, Loader2,
-  CheckCircle, AlertTriangle, TrendingUp,
+  AlertTriangle, TrendingUp,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -33,34 +34,24 @@ interface AuditData {
   completed_at?: string
 }
 
-function gradeColor(grade: string) {
-  switch (grade) {
-    case 'A': return 'text-green-600'
-    case 'B': return 'text-blue-600'
-    case 'C': return 'text-yellow-600'
-    case 'D': return 'text-orange-600'
-    case 'F': return 'text-red-600'
-    default: return 'text-gray-500'
-  }
+// Brand-consistent grade colors (matches lib/brand.ts GRADE_COLORS, the same
+// mapping used in the PDF export) instead of generic Tailwind semantic
+// colors that had no relationship to the app's actual brand palette.
+function gradeHex(grade: string): string {
+  return gradeColorHex(grade)
 }
 
-function gradeBg(grade: string) {
-  switch (grade) {
-    case 'A': return 'bg-green-50 border-green-200'
-    case 'B': return 'bg-blue-50 border-blue-200'
-    case 'C': return 'bg-yellow-50 border-yellow-200'
-    case 'D': return 'bg-orange-50 border-orange-200'
-    case 'F': return 'bg-red-50 border-red-200'
-    default: return 'bg-gray-50 border-gray-200'
-  }
+function gradeBgStyle(grade: string): { backgroundColor: string; borderColor: string } {
+  const hex = gradeColorHex(grade)
+  return { backgroundColor: `${hex}14`, borderColor: `${hex}40` }
 }
 
-function scoreBarColor(score: number) {
-  if (score >= 90) return 'bg-green-500'
-  if (score >= 80) return 'bg-blue-500'
-  if (score >= 70) return 'bg-yellow-500'
-  if (score >= 60) return 'bg-orange-500'
-  return 'bg-red-500'
+function scoreBarHex(score: number): string {
+  if (score >= 90) return gradeColorHex('A')
+  if (score >= 80) return gradeColorHex('B')
+  if (score >= 70) return gradeColorHex('C')
+  if (score >= 60) return gradeColorHex('D')
+  return gradeColorHex('F')
 }
 
 export default function AuditDetailPage() {
@@ -88,17 +79,13 @@ export default function AuditDetailPage() {
     load()
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleDownloadPdf() {
+  async function handleDownloadPdf() {
     if (!audit) return
     setDownloading(true)
     try {
-      const html = buildReportHtml(audit)
-      const blob = generatePdf(html, {
-        title: `Website Audit — ${audit.company_name || audit.website_url}`,
-        orientation: 'portrait',
-      })
+      const blob = await generateAuditPdf(audit)
       const filename = `audit-${(audit.company_name || audit.website_url).replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-${new Date(audit.created_at).toISOString().slice(0, 10)}.pdf`
-      downloadPdf(blob, filename)
+      downloadBlob(blob, filename)
     } catch {
       toast('PDF download failed', 'error')
     } finally {
@@ -139,30 +126,33 @@ export default function AuditDetailPage() {
           </button>
         </div>
 
-        {/* Overview Card */}
-        <div className={`rounded-xl border p-6 ${gradeBg(audit.overall_grade)}`}>
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+        {/* Overview Card — dark brand header band, matches the PDF export */}
+        <div className="rounded-xl overflow-hidden border border-gray-100">
+          <div className="p-6 flex flex-col md:flex-row items-start md:items-center gap-6" style={{ background: '#012b1e' }}>
             <div className="flex items-center gap-4">
-              <div className={`text-5xl font-bold ${gradeColor(audit.overall_grade)}`}>
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white flex-shrink-0"
+                style={{ background: gradeHex(audit.overall_grade) }}
+              >
                 {audit.overall_grade}
               </div>
               <div>
-                <div className="text-2xl font-bold text-gray-900">{audit.overall_score}/100</div>
-                <div className="text-sm text-gray-500">Overall Score</div>
+                <div className="text-2xl font-bold text-white">{audit.overall_score}/100</div>
+                <div className="text-sm text-gray-300">Overall Score</div>
               </div>
             </div>
             <div className="flex-1 space-y-1">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
+              <div className="flex items-center gap-2 text-sm text-gray-300">
                 <Globe size={14} />
                 <a href={audit.website_url} target="_blank" rel="noopener noreferrer" className="hover:underline">
                   {audit.website_url}
                 </a>
               </div>
               {audit.company_name && (
-                <div className="text-sm text-gray-600">Company: {audit.company_name}</div>
+                <div className="text-sm text-gray-300">Company: {audit.company_name}</div>
               )}
-              <div className="text-xs text-gray-500">
-                {audit.audit_type === 'full' ? 'Full Audit' : audit.audit_type === 'seo' ? 'SEO Audit' : 'Website Audit'} &middot;{' '}
+              <div className="text-xs font-semibold tracking-wide" style={{ color: '#CC7853' }}>
+                {(audit.audit_type === 'full' ? 'FULL AUDIT' : audit.audit_type === 'seo' ? 'SEO AUDIT' : 'WEBSITE AUDIT')} &middot;{' '}
                 {new Date(audit.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
               </div>
             </div>
@@ -172,25 +162,31 @@ export default function AuditDetailPage() {
         {/* Executive Summary */}
         {audit.summary && (
           <div className="bg-white border rounded-xl p-6 shadow-sm">
-            <h2 className="font-semibold text-gray-900 mb-2">Executive Summary</h2>
+            <h2 className="font-semibold text-xs uppercase tracking-wide mb-3 flex items-center gap-2" style={{ color: '#1B211D' }}>
+              <span className="inline-block w-1 h-4 rounded-sm" style={{ background: '#015035' }} />
+              Executive Summary
+            </h2>
             <p className="text-sm text-gray-700 leading-relaxed">{audit.summary}</p>
           </div>
         )}
 
         {/* Score Overview */}
         <div className="bg-white border rounded-xl p-6 shadow-sm">
-          <h2 className="font-semibold text-gray-900 mb-4">Section Scores</h2>
+          <h2 className="font-semibold text-xs uppercase tracking-wide mb-4 flex items-center gap-2" style={{ color: '#1B211D' }}>
+            <span className="inline-block w-1 h-4 rounded-sm" style={{ background: '#015035' }} />
+            Section Scores
+          </h2>
           <div className="space-y-3">
             {sections.map((s, i) => (
               <div key={i} className="flex items-center gap-3">
                 <div className="w-40 text-sm text-gray-600 shrink-0">{s.name}</div>
                 <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${scoreBarColor(s.score)}`}
-                    style={{ width: `${s.score}%` }}
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${s.score}%`, background: scoreBarHex(s.score) }}
                   />
                 </div>
-                <div className={`w-16 text-right text-sm font-semibold ${gradeColor(s.grade)}`}>
+                <div className="w-16 text-right text-sm font-semibold" style={{ color: gradeHex(s.grade) }}>
                   {s.grade} ({s.score})
                 </div>
               </div>
@@ -203,7 +199,7 @@ export default function AuditDetailPage() {
           <div key={i} className="bg-white border rounded-xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-900">{section.name}</h2>
-              <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${gradeColor(section.grade)} ${gradeBg(section.grade)}`}>
+              <span className="px-3 py-1 rounded-lg text-sm font-semibold" style={{ ...gradeBgStyle(section.grade), color: gradeHex(section.grade) }}>
                 {section.grade} — {section.score}/100
               </span>
             </div>
@@ -242,30 +238,3 @@ export default function AuditDetailPage() {
   )
 }
 
-function buildReportHtml(audit: AuditData): string {
-  const sections = Array.isArray(audit.sections) ? audit.sections : []
-  return `
-    <div>
-      <h1>Website Audit Report</h1>
-      <p><strong>Website:</strong> ${audit.website_url}</p>
-      ${audit.company_name ? `<p><strong>Company:</strong> ${audit.company_name}</p>` : ''}
-      <p><strong>Date:</strong> ${new Date(audit.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-      <p><strong>Overall Score:</strong> ${audit.overall_score}/100 (Grade: ${audit.overall_grade})</p>
-      <br/>
-      <h2>Executive Summary</h2>
-      <p>${audit.summary || 'No summary available.'}</p>
-      <br/>
-      <h2>Section Scores</h2>
-      ${sections.map(s => `<p>${s.name}: ${s.score}/100 (${s.grade})</p>`).join('')}
-      <br/>
-      ${sections.map(s => `
-        <h2>${s.name} — ${s.grade} (${s.score}/100)</h2>
-        <h3>Findings</h3>
-        <ul>${s.findings.map(f => `<li>${f}</li>`).join('')}</ul>
-        <h3>Recommendations</h3>
-        <ul>${s.recommendations.map(r => `<li>${r}</li>`).join('')}</ul>
-        <br/>
-      `).join('')}
-    </div>
-  `
-}

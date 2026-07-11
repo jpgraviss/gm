@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/admin-auth'
 
-export const GET = withErrorHandler('data-audit GET', async () => {
+export const GET = withErrorHandler('data-audit GET', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const db = createServiceClient()
 
   const [
@@ -89,6 +93,9 @@ export const GET = withErrorHandler('data-audit GET', async () => {
 })
 
 export const POST = withErrorHandler('data-audit POST', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const body = await req.json()
   const db = createServiceClient()
 

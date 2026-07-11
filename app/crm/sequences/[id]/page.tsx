@@ -8,48 +8,14 @@ import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronLeft, Edit2, Copy, TrendingUp, Search, MoreHorizontal,
   Eye, Trash2, ArrowUpDown, UserMinus, UserPlus, Phone,
-  Linkedin, AlertCircle, Send,
+  Linkedin, AlertCircle, Send, ChevronUp, ChevronDown,
 } from 'lucide-react'
+import type { SequenceStatus, SequenceStepType, SequenceStep, EmailSequence, TeamMember } from '@/lib/types'
+import SequenceStepEditor from '@/components/crm/SequenceStepEditor'
+import SequenceAutomateTab from '@/components/crm/SequenceAutomateTab'
+import { fetchTeamMembers } from '@/lib/supabase'
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
-
-type SequenceStatus = 'Active' | 'Paused' | 'Draft' | 'Completed'
-type StepType = 'email' | 'manual_email' | 'wait' | 'task' | 'condition' | 'linkedin' | 'call'
-
-interface SequenceStep {
-  id: string
-  type: StepType
-  day: number
-  subject?: string
-  body?: string
-  waitDays?: number
-  taskTitle?: string
-  condition?: string
-  linkedinAction?: 'connect' | 'inmail' | 'view_profile'
-  linkedinMessage?: string
-  callScript?: string
-}
-
-interface EmailSequence {
-  id: string
-  name: string
-  status: SequenceStatus
-  trigger: string
-  targetSegment: string
-  enrolledCount: number
-  activeCount: number
-  completedCount: number
-  openRate: number
-  clickRate: number
-  replyRate: number
-  steps: SequenceStep[]
-  createdDate: string
-  lastModified: string
-  sendVia: 'gmail' | 'resend'
-  fromName: string
-  fromEmail: string
-  assignedRepId: string | null
-}
+type StepType = SequenceStepType
 
 interface Enrollment {
   id: string
@@ -72,6 +38,41 @@ interface CRMContact {
   emails: string[]
   companyName: string
   title: string
+}
+
+interface SequenceAnalytics {
+  overview: {
+    totalSent: number
+    totalDelivered: number
+    totalOpened: number
+    totalClicked: number
+    totalReplied: number
+    totalBounced: number
+    totalUnsubscribed: number
+    openRate: number
+    clickRate: number
+    replyRate: number
+    bounceRate: number
+    unsubscribeRate: number
+  }
+  stepMetrics: {
+    stepIndex: number
+    sent: number
+    opened: number
+    clicked: number
+    replied: number
+    bounced: number
+    openRate: number
+    clickRate: number
+    replyRate: number
+  }[]
+  dailySends: { date: string; count: number }[]
+  abResults?: {
+    stepIndex: number
+    variantA: { sent: number; opened: number; clicked: number; replied: number }
+    variantB: { sent: number; opened: number; clicked: number; replied: number }
+    winner: 'A' | 'B' | null
+  }[]
 }
 
 const statusColors: Record<SequenceStatus, { bg: string; text: string; dot: string }> = {
@@ -344,7 +345,7 @@ export default function SequenceDetailPage() {
   const [loading, setLoading] = useState(true)
   const [sequence, setSequence] = useState<EmailSequence | null>(null)
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
-  const [tab, setTab] = useState<'people' | 'steps' | 'settings'>('people')
+  const [tab, setTab] = useState<'people' | 'steps' | 'performance' | 'automate' | 'settings'>('people')
   const [enrollSearch, setEnrollSearch] = useState('')
   const [enrollStatusFilter, setEnrollStatusFilter] = useState<'all' | 'active' | 'completed' | 'paused'>('all')
   const [selectedEnrollments, setSelectedEnrollments] = useState<Set<string>>(new Set())
@@ -352,6 +353,14 @@ export default function SequenceDetailPage() {
   const [showDeleteSeqModal, setShowDeleteSeqModal] = useState(false)
   const [showRemoveModal, setShowRemoveModal] = useState(false)
   const [testSending, setTestSending] = useState(false)
+  const [editingStep, setEditingStep] = useState<SequenceStep | 'new' | null>(null)
+  const [savingSteps, setSavingSteps] = useState(false)
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [settingsForm, setSettingsForm] = useState<Partial<EmailSequence> | null>(null)
+  const [savingSettings, setSavingSettings] = useState(false)
+  const [analytics, setAnalytics] = useState<SequenceAnalytics | null>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+  const [analyticsLoaded, setAnalyticsLoaded] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -363,6 +372,7 @@ export default function SequenceDetailPage() {
         const seqs = await seqRes.json()
         const found = Array.isArray(seqs) ? seqs.find((s: EmailSequence) => s.id === sequenceId) : null
         setSequence(found ?? null)
+        if (found && found.steps.length === 0) setTab('steps')
       }
       if (enrollRes.ok) {
         const data = await enrollRes.json()
@@ -376,6 +386,54 @@ export default function SequenceDetailPage() {
   }, [sequenceId, toast])
 
   useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { fetchTeamMembers().then(setTeamMembers).catch(() => {}) }, [])
+  useEffect(() => {
+    if (tab !== 'performance' || analyticsLoaded) return
+    setAnalyticsLoading(true)
+    fetch(`/api/sequences/analytics?sequenceId=${sequenceId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(setAnalytics)
+      .catch(() => toast('Failed to load performance data', 'error'))
+      .finally(() => { setAnalyticsLoading(false); setAnalyticsLoaded(true) })
+  }, [tab, analyticsLoaded, sequenceId, toast])
+  useEffect(() => {
+    if (sequence && !settingsForm) {
+      setSettingsForm({
+        sendVia: sequence.sendVia,
+        fromName: sequence.fromName,
+        fromEmail: sequence.fromEmail,
+        assignedRepId: sequence.assignedRepId,
+        timezone: sequence.timezone,
+        sendWindowStart: sequence.sendWindowStart,
+        sendWindowEnd: sequence.sendWindowEnd,
+        sendOnWeekends: sequence.sendOnWeekends,
+        dailySendLimit: sequence.dailySendLimit,
+        perMinuteLimit: sequence.perMinuteLimit,
+        threadMode: sequence.threadMode,
+        sharing: sequence.sharing,
+      })
+    }
+  }, [sequence, settingsForm])
+
+  async function saveSettings() {
+    if (!sequence || !settingsForm) return
+    setSavingSettings(true)
+    try {
+      const res = await fetch(`/api/sequences/${sequenceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsForm),
+      })
+      if (!res.ok) throw new Error('Failed')
+      const updated = await res.json()
+      setSequence(prev => prev ? { ...prev, ...updated } : prev)
+      toast('Settings saved', 'success')
+    } catch {
+      toast('Failed to save settings', 'error')
+    } finally {
+      setSavingSettings(false)
+    }
+  }
 
   async function toggleStatus() {
     if (!sequence) return
@@ -393,6 +451,74 @@ export default function SequenceDetailPage() {
     await fetch(`/api/sequences/${sequenceId}`, { method: 'DELETE' })
     toast('Sequence deleted', 'success')
     router.push('/crm/sequences')
+  }
+
+  // Reordering/deleting/cloning can leave `day` (cumulative offset from
+  // enrollment, consumed by execute/route.ts as an absolute schedule) out of
+  // order relative to array position. Force it non-decreasing so the executor
+  // never computes a zero/negative gap between consecutive steps.
+  function normalizeStepDays(steps: SequenceStep[]): SequenceStep[] {
+    let minDay = 0
+    return steps.map((s, i) => {
+      const day = i === 0 ? s.day : Math.max(s.day, minDay)
+      minDay = day + 1
+      return day === s.day ? s : { ...s, day }
+    })
+  }
+
+  async function persistSteps(rawSteps: SequenceStep[]) {
+    if (!sequence) return
+    const steps = normalizeStepDays(rawSteps)
+    const previous = sequence.steps
+    setSequence({ ...sequence, steps })
+    setSavingSteps(true)
+    try {
+      const res = await fetch(`/api/sequences/${sequenceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ steps }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      toast('Failed to save steps — reverted', 'error')
+      setSequence(prev => prev ? { ...prev, steps: previous } : prev)
+    } finally {
+      setSavingSteps(false)
+    }
+  }
+
+  function handleSaveStep(step: SequenceStep) {
+    if (!sequence) return
+    const exists = sequence.steps.some(s => s.id === step.id)
+    const nextSteps = exists
+      ? sequence.steps.map(s => s.id === step.id ? step : s)
+      : [...sequence.steps, step]
+    persistSteps(nextSteps)
+    setEditingStep(null)
+  }
+
+  function handleDeleteStep(id: string) {
+    if (!sequence) return
+    persistSteps(sequence.steps.filter(s => s.id !== id))
+  }
+
+  function handleCloneStep(step: SequenceStep) {
+    if (!sequence) return
+    const clone: SequenceStep = { ...step, id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` }
+    const idx = sequence.steps.findIndex(s => s.id === step.id)
+    const nextSteps = [...sequence.steps]
+    nextSteps.splice(idx + 1, 0, clone)
+    persistSteps(nextSteps)
+  }
+
+  function handleMoveStep(id: string, direction: 'up' | 'down') {
+    if (!sequence) return
+    const idx = sequence.steps.findIndex(s => s.id === id)
+    const swapWith = direction === 'up' ? idx - 1 : idx + 1
+    if (idx < 0 || swapWith < 0 || swapWith >= sequence.steps.length) return
+    const nextSteps = [...sequence.steps]
+    ;[nextSteps[idx], nextSteps[swapWith]] = [nextSteps[swapWith], nextSteps[idx]]
+    persistSteps(nextSteps)
   }
 
   async function removeEnrollments() {
@@ -572,7 +698,7 @@ export default function SequenceDetailPage() {
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-gray-200 mb-5">
-          {(['people', 'steps', 'settings'] as const).map(t => (
+          {(['people', 'steps', 'performance', 'automate', 'settings'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -774,21 +900,38 @@ export default function SequenceDetailPage() {
         {/* Steps Tab */}
         {tab === 'steps' && (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs text-gray-400">{savingSteps ? 'Saving…' : `${sequence.steps.length} step${sequence.steps.length === 1 ? '' : 's'}`}</p>
+              <button
+                onClick={() => setEditingStep('new')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-semibold hover:opacity-90"
+                style={{ background: '#015035' }}
+              >
+                <Plus size={13} /> Add Step
+              </button>
+            </div>
             {sequence.steps.length === 0 ? (
               <div className="text-center py-12">
                 <Mail size={28} className="text-gray-300 mx-auto mb-2" />
                 <p className="text-sm text-gray-500">No steps configured</p>
-                <p className="text-xs text-gray-400 mt-1">Add steps to define your outreach sequence</p>
+                <p className="text-xs text-gray-400 mt-1 mb-4">Add steps to define your outreach sequence</p>
+                <button
+                  onClick={() => setEditingStep('new')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90"
+                  style={{ background: '#015035' }}
+                >
+                  <Plus size={14} /> Add First Step
+                </button>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
                 {sequence.steps.map((step, i) => {
                   const config = stepTypeConfig[step.type]
                   return (
-                    <div key={step.id} className="flex items-start gap-4">
+                    <div key={step.id} className="flex items-start gap-4 group">
                       <div className="flex flex-col items-center">
                         <div
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-white"
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0"
                           style={{ background: config.color }}
                         >
                           {config.icon}
@@ -797,13 +940,37 @@ export default function SequenceDetailPage() {
                           <div className="w-0.5 h-8 bg-gray-200 mt-1" />
                         )}
                       </div>
-                      <div className="flex-1 pb-4">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-gray-900">Day {step.day} — {config.label}</p>
+                      <div className="flex-1 pb-4 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {i === 0 && step.day === 0 ? 'Send now' : `Day ${step.day}`} — {config.label}
+                          </p>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                            <button onClick={() => handleMoveStep(step.id, 'up')} disabled={i === 0} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30" title="Move up">
+                              <ChevronUp size={13} className="text-gray-500" />
+                            </button>
+                            <button onClick={() => handleMoveStep(step.id, 'down')} disabled={i === sequence.steps.length - 1} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30" title="Move down">
+                              <ChevronDown size={13} className="text-gray-500" />
+                            </button>
+                            <button onClick={() => setEditingStep(step)} className="p-1 rounded hover:bg-gray-100" title="Edit">
+                              <Edit2 size={13} className="text-gray-500" />
+                            </button>
+                            <button onClick={() => handleCloneStep(step)} className="p-1 rounded hover:bg-gray-100" title="Clone">
+                              <Copy size={13} className="text-gray-500" />
+                            </button>
+                            <button onClick={() => handleDeleteStep(step.id)} className="p-1 rounded hover:bg-red-50" title="Delete">
+                              <Trash2 size={13} className="text-red-400" />
+                            </button>
+                          </div>
                         </div>
-                        {step.subject && <p className="text-xs text-gray-600 mt-1">Subject: {step.subject}</p>}
-                        {step.type === 'wait' && <p className="text-xs text-gray-500 mt-1">Wait {step.waitDays || step.day} day(s)</p>}
-                        {step.taskTitle && <p className="text-xs text-gray-500 mt-1">Task: {step.taskTitle}</p>}
+                        {step.subject && <p className="text-xs text-gray-600 mt-1 truncate">Subject: {step.subject}</p>}
+                        {step.taskTitle && <p className="text-xs text-gray-500 mt-1 truncate">Task: {step.taskTitle}</p>}
+                        {step.type !== 'email' && step.pauseUntilComplete && (
+                          <span className="inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">PAUSES SEQUENCE</span>
+                        )}
+                        {step.type === 'email' && step.abEnabled && (
+                          <span className="inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">A/B TEST · {step.abSplit ?? 50}/{100 - (step.abSplit ?? 50)}</span>
+                        )}
                         {step.linkedinAction && <p className="text-xs text-gray-500 mt-1">LinkedIn: {step.linkedinAction}</p>}
                       </div>
                     </div>
@@ -814,38 +981,297 @@ export default function SequenceDetailPage() {
           </div>
         )}
 
+        {/* Performance Tab */}
+        {tab === 'performance' && (
+          <div className="flex flex-col gap-4">
+            {analyticsLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
+              </div>
+            ) : !analytics ? (
+              <p className="text-sm text-gray-400 text-center py-16">No performance data yet.</p>
+            ) : (
+              <>
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
+                  <h3 className="text-sm font-bold text-gray-900 mb-4">Overview</h3>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                    {[
+                      { label: 'Sent', value: analytics.overview.totalSent },
+                      { label: 'Open Rate', value: `${analytics.overview.openRate}%` },
+                      { label: 'Click Rate', value: `${analytics.overview.clickRate}%` },
+                      { label: 'Reply Rate', value: `${analytics.overview.replyRate}%` },
+                      { label: 'Bounce Rate', value: `${analytics.overview.bounceRate}%` },
+                      { label: 'Unsub Rate', value: `${analytics.overview.unsubscribeRate}%` },
+                    ].map(s => (
+                      <div key={s.label} className="bg-gray-50 rounded-xl p-3 text-center">
+                        <p className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-heading)' }}>{s.value}</p>
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {analytics.stepMetrics.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="px-5 py-4 border-b border-gray-100">
+                      <h3 className="text-sm font-bold text-gray-900">Step Performance</h3>
+                    </div>
+                    <table className="data-table w-full">
+                      <thead>
+                        <tr>
+                          <th>Step</th><th>Sent</th><th>Opened</th><th>Clicked</th><th>Replied</th><th>Open Rate</th><th>Click Rate</th><th>Reply Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {analytics.stepMetrics.map(s => {
+                          const step = sequence.steps[s.stepIndex]
+                          return (
+                            <tr key={s.stepIndex}>
+                              <td className="text-sm text-gray-800">Step {s.stepIndex + 1}{step ? ` — ${stepTypeConfig[step.type].label}` : ''}</td>
+                              <td className="text-sm text-gray-600">{s.sent}</td>
+                              <td className="text-sm text-gray-600">{s.opened}</td>
+                              <td className="text-sm text-gray-600">{s.clicked}</td>
+                              <td className="text-sm text-gray-600">{s.replied}</td>
+                              <td className="text-sm text-gray-600">{s.openRate}%</td>
+                              <td className="text-sm text-gray-600">{s.clickRate}%</td>
+                              <td className="text-sm text-gray-600">{s.replyRate}%</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {analytics.abResults && analytics.abResults.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    <h3 className="text-sm font-bold text-gray-900 mb-4">A/B Test Results</h3>
+                    <div className="flex flex-col gap-4">
+                      {analytics.abResults.map(r => {
+                        const step = sequence.steps[r.stepIndex]
+                        return (
+                          <div key={r.stepIndex}>
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                              Step {r.stepIndex + 1}{step?.subject ? ` — ${step.subject}` : ''}
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                              {(['A', 'B'] as const).map(v => {
+                                const data = v === 'A' ? r.variantA : r.variantB
+                                const openRate = data.sent > 0 ? Math.round((data.opened / data.sent) * 1000) / 10 : 0
+                                return (
+                                  <div key={v} className={`rounded-xl p-3 text-center border ${r.winner === v ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-100'}`}>
+                                    <p className="text-[10px] font-semibold text-purple-400 uppercase">Variant {v} {r.winner === v && '★'}</p>
+                                    <p className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-heading)' }}>{data.sent > 0 ? `${openRate}%` : '—'}</p>
+                                    <p className="text-[10px] text-gray-400">{data.opened}/{data.sent} opened · {data.replied} replied</p>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                            {r.winner === null && (r.variantA.sent < 5 || r.variantB.sent < 5) && (
+                              <p className="text-[11px] text-gray-400 mt-1.5">Need at least 5 sends per variant before declaring a winner.</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Automate Tab */}
+        {tab === 'automate' && (
+          <SequenceAutomateTab sequenceId={sequenceId} />
+        )}
+
         {/* Settings Tab */}
-        {tab === 'settings' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="text-sm font-bold text-gray-900 mb-4">Sequence Settings</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Name</p>
-                <p className="text-gray-900">{sequence.name}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Status</p>
-                <p className="text-gray-900">{sequence.status}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Trigger</p>
-                <p className="text-gray-900">{sequence.trigger || 'Manual enrollment'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Target Segment</p>
-                <p className="text-gray-900">{sequence.targetSegment || 'All contacts'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Created</p>
-                <p className="text-gray-900">{sequence.createdDate}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Last Modified</p>
-                <p className="text-gray-900">{sequence.lastModified}</p>
+        {tab === 'settings' && settingsForm && (
+          <div className="flex flex-col gap-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-1">Overview</h3>
+              <div className="grid grid-cols-2 gap-4 text-sm mt-3">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Name</p>
+                  <p className="text-gray-900">{sequence.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Status</p>
+                  <p className="text-gray-900">{sequence.status}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Created</p>
+                  <p className="text-gray-900">{sequence.createdDate}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Last Modified</p>
+                  <p className="text-gray-900">{sequence.lastModified}</p>
+                </div>
               </div>
             </div>
 
-            <div className="border-t border-gray-100 mt-6 pt-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-3">Sender</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Send via</label>
+                  <select
+                    value={settingsForm.sendVia}
+                    onChange={e => setSettingsForm(f => f ? { ...f, sendVia: e.target.value as 'gmail' | 'resend' } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="gmail">Gmail (rep's own inbox)</option>
+                    <option value="resend">Resend</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Default rep</label>
+                  <select
+                    value={settingsForm.assignedRepId ?? ''}
+                    onChange={e => setSettingsForm(f => f ? { ...f, assignedRepId: e.target.value || null } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">Sequence's fromEmail only</option>
+                    {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">From Name</label>
+                  <input
+                    value={settingsForm.fromName ?? ''}
+                    onChange={e => setSettingsForm(f => f ? { ...f, fromName: e.target.value } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">From Email</label>
+                  <input
+                    value={settingsForm.fromEmail ?? ''}
+                    onChange={e => setSettingsForm(f => f ? { ...f, fromEmail: e.target.value } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-3">
+                When a default rep is set, per-enrollment sending still prefers that enrollment's own assigned rep first — this is only the fallback.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-3">Timing</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Timezone</label>
+                  <input
+                    value={settingsForm.timezone ?? ''}
+                    onChange={e => setSettingsForm(f => f ? { ...f, timezone: e.target.value } : f)}
+                    placeholder="America/New_York"
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div className="flex items-end pb-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settingsForm.sendOnWeekends ?? false}
+                      onChange={e => setSettingsForm(f => f ? { ...f, sendOnWeekends: e.target.checked } : f)}
+                      className="accent-emerald-600 w-4 h-4"
+                    />
+                    <span className="text-sm text-gray-700">Send on weekends</span>
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Send window start (hour, 0-23)</label>
+                  <input
+                    type="number" min={0} max={23}
+                    value={settingsForm.sendWindowStart ?? 8}
+                    onChange={e => setSettingsForm(f => f ? { ...f, sendWindowStart: Math.min(23, Math.max(0, parseInt(e.target.value) || 0)) } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Send window end (hour, 0-23)</label>
+                  <input
+                    type="number" min={0} max={23}
+                    value={settingsForm.sendWindowEnd ?? 18}
+                    onChange={e => setSettingsForm(f => f ? { ...f, sendWindowEnd: Math.min(23, Math.max(0, parseInt(e.target.value) || 0)) } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-[11px] text-amber-700">
+                  The sequence engine currently only runs once a day (via the shared daily cron), so a step can only ever
+                  advance once per ~24h regardless of these settings — they take effect once the run cadence is increased.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-3">Limits & Sharing</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Daily send limit</label>
+                  <input
+                    type="number" min={1}
+                    value={settingsForm.dailySendLimit ?? 200}
+                    onChange={e => setSettingsForm(f => f ? { ...f, dailySendLimit: Math.max(1, parseInt(e.target.value) || 1) } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Per-minute limit</label>
+                  <input
+                    type="number" min={1}
+                    value={settingsForm.perMinuteLimit ?? 3}
+                    onChange={e => setSettingsForm(f => f ? { ...f, perMinuteLimit: Math.max(1, parseInt(e.target.value) || 1) } : f)}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Sharing</label>
+                  <div className="flex gap-2">
+                    {(['private', 'everyone'] as const).map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setSettingsForm(f => f ? { ...f, sharing: s } : f)}
+                        className={`flex-1 py-2 rounded-xl text-sm font-medium border capitalize transition-colors ${
+                          settingsForm.sharing === s ? 'text-white border-transparent' : 'text-gray-600 border-gray-200 hover:bg-gray-50'
+                        }`}
+                        style={settingsForm.sharing === s ? { background: '#015035' } : undefined}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-end pb-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settingsForm.threadMode ?? true}
+                      onChange={e => setSettingsForm(f => f ? { ...f, threadMode: e.target.checked } : f)}
+                      className="accent-emerald-600 w-4 h-4"
+                    />
+                    <span className="text-sm text-gray-700">Reply in same thread</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={saveSettings}
+                disabled={savingSettings}
+                className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 hover:opacity-90"
+                style={{ background: '#015035' }}
+              >
+                {savingSettings ? 'Saving…' : 'Save Settings'}
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h4 className="text-sm font-bold text-red-600 mb-2">Danger Zone</h4>
               <p className="text-xs text-gray-500 mb-3">Deleting a sequence will remove all enrolled contacts and cannot be undone.</p>
               <button
@@ -860,6 +1286,21 @@ export default function SequenceDetailPage() {
       </div>
 
       {/* Modals */}
+      {editingStep && (
+        <SequenceStepEditor
+          step={editingStep === 'new' ? null : editingStep}
+          previousStepDay={(() => {
+            if (editingStep === 'new') {
+              return sequence.steps.length > 0 ? sequence.steps[sequence.steps.length - 1].day : null
+            }
+            const idx = sequence.steps.findIndex(s => s.id === editingStep.id)
+            return idx > 0 ? sequence.steps[idx - 1].day : null
+          })()}
+          onSave={handleSaveStep}
+          onClose={() => setEditingStep(null)}
+        />
+      )}
+
       {showEnrollModal && (
         <EnrollContactsModal
           sequenceId={sequenceId}

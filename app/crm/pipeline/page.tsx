@@ -22,7 +22,8 @@ import {
   X, Phone, Mail, Calendar, TrendingUp, DollarSign,
   FileText, ScrollText, User, ChevronRight, ChevronLeft, Plus,
   CheckCircle2, Circle, AlertCircle, Settings, Upload,
-  GripVertical, Pencil, Trash2, Check, Download,
+  GripVertical, Pencil, Trash2, Check, Download, Search, Link2,
+  LayoutGrid, List, ArrowUpDown,
 } from 'lucide-react'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
@@ -89,27 +90,25 @@ function DealCard({
           className={`deal-card cursor-grab active:cursor-grabbing select-none ${snapshot.isDragging ? 'shadow-xl rotate-1 opacity-90' : ''} ${selected ? 'ring-2 ring-[#015035] bg-emerald-50/30' : ''}`}
           onClick={onClick}
         >
-          <div className="flex items-start justify-between mb-2">
-            <div className="flex items-start gap-2">
-              {onToggleSelect && (
-                <input
-                  type="checkbox"
-                  checked={!!selected}
-                  onChange={e => { e.stopPropagation(); onToggleSelect() }}
-                  onClick={e => e.stopPropagation()}
-                  className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer mt-0.5 flex-shrink-0"
-                />
-              )}
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{deal.company}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{deal.contact.name}</p>
-              </div>
+          <div className="flex items-start gap-2 mb-2 min-w-0">
+            {onToggleSelect && (
+              <input
+                type="checkbox"
+                checked={!!selected}
+                onChange={e => { e.stopPropagation(); onToggleSelect() }}
+                onClick={e => e.stopPropagation()}
+                className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer mt-0.5 flex-shrink-0"
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-900 truncate" title={deal.company}>{deal.company}</p>
+              <p className="text-xs text-gray-400 mt-0.5 truncate" title={deal.contact.name}>{deal.contact.name}</p>
             </div>
-            <div className="flex flex-wrap gap-1 justify-end">
-              {(deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]).map(st => (
-                <StatusBadge key={st} label={st} colorClass={serviceTypeColors[st] ?? 'bg-gray-100 text-gray-600'} />
-              ))}
-            </div>
+          </div>
+          <div className="flex flex-wrap gap-1 mb-2">
+            {(deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]).map(st => (
+              <StatusBadge key={st} label={st} colorClass={serviceTypeColors[st] ?? 'bg-gray-100 text-gray-600'} />
+            ))}
           </div>
           <div className="flex items-center justify-between mt-3">
             <span className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
@@ -139,6 +138,101 @@ function DealCard({
         </div>
       )}
     </Draggable>
+  )
+}
+
+// ─── Deal List View ───────────────────────────────────────────────────────────
+
+function DealListView({
+  deals,
+  sortKey,
+  sortDir,
+  onSort,
+  onSelect,
+  pipelineStages,
+}: {
+  deals: LocalDeal[]
+  sortKey: 'company' | 'value' | 'closeDate' | 'dealScore'
+  sortDir: 'asc' | 'desc'
+  onSort: (key: 'company' | 'value' | 'closeDate' | 'dealScore') => void
+  onSelect: (deal: LocalDeal) => void
+  pipelineStages: PipelineStage[]
+}) {
+  const sorted = [...deals].sort((a, b) => {
+    let cmp = 0
+    if (sortKey === 'company') cmp = a.company.localeCompare(b.company)
+    else if (sortKey === 'value') cmp = a.value - b.value
+    else if (sortKey === 'closeDate') cmp = (a.closeDate || '').localeCompare(b.closeDate || '')
+    else if (sortKey === 'dealScore') cmp = (a.dealScore ?? -1) - (b.dealScore ?? -1)
+    return sortDir === 'asc' ? cmp : -cmp
+  })
+
+  const columns: { key: 'company' | 'value' | 'closeDate' | 'dealScore'; label: string }[] = [
+    { key: 'company', label: 'Company' },
+    { key: 'value', label: 'Value' },
+    { key: 'closeDate', label: 'Close Date' },
+    { key: 'dealScore', label: 'Score' },
+  ]
+
+  return (
+    <div className="flex-1 min-h-0 overflow-auto bg-white rounded-xl border border-gray-100 shadow-sm">
+      <table className="data-table w-full min-w-[760px]">
+        <thead>
+          <tr>
+            {columns.map(col => (
+              <th key={col.key} className="cursor-pointer select-none" onClick={() => onSort(col.key)}>
+                <span className="flex items-center gap-1">
+                  {col.label}
+                  <ArrowUpDown size={11} className={sortKey === col.key ? 'text-gray-600' : 'text-gray-300'} />
+                </span>
+              </th>
+            ))}
+            <th>Stage</th>
+            <th>Contact</th>
+            <th>Rep</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(deal => {
+            const stageColor = pipelineStages.find(s => s.name === deal.stage)?.color
+              ?? DEFAULT_STAGE_COLORS[deal.stage] ?? '#9ca3af'
+            return (
+              <tr key={deal.id} className="cursor-pointer" onClick={() => onSelect(deal)}>
+                <td>
+                  <p className="text-sm font-semibold text-gray-900">{deal.company}</p>
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {(deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]).map(st => (
+                      <StatusBadge key={st} label={st} colorClass={serviceTypeColors[st] ?? 'bg-gray-100 text-gray-600'} />
+                    ))}
+                  </div>
+                </td>
+                <td className="text-sm font-semibold" style={{ color: '#015035' }}>{formatCurrency(deal.value)}</td>
+                <td className="text-sm text-gray-600">
+                  {deal.closeDate ? new Date(deal.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                </td>
+                <td>
+                  {typeof deal.dealScore === 'number' ? (
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      deal.dealScore >= 60 ? 'bg-emerald-50 text-emerald-700' : deal.dealScore >= 35 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'
+                    }`}>{deal.dealScore}</span>
+                  ) : '—'}
+                </td>
+                <td>
+                  <span className="text-xs font-semibold px-2 py-1 rounded-full text-white" style={{ background: stageColor }}>{deal.stage}</span>
+                </td>
+                <td className="text-sm text-gray-600 truncate max-w-[160px]">{deal.contact?.name || '—'}</td>
+                <td className="text-sm text-gray-600">{deal.assignedRep}</td>
+              </tr>
+            )
+          })}
+          {sorted.length === 0 && (
+            <tr>
+              <td colSpan={7} className="text-center py-10 text-sm text-gray-400">No deals match the current filters.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -176,6 +270,8 @@ function DealPanel({
   const [creatingProposal, setCreatingProposal] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<'deal' | 'company' | null>(null)
   const [editing, setEditing] = useState(false)
+  const [linkingContact, setLinkingContact] = useState(false)
+  const [contactSearch, setContactSearch] = useState('')
   const dealServiceTypes = deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]
   const [editForm, setEditForm] = useState({
     value: String(deal.value),
@@ -222,6 +318,29 @@ function DealPanel({
     setEditing(false)
   }
 
+  function handleLinkContact(contact: CRMContact) {
+    if (!onUpdateDeal) return
+    onUpdateDeal(deal.id, {
+      contactId: contact.id,
+      contact: {
+        id: contact.id,
+        name: contact.fullName || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
+        email: contact.emails?.[0] ?? '',
+        phone: contact.phones?.[0] ?? '',
+        title: contact.title ?? '',
+      },
+    } as Partial<LocalDeal>)
+    setLinkingContact(false)
+    setContactSearch('')
+    toast(`Linked to ${contact.fullName || contact.firstName}`, 'success')
+  }
+
+  const contactSearchResults = contactSearch.trim().length > 0
+    ? crmContacts
+        .filter(c => (c.fullName || `${c.firstName ?? ''} ${c.lastName ?? ''}`).toLowerCase().includes(contactSearch.trim().toLowerCase()))
+        .slice(0, 8)
+    : linkedContacts.slice(0, 8)
+
   function handleSaveActivity(activity: LoggedActivity) {
     setLocalActivities(prev => [{
       id: activity.id,
@@ -264,7 +383,9 @@ function DealPanel({
               <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-heading)' }}>
                 {deal.company}
               </h2>
-              <p className="text-gray-500 text-sm mt-0.5">{deal.contact.title} — {deal.contact.name}</p>
+              <p className="text-gray-500 text-sm mt-0.5">
+                {deal.contact?.name ? `${deal.contact.title ? `${deal.contact.title} — ` : ''}${deal.contact.name}` : 'No contact linked'}
+              </p>
             </div>
             <div className="flex items-center gap-1">
               {onUpdateDeal && (
@@ -322,6 +443,28 @@ function DealPanel({
 
           {tab === 'overview' && (
             <div className="flex flex-col gap-4">
+              {/* Deal Score */}
+              {typeof deal.dealScore === 'number' && (
+                <div className="p-4 rounded-xl text-white" style={{ background: '#012b1e' }}>
+                  <div className="flex items-center gap-4">
+                    <div className="relative w-16 h-16 flex-shrink-0 flex items-center justify-center rounded-full border-4" style={{ borderColor: deal.dealScore >= 60 ? '#22c55e' : deal.dealScore >= 35 ? '#f59e0b' : '#ef4444' }}>
+                      <span className="text-xl font-bold" style={{ fontFamily: 'var(--font-heading)' }}>{deal.dealScore}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white/60 uppercase tracking-wide font-semibold mb-1.5">Deal Score · Key Factors</p>
+                      <div className="flex flex-col gap-1">
+                        {(deal.dealScoreFactors ?? []).map((f, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-xs">
+                            <span className={f.positive ? 'text-emerald-400' : 'text-red-400'}>{f.positive ? '▲' : '▼'}</span>
+                            <span className="text-white/80">{f.label}: {f.detail}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Deal info */}
               <div className="p-4 bg-gray-50 rounded-xl">
                 <div className="flex items-center justify-between mb-3">
@@ -412,25 +555,92 @@ function DealPanel({
                     </Link>
                   )}
                 </div>
-                <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-100">
-                  <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
-                    {deal.contact.name.split(' ').map((n: string) => n[0]).join('')}
+
+                {!dealAny.contactId ? (
+                  <div className="p-3 bg-white rounded-lg border border-dashed border-amber-300">
+                    {!linkingContact ? (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">
+                            {deal.contact?.name || 'No contact linked'}
+                          </p>
+                          <p className="text-xs text-amber-600">Not connected to a CRM contact record</p>
+                        </div>
+                        {onUpdateDeal && (
+                          <button
+                            onClick={() => setLinkingContact(true)}
+                            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-semibold hover:opacity-90"
+                            style={{ background: '#015035' }}
+                          >
+                            <Link2 size={12} /> Connect
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <div className="relative">
+                          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                          <input
+                            autoFocus
+                            value={contactSearch}
+                            onChange={e => setContactSearch(e.target.value)}
+                            placeholder="Search contacts by name…"
+                            className="w-full text-sm border border-gray-200 rounded-lg pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+                          {contactSearchResults.length === 0 ? (
+                            <p className="text-xs text-gray-400 px-1 py-2">
+                              {contactSearch.trim() ? 'No matching contacts' : 'No contacts at this company yet — try searching by name'}
+                            </p>
+                          ) : (
+                            contactSearchResults.map(c => (
+                              <button
+                                key={c.id}
+                                onClick={() => handleLinkContact(c)}
+                                className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 text-left"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-800 truncate">{c.fullName}</p>
+                                  <p className="text-xs text-gray-400 truncate">{c.title || c.companyName}</p>
+                                </div>
+                                <Check size={13} className="text-gray-300 flex-shrink-0" />
+                              </button>
+                            ))
+                          )}
+                        </div>
+                        <button
+                          onClick={() => { setLinkingContact(false); setContactSearch('') }}
+                          className="self-start text-xs text-gray-500 hover:text-gray-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">{deal.contact.name}</p>
-                    <p className="text-xs text-gray-400">{deal.contact.title}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <a href={`mailto:${deal.contact.email}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
-                      <Mail size={13} />
-                    </a>
-                    <a href={`tel:${deal.contact.phone}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
-                      <Phone size={13} />
-                    </a>
-                  </div>
-                </div>
-                {linkedContacts.length > 1 && (
-                  <p className="text-xs text-gray-400 mt-2">+{linkedContacts.length - 1} more contacts at this company</p>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-100">
+                      <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
+                        {deal.contact.name.split(' ').map((n: string) => n[0]).join('')}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900">{deal.contact.name}</p>
+                        <p className="text-xs text-gray-400">{deal.contact.title}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <a href={`mailto:${deal.contact.email}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                          <Mail size={13} />
+                        </a>
+                        <a href={`tel:${deal.contact.phone}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                          <Phone size={13} />
+                        </a>
+                      </div>
+                    </div>
+                    {linkedContacts.length > 1 && (
+                      <p className="text-xs text-gray-400 mt-2">+{linkedContacts.length - 1} more contacts at this company</p>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -891,6 +1101,9 @@ export default function PipelinePage() {
   const [localDeals, setLocalDeals] = useState<LocalDeal[]>([])
   const [selectedDeal, setSelectedDeal] = useState<LocalDeal | null>(null)
   const [filterRep, setFilterRep] = useState('All')
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
+  const [sortKey, setSortKey] = useState<'company' | 'value' | 'closeDate' | 'dealScore'>('closeDate')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [managingPipeline, setManagingPipeline] = useState(false)
   const [creatingDeal, setCreatingDeal] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -1075,6 +1288,24 @@ export default function PipelinePage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <div className="flex items-center rounded-lg border border-gray-200 p-0.5 bg-white flex-shrink-0">
+                <button
+                  onClick={() => setViewMode('kanban')}
+                  title="Pipeline view"
+                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'kanban' ? 'text-white' : 'text-gray-400 hover:text-gray-600'}`}
+                  style={viewMode === 'kanban' ? { background: '#015035' } : undefined}
+                >
+                  <LayoutGrid size={14} />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  title="List view"
+                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'text-white' : 'text-gray-400 hover:text-gray-600'}`}
+                  style={viewMode === 'list' ? { background: '#015035' } : undefined}
+                >
+                  <List size={14} />
+                </button>
+              </div>
               <button
                 onClick={() => setShowNewClientModal(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-[#015035] border border-[#015035]/20 hover:bg-[#015035]/5 transition-colors"
@@ -1132,13 +1363,25 @@ export default function PipelinePage() {
         </div>
 
         {/* Kanban Board */}
-        {mounted ? <DragDropContext onDragEnd={onDragEnd}>
+        {viewMode === 'list' ? (
+          <DealListView
+            deals={filteredDeals}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={key => {
+              if (key === sortKey) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+              else { setSortKey(key); setSortDir('asc') }
+            }}
+            onSelect={setSelectedDeal}
+            pipelineStages={activeStages}
+          />
+        ) : mounted ? <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-3 overflow-x-auto flex-1 min-h-0 pb-2">
             {activeStages.map(stage => {
               const stageDeals = filteredDeals.filter(d => d.stage === stage.name)
               const stageTotal = stageDeals.reduce((s, d) => s + d.value, 0)
               return (
-                <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col min-h-0 bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 340, maxHeight: 'calc(100vh - 280px)' }}>
+                <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col min-h-0 bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 360, maxHeight: 'calc(100vh - 280px)' }}>
                   <div className="flex items-center justify-between mb-2 px-1 pb-2 border-b border-gray-100 flex-shrink-0">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
@@ -1188,7 +1431,7 @@ export default function PipelinePage() {
         </DragDropContext> : (
           <div className="flex gap-3 overflow-x-auto flex-1 min-h-0 pb-2">
             {activeStages.map(stage => (
-              <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col min-h-0 bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 340, maxHeight: 'calc(100vh - 280px)' }}>
+              <div key={stage.id} className="kanban-col flex-shrink-0 flex flex-col min-h-0 bg-white/50 rounded-xl border border-gray-100 p-2" style={{ width: 360, maxHeight: 'calc(100vh - 280px)' }}>
                 <div className="flex items-center gap-2 mb-3 px-1 flex-shrink-0">
                   <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
                   <span className="text-xs font-semibold text-gray-700">{stage.name}</span>

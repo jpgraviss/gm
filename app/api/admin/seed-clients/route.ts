@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/admin-auth'
 
 const TODAY = '2026-06-29'
 
@@ -47,7 +48,10 @@ const renewals = [
   { id: 'ren-formetco',          company: 'Formetco',          contract_id: 'c-formetco-2026',          expiration_date: '2027-04-30', renewal_value: 1200,   assigned_rep: 'Jonathan Graviss', status: 'Auto-Renew',    service_type: 'SEO' },
 ]
 
-export const POST = withErrorHandler('admin/seed-clients POST', async () => {
+export const POST = withErrorHandler('admin/seed-clients POST', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const db = createServiceClient()
   const results: { companies: number; contracts: number; renewals: number; errors: string[] } = {
     companies: 0, contracts: 0, renewals: 0, errors: [],

@@ -1,5 +1,6 @@
 import { renderTemplate, formatDate } from './template-helpers'
 import type { AppSettings } from '@/lib/settings'
+import { BRAND_COLORS } from '@/lib/brand'
 
 export interface MonthlyReportMetrics {
   traffic?: {
@@ -49,12 +50,12 @@ export interface MonthlyReportData {
 }
 
 const BRAND_DEFAULTS = {
-  primary: '#015035',
-  secondary: '#FFF3EA',
-  accent: '#CC7853',
-  ink: '#1B211D',
-  stone: '#8C8478',
-  darkBg: '#012b1e',
+  primary: BRAND_COLORS.primary,
+  secondary: BRAND_COLORS.secondary,
+  accent: BRAND_COLORS.accent,
+  ink: BRAND_COLORS.ink,
+  stone: BRAND_COLORS.stone,
+  darkBg: BRAND_COLORS.darkBg,
 }
 
 function changeIndicator(current: number, previous: number | undefined): string {

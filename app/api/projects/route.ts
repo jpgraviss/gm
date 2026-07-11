@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROJECT_STATUSES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
+import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProject(row: any) {
@@ -28,7 +29,7 @@ function mapProject(row: any) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler('projects GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const status  = searchParams.get('status')
   const company = searchParams.get('company')
@@ -42,14 +43,13 @@ export async function GET(req: NextRequest) {
   query = applyCursor(query, pag)
   const { data, error } = await query
   if (error) {
-    console.error('[projects GET]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to fetch projects' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to fetch projects')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
   return paginatedJson(rows.map(mapProject), nextCursor)
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler('projects POST', async (req) => {
   const body = await req.json()
   const result = validate(body, {
     company: { required: true, type: 'string', maxLength: 200 },
@@ -88,8 +88,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) {
-    console.error('[projects POST]', error)
-    return NextResponse.json({ error: error?.message || 'Failed to create project' }, { status: 500 })
+    throw new Error(error?.message || 'Failed to create project')
   }
   return NextResponse.json(mapProject(data), { status: 201 })
-}
+})

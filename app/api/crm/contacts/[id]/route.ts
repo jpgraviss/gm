@@ -23,6 +23,7 @@ function mapContact(row: any) {
     lifecycleStage: row.lifecycle_stage ?? undefined,
     leadStatus:     row.lead_status ?? undefined,
     owner:          row.owner ?? '',
+    ownerId:        row.owner_id ?? null,
     tags:           row.tags ?? [],
     notes:          row.notes ?? undefined,
     contactNotes:   row.contact_notes ?? [],
@@ -34,6 +35,9 @@ function mapContact(row: any) {
 }
 
 export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await ctx!.params
   const body = await req.json()
 
@@ -65,6 +69,7 @@ export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) =>
       lifecycle_stage: body.lifecycleStage ?? null,
       lead_status:     body.leadStatus ?? null,
       owner:           body.owner,
+      owner_id:        body.ownerId !== undefined ? body.ownerId : null,
       tags:            body.tags ?? [],
       notes:           body.notes ?? null,
       contact_notes:   body.contactNotes ?? [],
@@ -86,6 +91,9 @@ export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) =>
 })
 
 export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await ctx!.params
   const body = await req.json()
 

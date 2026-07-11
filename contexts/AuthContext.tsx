@@ -197,9 +197,23 @@ async function establishSessionCookie(accessToken: string) {
     })
   } catch {/* non-blocking */}
 }
-function clearAuthCookie() {
-  try { document.cookie = 'gravhub-auth=; path=/; max-age=0; SameSite=Lax' } catch {/* SSR guard */}
-  fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {/* non-blocking */})
+async function clearAuthCookie() {
+  // Clearing the httpOnly gravhub-auth cookie only actually happens
+  // server-side (Set-Cookie with max-age=0 from DELETE /api/auth/session) —
+  // JS can't read or meaningfully clear an httpOnly cookie itself. This was
+  // previously fire-and-forget with no retry, so a single network blip
+  // could leave a still-valid signed session cookie in the browser for up
+  // to 7 days after the UI showed the user as logged out. Retry a couple
+  // times before giving up; the local sign-out UI state clears regardless
+  // (below) so a slow/failed network call doesn't trap the user on screen.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch('/api/auth/session', { method: 'DELETE' })
+      if (res.ok) return
+    } catch {/* retry */}
+    if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)))
+  }
+  console.error('[auth] Failed to clear session cookie after retries — it may remain valid until it expires.')
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -354,7 +368,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // from localStorage instead.
       if (event === 'SIGNED_OUT') {
         setUser(null)
-        clearAuthCookie()
+        await clearAuthCookie()
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session?.user?.email) {
           await restoreProfile(session.user.email, session.access_token)
@@ -440,14 +454,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     const supabase = getSupabaseClient()
     await supabase.auth.signOut()
+    // UI state clears immediately so the user sees "logged out" without
+    // waiting on the network — the signed cookie clear (with retries) still
+    // happens below and is awaited, so callers that want confirmation
+    // (e.g. a sign-out button showing a spinner) get an accurate result.
     setUser(null)
     setImpersonatedBy(null)
     setGmailToken(null)
     setGmailEmail(null)
-    clearAuthCookie()
     try { localStorage.removeItem('gravhub_user') } catch {/* ignore */}
     try { localStorage.removeItem('gravhub_gmail_email') } catch {/* ignore */}
     try { sessionStorage.removeItem('gravhub_login_at') } catch {/* ignore */}
+    await clearAuthCookie()
   }
 
   const connectGmail = useCallback(() => {

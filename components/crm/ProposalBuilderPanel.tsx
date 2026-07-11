@@ -6,6 +6,7 @@ import { useSettings } from '@/lib/useSettings'
 import CompanySelect from '@/components/ui/CompanySelect'
 import type { Proposal, ProposalLineItem, ServiceType } from '@/lib/types'
 import { useTeamMembers } from '@/lib/useTeamMembers'
+import { PDF_COLORS, type RGB } from '@/lib/pdf-brand'
 
 // ─── Pricing Constants ────────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ function PdfTemplate(p: PdfProps) {
   const companyName = settings?.company.name ?? 'Graviss Marketing'
   const BG = settings?.branding.darkBg ?? '#012b1e'
   const GREEN = settings?.branding.primaryColor ?? '#015035'
-  const ACCENT = '#4ade80'
+  const ACCENT = settings?.branding.accentColor ?? '#CC7853'
 
   const sectionTitle = (text: string) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
@@ -483,16 +484,19 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
       const MR = 18
       const CW = W - ML - MR
 
-      type RGB = [number, number, number]
-      const DARK:       RGB = [1, 43, 30]
-      const GREEN:      RGB = [1, 80, 53]
-      const ACCENT:     RGB = [74, 222, 128]
-      const WHITE:      RGB = [255, 255, 255]
-      const GRAY:       RGB = [107, 114, 128]
-      const DARK_TEXT:  RGB = [31, 41, 55]
-      const LIGHT_GRAY: RGB = [249, 250, 251]
-      const BORDER:     RGB = [229, 231, 235]
-      const PALE_GREEN: RGB = [240, 253, 244]
+      // Pulls from the same brand palette every other PDF in the system uses
+      // (lib/pdf-brand.ts) — this file previously hardcoded its own copy,
+      // including an ACCENT color (#4ade80, bright green) that didn't match
+      // the terracotta (#CC7853) used everywhere else as the accent color.
+      const DARK:       RGB = PDF_COLORS.dark
+      const GREEN:      RGB = PDF_COLORS.primary
+      const ACCENT:     RGB = PDF_COLORS.accent
+      const WHITE:      RGB = PDF_COLORS.white
+      const GRAY:       RGB = PDF_COLORS.gray
+      const DARK_TEXT:  RGB = PDF_COLORS.ink
+      const LIGHT_GRAY: RGB = PDF_COLORS.lightGray
+      const BORDER:     RGB = PDF_COLORS.border
+      const PALE_GREEN: RGB = PDF_COLORS.paleGreen
 
       let y = 0
 

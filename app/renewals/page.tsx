@@ -661,6 +661,10 @@ export default function RenewalsPage() {
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [activeTab, setActiveTab] = useState<FilterTab>('active')
   const [searchQuery, setSearchQuery] = useState('')
+  // Whether a real, Active automation exists to actually fire the renewal_90/
+  // renewal_30 triggers below — null while loading. Without one, the cron
+  // still fires the trigger event but nothing is listening, so nothing sends.
+  const [renewalAutomationActive, setRenewalAutomationActive] = useState<boolean | null>(null)
 
   useEffect(() => {
     fetch('/api/renewals')
@@ -671,6 +675,14 @@ export default function RenewalsPage() {
     fetchContracts().then(setContracts)
     fetchCrmContacts().then(setCrmContacts)
     fetchProposals().then(setProposals)
+    fetch('/api/automations')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: { trigger?: string; status?: string }[]) => {
+        const hasActive = Array.isArray(data) && data.some(a =>
+          (a.trigger === 'renewal_90' || a.trigger === 'renewal_30') && a.status === 'Active')
+        setRenewalAutomationActive(hasActive)
+      })
+      .catch(() => setRenewalAutomationActive(false))
   }, [])
 
   const now = new Date()
@@ -1028,14 +1040,13 @@ export default function RenewalsPage() {
             <h3 className="text-sm font-semibold text-gray-800">Renewal Sequence</h3>
           </div>
           <p className="text-xs text-gray-500 mb-3">
-            Automatic notifications are sent to the assigned rep and client contact at these intervals:
+            The daily renewal check fires these trigger events for contracts approaching expiry — an <strong>Active</strong> automation
+            listening for one of them is what actually sends anything:
           </p>
           <ul className="flex flex-col gap-2 mb-4">
             {[
-              { label: '60 days before expiry', urgent: false },
-              { label: '30 days before expiry', urgent: false },
-              { label: '14 days before expiry', urgent: false },
-              { label: '7 days before expiry (urgent)', urgent: true },
+              { label: 'Renewal date within 90 days', urgent: false },
+              { label: 'Renewal date within 30 days (urgent)', urgent: true },
             ].map(item => (
               <li key={item.label} className="flex items-center gap-2">
                 <div
@@ -1048,10 +1059,20 @@ export default function RenewalsPage() {
               </li>
             ))}
           </ul>
+          {renewalAutomationActive === false && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg mb-3">
+              <AlertTriangle size={13} className="text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-700">
+                No Active automation is listening for these triggers right now — nothing is actually being sent.{' '}
+                <Link href="/automation/builder" className="font-semibold underline">Build one</Link> to enable renewal notifications.
+              </p>
+            </div>
+          )}
           <div className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
             <Mail size={13} className="text-gray-400 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-gray-500">
-              Notifications go to the assigned rep (internal) and the primary contact on the account (external email)
+              Once an automation is Active, notification recipients (rep, client contact, or both) depend on how that
+              automation is configured
             </p>
           </div>
         </div>

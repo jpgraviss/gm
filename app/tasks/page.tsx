@@ -10,6 +10,7 @@ import {
   LayoutList, Columns3, Eye, Copy, Mail,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { TASK_DEPARTMENTS, type TaskDepartment } from '@/lib/task-department'
 
 const categoryColors: Record<AppTaskCategory, string> = {
   Deal:     'bg-blue-100 text-blue-700',
@@ -102,6 +103,7 @@ function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
   const [assignedTo, setAssignedTo] = useState(teamMembers[0]?.name ?? '')
   const [dueDate, setDueDate] = useState(getToday())
   const [company, setCompany] = useState('')
+  const [department, setDepartment] = useState<TaskDepartment>('Operations')
   const [recurring, setRecurring] = useState(false)
   const [recFrequency, setRecFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
   const [recInterval, setRecInterval] = useState(1)
@@ -123,6 +125,7 @@ function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
       dueDate,
       createdDate: getToday(),
       recurrence: recurring ? { frequency: recFrequency, interval: recInterval, ...(recEndDate ? { endDate: recEndDate } : {}) } : null,
+      department,
     })
   }
 
@@ -157,6 +160,14 @@ function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
 
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className={labelCls}>Department</label>
+              <select value={department} onChange={e => setDepartment(e.target.value as TaskDepartment)} className={selectCls}>
+                {TASK_DEPARTMENTS.filter(d => d !== 'General').map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className={labelCls}>Category</label>
               <select value={category} onChange={e => setCategory(e.target.value as AppTaskCategory)} className={selectCls}>
                 {(['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'Email', 'General'] as AppTaskCategory[]).map(c => (
@@ -164,6 +175,9 @@ function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Priority</label>
               <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className={selectCls}>
@@ -556,6 +570,11 @@ function ListView({ tasks, onSelectTask, onToggleComplete }: { tasks: AppTask[];
               <div className="hidden sm:block">
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${categoryColors[task.category]}`}>{task.category}</span>
               </div>
+              {task.department && (
+                <div className="hidden sm:block">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-slate-100 text-slate-600">{task.department}</span>
+                </div>
+              )}
             </div>
           )
         })}

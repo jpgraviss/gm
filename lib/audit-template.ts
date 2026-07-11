@@ -4,19 +4,18 @@
  * and writing rules for all audit reports.
  */
 
+import { BRAND_COLORS, BRAND_FONTS, GRADE_COLORS } from '@/lib/brand'
+
 export const BRAND_SETUP = {
   colors: {
-    forestGreen: '#015035',
-    warmCream: '#FFF3EA',
-    terracotta: '#CC7853',
-    ink: '#1B211D',
-    stone: '#8C8478',
-    darkBg: '#012b1e',
+    forestGreen: BRAND_COLORS.primary,
+    warmCream: BRAND_COLORS.secondary,
+    terracotta: BRAND_COLORS.accent,
+    ink: BRAND_COLORS.ink,
+    stone: BRAND_COLORS.stone,
+    darkBg: BRAND_COLORS.darkBg,
   },
-  fonts: {
-    heading: "'Syncopate', sans-serif",
-    body: "'Montserrat', 'Helvetica Neue', Arial, sans-serif",
-  },
+  fonts: BRAND_FONTS,
   usage: {
     forestGreen: 'Headers, borders, CTA buttons, score indicators',
     warmCream: 'Page background, card backgrounds, highlight blocks',
@@ -135,11 +134,11 @@ export const SECTION_TEMPLATE = {
     layout: '2x4 grid of category cards',
     cardContent: 'Category name, score (0-100), letter grade, one-line summary',
     gradeScale: {
-      A: { min: 90, color: '#059669', label: 'Excellent' },
-      B: { min: 80, color: '#015035', label: 'Good' },
-      C: { min: 70, color: '#CC7853', label: 'Needs Work' },
-      D: { min: 60, color: '#d97706', label: 'Poor' },
-      F: { min: 0, color: '#dc2626', label: 'Critical' },
+      A: { min: 90, color: GRADE_COLORS.A, label: 'Excellent' },
+      B: { min: 80, color: GRADE_COLORS.B, label: 'Good' },
+      C: { min: 70, color: GRADE_COLORS.C, label: 'Needs Work' },
+      D: { min: 60, color: GRADE_COLORS.D, label: 'Poor' },
+      F: { min: 0, color: GRADE_COLORS.F, label: 'Critical' },
     },
   },
   hero: {

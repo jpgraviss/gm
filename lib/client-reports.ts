@@ -219,6 +219,75 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
 }
 
 /**
+ * Rule-based recommendations derived from real report metrics — no LLM
+ * guessing, only thresholds against numbers already on the report, so a
+ * recommendation is never shown that isn't backed by the data alongside it.
+ * `traffic`/`seo` here accept optional previous-period fields since not
+ * every caller has month-over-month comparison data; those recommendations
+ * simply don't fire when the comparison isn't available.
+ */
+export function buildReportRecommendations(metrics: {
+  traffic?: { sessions: number; previousSessions?: number }
+  seo?: { clicks: number; previousClicks?: number }
+  ranking?: ClientReportData['ranking']
+  reputation?: ClientReportData['reputation']
+  uptime?: ClientReportData['uptime']
+}): string[] {
+  const recs: string[] = []
+
+  if (metrics.traffic?.previousSessions !== undefined && metrics.traffic.previousSessions > 0) {
+    const change = (metrics.traffic.sessions - metrics.traffic.previousSessions) / metrics.traffic.previousSessions
+    if (change <= -0.1) {
+      recs.push(`Site traffic dropped ${Math.round(Math.abs(change) * 100)}% month-over-month — worth investigating recent technical or content changes.`)
+    } else if (change >= 0.2) {
+      recs.push(`Site traffic grew ${Math.round(change * 100)}% month-over-month — a good moment to double down on what's driving it.`)
+    }
+  }
+
+  if (metrics.seo?.previousClicks !== undefined && metrics.seo.previousClicks > 0) {
+    const change = (metrics.seo.clicks - metrics.seo.previousClicks) / metrics.seo.previousClicks
+    if (change <= -0.15) {
+      recs.push('Organic search clicks declined significantly this month — recommend a technical SEO review.')
+    }
+  }
+
+  const ranking = metrics.ranking
+  if (ranking) {
+    if (ranking.declined > ranking.improved && ranking.declined > 0) {
+      recs.push(`${ranking.declined} tracked keyword${ranking.declined === 1 ? '' : 's'} declined in ranking this month (vs. ${ranking.improved} improved) — recommend reviewing recent content or competitor activity.`)
+    }
+    if (ranking.tracked > 0 && ranking.top10 / ranking.tracked < 0.3) {
+      recs.push('Fewer than 30% of tracked keywords rank in the top 10 — consider a content push targeting mid-tier keywords.')
+    }
+  }
+
+  const reputation = metrics.reputation
+  if (reputation) {
+    if (reputation.newReviews === 0) {
+      recs.push('No new reviews this month — consider a review-request campaign to keep momentum.')
+    }
+    if (reputation.averageRating > 0 && reputation.averageRating < 4) {
+      recs.push(`Average rating is ${reputation.averageRating} — recommend proactive outreach to satisfied clients for reviews.`)
+    }
+  }
+
+  const uptime = metrics.uptime
+  if (uptime) {
+    if (uptime.incidents > 0) {
+      recs.push(`${uptime.incidents} downtime incident${uptime.incidents === 1 ? '' : 's'} recorded this month — recommend reviewing hosting reliability.`)
+    } else if (uptime.uptimePercent < 99.9) {
+      recs.push(`Uptime is ${uptime.uptimePercent}% — below the 99.9% target, worth investigating.`)
+    }
+  }
+
+  if (recs.length === 0) {
+    recs.push('No urgent action items this month — performance is stable across tracked metrics.')
+  }
+
+  return recs
+}
+
+/**
  * Save a report snapshot to client_data_snapshots for historical comparisons.
  */
 export async function saveReportSnapshot(report: ClientReportData): Promise<void> {

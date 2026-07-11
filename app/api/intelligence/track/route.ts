@@ -36,7 +36,14 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
     return NextResponse.json({ error: 'Missing visitorId or sessionId' }, { status: 400, headers: CORS_HEADERS })
   }
 
-  // Upsert visitor record
+  // Upsert visitor record. visit_count must only ever be set to 1 on the
+  // visitor's FIRST-ever insert — it was previously included in every
+  // upsert call regardless of event type, which reset it back to 1 on
+  // nearly every non-page_view event (page_leave, scroll, etc. all fire
+  // per page load), corrupting the lead-score formula and "Hot Leads".
+  // ignoreDuplicates: true makes this INSERT-only (ON CONFLICT DO NOTHING),
+  // so existing visitors' visit_count is never touched here — only the RPC
+  // call below (gated on page_view) is allowed to increment it.
   const identifiedEmail = (body.identifiedEmail as string) || (body.formData as Record<string, string>)?.formEmail || null
   const formName = (body.formData as Record<string, string>)?.formName || null
   const formPhone = (body.formData as Record<string, string>)?.formPhone || null
@@ -62,18 +69,22 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
     utm_campaign: (body.utm as Record<string, string>)?.utm_campaign ?? null,
   }, {
     onConflict: 'visitor_id',
-    ignoreDuplicates: false,
+    ignoreDuplicates: true,
   })
 
-  // Update visitor with identified info if available
-  if (identifiedEmail || formName || formPhone || formCompany) {
-    const updates: Record<string, unknown> = { last_seen: new Date().toISOString() }
-    if (identifiedEmail) updates.email = identifiedEmail
-    if (formName) updates.name = formName
-    if (formPhone) updates.phone = formPhone
-    if (formCompany) updates.company = formCompany
-    await db.from('gi_visitors').update(updates).eq('visitor_id', visitorId)
+  // Refresh mutable per-visit fields for both new and returning visitors —
+  // deliberately excludes visit_count, first_seen, and visit_count-adjacent
+  // fields, which the insert-only upsert above already owns.
+  const returningUpdates: Record<string, unknown> = {
+    last_seen: new Date().toISOString(),
+    ip_address: ip,
+    user_agent: userAgent,
   }
+  if (identifiedEmail) returningUpdates.email = identifiedEmail
+  if (formName) returningUpdates.name = formName
+  if (formPhone) returningUpdates.phone = formPhone
+  if (formCompany) returningUpdates.company = formCompany
+  await db.from('gi_visitors').update(returningUpdates).eq('visitor_id', visitorId)
 
   // Increment visit count on page_view
   if (body.eventType === 'page_view') {
@@ -99,6 +110,13 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
     ip_address: ip,
     timestamp: body.timestamp as string ?? new Date().toISOString(),
   })
+
+  // Recompute lead score (visit frequency + identification + recency +
+  // event count) and persist lead_score/is_hot_lead on the visitor row.
+  // This function existed since the table migration but was never called
+  // anywhere — every visitor's score/hot-lead flag sat permanently at 0/
+  // false while the UI rendered a live-looking score bar and 🔥 flame.
+  try { await db.rpc('gi_score_visitor', { vid: visitorId }) } catch { /* function may not exist yet */ }
 
   return NextResponse.json({ ok: true }, { headers: CORS_HEADERS })
 })

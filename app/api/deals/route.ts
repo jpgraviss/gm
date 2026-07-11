@@ -3,9 +3,16 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
+import { computeDealScore } from '@/lib/deal-score'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDeal(row: any) {
+  const { score, factors } = computeDealScore({
+    probability: row.probability ?? 0,
+    lastActivity: row.last_activity,
+    closeDate: row.close_date,
+    stage: row.stage,
+  })
   return {
     id:           row.id,
     company:      row.company,
@@ -22,6 +29,8 @@ function mapDeal(row: any) {
     pipelineId:   row.pipeline_id ?? 'client-acquisition',
     companyId:    row.company_id ?? null,
     contactId:    row.contact_id ?? null,
+    dealScore:    score,
+    dealScoreFactors: factors,
   }
 }
 

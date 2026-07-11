@@ -61,7 +61,7 @@ function getStepPhase(step: number, totalSteps: number = 8): 'onboarding' | 'act
 }
 
 function isWorkflowCompleted(w: Workflow): boolean {
-  return w.steps.every(s => s.status === 'completed')
+  return (w.steps ?? []).length > 0 && w.steps.every(s => s.status === 'completed')
 }
 
 function getWorkflowCategory(w: Workflow, totalSteps: number = 8): FilterTab {
@@ -277,6 +277,12 @@ export default function DeliveryDashboardPage() {
   const [sendModalScheduleTime, setSendModalScheduleTime] = useState('08:00')
   const [sendModalRecurring, setSendModalRecurring] = useState('none')
   const [sendModalMode, setSendModalMode] = useState<'now' | 'schedule'>('now')
+  const [deliverableModal, setDeliverableModal] = useState<string | null>(null)
+  const [deliverableName, setDeliverableName] = useState('')
+  const [deliverableType, setDeliverableType] = useState('')
+  const [deliverableFileUrl, setDeliverableFileUrl] = useState('')
+  const [deliverableDescription, setDeliverableDescription] = useState('')
+  const [deliverableSaving, setDeliverableSaving] = useState(false)
   const [stepNames, setStepNames] = useState<string[]>(DEFAULT_STEP_NAMES)
 
   useEffect(() => {
@@ -385,7 +391,36 @@ export default function DeliveryDashboardPage() {
   }
 
   function handleAddDeliverable(workflowId: string) {
-    toast('Add deliverable from the project panel', 'info')
+    setDeliverableModal(workflowId)
+    setDeliverableName('')
+    setDeliverableType('')
+    setDeliverableFileUrl('')
+    setDeliverableDescription('')
+  }
+
+  async function executeAddDeliverable() {
+    if (!deliverableModal || !deliverableName.trim() || !deliverableType.trim()) return
+    setDeliverableSaving(true)
+    try {
+      const res = await fetch('/api/delivery/add-deliverable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflowId: deliverableModal,
+          name: deliverableName.trim(),
+          type: deliverableType.trim(),
+          fileUrl: deliverableFileUrl.trim() || undefined,
+          description: deliverableDescription.trim() || undefined,
+        }),
+      })
+      if (!res.ok) { toast('Failed to add deliverable', 'error'); return }
+      toast('Deliverable added', 'success')
+      setDeliverableModal(null)
+    } catch {
+      toast('Failed to add deliverable', 'error')
+    } finally {
+      setDeliverableSaving(false)
+    }
   }
 
   function handleCreateWorkflow(data: { company: string; service: string; projectId?: string }) {
@@ -772,6 +807,69 @@ export default function DeliveryDashboardPage() {
           onClose={() => setShowNewModal(false)}
           onCreate={handleCreateWorkflow}
         />
+      )}
+
+      {deliverableModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDeliverableModal(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-bold text-gray-900">Add Deliverable</h2>
+              <button onClick={() => setDeliverableModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={16} className="text-gray-400" /></button>
+            </div>
+            <div className="p-6 flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Name</label>
+                <input
+                  value={deliverableName}
+                  onChange={e => setDeliverableName(e.target.value)}
+                  placeholder="Final brand guidelines"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Type</label>
+                <input
+                  value={deliverableType}
+                  onChange={e => setDeliverableType(e.target.value)}
+                  placeholder="PDF, video, link, etc."
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">File / Link URL (optional)</label>
+                <input
+                  value={deliverableFileUrl}
+                  onChange={e => setDeliverableFileUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description (optional)</label>
+                <textarea
+                  value={deliverableDescription}
+                  onChange={e => setDeliverableDescription(e.target.value)}
+                  rows={3}
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-2">
+              <button
+                onClick={executeAddDeliverable}
+                disabled={deliverableSaving || !deliverableName.trim() || !deliverableType.trim()}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
+                style={{ background: '#015035' }}
+              >
+                {deliverableSaving ? 'Adding…' : 'Add Deliverable'}
+              </button>
+              <button onClick={() => setDeliverableModal(null)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

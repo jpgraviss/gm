@@ -21,6 +21,7 @@ export const PATCH = withErrorHandler('tasks/[id] PATCH', async (req: NextReques
   if (body.projectId !== undefined)     update.project_id = body.projectId
   if (body.section !== undefined)       update.section = body.section
   if (body.sortOrder !== undefined)     update.sort_order = body.sortOrder
+  if (body.department !== undefined)    update.department = body.department
   const { data, error } = await db.from('app_tasks').update(update).eq('id', id).select().single()
   if (error) {
     throw new Error(error?.message || 'Failed to update task')

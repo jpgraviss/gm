@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { withErrorHandler } from '@/lib/api-handler'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params
+export const GET = withErrorHandler('proposals/view/[token] GET', async (_req, ctx) => {
+  const { token } = await ctx!.params
 
   if (!token) {
     return NextResponse.json({ error: 'Token is required' }, { status: 400 })
@@ -44,10 +45,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
     createdDate: proposal.created_date,
     assignedRep: proposal.assigned_rep,
   })
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params
+export const PATCH = withErrorHandler('proposals/view/[token] PATCH', async (req, ctx) => {
+  const { token } = await ctx!.params
 
   if (!token) {
     return NextResponse.json({ error: 'Token is required' }, { status: 400 })
@@ -90,9 +91,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ to
     .eq('id', proposal.id)
 
   if (updateErr) {
-    console.error('[proposals/view/:token PATCH]', updateErr)
-    return NextResponse.json({ error: 'Failed to update proposal' }, { status: 500 })
+    throw new Error(updateErr?.message || 'Failed to update proposal')
   }
 
   return NextResponse.json({ success: true, status: newStatus })
-}
+})

@@ -435,7 +435,9 @@ export default function AdminPage() {
     email: boolean
     googleCalendar: boolean
     googleDrive: boolean
-  }>({ mercury: false, email: false, googleCalendar: false, googleDrive: false })
+    database: boolean | null
+    auth: boolean | null
+  }>({ mercury: false, email: false, googleCalendar: false, googleDrive: false, database: null, auth: null })
 
   // Mercury Banking
   const [mercuryConnected, setMercuryConnected] = useState(false)
@@ -589,12 +591,17 @@ export default function AdminPage() {
             email: !!d.email,
             googleCalendar: !!d.googleCalendar,
             googleDrive: !!d.googleDrive,
+            database: !!d.database,
+            auth: !!d.auth,
           }))
+        } else {
+          setIntegrationHealth(prev => ({ ...prev, database: false, auth: false }))
         }
       })
       .catch(() => {
-        // Fallback: assume email is configured if the app works
-        setIntegrationHealth(prev => ({ ...prev, email: true }))
+        // Fallback: assume email is configured if the app works, but leave
+        // database/auth as an explicit failure since the health check itself failed
+        setIntegrationHealth(prev => ({ ...prev, email: true, database: false, auth: false }))
       })
   }, [])
 
@@ -1103,12 +1110,24 @@ export default function AdminPage() {
               <div className="flex items-center gap-2 mb-3">
                 <Server size={15} style={{ color: '#015035' }} />
                 <h3 className="text-sm font-bold text-gray-800">System Health</h3>
-                <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
-                  {[true, true, integrationHealth.mercury, integrationHealth.email, integrationHealth.googleCalendar, integrationHealth.googleDrive].every(Boolean) ? 'ALL SYSTEMS GO' : 'DEGRADED'}
+                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                  [integrationHealth.auth, integrationHealth.database].every(Boolean) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                }`}>
+                  {integrationHealth.auth === null && integrationHealth.database === null
+                    ? 'CHECKING...'
+                    : [integrationHealth.auth, integrationHealth.database].every(Boolean) ? 'ALL SYSTEMS GO' : 'DEGRADED'}
                 </span>
               </div>
-              <SystemHealthRow label="Authentication" status="ok" detail="Operational" />
-              <SystemHealthRow label="Database" status="ok" detail="Healthy" />
+              <SystemHealthRow
+                label="Authentication"
+                status={integrationHealth.auth === null ? 'warn' : integrationHealth.auth ? 'ok' : 'error'}
+                detail={integrationHealth.auth === null ? 'Checking...' : integrationHealth.auth ? 'Operational' : 'SESSION_SIGNING_KEY not configured'}
+              />
+              <SystemHealthRow
+                label="Database"
+                status={integrationHealth.database === null ? 'warn' : integrationHealth.database ? 'ok' : 'error'}
+                detail={integrationHealth.database === null ? 'Checking...' : integrationHealth.database ? 'Healthy' : 'Unreachable'}
+              />
               <SystemHealthRow label="Mercury Banking" status={integrationHealth.mercury ? 'ok' : 'warn'} detail={integrationHealth.mercury ? 'Connected' : 'Not Connected'} />
               <SystemHealthRow label="E-Signature" status="ok" detail="Built-in" />
               <SystemHealthRow label="Email Delivery" status={integrationHealth.email ? 'ok' : 'warn'} detail={integrationHealth.email ? 'Active' : 'Not Configured'} />
@@ -1798,8 +1817,17 @@ export default function AdminPage() {
         {tab === 'permissions' && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-bold text-gray-800">Role-Based Permission Matrix</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Control module access by role. Super Admin always has full access.</p>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-800">Role-Based Permission Matrix</h3>
+                <span className="status-badge text-[10px] bg-gray-100 text-gray-500">Reference only</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Illustrates intended module access by role — not editable here, and not independently enforced
+                per module. The app&apos;s actual access control is a single role hierarchy (Client &lt; Contractor &lt; Team
+                Member &lt; Dept Manager &lt; Leadership &lt; Super Admin, each level inheriting the ones below it);
+                per-module distinctions like &quot;Unit&quot; or &quot;Assigned&quot; below reflect what each page&apos;s
+                queries happen to filter by, not a separate permissions system.
+              </p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[700px]">

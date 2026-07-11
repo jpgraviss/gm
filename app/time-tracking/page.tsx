@@ -407,21 +407,35 @@ export default function TimeTrackingPage() {
         toast('Failed to save time entry', 'error')
       }
     } else {
-      fetch(`/api/time-entries/${entry.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entry),
-      }).catch(() => toast('Failed to update time entry', 'error'))
+      const previous = entries.find(e => e.id === entry.id)
       setEntries(prev => prev.map(e => e.id === entry.id ? entry : e))
+      try {
+        const res = await fetch(`/api/time-entries/${entry.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entry),
+        })
+        if (!res.ok) throw new Error('Failed')
+      } catch {
+        toast('Failed to update time entry — reverted', 'error')
+        if (previous) setEntries(prev => prev.map(e => e.id === entry.id ? previous : e))
+      }
     }
     setShowLog(false)
     setEditEntry(undefined)
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     if (!confirm('Delete this time entry?')) return
+    const previous = entries.find(e => e.id === id)
     setEntries(prev => prev.filter(e => e.id !== id))
-    fetch(`/api/time-entries/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete time entry', 'error'))
+    try {
+      const res = await fetch(`/api/time-entries/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      toast('Failed to delete time entry — restored', 'error')
+      if (previous) setEntries(prev => [previous, ...prev])
+    }
   }
 
   async function handleBulkApproval(status: 'approved' | 'rejected', rejectionNote?: string) {

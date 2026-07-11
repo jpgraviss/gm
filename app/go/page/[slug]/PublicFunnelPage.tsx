@@ -25,7 +25,7 @@ function FaqAccordion({ question, answer }: { question: string; answer: string }
   )
 }
 
-function FormBlock({ data, funnelSlug }: { data: Record<string, unknown>; funnelSlug: string }) {
+function FormBlock({ data, funnelSlug, pageId }: { data: Record<string, unknown>; funnelSlug: string; pageId: string }) {
   const fields = (data.fields ?? []) as Array<{ name: string; label: string; type: string; required: boolean }>
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -42,7 +42,7 @@ function FormBlock({ data, funnelSlug }: { data: Record<string, unknown>; funnel
       await fetch('/api/forms/public/funnel-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ funnelSlug, data: formData }),
+        body: JSON.stringify({ funnelSlug, pageId, data: formData }),
       })
       setSubmitted(true)
     } catch {
@@ -103,7 +103,7 @@ function FormBlock({ data, funnelSlug }: { data: Record<string, unknown>; funnel
   )
 }
 
-function PublicBlock({ block, funnelSlug }: { block: Block; funnelSlug: string }) {
+function PublicBlock({ block, funnelSlug, pageId }: { block: Block; funnelSlug: string; pageId: string }) {
   const d = block.data
   const padding = `${d.padding ?? '60'}px`
   const bgColor = (d.bgColor as string) ?? '#ffffff'
@@ -180,7 +180,7 @@ function PublicBlock({ block, funnelSlug }: { block: Block; funnelSlug: string }
         </section>
       )
     case 'form':
-      return <FormBlock data={d} funnelSlug={funnelSlug} />
+      return <FormBlock data={d} funnelSlug={funnelSlug} pageId={pageId} />
     case 'video':
       return (
         <section style={{ background: bgColor, color: textColor, padding }}>
@@ -233,11 +233,11 @@ function PublicBlock({ block, funnelSlug }: { block: Block; funnelSlug: string }
   }
 }
 
-export default function PublicFunnelPage({ blocks, funnelSlug }: { blocks: Block[]; funnelSlug: string }) {
+export default function PublicFunnelPage({ blocks, funnelSlug, pageId }: { blocks: Block[]; funnelSlug: string; pageId: string }) {
   return (
     <div className="min-h-screen">
       {blocks.map((block) => (
-        <PublicBlock key={block.id} block={block} funnelSlug={funnelSlug} />
+        <PublicBlock key={block.id} block={block} funnelSlug={funnelSlug} pageId={pageId} />
       ))}
     </div>
   )

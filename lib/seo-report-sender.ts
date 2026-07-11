@@ -1,5 +1,5 @@
 import { createServiceClient } from '@/lib/supabase'
-import { buildClientReport, saveReportSnapshot, type ClientReportConfig } from '@/lib/client-reports'
+import { buildClientReport, saveReportSnapshot, buildReportRecommendations, type ClientReportConfig } from '@/lib/client-reports'
 import { generateMonthlyReportHtml, type MonthlyReportData } from '@/lib/templates/generate-monthly-report'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
@@ -132,7 +132,7 @@ export async function sendMonthlyClientReports(): Promise<{ sent: number; failed
           ranking: reportData.ranking,
           uptime: reportData.uptime,
         },
-        recommendations: [],
+        recommendations: buildReportRecommendations({ ranking: reportData.ranking, reputation: reportData.reputation, uptime: reportData.uptime }),
         changelog: [],
       }
 
@@ -215,7 +215,7 @@ export async function sendSingleReport(companyName: string, options?: { recipien
       ranking: reportData.ranking,
       uptime: reportData.uptime,
     },
-    recommendations: [],
+    recommendations: buildReportRecommendations({ ranking: reportData.ranking, reputation: reportData.reputation, uptime: reportData.uptime }),
     changelog: [],
   }
 

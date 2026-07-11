@@ -6,6 +6,67 @@ import { withErrorHandler } from '@/lib/api-handler'
 
 const SERVICE_TYPES = ['Website', 'SEO', 'PPC', 'Social Media', 'Branding', 'Maintenance', 'Custom']
 
+const STEP_NAMES = [
+  'Contract Signed',
+  'Invoice & Payment',
+  'Welcome Email',
+  'Portal Access',
+  'Strategy Call',
+  'Usage Guide & Resources',
+  'Deliverables',
+  'Reporting & Analytics',
+]
+
+const STEP_STATUS_COLUMNS = [
+  'step_01_agreement', 'step_02_invoice', 'step_03_welcome', 'step_04_portal',
+  'step_05_strategy_call', 'step_06_usage_guide', 'step_07_fulfillment', 'step_08_monthly_report',
+]
+
+const STEP_COMPLETED_AT_COLUMNS: Record<number, string | null> = {
+  1: 'step_01_completed_at',
+  2: 'step_02_completed_at',
+  3: null,
+  4: null,
+  5: 'step_05_completed_at',
+  6: null,
+  7: 'step_07_completed_at',
+  8: null,
+}
+
+function toStepStatus(raw: string | null | undefined): 'completed' | 'in_progress' | 'pending' {
+  if (raw === 'Completed' || raw === 'Skipped') return 'completed'
+  if (raw === 'In Progress') return 'in_progress'
+  return 'pending'
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapWorkflow(row: any) {
+  const steps = STEP_NAMES.map((name, i) => {
+    const stepNum = i + 1
+    const status = toStepStatus(row[STEP_STATUS_COLUMNS[i]])
+    const completedAtCol = STEP_COMPLETED_AT_COLUMNS[stepNum]
+    return {
+      step: stepNum,
+      name,
+      status,
+      completedDate: completedAtCol ? (row[completedAtCol] ?? undefined) : undefined,
+    }
+  })
+  const currentStep = steps.find(s => s.status !== 'completed')?.step ?? STEP_NAMES.length
+
+  return {
+    id: row.id,
+    company: row.company_name,
+    companyId: row.company_id ?? undefined,
+    service: row.service_type,
+    projectId: row.project_id ?? undefined,
+    currentStep,
+    steps,
+    startedDate: row.created_at,
+    lastUpdated: row.updated_at ?? row.created_at,
+  }
+}
+
 export const POST = withErrorHandler('delivery/workflow POST', async (req: NextRequest) => {
   const body = await req.json()
   const result = validate(body, {
@@ -47,7 +108,7 @@ export const POST = withErrorHandler('delivery/workflow POST', async (req: NextR
     metadata: { service_type: body.serviceType ?? 'Website' },
   })
 
-  return NextResponse.json(data, { status: 201 })
+  return NextResponse.json(mapWorkflow(data), { status: 201 })
 })
 
 export const GET = withErrorHandler('delivery/workflow GET', async (req: NextRequest) => {
@@ -71,5 +132,5 @@ export const GET = withErrorHandler('delivery/workflow GET', async (req: NextReq
   }
 
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
-  return paginatedJson(rows, nextCursor)
+  return paginatedJson(rows.map(mapWorkflow), nextCursor)
 })

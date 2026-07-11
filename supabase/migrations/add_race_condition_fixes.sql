@@ -5,8 +5,27 @@
 -- pre-update row and clobber each other's write.
 
 -- #44 — Sequence enrollment's "one active sequence at a time" guarantee
--- was only enforced by a check-then-insert in application code. This
--- index makes it a real DB-level invariant: at most one row with
+-- was only enforced by a check-then-insert in application code, so
+-- pre-existing data can already have more than one active row for the
+-- same contact_email (exactly what the race let happen). Resolve those
+-- before the unique index can be created: keep the most-recently-enrolled
+-- active row per contact, mark any older duplicates as unenrolled. This
+-- is a data cleanup, not a behavior change — the "one at a time" rule
+-- already existed as intent, these rows just slipped through the race.
+with ranked as (
+  select id,
+         row_number() over (
+           partition by contact_email
+           order by enrolled_at desc nulls last, id desc
+         ) as rn
+  from public.sequence_enrollments
+  where status = 'active'
+)
+update public.sequence_enrollments
+set status = 'unenrolled', unenroll_reason = 'duplicate_active_cleanup'
+where id in (select id from ranked where rn > 1);
+
+-- This index makes it a real DB-level invariant: at most one row with
 -- status='active' per contact_email. A contact's row stops matching this
 -- partial index the moment it's completed/unenrolled/bounced, so
 -- re-enrollment afterward is unaffected.

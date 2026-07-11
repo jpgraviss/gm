@@ -6,8 +6,9 @@ import { useTeamMembers } from '@/lib/useTeamMembers'
 import CompanySelect from '@/components/ui/CompanySelect'
 import FileUpload from '@/components/ui/FileUpload'
 import type { ServiceType } from '@/lib/types'
+import { SERVICE_NAMES } from '@/lib/services'
 
-const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
+const SERVICE_TYPES: ServiceType[] = [...SERVICE_NAMES]
 
 interface UploadedFile {
   name: string
@@ -59,7 +60,7 @@ export default function NewProposalPanel({ onSave, onClose }: Props) {
   const REPS = useTeamMembers()
   const [form, setForm] = useState<NewProposalFormData>({
     company: '',
-    serviceType: 'Website',
+    serviceType: 'Website Build',
     assignedRep: 'Graviss Marketing',
     value: '',
     notes: '',

@@ -15,6 +15,7 @@ import {
 // data loaded from API
 import { useToast } from '@/components/ui/Toast'
 import { formatCurrency } from '@/lib/utils'
+import { SERVICE_NAMES } from '@/lib/services'
 import { computeMRR } from '@/lib/metrics'
 import NewClientModal from '@/components/admin/NewClientModal'
 
@@ -1886,9 +1887,7 @@ export default function AdminPage() {
             { label: 'Timezone', value: co?.timezone ?? 'America/New_York (ET)' },
           ]
 
-          const serviceTypes = (platformSettings?.service_types as string[] | undefined) ?? [
-            'Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom', 'PPC / Paid Ads', 'Content Marketing',
-          ]
+          const serviceTypes = (platformSettings?.service_types as string[] | undefined) ?? [...SERVICE_NAMES]
 
           const DEFAULT_STAGE_COLORS: Record<string, string> = {
             Lead: '#9ca3af', Qualified: '#3b82f6', 'Proposal Sent': '#f59e0b',

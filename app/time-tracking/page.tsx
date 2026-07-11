@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { Clock, Plus, X, ChevronLeft, ChevronRight, DollarSign, Ban, Users, Check, Pencil, Trash2, CheckCircle, XCircle, Shield, Search, List, CalendarDays, TrendingUp, Timer } from 'lucide-react'
 import type { TimeEntry, TeamServiceLine, TeamMember, Project } from '@/lib/types'
 import { fetchTeamMembers, fetchProjects } from '@/lib/supabase'
+import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
 import Header from '@/components/layout/Header'
@@ -45,22 +46,9 @@ function fmtDayLabel(d: Date) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
-const SERVICE_COLORS: Record<string, string> = {
-  Website: 'bg-blue-100 text-blue-700',
-  Development: 'bg-indigo-100 text-indigo-700',
-  SEO: 'bg-green-100 text-green-700',
-  'Social Media': 'bg-pink-100 text-pink-700',
-  Marketing: 'bg-purple-100 text-purple-700',
-  'Email Marketing': 'bg-orange-100 text-orange-700',
-  Content: 'bg-yellow-100 text-yellow-700',
-  Design: 'bg-rose-100 text-rose-700',
-  General: 'bg-gray-100 text-gray-600',
-}
+const SERVICE_COLORS: Record<string, string> = serviceTypeColors
 
-const SERVICE_TYPES: TeamServiceLine[] = [
-  'Website', 'Development', 'SEO', 'Social Media',
-  'Marketing', 'Email Marketing', 'Content', 'Design', 'General',
-]
+const SERVICE_TYPES: TeamServiceLine[] = [...SERVICE_NAMES, 'General']
 
 interface LogFormProps {
   entry?: TimeEntry

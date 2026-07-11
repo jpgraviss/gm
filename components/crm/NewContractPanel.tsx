@@ -6,8 +6,9 @@ import { fetchProposals } from '@/lib/supabase'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import CompanySelect from '@/components/ui/CompanySelect'
 import type { ServiceType, Proposal } from '@/lib/types'
+import { SERVICE_NAMES } from '@/lib/services'
 
-const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
+const SERVICE_TYPES: ServiceType[] = [...SERVICE_NAMES]
 const BILLING_STRUCTURES = ['One-Time', 'Monthly Retainer', 'Quarterly', 'Annual']
 
 export interface NewContractFormData {
@@ -56,7 +57,7 @@ export default function NewContractPanel({ onSave, onClose, initialProposalId }:
   const today = new Date().toISOString().split('T')[0]
   const [form, setForm] = useState<NewContractFormData>({
     company: '',
-    serviceType: 'Website',
+    serviceType: 'Website Build',
     assignedRep: 'Graviss Marketing',
     value: '',
     billingStructure: 'Monthly Retainer',

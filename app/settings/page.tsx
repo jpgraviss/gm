@@ -14,6 +14,7 @@ import {
   FileText, ArrowUp, ArrowDown, Copy, Clock, PenLine, Calendar, Brain,
 } from 'lucide-react'
 import { type EmailSignatureData, DEFAULT_SIGNATURE, generateSignatureHtml } from '@/lib/email-signature'
+import { SERVICES } from '@/lib/services'
 import {
   type SystemTemplateName, type SystemEmailTemplate, type TemplateBlock,
   TEMPLATE_LABELS, MERGE_FIELDS, SAMPLE_DATA,
@@ -196,7 +197,6 @@ const PIPELINES_DEFAULT: PipelineConf[] = [{
   name: 'Sales Pipeline',
   stages: PIPELINE_STAGES_DEFAULT.map((name, i) => ({ id: `s${i}`, name, color: STAGE_COLORS_CYCLE[i % STAGE_COLORS_CYCLE.length] })),
 }]
-const SERVICE_TYPES_DEFAULT = ['Website', 'SEO', 'Social Media', 'Email Marketing', 'Branding', 'Custom']
 const CONTACT_TAGS_DEFAULT = ['Decision Maker', 'Executive', 'Signed Client', 'Warm Lead', 'Marketing', 'Healthcare', 'Partner']
 
 const ENGAGEMENT_DEFAULTS = {
@@ -356,9 +356,7 @@ export default function SettingsPage() {
   const [expandedPipelineId, setExpandedPipelineId] = useState<string | null>('sales')
   const [newStageNames, setNewStageNames] = useState<Record<string, string>>({})
   const [newPipelineName, setNewPipelineName] = useState('')
-  const [serviceTypes, setServiceTypes] = useState(SERVICE_TYPES_DEFAULT)
   const [contactTags, setContactTags] = useState(CONTACT_TAGS_DEFAULT)
-  const [newService, setNewService] = useState('')
   const [newTag, setNewTag] = useState('')
 
   // Delivery Steps
@@ -428,7 +426,6 @@ export default function SettingsPage() {
           setActivityNotifs(loadLS('gravhub_activity_notifs', ACTIVITY_NOTIF_DEFAULTS))
           setQuietHours(loadLS('gravhub_quiet_hours', QUIET_HOURS_DEFAULTS))
           setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
-          setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
           setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
           setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
           return
@@ -439,7 +436,6 @@ export default function SettingsPage() {
         if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(d.invoice_defaults)
         if (Array.isArray(d.pipelines) && d.pipelines.length) setPipelines(d.pipelines.map((p: PipelineConf) => ({ ...p, stages: Array.isArray(p.stages) ? p.stages : [] })))
         else if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length) setPipelines([{ id: 'sales', name: 'Sales Pipeline', stages: d.pipeline_stages.map((name: string, i: number) => ({ id: `s${i}`, name, color: STAGE_COLORS_CYCLE[i % STAGE_COLORS_CYCLE.length] })) }])
-        if (Array.isArray(d.service_types)   && d.service_types.length)    setServiceTypes(d.service_types)
         if (Array.isArray(d.contact_tags)    && d.contact_tags.length)     setContactTags(d.contact_tags)
         if (d.branding         && Object.keys(d.branding).length)          setBranding(prev => ({ ...prev, ...d.branding }))
         if (d.email_defaults   && Object.keys(d.email_defaults).length)    setEmailDefaults(prev => ({ ...prev, ...d.email_defaults }))
@@ -461,7 +457,6 @@ export default function SettingsPage() {
         setActivityNotifs(loadLS('gravhub_activity_notifs', ACTIVITY_NOTIF_DEFAULTS))
         setQuietHours(loadLS('gravhub_quiet_hours', QUIET_HOURS_DEFAULTS))
         setInvoiceDefaults(loadLS('gravhub_invoice_defaults', INVOICE_DEFAULTS))
-        setServiceTypes(loadLS('gravhub_service_types', SERVICE_TYPES_DEFAULT))
         setContactTags(loadLS('gravhub_contact_tags', CONTACT_TAGS_DEFAULT))
         setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
       })
@@ -507,7 +502,7 @@ export default function SettingsPage() {
 
   function saveCRM() {
     const firstPipelineStages = pipelines[0]?.stages.map(s => s.name) ?? []
-    patchSettings({ pipelineStages: firstPipelineStages, pipelines, serviceTypes, contactTags, deliverySteps }, 'CRM Setup')
+    patchSettings({ pipelineStages: firstPipelineStages, pipelines, contactTags, deliverySteps }, 'CRM Setup')
   }
 
   function saveBranding() {
@@ -2100,24 +2095,22 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Service Types */}
+            {/* Service Types — read-only. The catalog now lives in lib/services.ts
+                (single source of truth used by deals/proposals/contracts/projects/
+                tasks/etc.) instead of this DB-editable list, which nothing else read. */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Service Types</h3>
-              <div className="flex flex-wrap gap-2 mb-3">
-                {serviceTypes.map(s => (
-                  <div key={s} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-full">
-                    <span className="text-xs font-medium text-gray-700">{s}</span>
-                    <button onClick={() => setServiceTypes(prev => prev.filter(x => x !== s))} className="text-gray-400 hover:text-red-500"><X size={10} /></button>
+              <h3 className="text-sm font-bold text-gray-800 mb-1 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Service Types</h3>
+              <p className="text-xs text-gray-400 mb-4">Managed centrally in the codebase so every part of GravHub stays in sync — edit lib/services.ts to add or change a service.</p>
+              {(['Marketing', 'Sales'] as const).map(lane => (
+                <div key={lane} className="mb-3 last:mb-0">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{lane} Lane</p>
+                  <div className="flex flex-wrap gap-2">
+                    {SERVICES.filter(s => s.lane === lane).map(s => (
+                      <div key={s.name} className={`px-3 py-1.5 rounded-full text-xs font-medium ${s.color}`}>{s.name}</div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input value={newService} onChange={e => setNewService(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newService.trim()) { setServiceTypes(p => [...p, newService.trim()]); setNewService('') }}}
-                  placeholder="New service type…" className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700" />
-                <button onClick={() => { if (newService.trim()) { setServiceTypes(p => [...p, newService.trim()]); setNewService('') }}} className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-medium" style={{ background: '#015035' }}>
-                  <Plus size={12} /> Add
-                </button>
-              </div>
+                </div>
+              ))}
             </div>
 
             {/* Contact Tags */}

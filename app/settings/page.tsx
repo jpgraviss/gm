@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { type EmailSignatureData, DEFAULT_SIGNATURE, generateSignatureHtml } from '@/lib/email-signature'
 import { SERVICES } from '@/lib/services'
+import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
 import {
   type SystemTemplateName, type SystemEmailTemplate, type TemplateBlock,
   TEMPLATE_LABELS, MERGE_FIELDS, SAMPLE_DATA,
@@ -359,13 +360,6 @@ export default function SettingsPage() {
   const [contactTags, setContactTags] = useState(CONTACT_TAGS_DEFAULT)
   const [newTag, setNewTag] = useState('')
 
-  // Delivery Steps
-  const DELIVERY_STEPS_DEFAULT = [
-    'Contract Signed', 'Invoice & Payment', 'Welcome Email', 'Portal Access',
-    'Strategy Call', 'Usage Guide & Resources', 'Deliverables', 'Reporting & Analytics',
-  ]
-  const [deliverySteps, setDeliverySteps] = useState<string[]>(DELIVERY_STEPS_DEFAULT)
-  const [newDeliveryStep, setNewDeliveryStep] = useState('')
 
   // Engagement
   const [engagement, setEngagement] = useState(ENGAGEMENT_DEFAULTS)
@@ -448,7 +442,6 @@ export default function SettingsPage() {
             setRoleNavConfig({ global: d.navigation_config as NavConfig, roles: {} })
           }
         }
-        if (Array.isArray(d.delivery_steps) && d.delivery_steps.length) setDeliverySteps(d.delivery_steps)
         if (d.email_templates && typeof d.email_templates === 'object') setEmailTemplates(d.email_templates as Record<string, SystemEmailTemplate>)
         if (d.approval_config && typeof d.approval_config === 'object') setApprovalConfig(prev => ({ ...prev, ...d.approval_config as Record<string, unknown> }))
       })
@@ -502,7 +495,7 @@ export default function SettingsPage() {
 
   function saveCRM() {
     const firstPipelineStages = pipelines[0]?.stages.map(s => s.name) ?? []
-    patchSettings({ pipelineStages: firstPipelineStages, pipelines, contactTags, deliverySteps }, 'CRM Setup')
+    patchSettings({ pipelineStages: firstPipelineStages, pipelines, contactTags }, 'CRM Setup')
   }
 
   function saveBranding() {
@@ -2134,89 +2127,20 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Delivery Steps */}
+            {/* Delivery Steps — read-only. Each step is tied to a dedicated
+                column on delivery_workflows (step_01_agreement …
+                step_08_monthly_report), so steps can't actually be added,
+                removed, reordered, or renamed without a schema change. */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Delivery Steps</h3>
-                  <p className="text-xs text-gray-400 mt-1">Configure the steps in your client delivery pipeline. Used by the Delivery Dashboard.</p>
-                </div>
-                {saved === 'CRM Setup' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
-              </div>
-              <div className="flex flex-col gap-1.5 mb-3">
-                {deliverySteps.map((step, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg group">
+              <h3 className="text-sm font-bold text-gray-800 mb-1 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Delivery Steps</h3>
+              <p className="text-xs text-gray-400 mb-4">The fixed stages of the client delivery pipeline, used by the Delivery Dashboard. Each stage maps to a dedicated database field, so this list can't be edited here.</p>
+              <div className="flex flex-col gap-1.5">
+                {DELIVERY_STEP_NAMES.map((step, i) => (
+                  <div key={step} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
                     <span className="text-xs text-gray-400 font-mono w-6 text-center flex-shrink-0">{i + 1}</span>
-                    <input
-                      value={step}
-                      onChange={e => setDeliverySteps(prev => prev.map((s, j) => j === i ? e.target.value : s))}
-                      className="flex-1 px-2 py-1 border border-transparent rounded text-sm text-gray-800 bg-transparent hover:border-gray-200 focus:border-green-700 focus:bg-white focus:outline-none transition-colors"
-                    />
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => {
-                          if (i === 0) return
-                          setDeliverySteps(prev => {
-                            const next = [...prev]
-                            ;[next[i - 1], next[i]] = [next[i], next[i - 1]]
-                            return next
-                          })
-                        }}
-                        disabled={i === 0}
-                        className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 disabled:opacity-20"
-                      >
-                        <ArrowUp size={12} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (i === deliverySteps.length - 1) return
-                          setDeliverySteps(prev => {
-                            const next = [...prev]
-                            ;[next[i], next[i + 1]] = [next[i + 1], next[i]]
-                            return next
-                          })
-                        }}
-                        disabled={i === deliverySteps.length - 1}
-                        className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 disabled:opacity-20"
-                      >
-                        <ArrowDown size={12} />
-                      </button>
-                      <button
-                        onClick={() => setDeliverySteps(prev => prev.filter((_, j) => j !== i))}
-                        disabled={deliverySteps.length <= 1}
-                        className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-red-500 disabled:opacity-20"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
+                    <span className="flex-1 text-sm text-gray-700">{step}</span>
                   </div>
                 ))}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={newDeliveryStep}
-                  onChange={e => setNewDeliveryStep(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && newDeliveryStep.trim()) {
-                      setDeliverySteps(prev => [...prev, newDeliveryStep.trim()])
-                      setNewDeliveryStep('')
-                    }
-                  }}
-                  placeholder="New step name..."
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
-                />
-                <button
-                  onClick={() => {
-                    if (newDeliveryStep.trim()) {
-                      setDeliverySteps(prev => [...prev, newDeliveryStep.trim()])
-                      setNewDeliveryStep('')
-                    }
-                  }}
-                  className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-medium"
-                  style={{ background: '#015035' }}
-                >
-                  <Plus size={12} /> Add Step
-                </button>
               </div>
             </div>
 

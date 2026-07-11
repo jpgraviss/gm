@@ -4,19 +4,11 @@ import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
 import { ALL_SERVICE_VALUES } from '@/lib/services'
+import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
 
 const SERVICE_TYPES = [...ALL_SERVICE_VALUES]
 
-const STEP_NAMES = [
-  'Contract Signed',
-  'Invoice & Payment',
-  'Welcome Email',
-  'Portal Access',
-  'Strategy Call',
-  'Usage Guide & Resources',
-  'Deliverables',
-  'Reporting & Analytics',
-]
+const STEP_NAMES: readonly string[] = DELIVERY_STEP_NAMES
 
 const STEP_STATUS_COLUMNS = [
   'step_01_agreement', 'step_02_invoice', 'step_03_welcome', 'step_04_portal',

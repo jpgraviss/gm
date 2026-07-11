@@ -64,7 +64,6 @@ export const PATCH = withErrorHandler('settings PATCH', async (req) => {
   if (body.mercury              !== undefined) updates.mercury              = body.mercury
   if (body.maverick             !== undefined) updates.maverick             = body.maverick
   if (body.apollo               !== undefined) updates.apollo               = body.apollo
-  if (body.deliverySteps        !== undefined) updates.delivery_steps       = body.deliverySteps
   if (body.trainingModules      !== undefined) updates.training_modules     = body.trainingModules
   if (body.sops                 !== undefined) updates.sops                 = body.sops
   if (body.security             !== undefined) updates.security             = body.security

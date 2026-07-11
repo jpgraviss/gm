@@ -347,6 +347,28 @@ function DealPanel({
 
           {tab === 'overview' && (
             <div className="flex flex-col gap-4">
+              {/* Deal Score */}
+              {typeof deal.dealScore === 'number' && (
+                <div className="p-4 rounded-xl text-white" style={{ background: '#012b1e' }}>
+                  <div className="flex items-center gap-4">
+                    <div className="relative w-16 h-16 flex-shrink-0 flex items-center justify-center rounded-full border-4" style={{ borderColor: deal.dealScore >= 60 ? '#22c55e' : deal.dealScore >= 35 ? '#f59e0b' : '#ef4444' }}>
+                      <span className="text-xl font-bold" style={{ fontFamily: 'var(--font-heading)' }}>{deal.dealScore}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white/60 uppercase tracking-wide font-semibold mb-1.5">Deal Score · Key Factors</p>
+                      <div className="flex flex-col gap-1">
+                        {(deal.dealScoreFactors ?? []).map((f, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-xs">
+                            <span className={f.positive ? 'text-emerald-400' : 'text-red-400'}>{f.positive ? '▲' : '▼'}</span>
+                            <span className="text-white/80">{f.label}: {f.detail}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Deal info */}
               <div className="p-4 bg-gray-50 rounded-xl">
                 <div className="flex items-center justify-between mb-3">

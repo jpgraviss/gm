@@ -113,6 +113,8 @@ export interface Deal {
   pipelineId?: string
   companyId?: string | null
   contactId?: string | null
+  dealScore?: number
+  dealScoreFactors?: { label: string; detail: string; positive: boolean }[]
 }
 
 export interface ProposalLineItem {

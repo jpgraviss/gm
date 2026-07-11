@@ -831,11 +831,13 @@ function DealPanel({
 function ManagePipelinesPanel({
   pipelines,
   activePipelineId,
+  dealCounts,
   onClose,
   onChange,
 }: {
   pipelines: PipelineConfig[]
   activePipelineId: string
+  dealCounts: Record<string, number>
   onClose: () => void
   onChange: (updated: PipelineConfig[]) => void
 }) {
@@ -846,6 +848,8 @@ function ManagePipelinesPanel({
   const [newStageName, setNewStageName] = useState('')
   const [newPipelineName, setNewPipelineName] = useState('')
   const [addingPipeline, setAddingPipeline] = useState(false)
+  const [editingPipelineId, setEditingPipelineId] = useState<string | null>(null)
+  const [editingPipelineName, setEditingPipelineName] = useState('')
 
   const pipeline = localPipelines.find(p => p.id === selectedPipelineId) ?? localPipelines[0]
 
@@ -896,6 +900,24 @@ function ManagePipelinesPanel({
     setAddingPipeline(false)
   }
 
+  function renamePipeline(pipelineId: string, name: string) {
+    if (!name.trim()) return
+    setLocalPipelines(prev => prev.map(p => p.id === pipelineId ? { ...p, name: name.trim() } : p))
+  }
+
+  function removePipeline(pipelineId: string) {
+    if (localPipelines.length <= 1) return
+    const count = dealCounts[pipelineId] ?? 0
+    if (count > 0) {
+      const name = localPipelines.find(p => p.id === pipelineId)?.name ?? 'this pipeline'
+      const ok = window.confirm(`"${name}" has ${count} deal${count === 1 ? '' : 's'} in it. Deleting the pipeline won't delete those deals, but they'll no longer be visible in any pipeline view until reassigned. Delete anyway?`)
+      if (!ok) return
+    }
+    const next = localPipelines.filter(p => p.id !== pipelineId)
+    setLocalPipelines(next)
+    if (selectedPipelineId === pipelineId) setSelectedPipelineId(next[0].id)
+  }
+
   function reorderStages(result: DropResult) {
     if (!result.destination) return
     const updated = Array.from(pipeline.stages)
@@ -929,18 +951,55 @@ function ManagePipelinesPanel({
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pipelines</p>
             <div className="flex flex-col gap-1.5">
               {localPipelines.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => setSelectedPipelineId(p.id)}
-                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
-                    selectedPipelineId === p.id
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                      : 'border-gray-200 text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <span>{p.name}</span>
-                  <span className="text-xs text-gray-400">{p.stages.length} stages</span>
-                </button>
+                editingPipelineId === p.id ? (
+                  <div key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-600 bg-emerald-50">
+                    <input
+                      value={editingPipelineName}
+                      onChange={e => setEditingPipelineName(e.target.value)}
+                      className="flex-1 text-sm font-medium border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      autoFocus
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { renamePipeline(p.id, editingPipelineName); setEditingPipelineId(null) }
+                        if (e.key === 'Escape') setEditingPipelineId(null)
+                      }}
+                    />
+                    <button onClick={() => { renamePipeline(p.id, editingPipelineName); setEditingPipelineId(null) }} className="p-1 text-emerald-600 hover:bg-emerald-100 rounded-lg flex-shrink-0">
+                      <Check size={14} />
+                    </button>
+                    <button onClick={() => setEditingPipelineId(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded-lg flex-shrink-0">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    key={p.id}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium border transition-all cursor-pointer ${
+                      selectedPipelineId === p.id
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                        : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                    }`}
+                    onClick={() => setSelectedPipelineId(p.id)}
+                  >
+                    <span>{p.name}</span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs text-gray-400">{p.stages.length} stages</span>
+                      <button
+                        onClick={e => { e.stopPropagation(); setEditingPipelineId(p.id); setEditingPipelineName(p.name) }}
+                        className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      {localPipelines.length > 1 && (
+                        <button
+                          onClick={e => { e.stopPropagation(); removePipeline(p.id) }}
+                          className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
               ))}
               {addingPipeline ? (
                 <div className="flex gap-2">
@@ -1150,6 +1209,10 @@ export default function PipelinePage() {
   const activeStages = activePipeline?.stages ?? []
 
   const reps = ['All', ...ALL_REPS]
+  const dealCountByPipeline: Record<string, number> = {}
+  for (const p of pipelines) {
+    dealCountByPipeline[p.id] = localDeals.filter(d => (d as LocalDeal & { pipelineId?: string }).pipelineId === p.id || (!('pipelineId' in d) && p.id === 'client-acquisition')).length
+  }
   const pipelineDeals = localDeals.filter(d => (d as LocalDeal & { pipelineId?: string }).pipelineId === activePipelineId || (!('pipelineId' in d) && activePipelineId === 'client-acquisition'))
   const filteredDeals = filterRep === 'All' ? pipelineDeals : pipelineDeals.filter(d => d.assignedRep === filterRep)
 
@@ -1484,16 +1547,20 @@ export default function PipelinePage() {
         <ManagePipelinesPanel
           pipelines={pipelines}
           activePipelineId={activePipeline.id}
+          dealCounts={dealCountByPipeline}
           onClose={() => setManagingPipeline(false)}
           onChange={updated => {
             setPipelines(updated)
-            Promise.all(updated.map(p =>
-              fetch('/api/pipelines', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: p.id, name: p.name, stages: p.stages }),
-              })
-            )).catch(() => toast('Failed to save pipeline settings', 'error'))
+            if (!updated.some(p => p.id === activePipelineId)) {
+              setActivePipelineId(updated[0].id)
+            }
+            fetch('/api/pipelines', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updated),
+            })
+              .then(r => { if (!r.ok) throw new Error('Failed to save') })
+              .catch(() => toast('Failed to save pipeline settings', 'error'))
           }}
         />
       )}

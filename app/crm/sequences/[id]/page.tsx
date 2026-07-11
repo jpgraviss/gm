@@ -40,6 +40,41 @@ interface CRMContact {
   title: string
 }
 
+interface SequenceAnalytics {
+  overview: {
+    totalSent: number
+    totalDelivered: number
+    totalOpened: number
+    totalClicked: number
+    totalReplied: number
+    totalBounced: number
+    totalUnsubscribed: number
+    openRate: number
+    clickRate: number
+    replyRate: number
+    bounceRate: number
+    unsubscribeRate: number
+  }
+  stepMetrics: {
+    stepIndex: number
+    sent: number
+    opened: number
+    clicked: number
+    replied: number
+    bounced: number
+    openRate: number
+    clickRate: number
+    replyRate: number
+  }[]
+  dailySends: { date: string; count: number }[]
+  abResults?: {
+    stepIndex: number
+    variantA: { sent: number; opened: number; clicked: number; replied: number }
+    variantB: { sent: number; opened: number; clicked: number; replied: number }
+    winner: 'A' | 'B' | null
+  }[]
+}
+
 const statusColors: Record<SequenceStatus, { bg: string; text: string; dot: string }> = {
   Active:    { bg: 'bg-green-50',  text: 'text-green-700',  dot: '#015035' },
   Paused:    { bg: 'bg-gray-50',   text: 'text-gray-500',   dot: '#9ca3af' },
@@ -310,7 +345,7 @@ export default function SequenceDetailPage() {
   const [loading, setLoading] = useState(true)
   const [sequence, setSequence] = useState<EmailSequence | null>(null)
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
-  const [tab, setTab] = useState<'people' | 'steps' | 'automate' | 'settings'>('people')
+  const [tab, setTab] = useState<'people' | 'steps' | 'performance' | 'automate' | 'settings'>('people')
   const [enrollSearch, setEnrollSearch] = useState('')
   const [enrollStatusFilter, setEnrollStatusFilter] = useState<'all' | 'active' | 'completed' | 'paused'>('all')
   const [selectedEnrollments, setSelectedEnrollments] = useState<Set<string>>(new Set())
@@ -323,6 +358,9 @@ export default function SequenceDetailPage() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [settingsForm, setSettingsForm] = useState<Partial<EmailSequence> | null>(null)
   const [savingSettings, setSavingSettings] = useState(false)
+  const [analytics, setAnalytics] = useState<SequenceAnalytics | null>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+  const [analyticsLoaded, setAnalyticsLoaded] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -349,6 +387,15 @@ export default function SequenceDetailPage() {
 
   useEffect(() => { loadData() }, [loadData])
   useEffect(() => { fetchTeamMembers().then(setTeamMembers).catch(() => {}) }, [])
+  useEffect(() => {
+    if (tab !== 'performance' || analyticsLoaded) return
+    setAnalyticsLoading(true)
+    fetch(`/api/sequences/analytics?sequenceId=${sequenceId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(setAnalytics)
+      .catch(() => toast('Failed to load performance data', 'error'))
+      .finally(() => { setAnalyticsLoading(false); setAnalyticsLoaded(true) })
+  }, [tab, analyticsLoaded, sequenceId, toast])
   useEffect(() => {
     if (sequence && !settingsForm) {
       setSettingsForm({
@@ -651,7 +698,7 @@ export default function SequenceDetailPage() {
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-gray-200 mb-5">
-          {(['people', 'steps', 'automate', 'settings'] as const).map(t => (
+          {(['people', 'steps', 'performance', 'automate', 'settings'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -930,6 +977,106 @@ export default function SequenceDetailPage() {
                   )
                 })}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Performance Tab */}
+        {tab === 'performance' && (
+          <div className="flex flex-col gap-4">
+            {analyticsLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
+              </div>
+            ) : !analytics ? (
+              <p className="text-sm text-gray-400 text-center py-16">No performance data yet.</p>
+            ) : (
+              <>
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
+                  <h3 className="text-sm font-bold text-gray-900 mb-4">Overview</h3>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                    {[
+                      { label: 'Sent', value: analytics.overview.totalSent },
+                      { label: 'Open Rate', value: `${analytics.overview.openRate}%` },
+                      { label: 'Click Rate', value: `${analytics.overview.clickRate}%` },
+                      { label: 'Reply Rate', value: `${analytics.overview.replyRate}%` },
+                      { label: 'Bounce Rate', value: `${analytics.overview.bounceRate}%` },
+                      { label: 'Unsub Rate', value: `${analytics.overview.unsubscribeRate}%` },
+                    ].map(s => (
+                      <div key={s.label} className="bg-gray-50 rounded-xl p-3 text-center">
+                        <p className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-heading)' }}>{s.value}</p>
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {analytics.stepMetrics.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="px-5 py-4 border-b border-gray-100">
+                      <h3 className="text-sm font-bold text-gray-900">Step Performance</h3>
+                    </div>
+                    <table className="data-table w-full">
+                      <thead>
+                        <tr>
+                          <th>Step</th><th>Sent</th><th>Opened</th><th>Clicked</th><th>Replied</th><th>Open Rate</th><th>Click Rate</th><th>Reply Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {analytics.stepMetrics.map(s => {
+                          const step = sequence.steps[s.stepIndex]
+                          return (
+                            <tr key={s.stepIndex}>
+                              <td className="text-sm text-gray-800">Step {s.stepIndex + 1}{step ? ` — ${stepTypeConfig[step.type].label}` : ''}</td>
+                              <td className="text-sm text-gray-600">{s.sent}</td>
+                              <td className="text-sm text-gray-600">{s.opened}</td>
+                              <td className="text-sm text-gray-600">{s.clicked}</td>
+                              <td className="text-sm text-gray-600">{s.replied}</td>
+                              <td className="text-sm text-gray-600">{s.openRate}%</td>
+                              <td className="text-sm text-gray-600">{s.clickRate}%</td>
+                              <td className="text-sm text-gray-600">{s.replyRate}%</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {analytics.abResults && analytics.abResults.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    <h3 className="text-sm font-bold text-gray-900 mb-4">A/B Test Results</h3>
+                    <div className="flex flex-col gap-4">
+                      {analytics.abResults.map(r => {
+                        const step = sequence.steps[r.stepIndex]
+                        return (
+                          <div key={r.stepIndex}>
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                              Step {r.stepIndex + 1}{step?.subject ? ` — ${step.subject}` : ''}
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                              {(['A', 'B'] as const).map(v => {
+                                const data = v === 'A' ? r.variantA : r.variantB
+                                const openRate = data.sent > 0 ? Math.round((data.opened / data.sent) * 1000) / 10 : 0
+                                return (
+                                  <div key={v} className={`rounded-xl p-3 text-center border ${r.winner === v ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-100'}`}>
+                                    <p className="text-[10px] font-semibold text-purple-400 uppercase">Variant {v} {r.winner === v && '★'}</p>
+                                    <p className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-heading)' }}>{data.sent > 0 ? `${openRate}%` : '—'}</p>
+                                    <p className="text-[10px] text-gray-400">{data.opened}/{data.sent} opened · {data.replied} replied</p>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                            {r.winner === null && (r.variantA.sent < 5 || r.variantB.sent < 5) && (
+                              <p className="text-[11px] text-gray-400 mt-1.5">Need at least 5 sends per variant before declaring a winner.</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

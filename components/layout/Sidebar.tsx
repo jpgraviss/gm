@@ -13,7 +13,7 @@ import {
   BookOpen, Star, Megaphone, Bot, ChevronDown,
   ScrollText, GraduationCap, Share2, Mail, ClipboardList, Layers,
   CheckSquare, Clock, CalendarDays, CalendarCheck, Wrench, RefreshCw, PackageCheck, Zap,
-  BarChart3, Plug, Search, Activity, FileSearch, Radar,
+  BarChart3, Plug, Search, Activity, FileSearch, Radar, Compass,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -63,6 +63,7 @@ export const defaultNavigation: NavSection[] = [
     section: 'Home',
     items: [
       { label: 'Dashboard', href: '/',              icon: <LayoutDashboard size={16} />, contractorVisible: true, billingVisible: true },
+      { label: 'My Workspace', href: '/workspace',  icon: <Compass size={16} />,         allowedUnits: ['Leadership/Admin', 'Sales'] },
       { label: 'Inbox',     href: '/inbox/unified', icon: <Inbox size={16} />,           billingVisible: true },
     ],
   },

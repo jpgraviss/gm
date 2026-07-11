@@ -23,6 +23,7 @@ import {
   FileText, ScrollText, User, ChevronRight, ChevronLeft, Plus,
   CheckCircle2, Circle, AlertCircle, Settings, Upload,
   GripVertical, Pencil, Trash2, Check, Download, Search, Link2,
+  LayoutGrid, List, ArrowUpDown,
 } from 'lucide-react'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
@@ -137,6 +138,101 @@ function DealCard({
         </div>
       )}
     </Draggable>
+  )
+}
+
+// ─── Deal List View ───────────────────────────────────────────────────────────
+
+function DealListView({
+  deals,
+  sortKey,
+  sortDir,
+  onSort,
+  onSelect,
+  pipelineStages,
+}: {
+  deals: LocalDeal[]
+  sortKey: 'company' | 'value' | 'closeDate' | 'dealScore'
+  sortDir: 'asc' | 'desc'
+  onSort: (key: 'company' | 'value' | 'closeDate' | 'dealScore') => void
+  onSelect: (deal: LocalDeal) => void
+  pipelineStages: PipelineStage[]
+}) {
+  const sorted = [...deals].sort((a, b) => {
+    let cmp = 0
+    if (sortKey === 'company') cmp = a.company.localeCompare(b.company)
+    else if (sortKey === 'value') cmp = a.value - b.value
+    else if (sortKey === 'closeDate') cmp = (a.closeDate || '').localeCompare(b.closeDate || '')
+    else if (sortKey === 'dealScore') cmp = (a.dealScore ?? -1) - (b.dealScore ?? -1)
+    return sortDir === 'asc' ? cmp : -cmp
+  })
+
+  const columns: { key: 'company' | 'value' | 'closeDate' | 'dealScore'; label: string }[] = [
+    { key: 'company', label: 'Company' },
+    { key: 'value', label: 'Value' },
+    { key: 'closeDate', label: 'Close Date' },
+    { key: 'dealScore', label: 'Score' },
+  ]
+
+  return (
+    <div className="flex-1 min-h-0 overflow-auto bg-white rounded-xl border border-gray-100 shadow-sm">
+      <table className="data-table w-full min-w-[760px]">
+        <thead>
+          <tr>
+            {columns.map(col => (
+              <th key={col.key} className="cursor-pointer select-none" onClick={() => onSort(col.key)}>
+                <span className="flex items-center gap-1">
+                  {col.label}
+                  <ArrowUpDown size={11} className={sortKey === col.key ? 'text-gray-600' : 'text-gray-300'} />
+                </span>
+              </th>
+            ))}
+            <th>Stage</th>
+            <th>Contact</th>
+            <th>Rep</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(deal => {
+            const stageColor = pipelineStages.find(s => s.name === deal.stage)?.color
+              ?? DEFAULT_STAGE_COLORS[deal.stage] ?? '#9ca3af'
+            return (
+              <tr key={deal.id} className="cursor-pointer" onClick={() => onSelect(deal)}>
+                <td>
+                  <p className="text-sm font-semibold text-gray-900">{deal.company}</p>
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {(deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]).map(st => (
+                      <StatusBadge key={st} label={st} colorClass={serviceTypeColors[st] ?? 'bg-gray-100 text-gray-600'} />
+                    ))}
+                  </div>
+                </td>
+                <td className="text-sm font-semibold" style={{ color: '#015035' }}>{formatCurrency(deal.value)}</td>
+                <td className="text-sm text-gray-600">
+                  {deal.closeDate ? new Date(deal.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                </td>
+                <td>
+                  {typeof deal.dealScore === 'number' ? (
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      deal.dealScore >= 60 ? 'bg-emerald-50 text-emerald-700' : deal.dealScore >= 35 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'
+                    }`}>{deal.dealScore}</span>
+                  ) : '—'}
+                </td>
+                <td>
+                  <span className="text-xs font-semibold px-2 py-1 rounded-full text-white" style={{ background: stageColor }}>{deal.stage}</span>
+                </td>
+                <td className="text-sm text-gray-600 truncate max-w-[160px]">{deal.contact?.name || '—'}</td>
+                <td className="text-sm text-gray-600">{deal.assignedRep}</td>
+              </tr>
+            )
+          })}
+          {sorted.length === 0 && (
+            <tr>
+              <td colSpan={7} className="text-center py-10 text-sm text-gray-400">No deals match the current filters.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -1005,6 +1101,9 @@ export default function PipelinePage() {
   const [localDeals, setLocalDeals] = useState<LocalDeal[]>([])
   const [selectedDeal, setSelectedDeal] = useState<LocalDeal | null>(null)
   const [filterRep, setFilterRep] = useState('All')
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
+  const [sortKey, setSortKey] = useState<'company' | 'value' | 'closeDate' | 'dealScore'>('closeDate')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [managingPipeline, setManagingPipeline] = useState(false)
   const [creatingDeal, setCreatingDeal] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -1189,6 +1288,24 @@ export default function PipelinePage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <div className="flex items-center rounded-lg border border-gray-200 p-0.5 bg-white flex-shrink-0">
+                <button
+                  onClick={() => setViewMode('kanban')}
+                  title="Pipeline view"
+                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'kanban' ? 'text-white' : 'text-gray-400 hover:text-gray-600'}`}
+                  style={viewMode === 'kanban' ? { background: '#015035' } : undefined}
+                >
+                  <LayoutGrid size={14} />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  title="List view"
+                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'text-white' : 'text-gray-400 hover:text-gray-600'}`}
+                  style={viewMode === 'list' ? { background: '#015035' } : undefined}
+                >
+                  <List size={14} />
+                </button>
+              </div>
               <button
                 onClick={() => setShowNewClientModal(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-[#015035] border border-[#015035]/20 hover:bg-[#015035]/5 transition-colors"
@@ -1246,7 +1363,19 @@ export default function PipelinePage() {
         </div>
 
         {/* Kanban Board */}
-        {mounted ? <DragDropContext onDragEnd={onDragEnd}>
+        {viewMode === 'list' ? (
+          <DealListView
+            deals={filteredDeals}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={key => {
+              if (key === sortKey) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+              else { setSortKey(key); setSortDir('asc') }
+            }}
+            onSelect={setSelectedDeal}
+            pipelineStages={activeStages}
+          />
+        ) : mounted ? <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-3 overflow-x-auto flex-1 min-h-0 pb-2">
             {activeStages.map(stage => {
               const stageDeals = filteredDeals.filter(d => d.stage === stage.name)

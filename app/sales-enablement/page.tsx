@@ -681,13 +681,16 @@ export default function SalesEnablementPage() {
     fetchModules()
     fetchPlaybooks()
     fetchTemplates()
-    // Load completion state from localStorage
-    try {
-      const stored = localStorage.getItem('training_completion')
-      if (stored) setCompletion(JSON.parse(stored))
-      const clStored = localStorage.getItem('training_checklist_state')
-      if (clStored) setChecklistState(JSON.parse(clStored))
-    } catch { /* ignore parse errors */ }
+    // Server-persisted completion/checklist state — previously localStorage
+    // only, which meant progress was lost on storage clear or device switch
+    // and invisible to anyone but the browser it was set in.
+    fetch('/api/training/progress')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.completion) setCompletion(data.completion)
+        if (data?.checklistState) setChecklistState(data.checklistState)
+      })
+      .catch(() => { /* non-fatal — training still renders without progress */ })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -894,8 +897,13 @@ export default function SalesEnablementPage() {
 
   function toggleCompletion(contentId: string) {
     setCompletion(prev => {
-      const next = { ...prev, [contentId]: !prev[contentId] }
-      localStorage.setItem('training_completion', JSON.stringify(next))
+      const nextValue = !prev[contentId]
+      const next = { ...prev, [contentId]: nextValue }
+      fetch('/api/training/progress', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contentId, completed: nextValue }),
+      }).catch(() => toast('Failed to save progress', 'error'))
       return next
     })
   }
@@ -903,8 +911,13 @@ export default function SalesEnablementPage() {
   function toggleChecklistItem(contentId: string, itemId: string) {
     setChecklistState(prev => {
       const contentItems = prev[contentId] ?? {}
-      const next = { ...prev, [contentId]: { ...contentItems, [itemId]: !contentItems[itemId] } }
-      localStorage.setItem('training_checklist_state', JSON.stringify(next))
+      const nextValue = !contentItems[itemId]
+      const next = { ...prev, [contentId]: { ...contentItems, [itemId]: nextValue } }
+      fetch('/api/training/progress', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contentId, checklistItemId: itemId, checklistValue: nextValue }),
+      }).catch(() => toast('Failed to save progress', 'error'))
       return next
     })
   }

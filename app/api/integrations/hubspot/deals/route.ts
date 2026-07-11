@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { normalizeServiceType } from '@/lib/services'
 
 const HUBSPOT_DEALS_URL = 'https://api.hubapi.com/crm/v3/objects/deals'
 
@@ -68,20 +69,6 @@ function normalizeStage(val?: string | null): string {
   if (v.includes('lost') || v.includes('closed lost') || v === 'closedlost') return 'Closed Lost'
   if (v.includes('appointment') || v.includes('scheduled')) return 'Qualified'
   return 'Lead'
-}
-
-function normalizeServiceType(val?: string | null, dealName?: string | null): string {
-  const check = (val ?? dealName ?? '').toLowerCase()
-  if (check.includes('seo')) return 'SEO'
-  if (check.includes('website') || check.includes('web design') || check.includes('web dev')) return 'Website'
-  if (check.includes('social')) return 'Social Media'
-  if (check.includes('brand')) return 'Branding'
-  if (check.includes('email')) return 'Email Marketing'
-  if (check.includes('develop')) return 'Development'
-  if (check.includes('market')) return 'Marketing'
-  if (check.includes('content')) return 'Content'
-  if (check.includes('design')) return 'Design'
-  return 'General'
 }
 
 function parseNum(val?: string | null): number | null {

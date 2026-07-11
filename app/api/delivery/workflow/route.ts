@@ -3,8 +3,9 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
+import { ALL_SERVICE_VALUES } from '@/lib/services'
 
-const SERVICE_TYPES = ['Website', 'SEO', 'PPC', 'Social Media', 'Branding', 'Maintenance', 'Custom']
+const SERVICE_TYPES = [...ALL_SERVICE_VALUES]
 
 const STEP_NAMES = [
   'Contract Signed',

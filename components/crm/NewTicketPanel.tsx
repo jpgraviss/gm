@@ -6,8 +6,9 @@ import CompanySelect from '@/components/ui/CompanySelect'
 import FileUpload from '@/components/ui/FileUpload'
 import type { ServiceType } from '@/lib/types'
 import { useTeamMembers } from '@/lib/useTeamMembers'
+import { SERVICE_NAMES } from '@/lib/services'
 
-const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
+const SERVICE_TYPES: ServiceType[] = [...SERVICE_NAMES]
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const
 
 interface UploadedFile {
@@ -67,7 +68,7 @@ export default function NewTicketPanel({ onSave, onClose }: Props) {
     contactName: '',
     contactEmail: '',
     priority: 'Medium',
-    serviceType: 'Website',
+    serviceType: 'Website Build',
     assignedTo: '',
     body: '',
     attachments: [],

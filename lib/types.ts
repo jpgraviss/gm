@@ -1,17 +1,13 @@
+import type { ServiceName, LegacyServiceName } from './services'
+
 export type DealStage = string
 
 export type ProposalStatus = 'Draft' | 'Pending Approval' | 'Approved' | 'Sent' | 'Viewed' | 'Accepted' | 'Declined'
 
-export type TeamServiceLine =
-  | 'Website'
-  | 'Development'
-  | 'SEO'
-  | 'Social Media'
-  | 'Marketing'
-  | 'Email Marketing'
-  | 'Content'
-  | 'Design'
-  | 'General'
+/** Sellable service names (see lib/services.ts), plus legacy free-text
+ * values that predate the current catalog — both are valid since the
+ * underlying DB columns are free text with no CHECK constraint. */
+export type TeamServiceLine = ServiceName | LegacyServiceName
 
 export interface AttachedDocument {
   id: string
@@ -42,13 +38,7 @@ export type ProjectStatus =
   | 'Launched'
   | 'In Maintenance'
 
-export type ServiceType =
-  | 'Website'
-  | 'SEO'
-  | 'Social Media'
-  | 'Branding'
-  | 'Email Marketing'
-  | 'Custom'
+export type ServiceType = ServiceName | LegacyServiceName
 
 export type MembershipLevel =
   | 'Super Admin'

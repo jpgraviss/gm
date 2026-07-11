@@ -7,14 +7,31 @@ import CompanySelect from '@/components/ui/CompanySelect'
 import type { Proposal, ProposalLineItem, ServiceType } from '@/lib/types'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import { PDF_COLORS, type RGB } from '@/lib/pdf-brand'
+import { SERVICES, type ServiceDefinition, type ServiceTier } from '@/lib/services'
 
 // ─── Pricing Constants ────────────────────────────────────────────────────────
+// Sourced from lib/services.ts (the canonical catalog) so pricing here can't
+// drift from what's quoted elsewhere in the app.
 
-const WEBSITE_MGMT_MONTHLY = 350
+const WEBSITE_MGMT_MONTHLY = SERVICES.find(s => s.name === 'Website Management')!.tiers![0].price
+const SEO_TIERS = SERVICES.find(s => s.name === 'SEO / AEO')!.tiers!
 const SEO_PRICES: Record<'basic' | 'standard' | 'premium', number> = {
-  basic: 550,
-  standard: 700,
-  premium: 900,
+  basic: SEO_TIERS[0].price,
+  standard: SEO_TIERS[1].price,
+  premium: SEO_TIERS[2].price,
+}
+
+// Services beyond Website Build/Management and SEO — offered as a compact
+// tier-picker ("Additional Services") rather than a bespoke section each,
+// so Social Media, Email Marketing, Fractional CMO, Sales Training/Enablement/
+// Coaching, and Fractional Sales Lead/CRO can all be quoted on a proposal.
+const EXTRA_SERVICES = SERVICES.filter(
+  (s) => !['Website Build', 'Website Management', 'SEO / AEO'].includes(s.name),
+)
+
+interface ExtraSelection {
+  tierIndex: number
+  qty: number
 }
 
 interface Addon {
@@ -344,6 +361,10 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
   const [seoPackage, setSeoPackage]       = useState<SeoPackage>('none')
   const [contractMonths, setContractMonths] = useState(6)
 
+  // Additional services (Social Media, Email Marketing, Fractional CMO,
+  // Sales Training/Enablement/Coaching, Fractional Sales Lead/CRO)
+  const [extraSelections, setExtraSelections] = useState<Record<string, ExtraSelection>>({})
+
   // Content
   const [execSummary, setExecSummary] = useState('')
   const [clientGoals, setClientGoals] = useState('')
@@ -367,10 +388,25 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
     return sum + addon.price * (addon.hasQty ? state.qty : 1)
   }, 0)
 
-  const setupTotal     = websiteSetupCost + addonsCost
+  // Extra services resolve to either a one-time cost (one-time/hourly tiers)
+  // or a monthly rate (monthly-cadence tiers) — same split as website/SEO below.
+  const extraLines = Object.entries(extraSelections).map(([name, sel]) => {
+    const service = EXTRA_SERVICES.find((s) => s.name === name)
+    const tier = service?.tiers?.[sel.tierIndex]
+    return service && tier ? { service, tier, qty: sel.qty } : null
+  }).filter((x): x is { service: ServiceDefinition; tier: ServiceTier; qty: number } => x !== null)
+
+  const extraSetupCost = extraLines
+    .filter((l) => l.tier.cadence !== 'monthly')
+    .reduce((sum, l) => sum + l.tier.price * (l.tier.cadence === 'hourly' ? l.qty : 1), 0)
+  const extraMonthlyRate = extraLines
+    .filter((l) => l.tier.cadence === 'monthly')
+    .reduce((sum, l) => sum + l.tier.price, 0)
+
+  const setupTotal     = websiteSetupCost + addonsCost + extraSetupCost
   const monthlyWebsite = websiteMgmt ? WEBSITE_MGMT_MONTHLY : 0
   const monthlySEO     = seoPackage !== 'none' ? SEO_PRICES[seoPackage] : 0
-  const monthlyTotal   = monthlyWebsite + monthlySEO
+  const monthlyTotal   = monthlyWebsite + monthlySEO + extraMonthlyRate
   const subtotal       = setupTotal + monthlyTotal * contractMonths
   const discountAmount = Math.round(subtotal * (discount / 100))
   const grandTotal     = subtotal - discountAmount
@@ -441,16 +477,28 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
 
     if (seoPackage !== 'none') {
       const price = SEO_PRICES[seoPackage]
-      items.push({ id: `item-${idx++}`, description: `SEO — ${seoPackage.charAt(0).toUpperCase() + seoPackage.slice(1)} Package`, type: 'recurring', quantity: contractMonths, unitPrice: price, total: price * contractMonths })
+      items.push({ id: `item-${idx++}`, description: `SEO / AEO — ${seoPackage.charAt(0).toUpperCase() + seoPackage.slice(1)} Package`, type: 'recurring', quantity: contractMonths, unitPrice: price, total: price * contractMonths })
     }
+
+    extraLines.forEach(({ service, tier, qty }) => {
+      if (tier.cadence === 'monthly') {
+        items.push({ id: `item-${idx++}`, description: `${service.name} — ${tier.label}`, type: 'recurring', quantity: contractMonths, unitPrice: tier.price, total: tier.price * contractMonths })
+      } else if (tier.cadence === 'hourly') {
+        items.push({ id: `item-${idx++}`, description: `${service.name} — ${tier.label} (${qty} hrs)`, type: 'one-time', quantity: qty, unitPrice: tier.price, total: tier.price * qty })
+      } else {
+        items.push({ id: `item-${idx++}`, description: `${service.name} — ${tier.label}`, type: 'one-time', quantity: 1, unitPrice: tier.price, total: tier.price })
+      }
+    })
 
     return items
   }
 
   function getServiceType(): ServiceType {
-    if (websiteEnabled && seoPackage !== 'none') return 'Website'
-    if (seoPackage !== 'none') return 'SEO'
-    if (websiteEnabled) return 'Website'
+    const selected: ServiceType[] = []
+    if (websiteEnabled) selected.push('Website Build')
+    if (seoPackage !== 'none') selected.push('SEO / AEO')
+    extraLines.forEach((l) => selected.push(l.service.name as ServiceType))
+    if (selected.length === 1) return selected[0]
     return 'Custom'
   }
 
@@ -882,6 +930,21 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
     setAddons(prev => ({ ...prev, [id]: { ...prev[id], qty: Math.max(1, qty) } }))
   }
 
+  // ─── Additional-service helpers ───────────────────────────────────────────
+
+  function setExtraTier(serviceName: string, tierIndex: number | null) {
+    setExtraSelections(prev => {
+      const next = { ...prev }
+      if (tierIndex === null) { delete next[serviceName]; return next }
+      const tier = EXTRA_SERVICES.find(s => s.name === serviceName)?.tiers?.[tierIndex]
+      next[serviceName] = { tierIndex, qty: tier?.cadence === 'hourly' ? 5 : 1 }
+      return next
+    })
+  }
+  function setExtraQty(serviceName: string, qty: number) {
+    setExtraSelections(prev => prev[serviceName] ? { ...prev, [serviceName]: { ...prev[serviceName], qty: Math.max(1, qty) } } : prev)
+  }
+
   const solutions = getAutoSolutions()
   const timeline  = getAutoTimeline()
   const today     = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -1145,6 +1208,56 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
               </div>
             </section>
 
+            {/* Additional services — Social Media, Email Marketing, Fractional CMO,
+                Sales Training/Enablement/Coaching, Fractional Sales Lead/CRO */}
+            <section>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Additional Services</p>
+              <div className="flex flex-col gap-3">
+                {EXTRA_SERVICES.map(service => {
+                  const sel = extraSelections[service.name]
+                  const selectedTier = sel ? service.tiers?.[sel.tierIndex] : undefined
+                  return (
+                    <div key={service.name} className="p-3 rounded-xl border border-gray-100 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-600 mb-2">{service.name}</p>
+                      <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min((service.tiers?.length ?? 0) + 1, 4)}, minmax(0, 1fr))` }}>
+                        <button onClick={() => setExtraTier(service.name, null)}
+                          className={`py-2 px-1 rounded-lg text-xs font-semibold transition-colors ${!sel ? 'text-white' : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-100'}`}
+                          style={!sel ? { background: '#015035' } : {}}>
+                          None
+                        </button>
+                        {service.tiers?.map((tier, i) => (
+                          <button key={tier.label} onClick={() => setExtraTier(service.name, i)}
+                            className={`py-2 px-1 rounded-lg text-xs font-semibold transition-colors ${sel?.tierIndex === i ? 'text-white' : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-100'}`}
+                            style={sel?.tierIndex === i ? { background: '#015035' } : {}}>
+                            {tier.label}
+                            <span className="block text-[9px] font-normal opacity-80">
+                              {fmt(tier.price)}{tier.cadence === 'monthly' ? '/mo' : tier.cadence === 'hourly' ? '/hr' : ''}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      {selectedTier?.cadence === 'hourly' && sel && (
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <span className="text-[11px] text-gray-400">Hours:</span>
+                          <button onClick={() => setExtraQty(service.name, sel.qty - 1)} className="w-6 h-6 rounded bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100">
+                            <Minus size={10} />
+                          </button>
+                          <span className="w-6 text-center text-xs font-semibold">{sel.qty}</span>
+                          <button onClick={() => setExtraQty(service.name, sel.qty + 1)} className="w-6 h-6 rounded bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100">
+                            <Plus size={10} />
+                          </button>
+                          <span className="text-xs font-bold text-emerald-700 ml-1">{fmt(selectedTier.price * sel.qty)}</span>
+                        </div>
+                      )}
+                      {selectedTier?.note && (
+                        <p className="text-[10px] text-gray-400 mt-1.5">{selectedTier.note}{selectedTier.minTerm ? ` · ${selectedTier.minTerm}` : ''}</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+
             {/* Proposal content */}
             <section>
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Proposal Content</p>
@@ -1168,7 +1281,8 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
                                 services: [
                                   ...SETUP_ADDONS.filter(a => addons[a.id]?.enabled).map(a => a.label),
                                   websiteMgmt ? 'Website Management' : '',
-                                  seoPackage !== 'none' ? `SEO (${seoPackage})` : '',
+                                  seoPackage !== 'none' ? `SEO / AEO (${seoPackage})` : '',
+                                  ...extraLines.map(l => `${l.service.name} (${l.tier.label})`),
                                 ].filter(Boolean).join(', ') || 'marketing services',
                                 value: `$${(setupTotal + monthlyTotal * contractMonths).toLocaleString()}`,
                                 additionalContext: clientGoals ? `Client goals: ${clientGoals}` : '',
@@ -1231,6 +1345,12 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
                       <span className="font-semibold text-gray-800">{fmt(a.price * (a.hasQty ? addons[a.id].qty : 1))}</span>
                     </div>
                   ))}
+                  {extraLines.filter(l => l.tier.cadence !== 'monthly').map(l => (
+                    <div key={l.service.name} className="flex justify-between text-xs">
+                      <span className="text-gray-600">{l.service.name} — {l.tier.label}{l.tier.cadence === 'hourly' ? ` ×${l.qty}hrs` : ''}</span>
+                      <span className="font-semibold text-gray-800">{fmt(l.tier.price * (l.tier.cadence === 'hourly' ? l.qty : 1))}</span>
+                    </div>
+                  ))}
                   <div className="border-t border-gray-100 pt-1.5 flex justify-between text-xs font-bold">
                     <span className="text-gray-700">Setup Total</span>
                     <span className="text-gray-900">{fmt(setupTotal)}</span>
@@ -1251,10 +1371,16 @@ export default function ProposalBuilderPanel({ onSave, onClose, initialCompany =
                   )}
                   {seoPackage !== 'none' && (
                     <div className="flex justify-between text-xs">
-                      <span className="text-gray-600">SEO — {seoPackage.charAt(0).toUpperCase() + seoPackage.slice(1)}</span>
+                      <span className="text-gray-600">SEO / AEO — {seoPackage.charAt(0).toUpperCase() + seoPackage.slice(1)}</span>
                       <span className="font-semibold text-gray-800">{fmt(SEO_PRICES[seoPackage])}/mo</span>
                     </div>
                   )}
+                  {extraLines.filter(l => l.tier.cadence === 'monthly').map(l => (
+                    <div key={l.service.name} className="flex justify-between text-xs">
+                      <span className="text-gray-600">{l.service.name} — {l.tier.label}</span>
+                      <span className="font-semibold text-gray-800">{fmt(l.tier.price)}/mo</span>
+                    </div>
+                  ))}
                   <div className="border-t border-gray-100 pt-1.5 flex justify-between text-xs font-bold">
                     <span className="text-gray-700">{contractMonths}-Mo Total</span>
                     <span className="text-gray-900">{fmt(monthlyTotal * contractMonths)}</span>

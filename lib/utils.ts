@@ -1,3 +1,8 @@
+// serviceTypeColors now lives in lib/services.ts (the single source of truth
+// for the service catalog); re-exported here so existing '@/lib/utils'
+// imports keep working.
+export { serviceTypeColors } from './services'
+
 export function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -76,16 +81,6 @@ export const projectStatusColors: Record<string, string> = {
   Completed: 'bg-green-100 text-green-700',
   Launched: 'bg-emerald-100 text-emerald-700',
   'In Maintenance': 'bg-purple-100 text-purple-700',
-}
-
-export const serviceTypeColors: Record<string, string> = {
-  Website: 'bg-indigo-100 text-indigo-700',
-  SEO: 'bg-teal-100 text-teal-700',
-  'Social Media': 'bg-pink-100 text-pink-700',
-  Branding: 'bg-amber-100 text-amber-700',
-  'Email Marketing': 'bg-cyan-100 text-cyan-700',
-  Custom: 'bg-violet-100 text-violet-700',
-  General: 'bg-gray-100 text-gray-600',
 }
 
 export const renewalStatusColors: Record<string, string> = {

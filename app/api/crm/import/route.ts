@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
+import { normalizeServiceType } from '@/lib/services'
 
 // ── HubSpot-aware field getter ──────────────────────────────────────────────
 // Checks multiple possible column names (HubSpot exports vary by locale/version)
@@ -198,16 +199,6 @@ function normalizeStage(val?: string): string {
   if (v.includes('lost') || v.includes('closed lost'))         return 'Closed Lost'
   if (v.includes('appointment') || v.includes('scheduled'))    return 'Qualified'
   return 'Lead'
-}
-
-function normalizeServiceType(val?: string, dealName?: string): string {
-  const check = (val ?? dealName ?? '').toLowerCase()
-  if (check.includes('seo'))         return 'SEO'
-  if (check.includes('website') || check.includes('web design') || check.includes('web dev')) return 'Website'
-  if (check.includes('social'))      return 'Social Media'
-  if (check.includes('brand'))       return 'Branding'
-  if (check.includes('email'))       return 'Email Marketing'
-  return 'Custom'
 }
 
 function stageProbability(stage: string): number {

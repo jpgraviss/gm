@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 import { X, DollarSign, Calendar, ChevronLeft } from 'lucide-react'
 import { fetchCrmCompanies, fetchContracts } from '@/lib/supabase'
 import type { ServiceType, CRMCompany, Contract } from '@/lib/types'
+import { SERVICE_NAMES } from '@/lib/services'
 
-const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
+const SERVICE_TYPES: ServiceType[] = [...SERVICE_NAMES]
 
 export interface NewInvoiceFormData {
   company: string
@@ -49,7 +50,7 @@ export default function NewInvoicePanel({ onSave, onClose }: Props) {
 
   const [form, setForm] = useState<NewInvoiceFormData>(() => ({
     company: '',
-    serviceType: 'Website',
+    serviceType: 'Website Build',
     amount: '',
     dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
     contractId: '',

@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import StatusBadge from '@/components/ui/StatusBadge'
-import { projectStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
+import { projectStatusColors, formatDate } from '@/lib/utils'
+import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import type { Project, ProjectStatus, AppTask, AppTaskStatus, TaskPriority } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
@@ -16,7 +17,7 @@ import {
   MoreHorizontal, Pencil, Trash2, ChevronDown, ChevronRight, Calendar,
   Users, Flag, GripVertical, AlertTriangle, CheckSquare, Settings,
   Globe, BarChart2, Share2, Mail, Palette, Wrench, StickyNote,
-  FolderKanban, Milestone as MilestoneIcon, FileText,
+  FolderKanban, Milestone as MilestoneIcon, FileText, Briefcase, TrendingUp,
 } from 'lucide-react'
 
 type ViewMode = 'list' | 'board' | 'overview' | 'files'
@@ -46,12 +47,21 @@ const taskStatusConfig: Record<AppTaskStatus, { icon: React.ReactNode; color: st
   Completed:     { icon: <CheckCircle2 size={14} />, color: '#22c55e', label: 'Done' },
 }
 
-type ServiceTypeKey = 'Website' | 'SEO' | 'Social Media' | 'Branding' | 'Email Marketing' | 'Custom'
-const serviceTypeIcons: Record<ServiceTypeKey, React.ReactNode> = {
-  Website: <Globe size={14} />,
-  SEO: <BarChart2 size={14} />,
+const serviceTypeIcons: Partial<Record<string, React.ReactNode>> = {
+  'Website Build': <Globe size={14} />,
+  'Website Management': <Globe size={14} />,
+  'SEO / AEO': <BarChart2 size={14} />,
   'Social Media': <Share2 size={14} />,
   'Email Marketing': <Mail size={14} />,
+  'Fractional CMO': <Briefcase size={14} />,
+  'Sales Training': <TrendingUp size={14} />,
+  'Sales Enablement': <Briefcase size={14} />,
+  'Sales Coaching': <TrendingUp size={14} />,
+  'Sales Enablement Support': <Briefcase size={14} />,
+  'Fractional Sales Lead / CRO': <Briefcase size={14} />,
+  // Legacy values, kept so pre-existing project records still show an icon
+  Website: <Globe size={14} />,
+  SEO: <BarChart2 size={14} />,
   Branding: <Palette size={14} />,
   Custom: <Wrench size={14} />,
 }
@@ -551,7 +561,7 @@ function ProjectSettingsModal({
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
               <select value={serviceType} onChange={e => setServiceType(e.target.value as Project['serviceType'])} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none bg-white">
-                {['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom'].map(s => <option key={s} value={s}>{s}</option>)}
+                {SERVICE_NAMES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div>

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { TASK_DEPARTMENTS, type TaskDepartment } from '@/lib/task-department'
+import { SERVICE_NAMES } from '@/lib/services'
 
 const categoryColors: Record<AppTaskCategory, string> = {
   Deal:     'bg-blue-100 text-blue-700',
@@ -792,7 +793,7 @@ export default function TasksPage() {
             className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 bg-white min-w-[160px]"
           >
             <option value="All">All Service Lines</option>
-            {(['Website', 'Development', 'SEO', 'Social Media', 'Marketing', 'Email Marketing', 'Content', 'Design', 'General'] as TeamServiceLine[]).map(s => (
+            {([...SERVICE_NAMES, 'General'] as TeamServiceLine[]).map(s => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>

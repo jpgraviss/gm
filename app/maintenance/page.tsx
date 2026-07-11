@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { fetchCrmContacts, fetchContracts, fetchInvoices } from '@/lib/supabase'
-import { formatCurrency, serviceTypeColors, formatDate, getDaysUntil } from '@/lib/utils'
+import { formatCurrency, formatDate, getDaysUntil } from '@/lib/utils'
+import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import StatusBadge from '@/components/ui/StatusBadge'
 import CompanySelect from '@/components/ui/CompanySelect'
 import type { MaintenanceRecord, MaintenanceStatus, CRMContact, Contract, Invoice } from '@/lib/types'
@@ -80,7 +81,7 @@ function AddRecordPanel({
     })
   }
 
-  const serviceTypes = ['Website', 'SEO', 'Social Media', 'Email Marketing', 'Branding', 'Custom', 'General']
+  const serviceTypes = [...SERVICE_NAMES, 'General']
   const statuses: MaintenanceStatus[] = ['Active', 'Onboarding', 'Pending Cancellation', 'Cancelled', 'Past']
   const paymentTermOptions = ['Net 30', 'End of service', 'End of 30 days', 'Due on receipt', 'Net 15', 'Custom']
 

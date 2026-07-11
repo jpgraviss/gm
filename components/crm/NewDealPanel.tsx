@@ -5,6 +5,7 @@ import { X, DollarSign, User, Calendar, TrendingUp, ChevronLeft } from 'lucide-r
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import CompanySelect from '@/components/ui/CompanySelect'
 import type { ServiceType } from '@/lib/types'
+import { SERVICE_NAMES } from '@/lib/services'
 
 export interface NewDealData {
   company: string
@@ -23,7 +24,7 @@ export interface NewDealData {
   pipelineId?: string
 }
 
-const SERVICE_TYPES: ServiceType[] = ['Website', 'SEO', 'Social Media', 'Branding', 'Email Marketing', 'Custom']
+const SERVICE_TYPES: ServiceType[] = [...SERVICE_NAMES]
 const DEFAULT_STAGES = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
 const DEFAULT_STAGE_PROBS: Record<string, string> = {
   Lead: '20',
@@ -77,7 +78,7 @@ export default function NewDealPanel({ onSave, onClose, stages, pipelineId }: Pr
     contactTitle: '',
     contactEmail: '',
     contactPhone: '',
-    serviceType: 'Website',
+    serviceType: 'Website Build',
     serviceTypes: [],
     stage: stageNames[0] ?? 'Lead',
     value: '',

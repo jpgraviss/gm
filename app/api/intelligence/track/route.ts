@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { isGeolocationConfigured, lookupIpGeolocation } from '@/lib/geolocation'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -89,6 +90,25 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
   // Increment visit count on page_view
   if (body.eventType === 'page_view') {
     try { await db.rpc('gi_increment_visits', { vid: visitorId }) } catch { /* function may not exist yet */ }
+
+    // Geolocation — no-op until IPINFO_API_KEY is set (see lib/geolocation.ts;
+    // AUDIT.md #33). Looked up once per visitor (skipped once city is already
+    // known) to stay bounded, rather than on every page_view forever.
+    if (isGeolocationConfigured() && ip) {
+      const { data: visitorRow } = await db.from('gi_visitors').select('city').eq('visitor_id', visitorId).maybeSingle()
+      if (!visitorRow?.city) {
+        const geo = await lookupIpGeolocation(ip)
+        if (geo) {
+          await db.from('gi_visitors').update({
+            city: geo.city,
+            region: geo.region,
+            country: geo.country,
+            isp: geo.isp,
+            rdns_company: geo.rdnsCompany,
+          }).eq('visitor_id', visitorId)
+        }
+      }
+    }
   }
 
   // Store event

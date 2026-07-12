@@ -436,9 +436,10 @@ export default function AdminPage() {
     email: boolean
     googleCalendar: boolean
     googleDrive: boolean
+    geolocation: boolean
     database: boolean | null
     auth: boolean | null
-  }>({ mercury: false, email: false, googleCalendar: false, googleDrive: false, database: null, auth: null })
+  }>({ mercury: false, email: false, googleCalendar: false, googleDrive: false, geolocation: false, database: null, auth: null })
 
   // Mercury Banking
   const [mercuryConnected, setMercuryConnected] = useState(false)
@@ -592,6 +593,7 @@ export default function AdminPage() {
             email: !!d.email,
             googleCalendar: !!d.googleCalendar,
             googleDrive: !!d.googleDrive,
+            geolocation: !!d.geolocation,
             database: !!d.database,
             auth: !!d.auth,
           }))
@@ -1134,6 +1136,7 @@ export default function AdminPage() {
               <SystemHealthRow label="Email Delivery" status={integrationHealth.email ? 'ok' : 'warn'} detail={integrationHealth.email ? 'Active' : 'Not Configured'} />
               <SystemHealthRow label="Google Calendar" status={integrationHealth.googleCalendar ? 'ok' : 'warn'} detail={integrationHealth.googleCalendar ? 'Connected' : 'Not Connected'} />
               <SystemHealthRow label="Google Drive" status={integrationHealth.googleDrive ? 'ok' : 'warn'} detail={integrationHealth.googleDrive ? 'Connected' : 'Not Connected'} />
+              <SystemHealthRow label="Visitor Geolocation" status={integrationHealth.geolocation ? 'ok' : 'warn'} detail={integrationHealth.geolocation ? 'Connected' : 'On hold — add IPINFO_API_KEY to enable'} />
             </div>
 
             {/* Quick Actions */}

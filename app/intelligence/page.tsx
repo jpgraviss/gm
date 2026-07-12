@@ -396,7 +396,11 @@ GravIntel.track('pricing_viewed', { plan: 'premium' });`}
                   <h3 className="text-sm font-bold text-gray-900">{giSelected.name ?? giSelected.email ?? 'Anonymous Visitor'}</h3>
                   {giSelected.email && <p className="text-xs text-gray-500">{giSelected.email}</p>}
                   {giSelected.company && <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><Building2 size={10} /> {giSelected.company}</p>}
-                  {giSelected.city && <p className="text-[10px] text-gray-400 mt-1">{[giSelected.city, giSelected.region, giSelected.country].filter(Boolean).join(', ')}</p>}
+                  {giSelected.city ? (
+                    <p className="text-[10px] text-gray-400 mt-1">{[giSelected.city, giSelected.region, giSelected.country].filter(Boolean).join(', ')}</p>
+                  ) : (
+                    <p className="text-[10px] text-gray-300 mt-1 italic">Location not configured</p>
+                  )}
                   <div className="flex gap-2 mt-2">
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{giSelected.visit_count} visits</span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Score: {giSelected.lead_score}</span>

@@ -349,30 +349,30 @@ async function spawnRecurringTasks() {
   }
 }
 
+// automation_pending_steps has no status column — resume position is
+// tracked via step_index (an index into the automation's own actions
+// array), not a frozen remaining_actions snapshot. The row is claimed
+// atomically by deleting it: only the invocation whose DELETE actually
+// returns a row proceeds, so two overlapping cron ticks (or a retry)
+// can't both pick up and re-execute the same step (AUDIT.md #12/#13).
 async function resumePendingAutomationSteps() {
   const db = createServiceClient()
   const now = new Date().toISOString()
 
   const { data: pending } = await db
     .from('automation_pending_steps')
-    .select('*')
-    .eq('status', 'pending')
+    .select('id')
     .lte('resume_at', now)
     .limit(50)
 
   if (!pending?.length) return
 
   for (const step of pending) {
-    // Atomic claim — only proceed if this invocation actually flipped the
-    // row from 'pending' to 'resumed'. Prevents two overlapping cron ticks
-    // (or a retry) from both picking up and re-executing the same step
-    // (AUDIT.md #12/#13 plan, finding on resume-side race conditions).
     const { data: claimed } = await db
       .from('automation_pending_steps')
-      .update({ status: 'resumed' })
+      .delete()
       .eq('id', step.id)
-      .eq('status', 'pending')
-      .select('id')
+      .select('*')
       .maybeSingle()
     if (!claimed) continue
 
@@ -380,17 +380,17 @@ async function resumePendingAutomationSteps() {
       const { data: automation } = await db
         .from('automations')
         .select('*')
-        .eq('id', step.automation_id)
+        .eq('id', claimed.automation_id)
         .single()
 
-      if (!automation || automation.status !== 'Active') {
-        await db.from('automation_pending_steps').update({ status: 'cancelled' }).eq('id', step.id)
-        continue
-      }
+      if (!automation || automation.status !== 'Active') continue
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const remainingActions = (step.remaining_actions as any[]) ?? []
-      const ctx = (step.context as Record<string, unknown>) ?? {}
+      // Re-fetched fresh from the automation's current actions, not a
+      // snapshot taken when the Wait fired — if the automation was edited
+      // while a step was pending, resume reflects the latest version.
+      const allActions = (automation.actions as unknown[]) ?? []
+      const remainingActions = allActions.slice((claimed.step_index as number) ?? 0)
+      const ctx = (claimed.context as Record<string, unknown>) ?? {}
 
       if (remainingActions.length > 0) {
         const { executeWorkflow } = await import('@/lib/automations-engine')
@@ -402,12 +402,12 @@ async function resumePendingAutomationSteps() {
           true,
         )
       }
-      // Already marked 'resumed' by the claim above — that's the terminal
-      // status (the table's CHECK constraint has no 'completed' value;
-      // see supabase/migrations/add_automation_wait_resume_fix.sql).
     } catch (err) {
+      // The row is already gone (claimed via delete above) — a failure
+      // here surfaces in the resumed run's own automation_runs row
+      // (executeWorkflow has its own try/catch), not as a status update
+      // on a step row that no longer exists.
       console.error(`[cron] Failed to resume pending step ${step.id}:`, err)
-      await db.from('automation_pending_steps').update({ status: 'failed' }).eq('id', step.id)
     }
   }
 }

@@ -252,13 +252,16 @@ describe('automations-engine', () => {
 
     // The action before Wait ran.
     expect(mockDb.from).toHaveBeenCalledWith('crm_contacts')
-    // Wait scheduled a real pending step...
+    // Wait scheduled a real pending step. automation_pending_steps has no
+    // status/remaining_actions columns on the live table — resume position
+    // is step_index (an index into the automation's own actions), matching
+    // the real schema (information_schema.columns), not what an earlier
+    // migration file in this repo incorrectly assumed.
     expect(insertCalls['automation_pending_steps']).toBeDefined()
     expect(insertCalls['automation_pending_steps'][0]).toEqual(
       expect.objectContaining({
         automation_id: 'auto-1',
-        remaining_actions: ['Create Task'],
-        status: 'pending',
+        step_index: 2, // ['Add Tag', 'Wait', 'Create Task'] — resume at index 2
       }),
     )
     const pendingRow = insertCalls['automation_pending_steps'][0] as { run_id: string }

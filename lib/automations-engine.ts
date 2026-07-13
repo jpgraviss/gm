@@ -203,7 +203,7 @@ export async function executeWorkflow(
         const resumeContext = { ...automation.config, ...triggerData }
         const context = { ...automation.config, ...translateActionConfig(actionType, actionConfig), ...triggerData }
         const remainingActions = automation.actions.slice(i + 1)
-        const result = await executeAction(actionType, context, supabase, automation.id, runId, remainingActions, resumeContext)
+        const result = await executeAction(actionType, context, supabase, automation.id, runId, i, resumeContext)
         steps.push({
           name: actionType,
           status: 'success',
@@ -283,7 +283,7 @@ async function executeAction(
   db: any,
   automationId?: string,
   runId?: string,
-  remainingActions: RawAction[] = [],
+  actionIndex = 0,
   resumeContext: Record<string, unknown> = {},
 ): Promise<{ paused?: boolean; skipRemaining?: boolean } | void> {
   const company = (context.company as string) ?? ''
@@ -466,16 +466,22 @@ async function executeAction(
       // never be found again.
       if (!automationId || !runId) break
 
+      // automation_pending_steps has no status column and no
+      // remaining_actions column — it tracks resume position via
+      // step_index (an index into the automation's own actions array) and
+      // relies on the resumer re-fetching the automation fresh, rather
+      // than freezing a snapshot of "what's left" at pause time. Confirmed
+      // against the live schema (information_schema.columns), which
+      // doesn't match what an earlier migration file in this repo assumed.
       const { error: pendingErr } = await db.from('automation_pending_steps').insert({
         id: `pending-${uid()}`,
         automation_id: automationId,
         run_id: runId,
+        step_index: actionIndex + 1,
         resume_at: new Date(Date.now() + ms).toISOString(),
-        remaining_actions: remainingActions,
         // Deliberately resumeContext, not context — never this Wait step's
         // own translated config (see the caller's comment on resumeContext).
         context: resumeContext,
-        status: 'pending',
       })
       if (pendingErr) throw new Error(pendingErr.message || 'Failed to schedule Wait resume')
       return { paused: true }

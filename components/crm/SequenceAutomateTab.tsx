@@ -12,7 +12,7 @@ interface Automation {
   id: string
   name: string
   trigger: string
-  actions: string[]
+  actions: { type: string; config: Record<string, unknown> }[]
   config: {
     sequenceId?: string
     formScope?: 'any' | 'specific'
@@ -274,8 +274,8 @@ export default function SequenceAutomateTab({ sequenceId }: { sequenceId: string
     const triggerDesc = a.config?.formScope === 'specific' && a.config?.formName
       ? `submits "${a.config.formName}"`
       : 'submits any form'
-    const rotateDesc = a.actions.includes('Rotate Contact Owner') ? `Assign owner (round-robin, ${a.config?.unit}) → ` : ''
-    const actionDesc = a.actions.includes('Enroll in Sequence')
+    const rotateDesc = a.actions.some(x => x.type === 'Rotate Contact Owner') ? `Assign owner (round-robin, ${a.config?.unit}) → ` : ''
+    const actionDesc = a.actions.some(x => x.type === 'Enroll in Sequence')
       ? `Enroll them in this sequence${a.config?.senderType === 'contact_owner' ? ' (sent by their assigned rep)' : ''}`
       : 'Unenroll them from this sequence'
     return `When a contact ${triggerDesc} → ${rotateDesc}${actionDesc}`

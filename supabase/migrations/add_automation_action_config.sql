@@ -11,13 +11,26 @@
 -- {type: a, config: {}} — matches current real behavior exactly, since no
 -- action has ever had real per-action config before this.
 --
--- Postgres can't auto-cast text[] -> jsonb, and jsonb_agg() over an empty
--- unnest() returns NULL (not '[]'), which the column's own
--- "not null default '{}'" would reject — hence the explicit COALESCE.
+-- Postgres won't allow a subquery directly inside an ALTER COLUMN ... TYPE
+-- USING transform expression ("cannot use subquery in transform
+-- expression") — the aggregate-over-unnest() logic has to live in a
+-- function instead, called as a plain scalar expression per row. The
+-- helper function is dropped again immediately after use.
+create or replace function public._migrate_actions_to_jsonb(arr text[])
+returns jsonb
+language sql
+immutable
+as $$
+  select coalesce(
+    jsonb_agg(jsonb_build_object('type', a, 'config', '{}'::jsonb)),
+    '[]'::jsonb
+  )
+  from unnest(arr) as a
+$$;
+
 alter table public.automations
   alter column actions type jsonb
-  using coalesce(
-    (select jsonb_agg(jsonb_build_object('type', a, 'config', '{}'::jsonb)) from unnest(actions) as a),
-    '[]'::jsonb
-  ),
+  using public._migrate_actions_to_jsonb(actions),
   alter column actions set default '[]'::jsonb;
+
+drop function public._migrate_actions_to_jsonb(text[]);

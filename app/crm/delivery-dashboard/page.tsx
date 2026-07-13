@@ -9,22 +9,12 @@ import {
   Plus, X, Send, Package, Filter, ArrowUpDown, UserPlus, Calendar,
 } from 'lucide-react'
 import NewClientModal from '@/components/admin/NewClientModal'
+import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
 
 const SERVICE_TYPES = [
   'SEO', 'PPC', 'Web Design', 'Social Media',
   'Email Marketing', 'Content Creation', 'Sales Training', 'Marketing Strategy',
 ] as const
-
-const DEFAULT_STEP_NAMES = [
-  'Contract Signed',
-  'Invoice & Payment',
-  'Welcome Email',
-  'Portal Access',
-  'Strategy Call',
-  'Usage Guide & Resources',
-  'Deliverables',
-  'Reporting & Analytics',
-]
 
 const FILTER_TABS = ['All', 'Onboarding', 'Active', 'Delivery', 'Completed'] as const
 type FilterTab = typeof FILTER_TABS[number]
@@ -283,19 +273,8 @@ export default function DeliveryDashboardPage() {
   const [deliverableFileUrl, setDeliverableFileUrl] = useState('')
   const [deliverableDescription, setDeliverableDescription] = useState('')
   const [deliverableSaving, setDeliverableSaving] = useState(false)
-  const [stepNames, setStepNames] = useState<string[]>(DEFAULT_STEP_NAMES)
 
   useEffect(() => {
-    // Fetch configurable delivery steps from settings
-    fetch('/api/settings')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d?.delivery_steps && Array.isArray(d.delivery_steps) && d.delivery_steps.length > 0) {
-          setStepNames(d.delivery_steps)
-        }
-      })
-      .catch(() => {})
-
     fetch('/api/delivery/workflow')
       .then(r => r.ok ? r.json() : [])
       .then((data: Workflow[]) => { if (Array.isArray(data)) setWorkflows(data) })
@@ -303,7 +282,7 @@ export default function DeliveryDashboardPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const totalSteps = stepNames.length
+  const totalSteps = DELIVERY_STEP_NAMES.length
 
   // Compute service types present in workflows for filter tabs
   const activeServiceTypes = Array.from(new Set(workflows.map(w => w.service))).sort()
@@ -423,15 +402,16 @@ export default function DeliveryDashboardPage() {
     }
   }
 
-  function handleCreateWorkflow(data: { company: string; service: string; projectId?: string }) {
+  async function handleCreateWorkflow(data: { company: string; service: string; projectId?: string }) {
     const now = new Date().toISOString().split('T')[0]
+    const tempId = `wf-${Date.now()}`
     const newWorkflow: Workflow = {
-      id: `wf-${Date.now()}`,
+      id: tempId,
       company: data.company,
       service: data.service,
       projectId: data.projectId,
       currentStep: 1,
-      steps: stepNames.map((name, i) => ({
+      steps: DELIVERY_STEP_NAMES.map((name, i) => ({
         step: i + 1,
         name,
         status: i === 0 ? 'in_progress' as const : 'pending' as const,
@@ -441,11 +421,19 @@ export default function DeliveryDashboardPage() {
     }
     setWorkflows(prev => [newWorkflow, ...prev])
     setShowNewModal(false)
-    fetch('/api/delivery/workflow', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ companyName: data.company, serviceType: data.service, projectId: data.projectId }),
-    }).catch(() => toast('Failed to create workflow', 'error'))
+    try {
+      const res = await fetch('/api/delivery/workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyName: data.company, serviceType: data.service, projectId: data.projectId }),
+      })
+      if (!res.ok) throw new Error('Failed to create workflow')
+      const created: Workflow = await res.json()
+      setWorkflows(prev => prev.map(w => (w.id === tempId ? created : w)))
+    } catch {
+      setWorkflows(prev => prev.filter(w => w.id !== tempId))
+      toast('Failed to create workflow', 'error')
+    }
   }
 
   function handleSkipStep(workflowId: string) {
@@ -485,7 +473,7 @@ export default function DeliveryDashboardPage() {
   if (loading) {
     return (
       <>
-        <Header title="Delivery Dashboard" subtitle={`${stepNames.length}-Step Client Delivery System`} />
+        <Header title="Delivery Dashboard" subtitle={`${DELIVERY_STEP_NAMES.length}-Step Client Delivery System`} />
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
         </div>
@@ -497,7 +485,7 @@ export default function DeliveryDashboardPage() {
     <>
       <Header
         title="Delivery Dashboard"
-        subtitle={`${stepNames.length}-Step Client Delivery System`}
+        subtitle={`${DELIVERY_STEP_NAMES.length}-Step Client Delivery System`}
         action={{ label: 'New Workflow', onClick: () => setShowNewModal(true) }}
       />
       <NewClientModal open={showNewClientModal} onClose={() => setShowNewClientModal(false)} />

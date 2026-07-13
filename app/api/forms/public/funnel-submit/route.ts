@@ -121,6 +121,12 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
       submissionId,
       contactId,
       data,
+      // Public, unauthenticated endpoint — an attacker who knows a funnel
+      // slug and an existing contact's email can reach this trigger. Lets
+      // the engine refuse actions that shouldn't be forgeable this way
+      // (AUDIT.md #46) without having to authenticate the endpoint itself,
+      // which has to stay public since funnels are embedded on external sites.
+      _publicSource: true,
     })
   }
 

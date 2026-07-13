@@ -58,32 +58,24 @@ export const PATCH = withErrorHandler('training/progress PATCH', async (req) => 
   const db = createServiceClient()
   const userEmail = user.email.toLowerCase()
 
-  const { data: existing } = await db
-    .from('training_progress')
-    .select('completed, checklist_state')
-    .eq('user_email', userEmail)
-    .eq('content_id', contentId)
-    .maybeSingle()
+  const setCompleted = typeof body.completed === 'boolean'
+  const setChecklist = typeof body.checklistItemId === 'string'
 
-  const update: Record<string, unknown> = {
-    id: `tp-${userEmail}-${contentId}`.replace(/[^a-z0-9-]/gi, '_'),
-    user_email: userEmail,
-    content_id: contentId,
-    completed: existing?.completed ?? false,
-    checklist_state: existing?.checklist_state ?? {},
-    updated_at: new Date().toISOString(),
-  }
-
-  if (typeof body.completed === 'boolean') {
-    update.completed = body.completed
-  }
-  if (typeof body.checklistItemId === 'string') {
-    const checklist = { ...(existing?.checklist_state ?? {}) } as Record<string, boolean>
-    checklist[body.checklistItemId] = !!body.checklistValue
-    update.checklist_state = checklist
-  }
-
-  const { error } = await db.from('training_progress').upsert(update, { onConflict: 'user_email,content_id' })
+  // Atomic — the merge into checklist_state happens inside the DB's
+  // UPSERT (see supabase/migrations/add_race_condition_fixes.sql), so two
+  // rapid toggles on different checklist items for the same content_id
+  // can't clobber each other the way a read-then-full-overwrite would
+  // (AUDIT.md #45).
+  const { error } = await db.rpc('upsert_training_progress', {
+    p_id: `tp-${userEmail}-${contentId}`.replace(/[^a-z0-9-]/gi, '_'),
+    p_user_email: userEmail,
+    p_content_id: contentId,
+    p_set_completed: setCompleted,
+    p_completed: setCompleted ? body.completed : false,
+    p_set_checklist: setChecklist,
+    p_checklist_item_id: setChecklist ? body.checklistItemId : '',
+    p_checklist_value: setChecklist ? !!body.checklistValue : false,
+  })
   if (error) {
     throw new Error(error.message || 'Failed to save training progress')
   }

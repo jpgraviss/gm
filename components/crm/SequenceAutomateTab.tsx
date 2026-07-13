@@ -12,7 +12,7 @@ interface Automation {
   id: string
   name: string
   trigger: string
-  actions: string[]
+  actions: { type: string; config: Record<string, unknown> }[]
   config: {
     sequenceId?: string
     formScope?: 'any' | 'specific'
@@ -274,8 +274,8 @@ export default function SequenceAutomateTab({ sequenceId }: { sequenceId: string
     const triggerDesc = a.config?.formScope === 'specific' && a.config?.formName
       ? `submits "${a.config.formName}"`
       : 'submits any form'
-    const rotateDesc = a.actions.includes('Rotate Contact Owner') ? `Assign owner (round-robin, ${a.config?.unit}) → ` : ''
-    const actionDesc = a.actions.includes('Enroll in Sequence')
+    const rotateDesc = a.actions.some(x => x.type === 'Rotate Contact Owner') ? `Assign owner (round-robin, ${a.config?.unit}) → ` : ''
+    const actionDesc = a.actions.some(x => x.type === 'Enroll in Sequence')
       ? `Enroll them in this sequence${a.config?.senderType === 'contact_owner' ? ' (sent by their assigned rep)' : ''}`
       : 'Unenroll them from this sequence'
     return `When a contact ${triggerDesc} → ${rotateDesc}${actionDesc}`
@@ -287,7 +287,14 @@ export default function SequenceAutomateTab({ sequenceId }: { sequenceId: string
         <h3 className="text-sm font-bold text-gray-900 mb-1">Automatic unenrollment</h3>
         <p className="text-xs text-gray-400 mb-3">Always on, can&apos;t be turned off.</p>
         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-          <p className="text-sm text-gray-700">When a contact replies to any email → Unenroll the contact from this sequence</p>
+          <div>
+            <p className="text-sm text-gray-700">When a contact replies to any email → Unenroll the contact from this sequence</p>
+            <p className="text-[11px] text-amber-600 mt-1">Only detected on Gmail-sent emails from a rep with a connected Gmail account. Sequences sending via Resend, or enrollments assigned to a rep without Gmail connected, won&apos;t auto-unenroll on reply yet.</p>
+          </div>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 flex-shrink-0 ml-3">ALWAYS ON</span>
+        </div>
+        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl mt-2">
+          <p className="text-sm text-gray-700">On a hard email bounce → Unenroll and add to the suppression list</p>
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 flex-shrink-0 ml-3">ALWAYS ON</span>
         </div>
       </div>

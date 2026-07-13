@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { formatCurrency } from '@/lib/utils'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import type { AppTask, Deal } from '@/lib/types'
 import {
   CheckSquare, Mail, Zap, TrendingUp, ChevronRight, AlertTriangle,
@@ -50,13 +51,13 @@ export default function WorkspacePage() {
       fetch(`/api/tasks?assignedTo=${encodeURIComponent(user.name)}&status=Pending`).then(r => r.ok ? r.json() : []),
       fetch('/api/workspace/guided-actions').then(r => r.ok ? r.json() : []),
       fetch('/api/sequences/rep-activity').then(r => r.ok ? r.json() : null),
-      fetch('/api/deals').then(r => r.ok ? r.json() : []),
+      fetchAllPages<Deal>('/api/deals'),
     ])
       .then(([taskData, actionData, activityData, dealData]) => {
         if (Array.isArray(taskData)) setTasks(taskData)
         if (Array.isArray(actionData)) setGuidedActions(actionData)
         setRepActivity(activityData)
-        if (Array.isArray(dealData)) setMyDeals(dealData.filter((d: Deal) => d.assignedRep === user.name))
+        setMyDeals(dealData.filter((d: Deal) => d.assignedRep === user.name))
       })
       .catch(() => toast('Failed to load workspace', 'error'))
       .finally(() => setLoading(false))
@@ -66,7 +67,10 @@ export default function WorkspacePage() {
   const tasksDueToday = tasks.filter(t => t.dueDate === today)
   const highPriorityTasks = tasks.filter(t => t.priority === 'High')
 
-  const openDeals = myDeals.filter(d => d.stage !== 'Closed Won' && d.stage !== 'Closed Lost')
+  // Matches the Pipeline page's closed-stage detection (startsWith, not an
+  // exact match) so a custom stage name like "Closed — Duplicate" doesn't
+  // count as open here but closed there.
+  const openDeals = myDeals.filter(d => !d.stage.startsWith('Closed'))
   const pipelineValue = openDeals.reduce((s, d) => s + d.value, 0)
   const thisMonth = new Date().toISOString().slice(0, 7)
   const wonThisMonth = myDeals.filter(d => d.stage === 'Closed Won' && d.closeDate?.startsWith(thisMonth))

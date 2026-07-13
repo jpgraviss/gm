@@ -281,7 +281,7 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (pa
   const teamMembers = useTeamMembers()
 
   const [company, setCompany] = useState('')
-  const [serviceType, setServiceType] = useState('Website')
+  const [serviceType, setServiceType] = useState('Website Build')
   const [customServices, setCustomServices] = useState<string[]>([])
   const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0])
   const [expirationDate, setExpirationDate] = useState(() => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])

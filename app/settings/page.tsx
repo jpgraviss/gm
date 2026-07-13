@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { type EmailSignatureData, DEFAULT_SIGNATURE, generateSignatureHtml } from '@/lib/email-signature'
 import { SERVICES } from '@/lib/services'
+import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
 import {
   type SystemTemplateName, type SystemEmailTemplate, type TemplateBlock,
   TEMPLATE_LABELS, MERGE_FIELDS, SAMPLE_DATA,
@@ -359,13 +360,6 @@ export default function SettingsPage() {
   const [contactTags, setContactTags] = useState(CONTACT_TAGS_DEFAULT)
   const [newTag, setNewTag] = useState('')
 
-  // Delivery Steps
-  const DELIVERY_STEPS_DEFAULT = [
-    'Contract Signed', 'Invoice & Payment', 'Welcome Email', 'Portal Access',
-    'Strategy Call', 'Usage Guide & Resources', 'Deliverables', 'Reporting & Analytics',
-  ]
-  const [deliverySteps, setDeliverySteps] = useState<string[]>(DELIVERY_STEPS_DEFAULT)
-  const [newDeliveryStep, setNewDeliveryStep] = useState('')
 
   // Engagement
   const [engagement, setEngagement] = useState(ENGAGEMENT_DEFAULTS)
@@ -448,7 +442,6 @@ export default function SettingsPage() {
             setRoleNavConfig({ global: d.navigation_config as NavConfig, roles: {} })
           }
         }
-        if (Array.isArray(d.delivery_steps) && d.delivery_steps.length) setDeliverySteps(d.delivery_steps)
         if (d.email_templates && typeof d.email_templates === 'object') setEmailTemplates(d.email_templates as Record<string, SystemEmailTemplate>)
         if (d.approval_config && typeof d.approval_config === 'object') setApprovalConfig(prev => ({ ...prev, ...d.approval_config as Record<string, unknown> }))
       })
@@ -502,7 +495,7 @@ export default function SettingsPage() {
 
   function saveCRM() {
     const firstPipelineStages = pipelines[0]?.stages.map(s => s.name) ?? []
-    patchSettings({ pipelineStages: firstPipelineStages, pipelines, contactTags, deliverySteps }, 'CRM Setup')
+    patchSettings({ pipelineStages: firstPipelineStages, pipelines, contactTags }, 'CRM Setup')
   }
 
   function saveBranding() {
@@ -1970,6 +1963,8 @@ export default function SettingsPage() {
 
             <HubSpotIntegrationSection />
 
+            <GranolaIntegrationSection />
+
             <GoogleReviewsIntegrationSection />
 
             <MaverickIntegrationSection />
@@ -2134,89 +2129,20 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Delivery Steps */}
+            {/* Delivery Steps — read-only. Each step is tied to a dedicated
+                column on delivery_workflows (step_01_agreement …
+                step_08_monthly_report), so steps can't actually be added,
+                removed, reordered, or renamed without a schema change. */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Delivery Steps</h3>
-                  <p className="text-xs text-gray-400 mt-1">Configure the steps in your client delivery pipeline. Used by the Delivery Dashboard.</p>
-                </div>
-                {saved === 'CRM Setup' && <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><CheckCircle size={12} /> Saved!</span>}
-              </div>
-              <div className="flex flex-col gap-1.5 mb-3">
-                {deliverySteps.map((step, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg group">
+              <h3 className="text-sm font-bold text-gray-800 mb-1 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Delivery Steps</h3>
+              <p className="text-xs text-gray-400 mb-4">The fixed stages of the client delivery pipeline, used by the Delivery Dashboard. Each stage maps to a dedicated database field, so this list can't be edited here.</p>
+              <div className="flex flex-col gap-1.5">
+                {DELIVERY_STEP_NAMES.map((step, i) => (
+                  <div key={step} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
                     <span className="text-xs text-gray-400 font-mono w-6 text-center flex-shrink-0">{i + 1}</span>
-                    <input
-                      value={step}
-                      onChange={e => setDeliverySteps(prev => prev.map((s, j) => j === i ? e.target.value : s))}
-                      className="flex-1 px-2 py-1 border border-transparent rounded text-sm text-gray-800 bg-transparent hover:border-gray-200 focus:border-green-700 focus:bg-white focus:outline-none transition-colors"
-                    />
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => {
-                          if (i === 0) return
-                          setDeliverySteps(prev => {
-                            const next = [...prev]
-                            ;[next[i - 1], next[i]] = [next[i], next[i - 1]]
-                            return next
-                          })
-                        }}
-                        disabled={i === 0}
-                        className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 disabled:opacity-20"
-                      >
-                        <ArrowUp size={12} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (i === deliverySteps.length - 1) return
-                          setDeliverySteps(prev => {
-                            const next = [...prev]
-                            ;[next[i], next[i + 1]] = [next[i + 1], next[i]]
-                            return next
-                          })
-                        }}
-                        disabled={i === deliverySteps.length - 1}
-                        className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 disabled:opacity-20"
-                      >
-                        <ArrowDown size={12} />
-                      </button>
-                      <button
-                        onClick={() => setDeliverySteps(prev => prev.filter((_, j) => j !== i))}
-                        disabled={deliverySteps.length <= 1}
-                        className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-red-500 disabled:opacity-20"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
+                    <span className="flex-1 text-sm text-gray-700">{step}</span>
                   </div>
                 ))}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={newDeliveryStep}
-                  onChange={e => setNewDeliveryStep(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && newDeliveryStep.trim()) {
-                      setDeliverySteps(prev => [...prev, newDeliveryStep.trim()])
-                      setNewDeliveryStep('')
-                    }
-                  }}
-                  placeholder="New step name..."
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
-                />
-                <button
-                  onClick={() => {
-                    if (newDeliveryStep.trim()) {
-                      setDeliverySteps(prev => [...prev, newDeliveryStep.trim()])
-                      setNewDeliveryStep('')
-                    }
-                  }}
-                  className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-medium"
-                  style={{ background: '#015035' }}
-                >
-                  <Plus size={12} /> Add Step
-                </button>
               </div>
             </div>
 
@@ -2941,6 +2867,183 @@ function HubSpotIntegrationSection() {
           >
             {saving ? 'Saving...' : 'Save Key'}
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function GranolaIntegrationSection() {
+  const [apiKey, setApiKey] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
+  const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'syncing' | 'error'>('idle')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [syncResult, setSyncResult] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const cfg = d?.granola as { apiKey?: string; lastSyncedAt?: string } | undefined
+        if (cfg?.apiKey) {
+          setApiKey(cfg.apiKey)
+          setStatus('connected')
+        }
+        if (cfg?.lastSyncedAt) setLastSyncedAt(cfg.lastSyncedAt)
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleTest() {
+    if (!apiKey.trim()) return
+    setStatus('testing')
+    setErrorMsg('')
+    try {
+      const res = await fetch('/api/integrations/granola/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
+      })
+      const data = await res.json()
+      if (data.connected) {
+        setStatus('connected')
+      } else {
+        setStatus('error')
+        setErrorMsg(data.error || 'Connection failed')
+      }
+    } catch {
+      setStatus('error')
+      setErrorMsg('Failed to test connection')
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ granola: { apiKey: apiKey.trim(), lastSyncedAt } }),
+      })
+    } catch { /* ignore */ }
+    setSaving(false)
+  }
+
+  async function handleSyncNow() {
+    setStatus('syncing')
+    setSyncResult(null)
+    try {
+      const res = await fetch('/api/integrations/granola/sync', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setSyncResult(`Synced ${data.imported} new note${data.imported === 1 ? '' : 's'} (${data.matched} matched to a contact)`)
+        setLastSyncedAt(new Date().toISOString())
+        setStatus('connected')
+      } else {
+        setStatus('error')
+        setErrorMsg(data.error || 'Sync failed')
+      }
+    } catch {
+      setStatus('error')
+      setErrorMsg('Sync failed')
+    }
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
+          <Calendar size={18} className="text-purple-600" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-800">Granola</p>
+          <p className="text-xs text-gray-500">Pull AI meeting notes into the matching contact/company timeline</p>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          {status === 'connected' && <CheckCircle size={13} className="text-emerald-600" />}
+          {status === 'error' && <AlertCircle size={13} className="text-red-500" />}
+          <span className={`text-[11px] font-semibold ${
+            status === 'connected' ? 'text-emerald-600' :
+            status === 'error' ? 'text-red-500' :
+            status === 'testing' || status === 'syncing' ? 'text-gray-500' :
+            'text-gray-400'
+          }`}>
+            {status === 'connected' ? 'Connected' :
+             status === 'error' ? 'Connection Failed' :
+             status === 'testing' ? 'Testing...' :
+             status === 'syncing' ? 'Syncing...' :
+             'Not Connected'}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">API Key</label>
+          <div className="relative">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={e => { setApiKey(e.target.value); if (status === 'connected' || status === 'error') setStatus('idle') }}
+              placeholder="grn_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              className="w-full px-3 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1">
+            Create a key from the Granola desktop app (Business plan or higher required) — Settings → Integrations → API.
+          </p>
+        </div>
+
+        {errorMsg && (
+          <p className="text-xs text-red-500">{errorMsg}</p>
+        )}
+
+        {syncResult && (
+          <p className="text-xs text-emerald-600 font-medium">{syncResult}</p>
+        )}
+
+        {lastSyncedAt && (
+          <p className="text-[11px] text-gray-400">
+            Last synced: {new Date(lastSyncedAt).toLocaleString()}
+          </p>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={handleTest}
+            disabled={!apiKey.trim() || status === 'testing'}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+            style={{ background: '#015035' }}
+          >
+            {status === 'testing' && <RefreshCw size={13} className="animate-spin" />}
+            Test Connection
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!apiKey.trim() || saving}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+          >
+            {saving ? 'Saving...' : 'Save Key'}
+          </button>
+          {status === 'connected' && (
+            <button
+              onClick={handleSyncNow}
+              disabled={status !== 'connected'}
+              className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+            >
+              <RefreshCw size={13} />
+              Sync Now
+            </button>
+          )}
         </div>
       </div>
     </div>

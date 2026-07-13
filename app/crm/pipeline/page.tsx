@@ -16,6 +16,7 @@ import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/
 import { useToast } from '@/components/ui/Toast'
 import { downloadCsv } from '@/lib/csv-export'
 import { useTeamMembers } from '@/lib/useTeamMembers'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
 import NewClientModal from '@/components/admin/NewClientModal'
 import {
@@ -150,6 +151,8 @@ function DealListView({
   onSort,
   onSelect,
   pipelineStages,
+  selectedIds,
+  onToggleSelect,
 }: {
   deals: LocalDeal[]
   sortKey: 'company' | 'value' | 'closeDate' | 'dealScore'
@@ -157,6 +160,8 @@ function DealListView({
   onSort: (key: 'company' | 'value' | 'closeDate' | 'dealScore') => void
   onSelect: (deal: LocalDeal) => void
   pipelineStages: PipelineStage[]
+  selectedIds: Set<string>
+  onToggleSelect: (dealId: string) => void
 }) {
   const sorted = [...deals].sort((a, b) => {
     let cmp = 0
@@ -179,6 +184,7 @@ function DealListView({
       <table className="data-table w-full min-w-[760px]">
         <thead>
           <tr>
+            <th className="w-8"></th>
             {columns.map(col => (
               <th key={col.key} className="cursor-pointer select-none" onClick={() => onSort(col.key)}>
                 <span className="flex items-center gap-1">
@@ -198,6 +204,14 @@ function DealListView({
               ?? DEFAULT_STAGE_COLORS[deal.stage] ?? '#9ca3af'
             return (
               <tr key={deal.id} className="cursor-pointer" onClick={() => onSelect(deal)}>
+                <td onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(deal.id)}
+                    onChange={() => onToggleSelect(deal.id)}
+                    className="rounded border-gray-300 text-[#015035] focus:ring-[#015035] cursor-pointer"
+                  />
+                </td>
                 <td>
                   <p className="text-sm font-semibold text-gray-900">{deal.company}</p>
                   <div className="flex flex-wrap gap-1 mt-0.5">
@@ -227,7 +241,7 @@ function DealListView({
           })}
           {sorted.length === 0 && (
             <tr>
-              <td colSpan={7} className="text-center py-10 text-sm text-gray-400">No deals match the current filters.</td>
+              <td colSpan={8} className="text-center py-10 text-sm text-gray-400">No deals match the current filters.</td>
             </tr>
           )}
         </tbody>
@@ -341,8 +355,8 @@ function DealPanel({
         .slice(0, 8)
     : linkedContacts.slice(0, 8)
 
-  function handleSaveActivity(activity: LoggedActivity) {
-    setLocalActivities(prev => [{
+  async function handleSaveActivity(activity: LoggedActivity) {
+    const entry = {
       id: activity.id,
       type: activity.type,
       title: activity.title,
@@ -354,9 +368,36 @@ function DealPanel({
       duration: activity.duration,
       companyId: company?.id,
       companyName: deal.company,
-    }, ...prev])
+      dealId: deal.id,
+    }
+    setLocalActivities(prev => [entry, ...prev])
     setLoggingActivity(false)
     setTab('activity')
+    // Previously never persisted — logging an activity from the deal panel
+    // only ever updated local state, so it silently vanished on refresh.
+    try {
+      await fetch('/api/crm/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      })
+    } catch { console.warn('Failed to persist activity to server') }
+  }
+
+  async function handleUpdateActivity(id: string, updates: { title: string; body: string }) {
+    const prev = localActivities
+    setLocalActivities(prevList => prevList.map(a => a.id === id ? { ...a, title: updates.title, body: updates.body } : a))
+    try {
+      const res = await fetch(`/api/crm/activities/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setLocalActivities(prev)
+      toast('Failed to save changes', 'error')
+    }
   }
 
   return (
@@ -704,7 +745,7 @@ function DealPanel({
           )}
 
           {tab === 'activity' && (
-            <ActivityTimeline activities={localActivities} />
+            <ActivityTimeline activities={localActivities} onUpdate={handleUpdateActivity} />
           )}
 
           {tab === 'tasks' && (
@@ -831,11 +872,15 @@ function DealPanel({
 function ManagePipelinesPanel({
   pipelines,
   activePipelineId,
+  dealCounts,
+  stageDealCounts,
   onClose,
   onChange,
 }: {
   pipelines: PipelineConfig[]
   activePipelineId: string
+  dealCounts: Record<string, number>
+  stageDealCounts: Record<string, number>
   onClose: () => void
   onChange: (updated: PipelineConfig[]) => void
 }) {
@@ -846,6 +891,8 @@ function ManagePipelinesPanel({
   const [newStageName, setNewStageName] = useState('')
   const [newPipelineName, setNewPipelineName] = useState('')
   const [addingPipeline, setAddingPipeline] = useState(false)
+  const [editingPipelineId, setEditingPipelineId] = useState<string | null>(null)
+  const [editingPipelineName, setEditingPipelineName] = useState('')
 
   const pipeline = localPipelines.find(p => p.id === selectedPipelineId) ?? localPipelines[0]
 
@@ -858,6 +905,12 @@ function ManagePipelinesPanel({
   }
 
   function removeStage(stageId: string) {
+    const stage = pipeline.stages.find(s => s.id === stageId)
+    const count = stage ? (stageDealCounts[`${pipeline.id}::${stage.name}`] ?? 0) : 0
+    if (count > 0) {
+      const ok = window.confirm(`"${stage!.name}" has ${count} deal${count === 1 ? '' : 's'} in it. Deleting the stage won't delete those deals, but they'll no longer be visible in any pipeline view until moved to a valid stage. Delete anyway?`)
+      if (!ok) return
+    }
     setLocalPipelines(prev => prev.map(p =>
       p.id === selectedPipelineId
         ? { ...p, stages: p.stages.filter(s => s.id !== stageId) }
@@ -896,6 +949,24 @@ function ManagePipelinesPanel({
     setAddingPipeline(false)
   }
 
+  function renamePipeline(pipelineId: string, name: string) {
+    if (!name.trim()) return
+    setLocalPipelines(prev => prev.map(p => p.id === pipelineId ? { ...p, name: name.trim() } : p))
+  }
+
+  function removePipeline(pipelineId: string) {
+    if (localPipelines.length <= 1) return
+    const count = dealCounts[pipelineId] ?? 0
+    if (count > 0) {
+      const name = localPipelines.find(p => p.id === pipelineId)?.name ?? 'this pipeline'
+      const ok = window.confirm(`"${name}" has ${count} deal${count === 1 ? '' : 's'} in it. Deleting the pipeline won't delete those deals, but they'll no longer be visible in any pipeline view until reassigned. Delete anyway?`)
+      if (!ok) return
+    }
+    const next = localPipelines.filter(p => p.id !== pipelineId)
+    setLocalPipelines(next)
+    if (selectedPipelineId === pipelineId) setSelectedPipelineId(next[0].id)
+  }
+
   function reorderStages(result: DropResult) {
     if (!result.destination) return
     const updated = Array.from(pipeline.stages)
@@ -929,18 +1000,55 @@ function ManagePipelinesPanel({
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pipelines</p>
             <div className="flex flex-col gap-1.5">
               {localPipelines.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => setSelectedPipelineId(p.id)}
-                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
-                    selectedPipelineId === p.id
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                      : 'border-gray-200 text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <span>{p.name}</span>
-                  <span className="text-xs text-gray-400">{p.stages.length} stages</span>
-                </button>
+                editingPipelineId === p.id ? (
+                  <div key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-600 bg-emerald-50">
+                    <input
+                      value={editingPipelineName}
+                      onChange={e => setEditingPipelineName(e.target.value)}
+                      className="flex-1 text-sm font-medium border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      autoFocus
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { renamePipeline(p.id, editingPipelineName); setEditingPipelineId(null) }
+                        if (e.key === 'Escape') setEditingPipelineId(null)
+                      }}
+                    />
+                    <button onClick={() => { renamePipeline(p.id, editingPipelineName); setEditingPipelineId(null) }} className="p-1 text-emerald-600 hover:bg-emerald-100 rounded-lg flex-shrink-0">
+                      <Check size={14} />
+                    </button>
+                    <button onClick={() => setEditingPipelineId(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded-lg flex-shrink-0">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    key={p.id}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium border transition-all cursor-pointer ${
+                      selectedPipelineId === p.id
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                        : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                    }`}
+                    onClick={() => setSelectedPipelineId(p.id)}
+                  >
+                    <span>{p.name}</span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs text-gray-400">{p.stages.length} stages</span>
+                      <button
+                        onClick={e => { e.stopPropagation(); setEditingPipelineId(p.id); setEditingPipelineName(p.name) }}
+                        className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      {localPipelines.length > 1 && (
+                        <button
+                          onClick={e => { e.stopPropagation(); removePipeline(p.id) }}
+                          className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
               ))}
               {addingPipeline ? (
                 <div className="flex gap-2">
@@ -1118,9 +1226,8 @@ export default function PipelinePage() {
   useEffect(() => { setMounted(true) }, []) // eslint-disable-line react-hooks/set-state-in-effect
 
   useEffect(() => {
-    fetch('/api/deals')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
+    fetchAllPages<LocalDeal>('/api/deals')
+      .then(data => setLocalDeals(data))
       .catch(() => toast('Failed to load deals', 'error'))
       .finally(() => setLoading(false))
     fetch('/api/pipelines')
@@ -1150,6 +1257,17 @@ export default function PipelinePage() {
   const activeStages = activePipeline?.stages ?? []
 
   const reps = ['All', ...ALL_REPS]
+  const dealCountByPipeline: Record<string, number> = {}
+  const dealCountByStage: Record<string, number> = {}
+  for (const p of pipelines) {
+    dealCountByPipeline[p.id] = localDeals.filter(d => (d as LocalDeal & { pipelineId?: string }).pipelineId === p.id || (!('pipelineId' in d) && p.id === 'client-acquisition')).length
+    for (const s of p.stages) {
+      const key = `${p.id}::${s.name}`
+      dealCountByStage[key] = localDeals.filter(d =>
+        d.stage === s.name && ((d as LocalDeal & { pipelineId?: string }).pipelineId === p.id || (!('pipelineId' in d) && p.id === 'client-acquisition'))
+      ).length
+    }
+  }
   const pipelineDeals = localDeals.filter(d => (d as LocalDeal & { pipelineId?: string }).pipelineId === activePipelineId || (!('pipelineId' in d) && activePipelineId === 'client-acquisition'))
   const filteredDeals = filterRep === 'All' ? pipelineDeals : pipelineDeals.filter(d => d.assignedRep === filterRep)
 
@@ -1374,6 +1492,8 @@ export default function PipelinePage() {
             }}
             onSelect={setSelectedDeal}
             pipelineStages={activeStages}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
           />
         ) : mounted ? <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-3 overflow-x-auto flex-1 min-h-0 pb-2">
@@ -1475,7 +1595,7 @@ export default function PipelinePage() {
           defaultType="deals"
           onClose={() => setShowImport(false)}
           onComplete={() => {
-            fetch('/api/deals').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalDeals(data as LocalDeal[]) })
+            fetchAllPages<LocalDeal>('/api/deals').then(data => setLocalDeals(data))
           }}
         />
       )}
@@ -1484,16 +1604,21 @@ export default function PipelinePage() {
         <ManagePipelinesPanel
           pipelines={pipelines}
           activePipelineId={activePipeline.id}
+          dealCounts={dealCountByPipeline}
+          stageDealCounts={dealCountByStage}
           onClose={() => setManagingPipeline(false)}
           onChange={updated => {
             setPipelines(updated)
-            Promise.all(updated.map(p =>
-              fetch('/api/pipelines', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: p.id, name: p.name, stages: p.stages }),
-              })
-            )).catch(() => toast('Failed to save pipeline settings', 'error'))
+            if (!updated.some(p => p.id === activePipelineId)) {
+              setActivePipelineId(updated[0].id)
+            }
+            fetch('/api/pipelines', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updated),
+            })
+              .then(r => { if (!r.ok) throw new Error('Failed to save') })
+              .catch(() => toast('Failed to save pipeline settings', 'error'))
           }}
         />
       )}

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
+import { isGeolocationConfigured } from '@/lib/geolocation'
+import { isGranolaConfigured } from '@/lib/granola'
 
 // GET /api/admin/integration-health
 // Returns which integrations have valid stored credentials, plus real
@@ -45,9 +47,19 @@ export const GET = withErrorHandler('admin/integration-health GET', async () => 
     const driveConfig = (appSettings as Record<string, unknown>)?.google_drive as Record<string, unknown> | null
     if (driveConfig?.google_drive_refresh_token) googleDrive = true
 
-    return NextResponse.json({ database, auth, email, googleCalendar, googleDrive })
+    // Geolocation (AUDIT.md #33) — held on hold pending a vendor decision,
+    // but fully wired against ipinfo.io; flips to true and starts
+    // populating GravIntel visitor location the moment IPINFO_API_KEY is
+    // set and the app is redeployed. See lib/geolocation.ts.
+    const geolocation = isGeolocationConfigured()
+
+    // Granola meeting-notes sync — inert until an API key is saved in
+    // Settings > Integrations (lib/granola.ts, no env var to set here).
+    const granola = await isGranolaConfigured(db)
+
+    return NextResponse.json({ database, auth, email, googleCalendar, googleDrive, geolocation, granola })
   } catch (err) {
     console.error('[admin/integration-health GET]', err)
-    return NextResponse.json({ database, auth, email: false, googleCalendar: false, googleDrive: false })
+    return NextResponse.json({ database, auth, email: false, googleCalendar: false, googleDrive: false, granola: false })
   }
 })

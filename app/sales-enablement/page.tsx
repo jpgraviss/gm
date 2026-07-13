@@ -896,30 +896,35 @@ export default function SalesEnablementPage() {
   // ─── Completion Tracking ──────────────────────────────────────────────────
 
   function toggleCompletion(contentId: string) {
-    setCompletion(prev => {
-      const nextValue = !prev[contentId]
-      const next = { ...prev, [contentId]: nextValue }
-      fetch('/api/training/progress', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contentId, completed: nextValue }),
-      }).catch(() => toast('Failed to save progress', 'error'))
-      return next
+    const prevValue = completion[contentId]
+    const nextValue = !prevValue
+    setCompletion(prev => ({ ...prev, [contentId]: nextValue }))
+    fetch('/api/training/progress', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contentId, completed: nextValue }),
     })
+      .then(r => { if (!r.ok) throw new Error('Failed to save') })
+      .catch(() => {
+        setCompletion(prev => ({ ...prev, [contentId]: prevValue }))
+        toast('Failed to save progress', 'error')
+      })
   }
 
   function toggleChecklistItem(contentId: string, itemId: string) {
-    setChecklistState(prev => {
-      const contentItems = prev[contentId] ?? {}
-      const nextValue = !contentItems[itemId]
-      const next = { ...prev, [contentId]: { ...contentItems, [itemId]: nextValue } }
-      fetch('/api/training/progress', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contentId, checklistItemId: itemId, checklistValue: nextValue }),
-      }).catch(() => toast('Failed to save progress', 'error'))
-      return next
+    const prevValue = checklistState[contentId]?.[itemId]
+    const nextValue = !prevValue
+    setChecklistState(prev => ({ ...prev, [contentId]: { ...(prev[contentId] ?? {}), [itemId]: nextValue } }))
+    fetch('/api/training/progress', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contentId, checklistItemId: itemId, checklistValue: nextValue }),
     })
+      .then(r => { if (!r.ok) throw new Error('Failed to save') })
+      .catch(() => {
+        setChecklistState(prev => ({ ...prev, [contentId]: { ...(prev[contentId] ?? {}), [itemId]: prevValue } }))
+        toast('Failed to save progress', 'error')
+      })
   }
 
   function toggleAnswer(questionId: string) {

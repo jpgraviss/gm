@@ -38,6 +38,7 @@ const PUBLIC_PREFIXES = [
   '/api/portal-clients/complete-setup',
   '/api/drive/callback',
   '/api/signatures/',
+  '/api/proposals/view/',
   '/api/forms/public/',
   '/api/sequences/webhooks',
   '/api/sequences/unsubscribe',
@@ -49,7 +50,6 @@ const PUBLIC_PREFIXES = [
   '/api/portal/',
   '/api/intelligence/track',
   '/api/intelligence/script',
-  '/api/wordpress/seo/',
 ]
 
 function getClientIp(req: NextRequest): string {
@@ -118,8 +118,16 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
   )
   const hasValidBridgeCookie = (await verifySessionCookie(req.cookies.get('gravhub-auth')?.value)) !== null
   const hasAuthHeader = !!req.headers.get('authorization')
+  // AUDIT.md #32 — the WordPress plugin authenticates every /api/wordpress/
+  // route via a pre-shared key in this header (lib/wordpress-auth.ts), not
+  // a cookie or Authorization header. Presence-only here, same as
+  // hasAuthHeader above — actual key validation happens downstream in
+  // requireWordPressAuth. This lets those routes stay OFF the public-route
+  // list (so CSRF/auth actually apply to their staff-cookie-authenticated
+  // paths) while still letting the plugin's key-only server calls through.
+  const hasGravHubKey = !!req.headers.get('x-gravhub-key')
 
-  if (!hasSupabaseCookie && !hasValidBridgeCookie && !hasAuthHeader) {
+  if (!hasSupabaseCookie && !hasValidBridgeCookie && !hasAuthHeader && !hasGravHubKey) {
     return NextResponse.json(
       { error: 'Authentication required' },
       { status: 401 }

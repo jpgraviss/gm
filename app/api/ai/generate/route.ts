@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chatCompletion } from '@/lib/ai-client'
 import { withErrorHandler } from '@/lib/api-handler'
 
-type GenerationType = 'email_draft' | 'proposal_summary' | 'report_summary' | 'social_post' | 'follow_up'
+type GenerationType = 'email_draft' | 'proposal_summary' | 'report_summary' | 'social_post' | 'follow_up' | 'sequence_email'
 
 const SYSTEM_PROMPTS: Record<GenerationType, string> = {
   email_draft: 'You are an expert email copywriter for a digital marketing agency (Graviss Marketing). Write professional, warm, and concise emails. Keep subject lines short and compelling. Format the output as:\n\nSubject: [subject line]\n\n[email body]',
@@ -10,6 +10,7 @@ const SYSTEM_PROMPTS: Record<GenerationType, string> = {
   report_summary: 'You are a marketing analyst at Graviss Marketing. Write clear, data-driven report narratives that highlight trends, wins, and areas for improvement. Use specific numbers when provided.',
   social_post: 'You are a social media manager for Graviss Marketing. Write engaging social media posts that drive engagement. Include relevant hashtags. Keep posts concise and platform-appropriate.',
   follow_up: 'You are a sales representative at Graviss Marketing. Write personalized follow-up messages that reference previous interactions and provide clear next steps. Be professional but personable.',
+  sequence_email: 'You are an expert sales/marketing copywriter for a digital marketing agency (Graviss Marketing), writing ONE step of a multi-step automated email sequence. Write concise, personable, non-salesy copy appropriate for that step\'s position in the sequence (an early step should be lower-pressure than a later, more direct step). Use the merge-field tokens {{first_name}}, {{company}}, {{sender_name}} where natural — do not invent other tokens. Format the output exactly as:\n\nSubject: [subject line]\n\n[email body]',
 }
 
 export const POST = withErrorHandler('ai/generate POST', async (req) => {
@@ -47,6 +48,8 @@ function buildUserPrompt(type: GenerationType, ctx: Record<string, string>): str
       return `Write a social media post.\n\nTopic: ${ctx.topic || 'marketing'}\nPlatform: ${ctx.platform || 'LinkedIn'}\n${ctx.url ? `Reference URL: ${ctx.url}` : ''}\n${ctx.additionalContext ? `Context: ${ctx.additionalContext}` : ''}`
     case 'follow_up':
       return `Write a follow-up message.\n\nRecipient: ${ctx.recipient || 'client'}\nCompany: ${ctx.company || ''}\nLast Interaction: ${ctx.lastInteraction || 'recent meeting'}\nGoal: ${ctx.goal || 'schedule next steps'}\n${ctx.additionalContext ? `Context: ${ctx.additionalContext}` : ''}`
+    case 'sequence_email':
+      return `Write step ${ctx.stepPosition || '1'} of a ${ctx.totalSteps || 'multi'}-step email sequence, sent ${ctx.dayOffset || '0'} day(s) after the sequence starts.\n\nSequence name: ${ctx.sequenceName || 'Outreach sequence'}\nAudience/target segment: ${ctx.targetSegment || 'prospective clients'}\n${ctx.previousSubjects ? `Subject lines already sent earlier in this sequence (don't repeat them, and don't contradict them): ${ctx.previousSubjects}` : 'This is the first email in the sequence.'}\nWhat this specific email should say: ${ctx.instruction || 'A natural next step for this point in the sequence.'}`
     default:
       return ctx.additionalContext || 'Generate professional content.'
   }
@@ -64,6 +67,8 @@ function generateFallback(type: GenerationType, ctx: Record<string, string>): st
       return `${ctx.topic || 'Digital marketing'} is evolving fast. At Graviss Marketing, we help businesses stay ahead of the curve. ${ctx.url ? `Learn more: ${ctx.url}` : ''}\n\n#Marketing #DigitalMarketing #GrowthStrategy`
     case 'follow_up':
       return `Hi ${ctx.recipient || 'there'},\n\nGreat connecting with you recently about ${ctx.lastInteraction || 'your marketing goals'}. I wanted to follow up and see if you had any questions.\n\nWould you be available for a brief call this week to discuss next steps?\n\nBest,\nGraviss Marketing Team`
+    case 'sequence_email':
+      return `Subject: ${ctx.instruction ? ctx.instruction.slice(0, 60) : `Following up — ${ctx.sequenceName || 'quick note'}`}\n\nHi {{first_name}},\n\n${ctx.instruction || `Wanted to reach out regarding ${ctx.sequenceName || 'our services'}.`}\n\nLet me know if you'd like to chat further.\n\nBest,\n{{sender_name}}`
     default:
       return 'Content generation is currently unavailable. Please try again later.'
   }

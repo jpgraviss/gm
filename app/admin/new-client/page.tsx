@@ -264,7 +264,7 @@ export default function NewClientPage() {
         body: JSON.stringify({
           companyName: data.companyName,
           companyId,
-          serviceType: data.services[0] || 'Website',
+          serviceType: data.services[0] || SERVICES[0],
         }),
       })
 

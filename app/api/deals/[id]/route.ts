@@ -56,7 +56,11 @@ export const PATCH = withErrorHandler('deals/[id] PATCH', async (req, ctx) => {
   if (body.companyId !== undefined)   update.company_id = body.companyId
   if (body.contactId !== undefined)   update.contact_id = body.contactId
   if (body.company !== undefined)     update.company = body.company
-  update.last_activity = new Date().toISOString().split('T')[0]
+  // Only a stage change counts as real pipeline activity for Deal Score's
+  // engagement factor and the stale-deal guided action — bumping this on
+  // every PATCH (a probability tweak, a close-date typo fix, a contact
+  // relink) made a deal with zero real customer contact look "active today."
+  if (body.stage !== undefined) update.last_activity = new Date().toISOString().split('T')[0]
   const { data, error } = await db.from('deals').update(update).eq('id', id).select().single()
   if (error) {
     throw new Error(error?.message || 'Failed to update deal')

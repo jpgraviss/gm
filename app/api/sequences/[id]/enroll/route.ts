@@ -67,27 +67,33 @@ export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: N
   const now = new Date()
   const nextSendAt = new Date(now.getTime() + firstDays * 24 * 60 * 60 * 1000)
 
-  const rows = toEnroll.map(c => ({
-    id: `enr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    sequence_id: id,
-    contact_id: c.id ?? null,
-    contact_name: c.name,
-    contact_email: c.email,
-    current_step: 0,
-    status: 'active',
-    next_send_at: nextSendAt.toISOString(),
-    enrolled_at: now.toISOString(),
-    delivery_status: 'pending',
-    message_ids: [],
-  }))
-
-  const { error: insertErr } = await db.from('sequence_enrollments').insert(rows)
-  if (insertErr) {
-    throw new Error(insertErr?.message || 'Failed to enroll contacts')
-  }
-
-  // Update contact sequence tracking
+  // Inserted one at a time (not a single batch insert) so a unique-
+  // constraint conflict on one contact doesn't fail the whole batch, and
+  // so we can tell exactly how many actually got enrolled. The DB-level
+  // partial unique index on (contact_email) where status='active' is the
+  // real "one sequence at a time" guarantee — the checks above are a
+  // fast pre-filter, not the source of truth, since another request could
+  // enroll the same contact between our check and this insert.
+  let enrolledCount = 0
   for (const c of toEnroll) {
+    const { error: insertErr } = await db.from('sequence_enrollments').insert({
+      id: `enr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      sequence_id: id,
+      contact_id: c.id ?? null,
+      contact_name: c.name,
+      contact_email: c.email,
+      current_step: 0,
+      status: 'active',
+      next_send_at: nextSendAt.toISOString(),
+      enrolled_at: now.toISOString(),
+      delivery_status: 'pending',
+      message_ids: [],
+    })
+    if (insertErr) {
+      if (insertErr.code === '23505') continue // already has an active enrollment elsewhere — race with another request
+      throw new Error(insertErr.message || 'Failed to enroll contacts')
+    }
+    enrolledCount++
     if (c.id) {
       await db.from('crm_contacts').update({
         in_sequence: true,
@@ -96,15 +102,16 @@ export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: N
     }
   }
 
-  // Update sequence aggregate counts
-  await db
-    .from('sequences')
-    .update({
-      enrolled_count: (seq.enrolled_count ?? 0) + toEnroll.length,
-      active_count: (seq.active_count ?? 0) + toEnroll.length,
-      last_modified: now.toISOString().split('T')[0],
-    })
-    .eq('id', id)
+  if (enrolledCount > 0) {
+    await db
+      .from('sequences')
+      .update({
+        enrolled_count: (seq.enrolled_count ?? 0) + enrolledCount,
+        active_count: (seq.active_count ?? 0) + enrolledCount,
+        last_modified: now.toISOString().split('T')[0],
+      })
+      .eq('id', id)
+  }
 
-  return NextResponse.json({ enrolled: toEnroll.length })
+  return NextResponse.json({ enrolled: enrolledCount })
 })

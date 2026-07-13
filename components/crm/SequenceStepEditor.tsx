@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { X, Mail, Edit2, Phone, CheckCircle, Linkedin, ChevronLeft } from 'lucide-react'
+import { X, Mail, Edit2, Phone, CheckCircle, Linkedin, ChevronLeft, Wand2, Sparkles } from 'lucide-react'
 import type { SequenceStep, SequenceStepType, SequenceHtmlTemplate, TaskPriority } from '@/lib/types'
 
 // Merge-field tokens the executor (app/api/sequences/execute/route.ts,
@@ -62,9 +62,19 @@ interface Props {
   previousStepDay: number | null // day offset of the step before this one; null if this is the first step
   onSave: (step: SequenceStep) => void
   onClose: () => void
+  // AI-draft context (all optional — the AI Assist block only needs
+  // enough to write a sensible prompt, not a full sequence object).
+  sequenceName?: string
+  targetSegment?: string
+  stepPosition?: number
+  totalSteps?: number
+  previousSubjects?: string[]
 }
 
-export default function SequenceStepEditor({ step, previousStepDay, onSave, onClose }: Props) {
+export default function SequenceStepEditor({
+  step, previousStepDay, onSave, onClose,
+  sequenceName, targetSegment, stepPosition, totalSteps, previousSubjects,
+}: Props) {
   const [pickedType, setPickedType] = useState<SequenceStepType | null>(step?.type ?? null)
   const [delayDays, setDelayDays] = useState<number>(
     previousStepDay === null ? 0 : Math.max(0, (step?.day ?? (previousStepDay + 1)) - previousStepDay)
@@ -87,6 +97,58 @@ export default function SequenceStepEditor({ step, previousStepDay, onSave, onCl
   const variantBBodyRef = useRef<HTMLTextAreaElement>(null)
   const insertToken = useCursorInsert(bodyRef, body, setBody)
   const insertVariantBToken = useCursorInsert(variantBBodyRef, variantBBody, setVariantBBody)
+
+  const [aiInstruction, setAiInstruction] = useState('')
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiDraft, setAiDraft] = useState<{ subject: string; body: string; source: string } | null>(null)
+  const [aiError, setAiError] = useState('')
+
+  async function generateWithAi() {
+    setAiGenerating(true)
+    setAiError('')
+    setAiDraft(null)
+    try {
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'sequence_email',
+          context: {
+            sequenceName: sequenceName || '',
+            targetSegment: targetSegment || '',
+            stepPosition: String(stepPosition ?? 1),
+            totalSteps: String(totalSteps ?? stepPosition ?? 1),
+            dayOffset: String(isFirstStep ? delayDays : (previousStepDay ?? 0) + delayDays),
+            previousSubjects: (previousSubjects ?? []).join(' / '),
+            instruction: aiInstruction.trim(),
+          },
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Generation failed')
+      // The system prompt asks for "Subject: ...\n\n[body]" — parse that
+      // shape but fall back to the whole thing as the body if a provider
+      // (or the template fallback) doesn't follow it exactly, so a
+      // slightly-off response is still usable instead of silently empty.
+      const match = /^Subject:\s*(.+?)\n+([\s\S]*)$/.exec(data.content ?? '')
+      setAiDraft({
+        subject: match ? match[1].trim() : '',
+        body: match ? match[2].trim() : (data.content ?? ''),
+        source: data.source ?? 'none',
+      })
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'Failed to generate draft')
+    }
+    setAiGenerating(false)
+  }
+
+  function useAiDraft() {
+    if (!aiDraft) return
+    if (aiDraft.subject) setSubject(aiDraft.subject)
+    setBody(aiDraft.body)
+    setAiDraft(null)
+    setAiInstruction('')
+  }
 
   const isFirstStep = previousStepDay === null
   const canSave =
@@ -190,13 +252,65 @@ export default function SequenceStepEditor({ step, previousStepDay, onSave, onCl
                     onChange={e => setDelayDays(Math.max(1, parseInt(e.target.value) || 1))}
                     className={`${inputCls} w-24`}
                   />
-                  <span className="text-sm text-gray-500">business day{delayDays === 1 ? '' : 's'}</span>
+                  <span className="text-sm text-gray-500">day{delayDays === 1 ? '' : 's'} after previous step</span>
                 </div>
               )}
             </div>
 
             {pickedType === 'email' && (
               <>
+                <div className="border border-purple-100 rounded-xl p-3 bg-purple-50/40">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Wand2 size={13} className="text-purple-600" />
+                    <span className="text-xs font-semibold text-purple-800">AI Assist</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={aiInstruction}
+                      onChange={e => setAiInstruction(e.target.value)}
+                      placeholder="What should this email say? e.g. Introduce our SEO audit offer"
+                      className={`${inputCls} bg-white`}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); generateWithAi() } }}
+                    />
+                    <button
+                      type="button"
+                      onClick={generateWithAi}
+                      disabled={aiGenerating}
+                      className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-white rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 flex-shrink-0"
+                      style={{ background: '#7c3aed' }}
+                    >
+                      {aiGenerating ? <div className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" /> : <Wand2 size={13} />}
+                      Generate
+                    </button>
+                  </div>
+                  {aiError && <p className="text-xs text-red-500 mt-2">{aiError}</p>}
+                  {aiDraft && (
+                    <div className="mt-2.5 p-2.5 bg-white border border-purple-200 rounded-lg">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles size={11} className="text-purple-600" />
+                          <span className="text-[11px] font-semibold text-purple-700">
+                            Draft {aiDraft.source === 'ollama' ? '(local AI)' : aiDraft.source === 'groq' ? '(AI)' : '(template — no AI provider configured)'}
+                          </span>
+                        </div>
+                        <button type="button" onClick={() => setAiDraft(null)} className="text-purple-400 hover:text-purple-600">
+                          <X size={12} />
+                        </button>
+                      </div>
+                      {aiDraft.subject && <p className="text-xs font-semibold text-gray-800 mb-1">{aiDraft.subject}</p>}
+                      <p className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{aiDraft.body}</p>
+                      <div className="flex gap-3 mt-2">
+                        <button type="button" onClick={useAiDraft} className="text-xs font-semibold text-purple-700 hover:text-purple-900">
+                          Use this draft
+                        </button>
+                        <button type="button" onClick={generateWithAi} className="text-xs font-semibold text-gray-500 hover:text-gray-700">
+                          Regenerate
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className={labelCls}>Subject</label>
                   <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Quick thought for {{company}}" className={inputCls} />

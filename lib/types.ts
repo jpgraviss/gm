@@ -337,7 +337,8 @@ export interface SequenceStep {
   taskPriority?: TaskPriority
   pauseUntilComplete?: boolean
   condition?: string
-  // A/B testing — declared, not yet executed (see AUDIT.md #24)
+  // A/B testing — fully executed by app/api/sequences/execute/route.ts's
+  // resolveAbVariant() and app/api/sequences/analytics/route.ts (see AUDIT.md #24)
   abEnabled?: boolean
   variantB?: { subject?: string; body?: string }
   abSplit?: number // percentage for variant A (default 50)
@@ -401,7 +402,7 @@ export interface SignatureRequest {
 
 export type CompanyStatus = 'Prospect' | 'Active Client' | 'Past Client' | 'Partner' | 'Churned'
 export type CompanySize = '1-10' | '11-50' | '51-200' | '201-500' | '501-1000' | '1001-5000' | '5001-10000' | '10001+' | '500+'
-export type ActivityType = 'call' | 'email' | 'meeting' | 'note' | 'task' | 'deal' | 'contract' | 'invoice' | 'proposal'
+export type ActivityType = 'call' | 'email' | 'meeting' | 'note' | 'call_note' | 'task' | 'deal' | 'contract' | 'invoice' | 'proposal'
 export type ContactTaskType = 'follow_up' | 'call' | 'email' | 'meeting' | 'reschedule' | 'proposal' | 'demo' | 'other'
 export type ContactTaskPriority = 'high' | 'medium' | 'low'
 

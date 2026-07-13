@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
 
 const STEP_STATUSES = ['Pending', 'In Progress', 'Completed', 'Skipped']
 
@@ -49,7 +50,7 @@ export const PATCH = withErrorHandler('delivery/workflow/[id]/step PATCH', async
 
   const body = await req.json()
   const result = validate(body, {
-    step: { required: true, type: 'number', min: 1, max: 8 },
+    step: { required: true, type: 'number', min: 1, max: DELIVERY_STEP_NAMES.length },
     status: { required: true, type: 'string', enum: STEP_STATUSES },
   })
   if (!result.valid) return validationError(result.error)

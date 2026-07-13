@@ -6,12 +6,17 @@ export interface TimelineEntry {
   id: string
   type: 'email_sent' | 'email_opened' | 'link_clicked' | 'proposal_sent' | 'proposal_viewed' |
         'contract_signed' | 'contract_created' | 'invoice_paid' | 'invoice_sent' |
-        'ticket_created' | 'deal_updated' | 'note_added' | 'task_completed' |
+        'ticket_created' | 'deal_updated' | 'note_added' | 'call_note' | 'task_completed' |
         'call' | 'meeting' | 'activity'
   title: string
   description?: string
   timestamp: string
   metadata?: Record<string, unknown>
+  // True only for entries backed by a real, editable crm_activities row
+  // (id === that row's real id) — every other entry here is derived from
+  // another table (broadcasts, proposals, contracts...) and has a
+  // synthetic id, so it can't be PATCHed as an activity.
+  editable?: boolean
 }
 
 export const GET = withErrorHandler('crm/contacts/[id]/timeline GET', async (_req, ctx) => {
@@ -93,8 +98,8 @@ export const GET = withErrorHandler('crm/contacts/[id]/timeline GET', async (_re
   for (const act of (activitiesRes.data ?? [])) {
     const typeMap: Record<string, TimelineEntry['type']> = {
       call: 'call', email: 'email_sent', meeting: 'meeting', note: 'note_added',
-      task: 'task_completed', deal: 'deal_updated', contract: 'contract_created',
-      invoice: 'invoice_sent', proposal: 'proposal_sent',
+      call_note: 'call_note', task: 'task_completed', deal: 'deal_updated',
+      contract: 'contract_created', invoice: 'invoice_sent', proposal: 'proposal_sent',
     }
     timeline.push({
       id: act.id,
@@ -103,6 +108,7 @@ export const GET = withErrorHandler('crm/contacts/[id]/timeline GET', async (_re
       description: act.body ?? undefined,
       timestamp: act.timestamp,
       metadata: { user: act.user_name, outcome: act.outcome, duration: act.duration },
+      editable: true,
     })
   }
 

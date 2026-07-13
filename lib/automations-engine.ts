@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
 import { sendPushNotification } from '@/lib/push-notifications'
 import { wrapBrandedEmail } from '@/lib/email-template'
+import { getSettings } from '@/lib/settings'
 import { contractMonthlyValue } from '@/lib/metrics'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -25,23 +26,72 @@ const TRIGGER_MAP: Record<string, string> = {
   'meeting_booked':       'Meeting Booked',
 }
 
+// Post-migration every row stores objects; the bare-string variant is kept
+// only as a defensive fallback for the migration window / any caller that
+// hasn't been updated (normalizeAction() below handles both).
+type RawAction = string | { type: string; config?: Record<string, unknown> }
+
 interface AutomationRow {
   id: string
   name: string
   trigger: string
-  actions: string[]
-  // Scoped to single-action automations (e.g. built from the sequence-level
-  // Automate tab) — merged into the trigger context before the action runs.
-  // Not a general fix for AUDIT.md #12 (multi-action config), see the
-  // migration comment on automations.config.
+  actions: RawAction[]
+  // Automation-level default config — merged in before each action's own
+  // config, so a caller that never sets per-action config (e.g. the
+  // sequence-level Automate tab, which only ever creates 1-2 actions) keeps
+  // working unchanged. Real per-action config (AUDIT.md #12) lives on each
+  // action object instead now — see ACTION_CONFIG_ADAPTERS.
   config?: Record<string, unknown>
   status: string
   runs: number
 }
 
+interface NormalizedAction {
+  type: string
+  config: Record<string, unknown>
+}
+
+function normalizeAction(action: RawAction): NormalizedAction {
+  return typeof action === 'string' ? { type: action, config: {} } : { type: action.type, config: action.config ?? {} }
+}
+
+// Translates the automation builder's per-action config field names (what
+// NodeConfigPanel in app/automation/builder/page.tsx actually collects)
+// into the engine's own context keys (what each case in executeAction
+// actually reads). These intentionally don't match 1:1 — the engine's
+// verbose, prefixed names exist so a short generic key like `value` or
+// `stage` in an action's own config can never collide with real trigger-
+// event data spread into the same context later (deals/contracts/invoices
+// all have real `value`/`stage` columns that are spread wholesale into
+// triggerData; see AUDIT.md #12/#13 plan). Add a case here, not a context-
+// key rename, if a new configurable action type is added.
+const ACTION_CONFIG_ADAPTERS: Record<string, (cfg: Record<string, unknown>) => Record<string, unknown>> = {
+  'Send Email Reminder': (cfg) => ({ emailSubject: cfg.subject, emailBody: cfg.body, fromName: cfg.fromName }),
+  'Wait': (cfg) => ({ waitDuration: cfg.duration, waitUnit: cfg.unit }),
+  'If/Else': (cfg) => ({ conditionField: cfg.field, conditionOperator: cfg.operator, conditionValue: cfg.value }),
+  'Create Task': (cfg) => ({ taskTitle: cfg.title, taskAssignee: cfg.assignee, taskDueDateOffset: cfg.dueDateOffset }),
+  'Update Contact': (cfg) => ({ updateField: cfg.field, updateValue: cfg.value }),
+  'Create Deal': (cfg) => ({ dealName: cfg.dealName, dealStage: cfg.stage }),
+  'Log Activity': (cfg) => ({ activityNote: cfg.note }),
+  'Send Notification': (cfg) => ({ notifyTarget: cfg.target, notifyMessage: cfg.message }),
+  'Add Tag': (cfg) => ({ tag: cfg.tag }),
+  'Remove Tag': (cfg) => ({ tag: cfg.tag }),
+}
+
+function translateActionConfig(actionType: string, cfg: Record<string, unknown>): Record<string, unknown> {
+  const adapter = ACTION_CONFIG_ADAPTERS[actionType]
+  if (!adapter) return {}
+  const translated = adapter(cfg)
+  // Drop unset fields so they don't spread as `undefined`/`''` and clobber
+  // a real default via `??` (which only falls back on null/undefined, not
+  // on an empty string) — e.g. an unfilled Subject field must not silently
+  // beat the engine's sensible default subject line.
+  return Object.fromEntries(Object.entries(translated).filter(([, v]) => v !== undefined && v !== ''))
+}
+
 interface StepResult {
   name: string
-  status: 'success' | 'failed' | 'skipped'
+  status: 'success' | 'failed' | 'skipped' | 'pending'
   duration_ms: number
   error?: string
 }
@@ -51,7 +101,7 @@ interface RunRecord {
   automation_id: string
   trigger_type: string
   trigger_data: Record<string, unknown>
-  status: 'running' | 'completed' | 'failed'
+  status: 'running' | 'completed' | 'failed' | 'waiting'
   started_at: string
   completed_at: string | null
   steps: StepResult[]
@@ -102,6 +152,25 @@ export async function executeWorkflow(
   triggerType: string,
   triggerData: Record<string, unknown>,
   db?: SupabaseClient,
+  isResume = false,
+  // Index into the automation's ORIGINAL, full actions array that this
+  // call's `automation.actions` starts at. 0 for a fresh trigger. On
+  // resume, cron passes a truncated slice as `automation.actions` — without
+  // this offset, a second Wait step's step_index would be computed
+  // relative to that truncated array (loop-local index 0), not the
+  // original array cron re-slices from next time, causing the resumed
+  // range to be wrong and the same actions to re-execute forever.
+  indexOffset = 0,
+  // When resuming a paused run, the run_id of the ORIGINAL automation_runs
+  // row (from the pending step) plus that row's steps recorded before the
+  // pause. Reusing the id (instead of minting a new one) means the final
+  // status update below lands on the same row the pause left at 'waiting',
+  // so it actually finalizes to 'completed'/'failed' instead of being
+  // orphaned forever alongside a second, disconnected run for the same
+  // logical trigger. priorSteps seeds step history so the resumed run's
+  // steps append onto what already happened, not overwrite it.
+  resumeRunId?: string,
+  priorSteps: StepResult[] = [],
 ) {
   // Form-submission automations can be scoped to one specific form
   // (config.formScope === 'specific') rather than "any form" — the trigger
@@ -112,57 +181,81 @@ export async function executeWorkflow(
   }
 
   const supabase = db ?? createServiceClient()
-  const runId = `run-${uid()}`
+  const runId = resumeRunId ?? `run-${uid()}`
   const startedAt = new Date().toISOString()
-  const steps: StepResult[] = []
+  const steps: StepResult[] = [...priorSteps]
   let runStatus: RunRecord['status'] = 'running'
   let runError: string | null = null
+  let skipRemaining = false
 
-  await supabase.from('automation_runs').insert({
-    id: runId,
-    automation_id: automation.id,
-    trigger_type: triggerType,
-    trigger_data: triggerData,
-    status: 'running',
-    started_at: startedAt,
-    completed_at: null,
-    steps: [],
-    error: null,
-  }).then(() => {}, () => {})
+  if (!resumeRunId) {
+    await supabase.from('automation_runs').insert({
+      id: runId,
+      automation_id: automation.id,
+      trigger_type: triggerType,
+      trigger_data: triggerData,
+      status: 'running',
+      started_at: startedAt,
+      completed_at: null,
+      steps: [],
+      error: null,
+    }).then(() => {}, () => {})
+  }
 
   try {
-    for (const action of automation.actions) {
-      if (triggerData._skipRemaining) {
-        steps.push({ name: action, status: 'skipped', duration_ms: 0 })
+    for (let i = 0; i < automation.actions.length; i++) {
+      const { type: actionType, config: actionConfig } = normalizeAction(automation.actions[i])
+      if (skipRemaining) {
+        steps.push({ name: actionType, status: 'skipped', duration_ms: 0 })
         continue
       }
 
       const stepStart = Date.now()
       try {
-        // Config only ever supplies fields the real trigger event doesn't
-        // have (e.g. which sequence to enroll into) — actual event data
-        // always wins on conflict.
-        const context = { ...automation.config, ...triggerData }
-        await executeAction(action, context, supabase, automation.id)
+        // Automation-level default, then this action's own config, then
+        // real trigger event data — each layer only overriding what the
+        // one before it didn't set, actual event data always wins on
+        // conflict (AUDIT.md #12). `resumeContext` deliberately excludes
+        // this action's own translated config — if this action is a Wait,
+        // that's what gets persisted for the *next* action to resume with,
+        // and a later action must never inherit an earlier Wait's own
+        // config (e.g. Wait's `waitDuration` leaking into a subsequent
+        // action's context — see AUDIT.md #12/#13 plan).
+        const resumeContext = { ...automation.config, ...triggerData }
+        const context = { ...automation.config, ...translateActionConfig(actionType, actionConfig), ...triggerData }
+        const remainingActions = automation.actions.slice(i + 1)
+        const result = await executeAction(actionType, context, supabase, automation.id, runId, indexOffset + i, resumeContext)
         steps.push({
-          name: action,
+          name: actionType,
           status: 'success',
           duration_ms: Date.now() - stepStart,
         })
+        // Wait scheduled a resume — stop executing this pass entirely
+        // instead of falling through to the next action (AUDIT.md #13).
+        if (result?.paused) {
+          runStatus = 'waiting'
+          for (const remaining of remainingActions) {
+            steps.push({ name: normalizeAction(remaining).type, status: 'pending', duration_ms: 0 })
+          }
+          break
+        }
+        if (result?.skipRemaining) {
+          skipRemaining = true
+        }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err)
         steps.push({
-          name: action,
+          name: actionType,
           status: 'failed',
           duration_ms: Date.now() - stepStart,
           error: errorMsg,
         })
         runStatus = 'failed'
-        runError = `Step "${action}" failed: ${errorMsg}`
+        runError = `Step "${actionType}" failed: ${errorMsg}`
 
-        for (let i = steps.length; i < automation.actions.length; i++) {
+        for (let j = steps.length; j < automation.actions.length; j++) {
           steps.push({
-            name: automation.actions[i],
+            name: normalizeAction(automation.actions[j]).type,
             status: 'skipped',
             duration_ms: 0,
           })
@@ -171,19 +264,24 @@ export async function executeWorkflow(
       }
     }
 
-    if (runStatus !== 'failed') {
+    if (runStatus !== 'failed' && runStatus !== 'waiting') {
       runStatus = 'completed'
     }
 
-    await supabase
-      .from('automations')
-      .update({
-        runs: (automation.runs ?? 0) + 1,
-        last_run: new Date().toISOString(),
-      })
-      .eq('id', automation.id)
+    // A resumed run is a continuation of the same logical trigger, not a
+    // new one — only the original (non-resume) call counts toward runs/
+    // last_run, so a Wait-paused-then-resumed execution isn't double-counted.
+    if (!isResume) {
+      await supabase
+        .from('automations')
+        .update({
+          runs: (automation.runs ?? 0) + 1,
+          last_run: new Date().toISOString(),
+        })
+        .eq('id', automation.id)
+    }
 
-    console.log(`[automations-engine] ${runStatus === 'completed' ? 'Executed' : 'Failed'} "${automation.name}" (${automation.id}) — ${steps.filter(s => s.status === 'success').length}/${automation.actions.length} steps`)
+    console.log(`[automations-engine] ${runStatus} "${automation.name}" (${automation.id}) — ${steps.filter(s => s.status === 'success').length}/${automation.actions.length} steps`)
   } catch (err) {
     runStatus = 'failed'
     runError = err instanceof Error ? err.message : String(err)
@@ -191,7 +289,7 @@ export async function executeWorkflow(
 
   await supabase.from('automation_runs').update({
     status: runStatus,
-    completed_at: new Date().toISOString(),
+    completed_at: runStatus === 'waiting' ? null : new Date().toISOString(),
     steps,
     error: runError,
   }).eq('id', runId).then(() => {}, () => {})
@@ -200,7 +298,34 @@ export async function executeWorkflow(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function executeAction(action: string, context: Record<string, unknown>, db: any, automationId?: string) {
+// Contract/invoice/proposal triggers carry a `company` name but have no
+// contact FK (unlike deals), so contactId is never in context for them.
+// Falls back to the same "primary contact for this company" lookup Send
+// Email already does, instead of silently no-oping every contact-targeting
+// action for every trigger that isn't deal-based.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveContactId(context: Record<string, unknown>, company: string, db: any): Promise<string | null> {
+  const direct = (context.contactId as string) ?? (context.contact_id as string) ?? null
+  if (direct) return direct
+  if (!company) return null
+  const { data: contacts } = await db
+    .from('crm_contacts')
+    .select('id')
+    .eq('company_name', company)
+    .order('is_primary', { ascending: false })
+    .limit(1)
+  return contacts?.[0]?.id ?? null
+}
+
+async function executeAction(
+  action: string,
+  context: Record<string, unknown>,
+  db: any,
+  automationId?: string,
+  runId?: string,
+  actionIndex = 0,
+  resumeContext: Record<string, unknown> = {},
+): Promise<{ paused?: boolean; skipRemaining?: boolean } | void> {
   const company = (context.company as string) ?? ''
   const today = new Date().toISOString().split('T')[0]
 
@@ -221,7 +346,9 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       const subject = (context.emailSubject as string) ?? `Update from GravHub — ${action}`
       const rawHtml = (context.emailBody as string) ?? `<p>Hi ${contact.full_name ?? 'there'},</p><p>This is an automated message regarding ${company}.</p>`
       const html = await wrapBrandedEmail(rawHtml, 'AUTOMATED NOTIFICATION')
-      await sendEmail({ to: contact.emails[0], subject, html })
+      const fromName = context.fromName as string | undefined
+      const from = fromName ? `${fromName} <${(await getSettings()).email.fromEmail}>` : undefined
+      await sendEmail({ to: contact.emails[0], subject, html, from })
       break
     }
 
@@ -246,7 +373,7 @@ async function executeAction(action: string, context: Record<string, unknown>, d
 
     case 'Add Tag': {
       const tag = (context.tag as string) ?? ''
-      const contactId = (context.contactId as string) ?? (context.contact_id as string) ?? null
+      const contactId = await resolveContactId(context, company, db)
       if (!tag || !contactId) break
       const { data: existing } = await db
         .from('crm_contacts')
@@ -262,7 +389,7 @@ async function executeAction(action: string, context: Record<string, unknown>, d
 
     case 'Remove Tag': {
       const tag = (context.tag as string) ?? ''
-      const contactId = (context.contactId as string) ?? (context.contact_id as string) ?? null
+      const contactId = await resolveContactId(context, company, db)
       if (!tag || !contactId) break
       const { data: existing } = await db
         .from('crm_contacts')
@@ -275,7 +402,7 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     }
 
     case 'Update Contact': {
-      const contactId = (context.contactId as string) ?? (context.contact_id as string) ?? null
+      const contactId = await resolveContactId(context, company, db)
       const field = (context.updateField as string) ?? ''
       const value = (context.updateValue as string) ?? ''
       if (!contactId || !field) break
@@ -375,16 +502,31 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       if (unit === 'hours') ms = duration * 3_600_000
       else if (unit === 'days') ms = duration * 86_400_000
 
-      await db.from('automation_pending_steps').insert({
+      // Without a real automation id there's nothing to resume against —
+      // matches the existing no-op fallback other actions use when they're
+      // missing required context, rather than scheduling a resume that can
+      // never be found again.
+      if (!automationId || !runId) break
+
+      // automation_pending_steps has no status column and no
+      // remaining_actions column — it tracks resume position via
+      // step_index (an index into the automation's own actions array) and
+      // relies on the resumer re-fetching the automation fresh, rather
+      // than freezing a snapshot of "what's left" at pause time. Confirmed
+      // against the live schema (information_schema.columns), which
+      // doesn't match what an earlier migration file in this repo assumed.
+      const { error: pendingErr } = await db.from('automation_pending_steps').insert({
         id: `pending-${uid()}`,
-        automation_id: (context._automationId as string) ?? '',
-        run_id: (context._runId as string) ?? '',
+        automation_id: automationId,
+        run_id: runId,
+        step_index: actionIndex + 1,
         resume_at: new Date(Date.now() + ms).toISOString(),
-        remaining_actions: (context._remainingActions as string[]) ?? [],
-        context: context,
-        status: 'pending',
-      }).then(() => {}, () => {})
-      break
+        // Deliberately resumeContext, not context — never this Wait step's
+        // own translated config (see the caller's comment on resumeContext).
+        context: resumeContext,
+      })
+      if (pendingErr) throw new Error(pendingErr.message || 'Failed to schedule Wait resume')
+      return { paused: true }
     }
 
     case 'If/Else': {
@@ -403,8 +545,12 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       }
 
       if (!matched) {
-        // Condition not met — skip remaining actions gracefully (not an error)
-        context._skipRemaining = true
+        // Condition not met — skip remaining actions gracefully (not an
+        // error). Signaled via return value, not by mutating `context`
+        // (that object is a fresh copy built per-action in the caller's
+        // loop, so mutating it here never actually reached the loop's
+        // check — this flag had never propagated in production).
+        return { skipRemaining: true }
       }
       break
     }
@@ -698,7 +844,12 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       const firstDay = seqSteps[0]?.day ?? 0
       const now = new Date()
 
-      await db.from('sequence_enrollments').insert({
+      // The activeElsewhere check above is a fast pre-filter, not the
+      // source of truth — a partial unique index on sequence_enrollments
+      // (contact_email) where status='active' is the real "one sequence
+      // at a time" guarantee (AUDIT.md #44), so a conflict here just
+      // means another request won the race; skip silently.
+      const { error: enrollErr } = await db.from('sequence_enrollments').insert({
         id: `enr-auto-${uid()}`,
         sequence_id: targetSeq.id,
         contact_id: contactId,
@@ -710,6 +861,10 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         company: company || null,
         assigned_rep_id: enrollmentRepId,
       })
+      if (enrollErr) {
+        if (enrollErr.code === '23505') break
+        throw new Error(enrollErr.message || 'Failed to enroll contact')
+      }
 
       await db.from('sequences').update({
         enrolled_count: (targetSeq.enrolled_count ?? 0) + 1,
@@ -749,6 +904,15 @@ async function executeAction(action: string, context: Record<string, unknown>, d
     }
 
     case 'Rotate Contact Owner': {
+      // Reassigns real CRM ownership — refuse when the trigger came from a
+      // public, unauthenticated endpoint (funnel-submit / generic public
+      // forms), which can be reached by anyone who knows a funnel slug and
+      // an existing contact's email. Enroll in Sequence stays allowed from
+      // public triggers (worst case: an unwanted nurture email), but
+      // reassigning who owns a customer relationship shouldn't be forgeable
+      // by a spoofed public form submission (AUDIT.md #46).
+      if (context._publicSource) break
+
       // config.unit: which team_members.unit to rotate across (e.g. 'Sales').
       // Rotation position is tracked durably in rotation_state, keyed by
       // this automation's id, so it survives across cold starts instead of
@@ -765,21 +929,17 @@ async function executeAction(action: string, context: Record<string, unknown>, d
         .order('id', { ascending: true })
       if (!members || members.length === 0) break
 
-      const { data: rotationRow } = await db
-        .from('rotation_state')
-        .select('last_index')
-        .eq('automation_id', automationId)
-        .maybeSingle()
-      const nextIndex = ((rotationRow?.last_index ?? -1) + 1) % members.length
-      const nextRep = members[nextIndex]
+      // Atomic — the increment happens inside the DB's UPSERT so two
+      // automations firing at nearly the same instant can't both read the
+      // same last_index and assign the same rep (see AUDIT.md #43).
+      const { data: nextIndex, error: rotationErr } = await db.rpc('next_rotation_index', {
+        p_automation_id: automationId,
+        p_member_count: members.length,
+      })
+      if (rotationErr || nextIndex === null || nextIndex === undefined) break
+      const nextRep = members[nextIndex % members.length]
 
       await db.from('crm_contacts').update({ owner_id: nextRep.id, owner: nextRep.name }).eq('id', contactId)
-      await db.from('rotation_state').upsert({
-        id: `rot-${automationId}`,
-        automation_id: automationId,
-        last_index: nextIndex,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'automation_id' })
       break
     }
 

@@ -24,6 +24,11 @@ export async function getGuidedActions(repName: string, repEmail: string, ownerI
   const now = new Date()
   const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000)
   const sevenDaysAhead = new Date(now.getTime() + 7 * 86400000)
+  // close_date is a date-only string ("2026-07-11"), parsed as UTC midnight —
+  // comparing it against `now` (the current instant) would exclude a deal
+  // closing today for the rest of the day. Compare against today's UTC
+  // midnight instead so "closing this week" actually includes today.
+  const todayUtcMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
 
   // 1 & 2. Stale open deals + deals closing this week — deals.assigned_rep is
   // a free-text name (no FK, unlike crm_contacts.owner_id), so this matches
@@ -48,7 +53,7 @@ export async function getGuidedActions(repName: string, repEmail: string, ownerI
     })
   }
 
-  const closingDeals = openDeals.filter(d => d.close_date && new Date(d.close_date) >= now && new Date(d.close_date) <= sevenDaysAhead)
+  const closingDeals = openDeals.filter(d => d.close_date && new Date(d.close_date) >= todayUtcMidnight && new Date(d.close_date) <= sevenDaysAhead)
   if (closingDeals.length > 0) {
     actions.push({
       id: 'closing-soon',

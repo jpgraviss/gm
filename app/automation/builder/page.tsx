@@ -236,14 +236,8 @@ function NodeConfigPanel({ node, onChange, onClose }: {
             <FieldLabel label="Subject Line">
               <input value={(config.subject as string) ?? ''} onChange={e => update('subject', e.target.value)} placeholder="e.g. Welcome to GravHub!" className="cfg-input" />
             </FieldLabel>
-            <FieldLabel label="Email Template">
-              <select value={(config.template as string) ?? ''} onChange={e => update('template', e.target.value)} className="cfg-input">
-                <option value="">Select template...</option>
-                <option value="welcome">Welcome Email — Sent to new contacts after signup</option>
-                <option value="follow_up">Follow Up — Check in after initial contact</option>
-                <option value="thank_you">Thank You — Post-meeting or post-purchase thank you</option>
-                <option value="onboarding">Onboarding — Getting started guide for new clients</option>
-              </select>
+            <FieldLabel label="Email Body">
+              <textarea rows={4} value={(config.body as string) ?? ''} onChange={e => update('body', e.target.value)} placeholder="Hi {{contact.name}}, ..." className="cfg-input resize-none" />
             </FieldLabel>
             <FieldLabel label="From Name">
               <input value={(config.fromName as string) ?? ''} onChange={e => update('fromName', e.target.value)} placeholder="GravHub" className="cfg-input" />
@@ -590,7 +584,7 @@ interface WorkflowRun {
   automation_id: string
   timestamp: string
   trigger_contact: { name: string; email: string }
-  status: 'success' | 'failed' | 'running'
+  status: 'success' | 'failed' | 'running' | 'waiting'
   actions_completed: number
   actions_total: number
   steps: RunStep[]
@@ -620,6 +614,13 @@ function StatusBadge({ status }: { status: WorkflowRun['status'] }) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-700">
         <AlertCircle size={10} /> Failed
+      </span>
+    )
+  }
+  if (status === 'waiting') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">
+        <Clock size={10} /> Waiting
       </span>
     )
   }
@@ -779,7 +780,8 @@ export default function AutomationBuilderPage() {
 
   useEffect(() => {
     if (!editId) return
-    fetch(`/api/automations`).then(r => r.ok ? r.json() : []).then((data: { id: string; name: string; trigger: string; actions: string[]; status: string }[]) => {
+    type LoadedAction = string | { type: string; config?: Record<string, unknown> }
+    fetch(`/api/automations`).then(r => r.ok ? r.json() : []).then((data: { id: string; name: string; trigger: string; actions: LoadedAction[]; status: string }[]) => {
       const auto = data.find((a: { id: string }) => a.id === editId)
       if (!auto) return
       setWorkflowName(auto.name)
@@ -796,13 +798,17 @@ export default function AutomationBuilderPage() {
         label: auto.trigger,
       })
 
-      for (const actionLabel of auto.actions) {
+      for (const rawAction of auto.actions) {
+        // Tolerates a legacy bare-string action (no config existed before
+        // AUDIT.md #12) alongside the new {type, config} shape.
+        const actionLabel = typeof rawAction === 'string' ? rawAction : rawAction.type
+        const actionConfig = typeof rawAction === 'string' ? {} : (rawAction.config ?? {})
         const actionKey = Object.entries(ACTION_TO_DB).find(([, v]) => v === actionLabel)?.[0] as ActionType | undefined
         rebuilt.push({
           id: uid(),
           type: 'action',
           subtype: actionKey,
-          config: {},
+          config: actionConfig,
           label: actionLabel,
         })
       }
@@ -875,7 +881,14 @@ export default function AutomationBuilderPage() {
     const actionNodes = nodes.filter(n => n.type === 'action')
 
     const triggerLabel = TRIGGER_TO_DB[triggerNode.subtype as TriggerType] ?? triggerNode.label
-    const actionLabels = actionNodes.map(n => ACTION_TO_DB[n.subtype as ActionType] ?? n.label)
+    // Per-action config (AUDIT.md #12) — each action now carries its own
+    // {type, config}, not just a bare label string. The engine translates
+    // config's field names into what it actually reads; see
+    // lib/automations-engine.ts's ACTION_CONFIG_ADAPTERS.
+    const actions = actionNodes.map(n => ({
+      type: ACTION_TO_DB[n.subtype as ActionType] ?? n.label,
+      config: n.config,
+    }))
 
     setSaving(true)
     try {
@@ -886,7 +899,7 @@ export default function AutomationBuilderPage() {
           body: JSON.stringify({
             name: workflowName,
             trigger: triggerLabel,
-            actions: actionLabels,
+            actions,
             status: status === 'Active' ? 'Active' : 'Paused',
           }),
         })
@@ -900,7 +913,7 @@ export default function AutomationBuilderPage() {
             id: `auto-${Date.now()}`,
             name: workflowName,
             trigger: triggerLabel,
-            actions: actionLabels,
+            actions,
             status: status === 'Active' ? 'Active' : 'Paused',
             runs: 0,
             lastRun: 'Never',

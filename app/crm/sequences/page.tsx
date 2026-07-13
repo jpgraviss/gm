@@ -567,24 +567,22 @@ export default function SequencesPage() {
 
             <div className="mb-6">
               <h4 className="text-sm font-bold text-gray-700 mb-3">Default Unenrollment Triggers</h4>
+              <p className="text-xs text-gray-500 mb-3">These run automatically across every sequence — not per-sequence configurable.</p>
               <div className="flex flex-col gap-2">
                 {[
-                  { label: 'Contact replies to sequence email', desc: 'Automatically unenroll when a reply is detected', default: true },
-                  { label: 'Meeting is booked', desc: 'Unenroll when contact books a meeting via calendar link', default: true },
-                  { label: 'Email bounces', desc: 'Unenroll and add to suppression list on hard bounce', default: true },
-                  { label: 'Company-level smart unenroll', desc: 'When one contact at a company replies, unenroll all contacts from that company', default: false },
+                  { label: 'Contact replies to sequence email', desc: 'Unenrolled on reply — but only detected on Gmail-sent emails from a rep with a connected Gmail account. Resend-sent sequences and reps without Gmail connected won’t trigger this yet.' },
+                  { label: 'Email bounces', desc: 'Unenrolled and added to the suppression list on a hard bounce or spam complaint' },
                 ].map(rule => (
                   <div key={rule.label} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                     <div>
                       <p className="text-sm font-medium text-gray-900">{rule.label}</p>
                       <p className="text-xs text-gray-500 mt-0.5">{rule.desc}</p>
                     </div>
-                    <div className={`w-10 h-6 rounded-full flex items-center px-1 cursor-pointer transition-colors ${rule.default ? 'bg-emerald-500 justify-end' : 'bg-gray-300 justify-start'}`}>
-                      <div className="w-4 h-4 rounded-full bg-white shadow" />
-                    </div>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 flex-shrink-0 ml-3">ALWAYS ON</span>
                   </div>
                 ))}
               </div>
+              <p className="text-xs text-gray-400 mt-3">Not yet available: unenrolling when a contact books a meeting, or unenrolling every contact at a company when one of them replies.</p>
             </div>
 
             <div>

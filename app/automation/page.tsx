@@ -12,7 +12,7 @@ interface Automation {
   id: string
   name: string
   trigger: string
-  actions: string[]
+  actions: { type: string; config: Record<string, unknown> }[]
   status: AutoStatus
   runs: number
   lastRun: string
@@ -146,7 +146,7 @@ function NewAutomationPanel({ onSave, onClose, initialName, initialTrigger, init
       id: `auto-${Date.now()}`,
       name: name.trim(),
       trigger,
-      actions: actions.filter(a => a.trim()),
+      actions: actions.filter(a => a.trim()).map(type => ({ type, config: {} })),
       status: 'Active',
       runs: 0,
       lastRun: 'Never',
@@ -432,7 +432,7 @@ export default function AutomationPage() {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {auto.actions.map((action, i) => (
                             <div key={i} className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1">
-                              <span className="text-[11px] text-gray-600">{action}</span>
+                              <span className="text-[11px] text-gray-600">{action.type}</span>
                             </div>
                           ))}
                         </div>

@@ -7,6 +7,7 @@ import { checkAllRanks } from '@/lib/rank-tracker'
 import { publishSocialPost } from '@/lib/social-publish'
 import { processScheduledEmails } from '@/lib/email-scheduler'
 import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender'
+import { syncGranolaNotes, isGranolaConfigured } from '@/lib/granola'
 
 /**
  * Cron endpoint — called on a schedule (e.g. every 6 hours via Vercel Cron).
@@ -153,6 +154,19 @@ export const GET = withErrorHandler('cron GET', async (req) => {
   } catch (err) {
     console.error('[cron] SEO report sending failed:', err)
     results.seoReports = { error: 'Failed' }
+  }
+
+  // 9. Granola meeting-notes sync — no-op until an API key is saved in
+  //    Settings > Integrations (lib/granola.ts).
+  try {
+    if (await isGranolaConfigured()) {
+      results.granola = await syncGranolaNotes()
+    } else {
+      results.granola = { skipped: true }
+    }
+  } catch (err) {
+    console.error('[cron] Granola sync failed:', err)
+    results.granola = { error: 'Failed' }
   }
 
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })
@@ -349,50 +363,105 @@ async function spawnRecurringTasks() {
   }
 }
 
+// automation_pending_steps has no status column — resume position is
+// tracked via step_index (an index into the automation's own actions
+// array), not a frozen remaining_actions snapshot. The row is claimed
+// atomically by deleting it: only the invocation whose DELETE actually
+// returns a row proceeds, so two overlapping cron ticks (or a retry)
+// can't both pick up and re-execute the same step (AUDIT.md #12/#13).
 async function resumePendingAutomationSteps() {
   const db = createServiceClient()
   const now = new Date().toISOString()
 
   const { data: pending } = await db
     .from('automation_pending_steps')
-    .select('*')
-    .eq('status', 'pending')
+    .select('id')
     .lte('resume_at', now)
     .limit(50)
 
   if (!pending?.length) return
 
   for (const step of pending) {
+    const { data: claimed } = await db
+      .from('automation_pending_steps')
+      .delete()
+      .eq('id', step.id)
+      .select('*')
+      .maybeSingle()
+    if (!claimed) continue
+
     try {
       const { data: automation } = await db
         .from('automations')
         .select('*')
-        .eq('id', step.automation_id)
+        .eq('id', claimed.automation_id)
         .single()
 
+      // The paused run's automation_runs row is sitting at status 'waiting'
+      // and would stay there forever if we just `continue` here — finalize
+      // it as failed so it's not silently indistinguishable from a run
+      // that's still genuinely in progress.
       if (!automation || automation.status !== 'Active') {
-        await db.from('automation_pending_steps').update({ status: 'cancelled' }).eq('id', step.id)
+        await db.from('automation_runs').update({
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+          error: !automation
+            ? 'Automation was deleted while a Wait step was pending'
+            : `Automation was ${automation.status?.toLowerCase() ?? 'paused'} while a Wait step was pending`,
+        }).eq('id', claimed.run_id).then(() => {}, () => {})
         continue
       }
 
-      const remainingActions = (step.remaining_actions as string[]) ?? []
-      const ctx = (step.context as Record<string, unknown>) ?? {}
+      // Re-fetched fresh from the automation's current actions, not a
+      // snapshot taken when the Wait fired — if the automation was edited
+      // while a step was pending, resume reflects the latest version.
+      const allActions = (automation.actions as unknown[]) ?? []
+      const remainingActions = allActions.slice((claimed.step_index as number) ?? 0)
+      const ctx = (claimed.context as Record<string, unknown>) ?? {}
 
-      for (const action of remainingActions) {
+      const { data: existingRun } = await db
+        .from('automation_runs')
+        .select('steps')
+        .eq('id', claimed.run_id)
+        .maybeSingle()
+      // Drop the trailing 'pending' placeholders the pause recorded for
+      // these exact actions — they're about to be replaced with real
+      // results, so keeping them would duplicate every remaining step.
+      const priorSteps = ((existingRun?.steps as { status: string }[]) ?? [])
+        .filter(s => s.status !== 'pending')
+
+      if (remainingActions.length > 0) {
         const { executeWorkflow } = await import('@/lib/automations-engine')
         await executeWorkflow(
           { ...automation, actions: remainingActions },
           'pending_resume',
           ctx,
           db,
+          true,
+          (claimed.step_index as number) ?? 0,
+          claimed.run_id as string,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          priorSteps as any,
         )
-        break
+      } else {
+        await db.from('automation_runs').update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        }).eq('id', claimed.run_id).then(() => {}, () => {})
       }
-
-      await db.from('automation_pending_steps').update({ status: 'completed' }).eq('id', step.id)
     } catch (err) {
+      // The pending-step row is already gone (claimed via delete above).
+      // executeWorkflow has its own internal try/catch around action
+      // execution, so a failure there already finalizes the run's own
+      // automation_runs row — this only fires for an error outside that
+      // (e.g. before executeWorkflow is even reached), which would
+      // otherwise leave the run stuck at 'waiting' forever.
+      await db.from('automation_runs').update({
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+        error: err instanceof Error ? err.message : String(err),
+      }).eq('id', claimed.run_id).then(() => {}, () => {})
       console.error(`[cron] Failed to resume pending step ${step.id}:`, err)
-      await db.from('automation_pending_steps').update({ status: 'failed' }).eq('id', step.id)
     }
   }
 }
@@ -415,19 +484,25 @@ async function checkTimeBasedTriggers() {
     fireAutomations('invoice_overdue', { invoiceId: inv.id, company: inv.company, ...inv })
   }
 
-  // Check for overdue invoices by 3+ days
+  // Check for overdue invoices by 3+ days — fires once per invoice when it
+  // crosses the threshold (overdue_3d_notified), not on every cron tick for
+  // as long as it stays unpaid (AUDIT.md #16 follow-up).
   const threeDaysAgo = new Date(today.getTime() - 3 * 86400000).toISOString().split('T')[0]
   const { data: overdue3 } = await db
     .from('invoices')
     .select('*')
     .eq('status', 'Overdue')
+    .eq('overdue_3d_notified', false)
     .lt('due_date', threeDaysAgo)
 
   for (const inv of overdue3 ?? []) {
+    await db.from('invoices').update({ overdue_3d_notified: true }).eq('id', inv.id)
     fireAutomations('invoice_overdue', { invoiceId: inv.id, company: inv.company, overdueDays: 3, ...inv })
   }
 
-  // Check renewals within 90 days
+  // Check renewals within 90 days — renewal_90 and renewal_30 each fire once
+  // per contract when it first crosses that window, not on every tick for
+  // the entire 60-90 day span (AUDIT.md #16 follow-up).
   const in90Days = new Date(today.getTime() + 90 * 86400000).toISOString().split('T')[0]
   const { data: renewals90 } = await db
     .from('contracts')
@@ -435,12 +510,17 @@ async function checkTimeBasedTriggers() {
     .lte('renewal_date', in90Days)
     .gte('renewal_date', todayStr)
     .in('status', ['Fully Executed', 'Active'])
+    .or('renewal_90_notified.eq.false,renewal_30_notified.eq.false')
 
   for (const c of renewals90 ?? []) {
     const daysUntil = Math.ceil((new Date(c.renewal_date).getTime() - today.getTime()) / 86400000)
     if (daysUntil <= 30) {
+      if (c.renewal_30_notified) continue
+      await db.from('contracts').update({ renewal_30_notified: true }).eq('id', c.id)
       fireAutomations('renewal_30', { contractId: c.id, company: c.company, daysUntil, ...c })
     } else {
+      if (c.renewal_90_notified) continue
+      await db.from('contracts').update({ renewal_90_notified: true }).eq('id', c.id)
       fireAutomations('renewal_90', { contractId: c.id, company: c.company, daysUntil, ...c })
     }
   }

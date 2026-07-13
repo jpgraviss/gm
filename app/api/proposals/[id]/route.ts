@@ -4,6 +4,7 @@ import { validate, validationError, PROPOSAL_STATUSES } from '@/lib/validation'
 import { fireAutomations } from '@/lib/automations-engine'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
+import { requirePortalClient } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,6 +50,23 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
   if (!result.valid) return validationError(result.error)
 
   const db = createServiceClient()
+
+  // The portal client's own Approvals page calls this route directly by id
+  // (not a company-scoped query), so without this check any authenticated
+  // caller — including a portal client for a different company — could
+  // PATCH any proposal. Staff pass through unconditionally.
+  const { data: currentProposal, error: currentErr } = await db
+    .from('proposals')
+    .select('company')
+    .eq('id', id)
+    .single()
+
+  if (currentErr || !currentProposal) {
+    return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
+  }
+
+  const denied = await requirePortalClient(req, currentProposal.company)
+  if (denied) return denied
 
   // Map camelCase body keys to snake_case columns
   const update: Record<string, unknown> = {}

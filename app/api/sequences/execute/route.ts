@@ -485,13 +485,20 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
       }
       const useVariantB = abVariant === 'B' && step.variantB
 
-      // Build merge context
+      // Resolve sender info (step overrides sequence overrides defaults)
+      const fromName = step.fromName ?? seq.from_name ?? settings.email.fromName
+      const fromEmail = step.fromEmail ?? seq.from_email ?? settings.email.fromEmail
+      const replyTo = step.replyTo ?? (rep?.email || settings.email.replyTo)
+
+      // Build merge context — {{sender_name}}/{{sender_email}} fall back to
+      // the same sequence/settings default fromName/fromEmail chain, not
+      // an empty string, when no assigned rep can be resolved (AUDIT #52).
       const mergeCtx: MergeContext = {
         contactName: enrollment.contact_name ?? '',
         contactEmail: enrollment.contact_email ?? '',
         company: enrollment.company ?? '',
-        senderName: rep?.name ?? '',
-        senderEmail: rep?.email ?? '',
+        senderName: rep?.name || fromName,
+        senderEmail: rep?.email || fromEmail,
       }
 
       // Apply merge fields to subject and body — variant B content when
@@ -501,11 +508,6 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
         mergeCtx,
       )
       const bodyText = replaceMergeFields((useVariantB ? step.variantB?.body : step.body) ?? '', mergeCtx)
-
-      // Resolve sender info (step overrides sequence overrides defaults)
-      const fromName = step.fromName ?? seq.from_name ?? settings.email.fromName
-      const fromEmail = step.fromEmail ?? seq.from_email ?? settings.email.fromEmail
-      const replyTo = step.replyTo ?? (rep?.email || settings.email.replyTo)
 
       // Resolve HTML template
       const template: HtmlTemplate = step.htmlTemplate ?? 'branded'

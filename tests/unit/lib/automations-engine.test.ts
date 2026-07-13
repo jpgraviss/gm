@@ -21,6 +21,7 @@ function createSupabaseChain(defaultResult = { data: null, error: null }) {
 
 let automationsResult: { data: unknown; error: unknown }
 const insertCalls: Record<string, unknown[]> = {}
+const updateCalls: Record<string, unknown[]> = {}
 
 const mockDb = {
   from: vi.fn((table: string) => {
@@ -29,13 +30,19 @@ const mockDb = {
       (chain._state as { _result: unknown })._result = automationsResult
       return chain
     }
-    // For any other table, capture inserts
+    // For any other table, capture inserts and updates
     const chain = createSupabaseChain()
     const origInsert = chain.insert as (data: unknown) => unknown
     chain.insert = vi.fn().mockImplementation((data: unknown) => {
       if (!insertCalls[table]) insertCalls[table] = []
       insertCalls[table].push(data)
       return origInsert(data)
+    })
+    const origUpdate = chain.update as (data: unknown) => unknown
+    chain.update = vi.fn().mockImplementation((data: unknown) => {
+      if (!updateCalls[table]) updateCalls[table] = []
+      updateCalls[table].push(data)
+      return origUpdate(data)
     })
     return chain
   }),
@@ -45,7 +52,7 @@ vi.mock('@/lib/supabase', () => ({
   createServiceClient: () => mockDb,
 }))
 
-import { fireAutomations } from '@/lib/automations-engine'
+import { fireAutomations, executeWorkflow } from '@/lib/automations-engine'
 
 function flushPromises() {
   return new Promise(resolve => setTimeout(resolve, 50))
@@ -56,9 +63,11 @@ describe('automations-engine', () => {
     vi.clearAllMocks()
     automationsResult = { data: [], error: null }
     for (const key of Object.keys(insertCalls)) delete insertCalls[key]
+    for (const key of Object.keys(updateCalls)) delete updateCalls[key]
   })
 
-  function setupAutomations(trigger: string, actions: string[], name = 'Test Auto') {
+  type RawAction = string | { type: string; config?: Record<string, unknown> }
+  function setupAutomations(trigger: string, actions: RawAction[], name = 'Test Auto') {
     automationsResult = {
       data: [{ id: 'auto-1', name, trigger, actions, status: 'Active', runs: 0 }],
       error: null,
@@ -227,5 +236,188 @@ describe('automations-engine', () => {
     // Should query automations but not proceed to actions
     expect(mockDb.from).toHaveBeenCalledWith('automations')
     expect(insertCalls['contracts']).toBeUndefined()
+  })
+
+  // AUDIT.md #13 — Wait must actually stop execution, not fall through to
+  // the next action in the same pass, and it must schedule a resume with a
+  // real automation_id/run_id (previously always blank, silently dropped).
+  it('Wait pauses execution and schedules a resume instead of running the next action', async () => {
+    setupAutomations('Contact Created', ['Add Tag', 'Wait', 'Create Task'])
+    fireAutomations('contact_created', {
+      company: 'Hotel India',
+      contactId: 'ct-9',
+      tag: 'nurture',
+    })
+    await flushPromises()
+
+    // The action before Wait ran.
+    expect(mockDb.from).toHaveBeenCalledWith('crm_contacts')
+    // Wait scheduled a real pending step. automation_pending_steps has no
+    // status/remaining_actions columns on the live table — resume position
+    // is step_index (an index into the automation's own actions), matching
+    // the real schema (information_schema.columns), not what an earlier
+    // migration file in this repo incorrectly assumed.
+    expect(insertCalls['automation_pending_steps']).toBeDefined()
+    expect(insertCalls['automation_pending_steps'][0]).toEqual(
+      expect.objectContaining({
+        automation_id: 'auto-1',
+        step_index: 2, // ['Add Tag', 'Wait', 'Create Task'] — resume at index 2
+      }),
+    )
+    const pendingRow = insertCalls['automation_pending_steps'][0] as { run_id: string }
+    expect(pendingRow.run_id).toBeTruthy()
+    // ...and did NOT fall through to execute the action after it.
+    expect(insertCalls['app_tasks']).toBeUndefined()
+  })
+
+  // Regression test for a bug an adversarial audit pass found in the
+  // step_index fix above: cron's resumePendingAutomationSteps() calls
+  // executeWorkflow with a TRUNCATED actions array (only what's left after
+  // the first Wait). Without indexOffset, a second Wait inside that
+  // resumed call would compute step_index relative to the truncated
+  // array's own loop-local index (0-based again), not the original
+  // 5-action automation cron re-slices from on the NEXT resume — causing
+  // already-executed actions to run a second time and the automation to
+  // loop on the same Wait forever, without ever reaching the final action.
+  it('a second Wait during a resumed run computes step_index against the ORIGINAL action list, not the resumed slice', async () => {
+    // Simulates exactly what cron's resumePendingAutomationSteps passes on
+    // resume: the automation's actions truncated to what's left (as if the
+    // original 5-action automation was [A0, Wait1, A2, Wait3, A4] and the
+    // first Wait already resumed at step_index 2), plus indexOffset=2 so
+    // the loop's local index 0/1/2 maps back to global index 2/3/4.
+    const resumedActions = ['Add Tag', 'Wait', 'Create Task']
+    await executeWorkflow(
+      { id: 'auto-1', name: 'Two-Wait Auto', trigger: 'Contact Created', actions: resumedActions, status: 'Active', runs: 0 },
+      'pending_resume',
+      { company: 'Mike Bravo', contactId: 'ct-77', tag: 'nurture' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockDb as any,
+      true,
+      2, // indexOffset — this resumed call starts at global index 2
+    )
+    await flushPromises()
+
+    expect(insertCalls['automation_pending_steps']).toBeDefined()
+    expect(insertCalls['automation_pending_steps'][0]).toEqual(
+      expect.objectContaining({
+        automation_id: 'auto-1',
+        // Wait is at local index 1 of resumedActions; correct global
+        // step_index is indexOffset(2) + 1 + 1 = 4, pointing at the real
+        // next action (Create Task) in the original 5-action array — NOT
+        // 2, which is the bug (local-index-only math re-pointing at the
+        // action that already ran this same resume pass).
+        step_index: 4,
+      }),
+    )
+  })
+
+  // AUDIT.md #12/#13 plan, finding on the pre-existing If/Else bug — the
+  // skip-remaining flag was set on a locally-scoped object the caller's
+  // loop never actually checked, so it never skipped anything in
+  // production. Confirms it now does.
+  it('If/Else with a false condition skips remaining actions', async () => {
+    setupAutomations('Contact Created', ['If/Else', 'Create Task'])
+    fireAutomations('contact_created', {
+      company: 'Juliett Corp',
+      conditionField: 'company',
+      conditionOperator: 'equals',
+      conditionValue: 'Not Juliett Corp',
+    })
+    await flushPromises()
+
+    expect(insertCalls['app_tasks']).toBeUndefined()
+  })
+
+  it('If/Else with a true condition runs remaining actions', async () => {
+    setupAutomations('Contact Created', ['If/Else', 'Create Task'])
+    fireAutomations('contact_created', {
+      company: 'Kilo LLC',
+      conditionField: 'company',
+      conditionOperator: 'equals',
+      conditionValue: 'Kilo LLC',
+    })
+    await flushPromises()
+
+    expect(insertCalls['app_tasks']).toBeDefined()
+  })
+
+  // AUDIT.md #12, the actual reported scenario — two actions of the same
+  // type must be able to carry two different values. Previously every
+  // action shared one automation-level context, so two "Add Tag" actions
+  // were indistinguishable.
+  it('two Add Tag actions with different per-action config apply distinct tags', async () => {
+    setupAutomations('Contact Created', [
+      { type: 'Add Tag', config: { tag: 'nurture' } },
+      { type: 'Add Tag', config: { tag: 'high-value' } },
+    ])
+    fireAutomations('contact_created', { company: 'Lima Partners', contactId: 'ct-22' })
+    await flushPromises()
+
+    expect(updateCalls['crm_contacts']).toBeDefined()
+    const tagUpdates = (updateCalls['crm_contacts'] as { tags: string[] }[]).map(u => u.tags[0])
+    expect(tagUpdates).toEqual(['nurture', 'high-value'])
+  })
+
+  // AUDIT.md #12/#13 plan, key-translation finding — the builder UI's
+  // config field names (duration/unit) don't match the engine's context
+  // keys (waitDuration/waitUnit) for 7 of 9 configurable action types.
+  // Confirms the adapter layer actually translates them, using Wait's
+  // resume_at as the observable proof (a wrong translation would silently
+  // fall back to the 1-hour default instead of the configured 30 minutes).
+  it('per-action config is translated into the keys each action actually reads (Wait duration/unit)', async () => {
+    setupAutomations('Contact Created', [
+      { type: 'Wait', config: { duration: 30, unit: 'minutes' } },
+    ])
+    const before = Date.now()
+    fireAutomations('contact_created', { company: 'Mike Ventures', contactId: 'ct-30' })
+    await flushPromises()
+
+    expect(insertCalls['automation_pending_steps']).toBeDefined()
+    const pendingRow = insertCalls['automation_pending_steps'][0] as { resume_at: string }
+    const resumeMs = new Date(pendingRow.resume_at).getTime() - before
+    // ~30 minutes, generously bounded — would be ~60 minutes (the default)
+    // if the config translation silently failed.
+    expect(resumeMs).toBeGreaterThan(29 * 60_000)
+    expect(resumeMs).toBeLessThan(31 * 60_000)
+  })
+
+  // A bare string action alongside an object-shape action in the same
+  // automation must keep working — the migration backfills every existing
+  // row to {type, config:{}}, but the engine's normalizeAction() defensive
+  // fallback should tolerate either shape regardless.
+  it('tolerates a mix of legacy bare-string and new object-shape actions', async () => {
+    setupAutomations('Contact Created', ['Add Tag', { type: 'Create Task', config: { title: 'Follow up' } }])
+    fireAutomations('contact_created', { company: 'November Inc', contactId: 'ct-31', tag: 'legacy' })
+    await flushPromises()
+
+    expect(insertCalls['app_tasks']).toBeDefined()
+    expect(insertCalls['app_tasks'][0]).toEqual(expect.objectContaining({ title: 'Follow up' }))
+  })
+
+  // AUDIT.md #46 — Rotate Contact Owner reassigns real CRM ownership and
+  // must not be forgeable via the public, unauthenticated funnel-submit /
+  // generic-forms endpoints (both stamp _publicSource: true on the trigger
+  // context they fire).
+  it('Rotate Contact Owner refuses to execute when triggered from a public source', async () => {
+    setupAutomations('Form Submitted', ['Rotate Contact Owner'])
+    fireAutomations('form_submitted', {
+      contactId: 'ct-40',
+      unit: 'Sales',
+      _publicSource: true,
+    })
+    await flushPromises()
+
+    expect(mockDb.from).not.toHaveBeenCalledWith('team_members')
+  })
+
+  it('Rotate Contact Owner executes normally when not from a public source', async () => {
+    setupAutomations('Form Submitted', ['Rotate Contact Owner'])
+    fireAutomations('form_submitted', {
+      contactId: 'ct-41',
+      unit: 'Sales',
+    })
+    await flushPromises()
+
+    expect(mockDb.from).toHaveBeenCalledWith('team_members')
   })
 })

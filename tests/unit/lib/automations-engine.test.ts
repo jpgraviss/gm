@@ -352,4 +352,31 @@ describe('automations-engine', () => {
     expect(insertCalls['app_tasks']).toBeDefined()
     expect(insertCalls['app_tasks'][0]).toEqual(expect.objectContaining({ title: 'Follow up' }))
   })
+
+  // AUDIT.md #46 — Rotate Contact Owner reassigns real CRM ownership and
+  // must not be forgeable via the public, unauthenticated funnel-submit /
+  // generic-forms endpoints (both stamp _publicSource: true on the trigger
+  // context they fire).
+  it('Rotate Contact Owner refuses to execute when triggered from a public source', async () => {
+    setupAutomations('Form Submitted', ['Rotate Contact Owner'])
+    fireAutomations('form_submitted', {
+      contactId: 'ct-40',
+      unit: 'Sales',
+      _publicSource: true,
+    })
+    await flushPromises()
+
+    expect(mockDb.from).not.toHaveBeenCalledWith('team_members')
+  })
+
+  it('Rotate Contact Owner executes normally when not from a public source', async () => {
+    setupAutomations('Form Submitted', ['Rotate Contact Owner'])
+    fireAutomations('form_submitted', {
+      contactId: 'ct-41',
+      unit: 'Sales',
+    })
+    await flushPromises()
+
+    expect(mockDb.from).toHaveBeenCalledWith('team_members')
+  })
 })

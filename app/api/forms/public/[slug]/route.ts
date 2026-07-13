@@ -156,6 +156,9 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
     submissionId,
     contactId,
     data: body,
+    // Public, unauthenticated endpoint — see the matching comment in
+    // funnel-submit/route.ts (AUDIT.md #46).
+    _publicSource: true,
   })
 
   if (Array.isArray(form.notify_emails) && form.notify_emails.length > 0) {

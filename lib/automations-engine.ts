@@ -862,6 +862,15 @@ async function executeAction(
     }
 
     case 'Rotate Contact Owner': {
+      // Reassigns real CRM ownership — refuse when the trigger came from a
+      // public, unauthenticated endpoint (funnel-submit / generic public
+      // forms), which can be reached by anyone who knows a funnel slug and
+      // an existing contact's email. Enroll in Sequence stays allowed from
+      // public triggers (worst case: an unwanted nurture email), but
+      // reassigning who owns a customer relationship shouldn't be forgeable
+      // by a spoofed public form submission (AUDIT.md #46).
+      if (context._publicSource) break
+
       // config.unit: which team_members.unit to rotate across (e.g. 'Sales').
       // Rotation position is tracked durably in rotation_state, keyed by
       // this automation's id, so it survives across cold starts instead of

@@ -62,7 +62,18 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
   // Only apply to API routes
   if (!pathname.startsWith('/api/')) return NextResponse.next()
 
+  // AUDIT.md #32 — every other route under /api/wordpress/seo/ is called by
+  // the WordPress plugin itself via a pre-shared X-GravHub-Key (immune to
+  // CSRF/cross-origin by construction, since a browser can't forge that
+  // header), which is why the whole prefix is exempt below. This one route
+  // is the exception: it's staff-only, cookie-authenticated (requireRole),
+  // and reassigns which client a connected site is billed against — a
+  // browser holding a logged-in staff session absolutely can be tricked
+  // into firing this cross-site, so it alone must not get the exemption.
+  const CSRF_NON_EXEMPT_ROUTES = new Set(['PATCH /api/wordpress/seo/health'])
+
   const isPublicRoute = PUBLIC_PREFIXES.some(p => pathname.startsWith(p))
+    && !CSRF_NON_EXEMPT_ROUTES.has(`${req.method} ${pathname}`)
 
   // ── CSRF protection for state-changing requests ─────────────────────────
   // Public routes are intentionally exempt — they're embedded on external

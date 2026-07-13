@@ -70,10 +70,20 @@ describe('POST /api/deals', () => {
     expect(res.status).toBe(400)
   })
 
-  it('rejects invalid stage', async () => {
+  it('accepts any stage string since pipelines/stages are user-defined, not a fixed enum', async () => {
     const req = new NextRequest(new URL('http://localhost/api/deals'), {
       method: 'POST',
-      body: JSON.stringify({ company: 'Test', stage: 'FakeStage' }),
+      body: JSON.stringify({ company: 'Test', stage: 'Some Custom Pipeline Stage' }),
+    })
+
+    const res = await POST(req)
+    expect(res.status).toBe(201)
+  })
+
+  it('rejects an overlong stage string', async () => {
+    const req = new NextRequest(new URL('http://localhost/api/deals'), {
+      method: 'POST',
+      body: JSON.stringify({ company: 'Test', stage: 'x'.repeat(101) }),
     })
 
     const res = await POST(req)

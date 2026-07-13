@@ -36,6 +36,9 @@ export const POST = withErrorHandler('wordpress/seo/scores POST', async (req) =>
       page_title: pageTitle,
       score: p.score as number,
       issues: (p.issues ?? []) as unknown[],
+      word_count: (p.word_count ?? p.wordCount ?? null) as number | null,
+      readability_score: (p.readability_score ?? p.readabilityScore ?? null) as number | null,
+      focus_keyword: (p.focus_keyword ?? p.focusKeyword ?? null) as string | null,
       checked_at: now,
     }
   })

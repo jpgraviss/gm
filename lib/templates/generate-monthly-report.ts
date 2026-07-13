@@ -38,6 +38,14 @@ export interface MonthlyReportMetrics {
     uptimePercent: number
     incidents: number
   }
+  wordpressSeo?: {
+    averageScore: number
+    totalPages: number
+    scoreDistribution: { green: number; yellow: number; red: number }
+    pluginUpdates: number
+    securityIssues: string[]
+    worstPages: Array<{ path: string; title: string | null; score: number }>
+  }
 }
 
 export interface MonthlyReportData {
@@ -132,6 +140,9 @@ export function generateMonthlyReportHtml(data: MonthlyReportData, settings?: Ap
     summaryCards += metricCard('Sites', metrics.uptime.sitesMonitored.toString(), '', primaryColor)
     summaryCards += metricCard('Incidents', metrics.uptime.incidents.toString(), '', primaryColor)
   }
+  if (metrics.wordpressSeo) {
+    summaryCards += metricCard('Website SEO Score', `${metrics.wordpressSeo.averageScore}/100`, '', primaryColor)
+  }
 
   let rankingSection = ''
   if (metrics.ranking && metrics.ranking.keywords.length > 0) {
@@ -171,6 +182,33 @@ export function generateMonthlyReportHtml(data: MonthlyReportData, settings?: Ap
           <td style="font-size:14px;color:${brand.ink};text-align:right;font-family:'Montserrat',sans-serif;">Total: <strong>${metrics.reputation.totalReviews}</strong>${changeIndicator(metrics.reputation.totalReviews, metrics.reputation.previousTotalReviews)}</td>
         </tr>
       </table>
+    </td></tr>`
+  }
+
+  let wordpressSeoSection = ''
+  if (metrics.wordpressSeo) {
+    const wp = metrics.wordpressSeo
+    const scoreColor = wp.averageScore >= 80 ? '#059669' : wp.averageScore >= 50 ? '#d97706' : '#dc2626'
+    const worstPagesHtml = wp.worstPages.length
+      ? wp.worstPages.slice(0, 3).map(p =>
+          `<tr><td style="padding:3px 0;font-size:13px;color:${brand.ink};font-family:'Montserrat',sans-serif;">${p.title || p.path}</td><td style="padding:3px 0;font-size:13px;color:${brand.stone};text-align:right;font-family:'Montserrat',sans-serif;">${p.score}/100</td></tr>`
+        ).join('')
+      : ''
+    const securityHtml = wp.securityIssues.length
+      ? `<p style="margin:10px 0 0;font-size:12px;color:#dc2626;font-family:'Montserrat',sans-serif;">&#9888; ${wp.securityIssues.join(' &middot; ')}</p>`
+      : ''
+    wordpressSeoSection = `
+    <tr><td style="padding:24px 32px 0;">
+      <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:${primaryColor};text-transform:uppercase;letter-spacing:0.06em;font-family:'Syncopate',sans-serif;">Website SEO Health</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="font-size:14px;color:${brand.ink};font-family:'Montserrat',sans-serif;">Avg. Page Score: <strong style="color:${scoreColor};">${wp.averageScore}/100</strong></td>
+          <td style="font-size:14px;color:${brand.ink};text-align:center;font-family:'Montserrat',sans-serif;">Pages Scanned: <strong>${wp.totalPages}</strong></td>
+          <td style="font-size:14px;color:${brand.ink};text-align:right;font-family:'Montserrat',sans-serif;">Plugin Updates: <strong style="color:${wp.pluginUpdates > 0 ? '#d97706' : brand.ink};">${wp.pluginUpdates}</strong></td>
+        </tr>
+      </table>
+      ${worstPagesHtml ? `<p style="margin:12px 0 4px;font-size:12px;color:${brand.stone};text-transform:uppercase;letter-spacing:0.05em;font-family:'Montserrat',sans-serif;">Pages Needing Attention</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${worstPagesHtml}</table>` : ''}
+      ${securityHtml}
     </td></tr>`
   }
 
@@ -215,6 +253,9 @@ ${rankingSection}
 
 <!-- Reputation -->
 ${reputationSection}
+
+<!-- Website SEO Health -->
+${wordpressSeoSection}
 
 <!-- Recommendations -->
 <tr><td style="padding:24px 32px 0;background:#ffffff;">

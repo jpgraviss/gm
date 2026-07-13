@@ -1298,6 +1298,14 @@ export default function SequenceDetailPage() {
           })()}
           onSave={handleSaveStep}
           onClose={() => setEditingStep(null)}
+          sequenceName={sequence.name}
+          targetSegment={sequence.targetSegment}
+          stepPosition={editingStep === 'new' ? sequence.steps.length + 1 : sequence.steps.findIndex(s => s.id === editingStep.id) + 1}
+          totalSteps={editingStep === 'new' ? sequence.steps.length + 1 : sequence.steps.length}
+          previousSubjects={(() => {
+            const idx = editingStep === 'new' ? sequence.steps.length : sequence.steps.findIndex(s => s.id === editingStep.id)
+            return sequence.steps.slice(0, idx).filter(s => s.type === 'email' && s.subject).map(s => s.subject as string)
+          })()}
         />
       )}
 

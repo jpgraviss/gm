@@ -483,6 +483,22 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
     } catch { console.warn('Failed to persist activity to server') }
   }
 
+  async function handleUpdateActivity(id: string, updates: { title: string; body: string }) {
+    const prev = localActivities
+    setLocalActivities(prevList => prevList.map(a => a.id === id ? { ...a, title: updates.title, body: updates.body } : a))
+    try {
+      const res = await fetch(`/api/crm/activities/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setLocalActivities(prev)
+      toast('Failed to save changes', 'error')
+    }
+  }
+
   // Cross-linked data
   const companyContacts = crmContacts.filter(c => c.companyId === company.id)
   const draftRecipient = companyContacts.find(c => c.id === aiDraftRecipientId)
@@ -1083,7 +1099,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y bg-white"
                 />
               </div>
-              <ActivityTimeline activities={localActivities} />
+              <ActivityTimeline activities={localActivities} onUpdate={handleUpdateActivity} />
             </div>
           )}
 

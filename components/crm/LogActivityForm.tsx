@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { PhoneCall, Mail, Video, StickyNote, CheckSquare, X } from 'lucide-react'
+import { PhoneCall, Mail, Video, StickyNote, NotebookPen, CheckSquare, X } from 'lucide-react'
 import type { ActivityType } from '@/lib/types'
 
 export interface LoggedActivity {
@@ -17,11 +17,12 @@ export interface LoggedActivity {
 }
 
 const typeOptions: { type: ActivityType; label: string; icon: React.ReactNode; color: string }[] = [
-  { type: 'call',    label: 'Call',    icon: <PhoneCall size={13} />,  color: '#3b82f6' },
-  { type: 'email',   label: 'Email',   icon: <Mail size={13} />,       color: '#f59e0b' },
-  { type: 'meeting', label: 'Meeting', icon: <Video size={13} />,      color: '#8b5cf6' },
-  { type: 'note',    label: 'Note',    icon: <StickyNote size={13} />, color: '#6b7280' },
-  { type: 'task',    label: 'Task',    icon: <CheckSquare size={13} />,color: '#10b981' },
+  { type: 'call',      label: 'Call',       icon: <PhoneCall size={13} />,   color: '#3b82f6' },
+  { type: 'email',     label: 'Email',      icon: <Mail size={13} />,        color: '#f59e0b' },
+  { type: 'meeting',   label: 'Meeting',    icon: <Video size={13} />,       color: '#8b5cf6' },
+  { type: 'note',      label: 'Note',       icon: <StickyNote size={13} />,  color: '#6b7280' },
+  { type: 'call_note', label: 'Call Notes', icon: <NotebookPen size={13} />, color: '#0ea5e9' },
+  { type: 'task',      label: 'Task',       icon: <CheckSquare size={13} />, color: '#10b981' },
 ]
 
 interface Props {
@@ -92,9 +93,9 @@ export default function LogActivityForm({ onSave, onCancel, authorName = 'You' }
       <textarea
         value={body}
         onChange={e => setBody(e.target.value)}
-        placeholder={`${selected.label} notes...`}
-        className="w-full text-sm border border-gray-200 rounded-lg p-2.5 text-gray-700 bg-white outline-none resize-none leading-relaxed"
-        rows={3}
+        placeholder={actType === 'call_note' ? 'Paste the call transcript or notes here...' : `${selected.label} notes...`}
+        className="w-full text-sm border border-gray-200 rounded-lg p-2.5 text-gray-700 bg-white outline-none resize-y leading-relaxed whitespace-pre-wrap"
+        rows={actType === 'call_note' ? 10 : 3}
       />
 
       {/* Outcome + Next step */}

@@ -26,7 +26,7 @@ import {
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
   PhoneCall, Video, Pencil, Trash2, Upload, Eye, MessageSquare, MousePointerClick,
   Flame, Thermometer, Snowflake, Sparkles, Brain, Wand2, GitMerge, Download, Tag, ArrowUpDown,
-  MapPin, Smartphone,
+  MapPin, Smartphone, NotebookPen, Check,
 } from 'lucide-react'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
 import BulkActionBar from '@/components/ui/BulkActionBar'
@@ -65,6 +65,7 @@ const timelineTypeConfig: Record<string, { icon: React.ReactNode; label: string;
   ticket_created:   { icon: <MessageSquare size={14} />,     label: 'Ticket Created',    color: '#f97316' },
   deal_updated:     { icon: <TrendingUp size={14} />,        label: 'Deal Updated',      color: '#3b82f6' },
   note_added:       { icon: <StickyNote size={14} />,        label: 'Note Added',        color: '#6b7280' },
+  call_note:        { icon: <NotebookPen size={14} />,       label: 'Call Notes',        color: '#0ea5e9' },
   task_completed:   { icon: <CheckSquare size={14} />,       label: 'Task Completed',    color: '#10b981' },
   call:             { icon: <PhoneCall size={14} />,         label: 'Call',              color: '#3b82f6' },
   meeting:          { icon: <Video size={14} />,             label: 'Meeting',           color: '#8b5cf6' },
@@ -78,6 +79,7 @@ interface TimelineEntry {
   description?: string
   timestamp: string
   metadata?: Record<string, unknown>
+  editable?: boolean
 }
 
 function formatRelativeTime(ts: string): string {
@@ -398,6 +400,33 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   const [moreMenu, setMoreMenu] = useState(false)
   const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([])
   const [timelineLoading, setTimelineLoading] = useState(false)
+  const [expandedEntryIds, setExpandedEntryIds] = useState<Set<string>>(new Set())
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
+  const [entryDraftTitle, setEntryDraftTitle] = useState('')
+  const [entryDraftBody, setEntryDraftBody] = useState('')
+  const [savingEntry, setSavingEntry] = useState(false)
+
+  async function handleUpdateActivity(id: string, updates: { title: string; body: string }) {
+    const prevTimeline = timelineEntries
+    const prevLocal = localActivities
+    setSavingEntry(true)
+    setTimelineEntries(prev => prev.map(e => e.id === id ? { ...e, title: updates.title, description: updates.body } : e))
+    setLocalActivities(prev => prev.map(a => a.id === id ? { ...a, title: updates.title, body: updates.body } : a))
+    try {
+      const res = await fetch(`/api/crm/activities/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      if (!res.ok) throw new Error()
+      setEditingEntryId(null)
+    } catch {
+      setTimelineEntries(prevTimeline)
+      setLocalActivities(prevLocal)
+      toast('Failed to save changes', 'error')
+    }
+    setSavingEntry(false)
+  }
   const [engagementScore, setEngagementScore] = useState(0)
   const [engagementBreakdown, setEngagementBreakdown] = useState({ emailsOpened: 0, linksClicked: 0, proposalsViewed: 0, meetings: 0 })
   const [engagementPoints, setEngagementPoints] = useState({ emailOpened: 5, linkClicked: 10, proposalViewed: 15, meetingHeld: 20 })
@@ -928,11 +957,12 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                         .filter(a => !timelineEntries.some(t => t.id === a.id))
                         .map(a => ({
                           id: a.id,
-                          type: a.type === 'call' ? 'call' : a.type === 'meeting' ? 'meeting' : a.type === 'note' ? 'note_added' : a.type === 'deal' ? 'deal_updated' : a.type === 'email' ? 'email_sent' : 'activity',
+                          type: a.type === 'call' ? 'call' : a.type === 'meeting' ? 'meeting' : a.type === 'note' ? 'note_added' : a.type === 'call_note' ? 'call_note' : a.type === 'deal' ? 'deal_updated' : a.type === 'email' ? 'email_sent' : 'activity',
                           title: a.title,
                           description: a.body,
                           timestamp: a.timestamp,
                           metadata: { user: a.user, outcome: a.outcome, duration: a.duration },
+                          editable: true,
                         } as TimelineEntry)),
                     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
@@ -971,16 +1001,71 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                                 </div>
                                 <div className="flex-1 pb-4">
                                   <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-medium text-gray-900">{entry.title}</p>
-                                      <span className="text-[10px] font-medium" style={{ color: cfg.color }}>{cfg.label}</span>
+                                    {editingEntryId === entry.id ? (
+                                      <input
+                                        value={entryDraftTitle}
+                                        onChange={e => setEntryDraftTitle(e.target.value)}
+                                        className="text-sm font-medium text-gray-900 border border-gray-200 rounded-lg px-2 py-1 flex-1 outline-none focus:ring-2 focus:ring-emerald-500"
+                                      />
+                                    ) : (
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-medium text-gray-900">{entry.title}</p>
+                                        <span className="text-[10px] font-medium" style={{ color: cfg.color }}>{cfg.label}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      <span className="text-[11px] text-gray-400 mt-0.5">
+                                        {formatRelativeTime(entry.timestamp)}
+                                      </span>
+                                      {entry.editable && editingEntryId !== entry.id && (
+                                        <button
+                                          onClick={() => { setEditingEntryId(entry.id); setEntryDraftTitle(entry.title); setEntryDraftBody(entry.description ?? '') }}
+                                          className="text-gray-300 hover:text-gray-600"
+                                        >
+                                          <Pencil size={11} />
+                                        </button>
+                                      )}
                                     </div>
-                                    <span className="text-[11px] text-gray-400 flex-shrink-0 mt-0.5">
-                                      {formatRelativeTime(entry.timestamp)}
-                                    </span>
                                   </div>
-                                  {entry.description && (
-                                    <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">{entry.description}</p>
+                                  {editingEntryId === entry.id ? (
+                                    <div className="mt-1.5">
+                                      <textarea
+                                        value={entryDraftBody}
+                                        onChange={e => setEntryDraftBody(e.target.value)}
+                                        rows={6}
+                                        className="w-full text-xs text-gray-700 border border-gray-200 rounded-lg p-2 outline-none focus:ring-2 focus:ring-emerald-500 resize-y whitespace-pre-wrap"
+                                      />
+                                      <div className="flex gap-2 mt-1.5">
+                                        <button
+                                          onClick={() => handleUpdateActivity(entry.id, { title: entryDraftTitle.trim(), body: entryDraftBody })}
+                                          disabled={savingEntry || !entryDraftTitle.trim()}
+                                          className="flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900 disabled:opacity-40"
+                                        >
+                                          <Check size={12} /> Save
+                                        </button>
+                                        <button onClick={() => setEditingEntryId(null)} className="flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-gray-700">
+                                          <X size={12} /> Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : entry.description && (
+                                    <div>
+                                      <p className={`text-xs text-gray-500 mt-1 leading-relaxed whitespace-pre-wrap ${expandedEntryIds.has(entry.id) ? '' : 'line-clamp-2'}`}>
+                                        {entry.description}
+                                      </p>
+                                      {entry.description.length > 140 && (
+                                        <button
+                                          onClick={() => setExpandedEntryIds(prev => {
+                                            const next = new Set(prev)
+                                            if (next.has(entry.id)) next.delete(entry.id); else next.add(entry.id)
+                                            return next
+                                          })}
+                                          className="text-[11px] font-medium text-emerald-700 hover:text-emerald-900 mt-0.5"
+                                        >
+                                          {expandedEntryIds.has(entry.id) ? 'Show less' : 'Show more'}
+                                        </button>
+                                      )}
+                                    </div>
                                   )}
                                   {entry.metadata && typeof entry.metadata === 'object' && (
                                     <div className="flex flex-wrap gap-1.5 mt-1.5">

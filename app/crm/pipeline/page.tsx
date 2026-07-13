@@ -355,8 +355,8 @@ function DealPanel({
         .slice(0, 8)
     : linkedContacts.slice(0, 8)
 
-  function handleSaveActivity(activity: LoggedActivity) {
-    setLocalActivities(prev => [{
+  async function handleSaveActivity(activity: LoggedActivity) {
+    const entry = {
       id: activity.id,
       type: activity.type,
       title: activity.title,
@@ -368,9 +368,36 @@ function DealPanel({
       duration: activity.duration,
       companyId: company?.id,
       companyName: deal.company,
-    }, ...prev])
+      dealId: deal.id,
+    }
+    setLocalActivities(prev => [entry, ...prev])
     setLoggingActivity(false)
     setTab('activity')
+    // Previously never persisted — logging an activity from the deal panel
+    // only ever updated local state, so it silently vanished on refresh.
+    try {
+      await fetch('/api/crm/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      })
+    } catch { console.warn('Failed to persist activity to server') }
+  }
+
+  async function handleUpdateActivity(id: string, updates: { title: string; body: string }) {
+    const prev = localActivities
+    setLocalActivities(prevList => prevList.map(a => a.id === id ? { ...a, title: updates.title, body: updates.body } : a))
+    try {
+      const res = await fetch(`/api/crm/activities/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setLocalActivities(prev)
+      toast('Failed to save changes', 'error')
+    }
   }
 
   return (
@@ -718,7 +745,7 @@ function DealPanel({
           )}
 
           {tab === 'activity' && (
-            <ActivityTimeline activities={localActivities} />
+            <ActivityTimeline activities={localActivities} onUpdate={handleUpdateActivity} />
           )}
 
           {tab === 'tasks' && (

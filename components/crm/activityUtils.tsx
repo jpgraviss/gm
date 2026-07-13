@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import {
-  PhoneCall, Mail, Video, StickyNote, CheckSquare,
-  TrendingUp, ScrollText, DollarSign, FileText, Clock,
+  PhoneCall, Mail, Video, StickyNote, NotebookPen, CheckSquare,
+  TrendingUp, ScrollText, DollarSign, FileText, Clock, Pencil, Check, X,
 } from 'lucide-react'
 import type { ActivityType, CRMActivity } from '@/lib/types'
 
@@ -23,18 +24,48 @@ export function InfoRow({
 }
 
 export const activityConfig: Record<ActivityType, { icon: React.ReactNode; color: string }> = {
-  call:     { icon: <PhoneCall size={14} />,   color: '#3b82f6' },
-  email:    { icon: <Mail size={14} />,         color: '#f59e0b' },
-  meeting:  { icon: <Video size={14} />,        color: '#8b5cf6' },
-  note:     { icon: <StickyNote size={14} />,   color: '#6b7280' },
-  task:     { icon: <CheckSquare size={14} />,  color: '#10b981' },
-  deal:     { icon: <TrendingUp size={14} />,   color: '#015035' },
-  contract: { icon: <ScrollText size={14} />,   color: '#f97316' },
-  invoice:  { icon: <DollarSign size={14} />,   color: '#ef4444' },
-  proposal: { icon: <FileText size={14} />,     color: '#6366f1' },
+  call:      { icon: <PhoneCall size={14} />,   color: '#3b82f6' },
+  email:     { icon: <Mail size={14} />,         color: '#f59e0b' },
+  meeting:   { icon: <Video size={14} />,        color: '#8b5cf6' },
+  note:      { icon: <StickyNote size={14} />,   color: '#6b7280' },
+  call_note: { icon: <NotebookPen size={14} />,  color: '#0ea5e9' },
+  task:      { icon: <CheckSquare size={14} />,  color: '#10b981' },
+  deal:      { icon: <TrendingUp size={14} />,   color: '#015035' },
+  contract:  { icon: <ScrollText size={14} />,   color: '#f97316' },
+  invoice:   { icon: <DollarSign size={14} />,   color: '#ef4444' },
+  proposal:  { icon: <FileText size={14} />,     color: '#6366f1' },
 }
 
-export function ActivityTimeline({ activities }: { activities: CRMActivity[] }) {
+export function ActivityTimeline({
+  activities, onUpdate,
+}: {
+  activities: CRMActivity[]
+  // Optional — when provided, each activity gets an inline edit affordance
+  // (pencil -> title/body textarea -> save/cancel) instead of being static.
+  onUpdate?: (id: string, updates: { title: string; body: string }) => void | Promise<void>
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draftTitle, setDraftTitle] = useState('')
+  const [draftBody, setDraftBody] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  function startEdit(act: CRMActivity) {
+    setEditingId(act.id)
+    setDraftTitle(act.title)
+    setDraftBody(act.body ?? '')
+  }
+
+  async function saveEdit(id: string) {
+    if (!onUpdate) return
+    setSaving(true)
+    try {
+      await onUpdate(id, { title: draftTitle.trim(), body: draftBody })
+      setEditingId(null)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (activities.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-8">No activities logged.</p>
   }
@@ -42,6 +73,7 @@ export function ActivityTimeline({ activities }: { activities: CRMActivity[] }) 
     <div className="flex flex-col">
       {activities.map((act, idx) => {
         const cfg = activityConfig[act.type]
+        const isEditing = editingId === act.id
         return (
           <div key={act.id} className="flex gap-3">
             <div className="flex flex-col items-center">
@@ -57,7 +89,15 @@ export function ActivityTimeline({ activities }: { activities: CRMActivity[] }) 
             </div>
             <div className="flex-1 pb-5">
               <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium text-gray-900">{act.title}</p>
+                {isEditing ? (
+                  <input
+                    value={draftTitle}
+                    onChange={e => setDraftTitle(e.target.value)}
+                    className="text-sm font-medium text-gray-900 border border-gray-200 rounded-lg px-2 py-1 flex-1 outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                ) : (
+                  <p className="text-sm font-medium text-gray-900">{act.title}</p>
+                )}
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {act.duration && (
                     <span className="text-[10px] text-gray-400 flex items-center gap-1">
@@ -67,10 +107,38 @@ export function ActivityTimeline({ activities }: { activities: CRMActivity[] }) 
                   <span className="text-[11px] text-gray-400">
                     {new Date(act.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </span>
+                  {onUpdate && !isEditing && (
+                    <button onClick={() => startEdit(act)} className="text-gray-300 hover:text-gray-600">
+                      <Pencil size={12} />
+                    </button>
+                  )}
                 </div>
               </div>
-              {act.body && (
-                <p className="text-sm text-gray-600 mt-1 leading-relaxed">{act.body}</p>
+              {isEditing ? (
+                <div className="mt-1.5">
+                  <textarea
+                    value={draftBody}
+                    onChange={e => setDraftBody(e.target.value)}
+                    rows={6}
+                    className="w-full text-sm text-gray-700 border border-gray-200 rounded-lg p-2 outline-none focus:ring-2 focus:ring-emerald-500 resize-y whitespace-pre-wrap"
+                  />
+                  <div className="flex gap-2 mt-1.5">
+                    <button
+                      onClick={() => saveEdit(act.id)}
+                      disabled={saving || !draftTitle.trim()}
+                      className="flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900 disabled:opacity-40"
+                    >
+                      <Check size={12} /> Save
+                    </button>
+                    <button onClick={() => setEditingId(null)} className="flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-gray-700">
+                      <X size={12} /> Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                act.body && (
+                  <p className="text-sm text-gray-600 mt-1 leading-relaxed whitespace-pre-wrap">{act.body}</p>
+                )
               )}
               <div className="flex flex-wrap gap-2 mt-2">
                 {act.outcome && (

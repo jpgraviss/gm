@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapActivity(row: any) {
@@ -40,12 +41,17 @@ export const GET = withErrorHandler('crm/activities GET', async (req) => {
 })
 
 export const POST = withErrorHandler('crm/activities POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
 
   const result = validate(body, {
     type:     { required: true, type: 'string' },
     title:    { required: true, type: 'string', maxLength: 300 },
-    body:     { type: 'string', maxLength: 5000 },
+    // Raised from 5000 — call transcripts logged as "Call Notes" activities
+    // routinely run much longer than a typical activity note.
+    body:     { type: 'string', maxLength: 50_000 },
     user:     { required: true, type: 'string' },
   })
   if (!result.valid) return validationError(result.error)

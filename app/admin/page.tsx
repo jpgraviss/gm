@@ -437,9 +437,10 @@ export default function AdminPage() {
     googleCalendar: boolean
     googleDrive: boolean
     geolocation: boolean
+    granola: boolean
     database: boolean | null
     auth: boolean | null
-  }>({ mercury: false, email: false, googleCalendar: false, googleDrive: false, geolocation: false, database: null, auth: null })
+  }>({ mercury: false, email: false, googleCalendar: false, googleDrive: false, geolocation: false, granola: false, database: null, auth: null })
 
   // Mercury Banking
   const [mercuryConnected, setMercuryConnected] = useState(false)
@@ -594,6 +595,7 @@ export default function AdminPage() {
             googleCalendar: !!d.googleCalendar,
             googleDrive: !!d.googleDrive,
             geolocation: !!d.geolocation,
+            granola: !!d.granola,
             database: !!d.database,
             auth: !!d.auth,
           }))
@@ -1137,6 +1139,7 @@ export default function AdminPage() {
               <SystemHealthRow label="Google Calendar" status={integrationHealth.googleCalendar ? 'ok' : 'warn'} detail={integrationHealth.googleCalendar ? 'Connected' : 'Not Connected'} />
               <SystemHealthRow label="Google Drive" status={integrationHealth.googleDrive ? 'ok' : 'warn'} detail={integrationHealth.googleDrive ? 'Connected' : 'Not Connected'} />
               <SystemHealthRow label="Visitor Geolocation" status={integrationHealth.geolocation ? 'ok' : 'warn'} detail={integrationHealth.geolocation ? 'Connected' : 'On hold — add IPINFO_API_KEY to enable'} />
+              <SystemHealthRow label="Granola Meeting Notes" status={integrationHealth.granola ? 'ok' : 'warn'} detail={integrationHealth.granola ? 'Connected' : 'Not Connected — add an API key in Settings > Integrations'} />
             </div>
 
             {/* Quick Actions */}

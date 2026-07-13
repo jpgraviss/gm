@@ -68,6 +68,7 @@ export const PATCH = withErrorHandler('settings PATCH', async (req) => {
   if (body.sops                 !== undefined) updates.sops                 = body.sops
   if (body.security             !== undefined) updates.security             = body.security
   if (body.wordpress            !== undefined) updates.wordpress            = body.wordpress
+  if (body.granola              !== undefined) updates.granola              = body.granola
 
   const { data, error } = await db
     .from('app_settings')

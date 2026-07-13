@@ -7,6 +7,7 @@ import { checkAllRanks } from '@/lib/rank-tracker'
 import { publishSocialPost } from '@/lib/social-publish'
 import { processScheduledEmails } from '@/lib/email-scheduler'
 import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender'
+import { syncGranolaNotes, isGranolaConfigured } from '@/lib/granola'
 
 /**
  * Cron endpoint — called on a schedule (e.g. every 6 hours via Vercel Cron).
@@ -153,6 +154,19 @@ export const GET = withErrorHandler('cron GET', async (req) => {
   } catch (err) {
     console.error('[cron] SEO report sending failed:', err)
     results.seoReports = { error: 'Failed' }
+  }
+
+  // 9. Granola meeting-notes sync — no-op until an API key is saved in
+  //    Settings > Integrations (lib/granola.ts).
+  try {
+    if (await isGranolaConfigured()) {
+      results.granola = await syncGranolaNotes()
+    } else {
+      results.granola = { skipped: true }
+    }
+  } catch (err) {
+    console.error('[cron] Granola sync failed:', err)
+    results.granola = { error: 'Failed' }
   }
 
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })

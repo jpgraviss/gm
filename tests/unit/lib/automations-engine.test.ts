@@ -228,4 +228,63 @@ describe('automations-engine', () => {
     expect(mockDb.from).toHaveBeenCalledWith('automations')
     expect(insertCalls['contracts']).toBeUndefined()
   })
+
+  // AUDIT.md #13 — Wait must actually stop execution, not fall through to
+  // the next action in the same pass, and it must schedule a resume with a
+  // real automation_id/run_id (previously always blank, silently dropped).
+  it('Wait pauses execution and schedules a resume instead of running the next action', async () => {
+    setupAutomations('Contact Created', ['Add Tag', 'Wait', 'Create Task'])
+    fireAutomations('contact_created', {
+      company: 'Hotel India',
+      contactId: 'ct-9',
+      tag: 'nurture',
+    })
+    await flushPromises()
+
+    // The action before Wait ran.
+    expect(mockDb.from).toHaveBeenCalledWith('crm_contacts')
+    // Wait scheduled a real pending step...
+    expect(insertCalls['automation_pending_steps']).toBeDefined()
+    expect(insertCalls['automation_pending_steps'][0]).toEqual(
+      expect.objectContaining({
+        automation_id: 'auto-1',
+        remaining_actions: ['Create Task'],
+        status: 'pending',
+      }),
+    )
+    const pendingRow = insertCalls['automation_pending_steps'][0] as { run_id: string }
+    expect(pendingRow.run_id).toBeTruthy()
+    // ...and did NOT fall through to execute the action after it.
+    expect(insertCalls['app_tasks']).toBeUndefined()
+  })
+
+  // AUDIT.md #12/#13 plan, finding on the pre-existing If/Else bug — the
+  // skip-remaining flag was set on a locally-scoped object the caller's
+  // loop never actually checked, so it never skipped anything in
+  // production. Confirms it now does.
+  it('If/Else with a false condition skips remaining actions', async () => {
+    setupAutomations('Contact Created', ['If/Else', 'Create Task'])
+    fireAutomations('contact_created', {
+      company: 'Juliett Corp',
+      conditionField: 'company',
+      conditionOperator: 'equals',
+      conditionValue: 'Not Juliett Corp',
+    })
+    await flushPromises()
+
+    expect(insertCalls['app_tasks']).toBeUndefined()
+  })
+
+  it('If/Else with a true condition runs remaining actions', async () => {
+    setupAutomations('Contact Created', ['If/Else', 'Create Task'])
+    fireAutomations('contact_created', {
+      company: 'Kilo LLC',
+      conditionField: 'company',
+      conditionOperator: 'equals',
+      conditionValue: 'Kilo LLC',
+    })
+    await flushPromises()
+
+    expect(insertCalls['app_tasks']).toBeDefined()
+  })
 })

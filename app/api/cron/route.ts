@@ -363,6 +363,19 @@ async function resumePendingAutomationSteps() {
   if (!pending?.length) return
 
   for (const step of pending) {
+    // Atomic claim — only proceed if this invocation actually flipped the
+    // row from 'pending' to 'resumed'. Prevents two overlapping cron ticks
+    // (or a retry) from both picking up and re-executing the same step
+    // (AUDIT.md #12/#13 plan, finding on resume-side race conditions).
+    const { data: claimed } = await db
+      .from('automation_pending_steps')
+      .update({ status: 'resumed' })
+      .eq('id', step.id)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle()
+    if (!claimed) continue
+
     try {
       const { data: automation } = await db
         .from('automations')
@@ -378,18 +391,19 @@ async function resumePendingAutomationSteps() {
       const remainingActions = (step.remaining_actions as string[]) ?? []
       const ctx = (step.context as Record<string, unknown>) ?? {}
 
-      for (const action of remainingActions) {
+      if (remainingActions.length > 0) {
         const { executeWorkflow } = await import('@/lib/automations-engine')
         await executeWorkflow(
           { ...automation, actions: remainingActions },
           'pending_resume',
           ctx,
           db,
+          true,
         )
-        break
       }
-
-      await db.from('automation_pending_steps').update({ status: 'completed' }).eq('id', step.id)
+      // Already marked 'resumed' by the claim above — that's the terminal
+      // status (the table's CHECK constraint has no 'completed' value;
+      // see supabase/migrations/add_automation_wait_resume_fix.sql).
     } catch (err) {
       console.error(`[cron] Failed to resume pending step ${step.id}:`, err)
       await db.from('automation_pending_steps').update({ status: 'failed' }).eq('id', step.id)

@@ -41,7 +41,7 @@ interface AutomationRow {
 
 interface StepResult {
   name: string
-  status: 'success' | 'failed' | 'skipped'
+  status: 'success' | 'failed' | 'skipped' | 'pending'
   duration_ms: number
   error?: string
 }
@@ -51,7 +51,7 @@ interface RunRecord {
   automation_id: string
   trigger_type: string
   trigger_data: Record<string, unknown>
-  status: 'running' | 'completed' | 'failed'
+  status: 'running' | 'completed' | 'failed' | 'waiting'
   started_at: string
   completed_at: string | null
   steps: StepResult[]
@@ -102,6 +102,7 @@ export async function executeWorkflow(
   triggerType: string,
   triggerData: Record<string, unknown>,
   db?: SupabaseClient,
+  isResume = false,
 ) {
   // Form-submission automations can be scoped to one specific form
   // (config.formScope === 'specific') rather than "any form" — the trigger
@@ -117,6 +118,7 @@ export async function executeWorkflow(
   const steps: StepResult[] = []
   let runStatus: RunRecord['status'] = 'running'
   let runError: string | null = null
+  let skipRemaining = false
 
   await supabase.from('automation_runs').insert({
     id: runId,
@@ -131,8 +133,9 @@ export async function executeWorkflow(
   }).then(() => {}, () => {})
 
   try {
-    for (const action of automation.actions) {
-      if (triggerData._skipRemaining) {
+    for (let i = 0; i < automation.actions.length; i++) {
+      const action = automation.actions[i]
+      if (skipRemaining) {
         steps.push({ name: action, status: 'skipped', duration_ms: 0 })
         continue
       }
@@ -143,12 +146,25 @@ export async function executeWorkflow(
         // have (e.g. which sequence to enroll into) — actual event data
         // always wins on conflict.
         const context = { ...automation.config, ...triggerData }
-        await executeAction(action, context, supabase, automation.id)
+        const remainingActions = automation.actions.slice(i + 1)
+        const result = await executeAction(action, context, supabase, automation.id, runId, remainingActions)
         steps.push({
           name: action,
           status: 'success',
           duration_ms: Date.now() - stepStart,
         })
+        // Wait scheduled a resume — stop executing this pass entirely
+        // instead of falling through to the next action (AUDIT.md #13).
+        if (result?.paused) {
+          runStatus = 'waiting'
+          for (const remaining of remainingActions) {
+            steps.push({ name: remaining, status: 'pending', duration_ms: 0 })
+          }
+          break
+        }
+        if (result?.skipRemaining) {
+          skipRemaining = true
+        }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err)
         steps.push({
@@ -160,9 +176,9 @@ export async function executeWorkflow(
         runStatus = 'failed'
         runError = `Step "${action}" failed: ${errorMsg}`
 
-        for (let i = steps.length; i < automation.actions.length; i++) {
+        for (let j = steps.length; j < automation.actions.length; j++) {
           steps.push({
-            name: automation.actions[i],
+            name: automation.actions[j],
             status: 'skipped',
             duration_ms: 0,
           })
@@ -171,19 +187,24 @@ export async function executeWorkflow(
       }
     }
 
-    if (runStatus !== 'failed') {
+    if (runStatus !== 'failed' && runStatus !== 'waiting') {
       runStatus = 'completed'
     }
 
-    await supabase
-      .from('automations')
-      .update({
-        runs: (automation.runs ?? 0) + 1,
-        last_run: new Date().toISOString(),
-      })
-      .eq('id', automation.id)
+    // A resumed run is a continuation of the same logical trigger, not a
+    // new one — only the original (non-resume) call counts toward runs/
+    // last_run, so a Wait-paused-then-resumed execution isn't double-counted.
+    if (!isResume) {
+      await supabase
+        .from('automations')
+        .update({
+          runs: (automation.runs ?? 0) + 1,
+          last_run: new Date().toISOString(),
+        })
+        .eq('id', automation.id)
+    }
 
-    console.log(`[automations-engine] ${runStatus === 'completed' ? 'Executed' : 'Failed'} "${automation.name}" (${automation.id}) — ${steps.filter(s => s.status === 'success').length}/${automation.actions.length} steps`)
+    console.log(`[automations-engine] ${runStatus} "${automation.name}" (${automation.id}) — ${steps.filter(s => s.status === 'success').length}/${automation.actions.length} steps`)
   } catch (err) {
     runStatus = 'failed'
     runError = err instanceof Error ? err.message : String(err)
@@ -191,7 +212,7 @@ export async function executeWorkflow(
 
   await supabase.from('automation_runs').update({
     status: runStatus,
-    completed_at: new Date().toISOString(),
+    completed_at: runStatus === 'waiting' ? null : new Date().toISOString(),
     steps,
     error: runError,
   }).eq('id', runId).then(() => {}, () => {})
@@ -200,7 +221,14 @@ export async function executeWorkflow(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function executeAction(action: string, context: Record<string, unknown>, db: any, automationId?: string) {
+async function executeAction(
+  action: string,
+  context: Record<string, unknown>,
+  db: any,
+  automationId?: string,
+  runId?: string,
+  remainingActions: string[] = [],
+): Promise<{ paused?: boolean; skipRemaining?: boolean } | void> {
   const company = (context.company as string) ?? ''
   const today = new Date().toISOString().split('T')[0]
 
@@ -375,16 +403,23 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       if (unit === 'hours') ms = duration * 3_600_000
       else if (unit === 'days') ms = duration * 86_400_000
 
-      await db.from('automation_pending_steps').insert({
+      // Without a real automation id there's nothing to resume against —
+      // matches the existing no-op fallback other actions use when they're
+      // missing required context, rather than scheduling a resume that can
+      // never be found again.
+      if (!automationId || !runId) break
+
+      const { error: pendingErr } = await db.from('automation_pending_steps').insert({
         id: `pending-${uid()}`,
-        automation_id: (context._automationId as string) ?? '',
-        run_id: (context._runId as string) ?? '',
+        automation_id: automationId,
+        run_id: runId,
         resume_at: new Date(Date.now() + ms).toISOString(),
-        remaining_actions: (context._remainingActions as string[]) ?? [],
-        context: context,
+        remaining_actions: remainingActions,
+        context,
         status: 'pending',
-      }).then(() => {}, () => {})
-      break
+      })
+      if (pendingErr) throw new Error(pendingErr.message || 'Failed to schedule Wait resume')
+      return { paused: true }
     }
 
     case 'If/Else': {
@@ -403,8 +438,12 @@ async function executeAction(action: string, context: Record<string, unknown>, d
       }
 
       if (!matched) {
-        // Condition not met — skip remaining actions gracefully (not an error)
-        context._skipRemaining = true
+        // Condition not met — skip remaining actions gracefully (not an
+        // error). Signaled via return value, not by mutating `context`
+        // (that object is a fresh copy built per-action in the caller's
+        // loop, so mutating it here never actually reached the loop's
+        // check — this flag had never propagated in production).
+        return { skipRemaining: true }
       }
       break
     }

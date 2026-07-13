@@ -25,18 +25,67 @@ const TRIGGER_MAP: Record<string, string> = {
   'meeting_booked':       'Meeting Booked',
 }
 
+// Post-migration every row stores objects; the bare-string variant is kept
+// only as a defensive fallback for the migration window / any caller that
+// hasn't been updated (normalizeAction() below handles both).
+type RawAction = string | { type: string; config?: Record<string, unknown> }
+
 interface AutomationRow {
   id: string
   name: string
   trigger: string
-  actions: string[]
-  // Scoped to single-action automations (e.g. built from the sequence-level
-  // Automate tab) — merged into the trigger context before the action runs.
-  // Not a general fix for AUDIT.md #12 (multi-action config), see the
-  // migration comment on automations.config.
+  actions: RawAction[]
+  // Automation-level default config — merged in before each action's own
+  // config, so a caller that never sets per-action config (e.g. the
+  // sequence-level Automate tab, which only ever creates 1-2 actions) keeps
+  // working unchanged. Real per-action config (AUDIT.md #12) lives on each
+  // action object instead now — see ACTION_CONFIG_ADAPTERS.
   config?: Record<string, unknown>
   status: string
   runs: number
+}
+
+interface NormalizedAction {
+  type: string
+  config: Record<string, unknown>
+}
+
+function normalizeAction(action: RawAction): NormalizedAction {
+  return typeof action === 'string' ? { type: action, config: {} } : { type: action.type, config: action.config ?? {} }
+}
+
+// Translates the automation builder's per-action config field names (what
+// NodeConfigPanel in app/automation/builder/page.tsx actually collects)
+// into the engine's own context keys (what each case in executeAction
+// actually reads). These intentionally don't match 1:1 — the engine's
+// verbose, prefixed names exist so a short generic key like `value` or
+// `stage` in an action's own config can never collide with real trigger-
+// event data spread into the same context later (deals/contracts/invoices
+// all have real `value`/`stage` columns that are spread wholesale into
+// triggerData; see AUDIT.md #12/#13 plan). Add a case here, not a context-
+// key rename, if a new configurable action type is added.
+const ACTION_CONFIG_ADAPTERS: Record<string, (cfg: Record<string, unknown>) => Record<string, unknown>> = {
+  'Send Email Reminder': (cfg) => ({ emailSubject: cfg.subject, emailBody: cfg.body, fromName: cfg.fromName }),
+  'Wait': (cfg) => ({ waitDuration: cfg.duration, waitUnit: cfg.unit }),
+  'If/Else': (cfg) => ({ conditionField: cfg.field, conditionOperator: cfg.operator, conditionValue: cfg.value }),
+  'Create Task': (cfg) => ({ taskTitle: cfg.title, taskAssignee: cfg.assignee, taskDueDateOffset: cfg.dueDateOffset }),
+  'Update Contact': (cfg) => ({ updateField: cfg.field, updateValue: cfg.value }),
+  'Create Deal': (cfg) => ({ dealName: cfg.dealName, dealStage: cfg.stage }),
+  'Log Activity': (cfg) => ({ activityNote: cfg.note }),
+  'Send Notification': (cfg) => ({ notifyTarget: cfg.target, notifyMessage: cfg.message }),
+  'Add Tag': (cfg) => ({ tag: cfg.tag }),
+  'Remove Tag': (cfg) => ({ tag: cfg.tag }),
+}
+
+function translateActionConfig(actionType: string, cfg: Record<string, unknown>): Record<string, unknown> {
+  const adapter = ACTION_CONFIG_ADAPTERS[actionType]
+  if (!adapter) return {}
+  const translated = adapter(cfg)
+  // Drop unset fields so they don't spread as `undefined`/`''` and clobber
+  // a real default via `??` (which only falls back on null/undefined, not
+  // on an empty string) — e.g. an unfilled Subject field must not silently
+  // beat the engine's sensible default subject line.
+  return Object.fromEntries(Object.entries(translated).filter(([, v]) => v !== undefined && v !== ''))
 }
 
 interface StepResult {
@@ -134,22 +183,29 @@ export async function executeWorkflow(
 
   try {
     for (let i = 0; i < automation.actions.length; i++) {
-      const action = automation.actions[i]
+      const { type: actionType, config: actionConfig } = normalizeAction(automation.actions[i])
       if (skipRemaining) {
-        steps.push({ name: action, status: 'skipped', duration_ms: 0 })
+        steps.push({ name: actionType, status: 'skipped', duration_ms: 0 })
         continue
       }
 
       const stepStart = Date.now()
       try {
-        // Config only ever supplies fields the real trigger event doesn't
-        // have (e.g. which sequence to enroll into) — actual event data
-        // always wins on conflict.
-        const context = { ...automation.config, ...triggerData }
+        // Automation-level default, then this action's own config, then
+        // real trigger event data — each layer only overriding what the
+        // one before it didn't set, actual event data always wins on
+        // conflict (AUDIT.md #12). `resumeContext` deliberately excludes
+        // this action's own translated config — if this action is a Wait,
+        // that's what gets persisted for the *next* action to resume with,
+        // and a later action must never inherit an earlier Wait's own
+        // config (e.g. Wait's `waitDuration` leaking into a subsequent
+        // action's context — see AUDIT.md #12/#13 plan).
+        const resumeContext = { ...automation.config, ...triggerData }
+        const context = { ...automation.config, ...translateActionConfig(actionType, actionConfig), ...triggerData }
         const remainingActions = automation.actions.slice(i + 1)
-        const result = await executeAction(action, context, supabase, automation.id, runId, remainingActions)
+        const result = await executeAction(actionType, context, supabase, automation.id, runId, remainingActions, resumeContext)
         steps.push({
-          name: action,
+          name: actionType,
           status: 'success',
           duration_ms: Date.now() - stepStart,
         })
@@ -158,7 +214,7 @@ export async function executeWorkflow(
         if (result?.paused) {
           runStatus = 'waiting'
           for (const remaining of remainingActions) {
-            steps.push({ name: remaining, status: 'pending', duration_ms: 0 })
+            steps.push({ name: normalizeAction(remaining).type, status: 'pending', duration_ms: 0 })
           }
           break
         }
@@ -168,17 +224,17 @@ export async function executeWorkflow(
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err)
         steps.push({
-          name: action,
+          name: actionType,
           status: 'failed',
           duration_ms: Date.now() - stepStart,
           error: errorMsg,
         })
         runStatus = 'failed'
-        runError = `Step "${action}" failed: ${errorMsg}`
+        runError = `Step "${actionType}" failed: ${errorMsg}`
 
         for (let j = steps.length; j < automation.actions.length; j++) {
           steps.push({
-            name: automation.actions[j],
+            name: normalizeAction(automation.actions[j]).type,
             status: 'skipped',
             duration_ms: 0,
           })
@@ -227,7 +283,8 @@ async function executeAction(
   db: any,
   automationId?: string,
   runId?: string,
-  remainingActions: string[] = [],
+  remainingActions: RawAction[] = [],
+  resumeContext: Record<string, unknown> = {},
 ): Promise<{ paused?: boolean; skipRemaining?: boolean } | void> {
   const company = (context.company as string) ?? ''
   const today = new Date().toISOString().split('T')[0]
@@ -415,7 +472,9 @@ async function executeAction(
         run_id: runId,
         resume_at: new Date(Date.now() + ms).toISOString(),
         remaining_actions: remainingActions,
-        context,
+        // Deliberately resumeContext, not context — never this Wait step's
+        // own translated config (see the caller's comment on resumeContext).
+        context: resumeContext,
         status: 'pending',
       })
       if (pendingErr) throw new Error(pendingErr.message || 'Failed to schedule Wait resume')

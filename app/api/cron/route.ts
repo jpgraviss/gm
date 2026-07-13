@@ -388,7 +388,8 @@ async function resumePendingAutomationSteps() {
         continue
       }
 
-      const remainingActions = (step.remaining_actions as string[]) ?? []
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const remainingActions = (step.remaining_actions as any[]) ?? []
       const ctx = (step.context as Record<string, unknown>) ?? {}
 
       if (remainingActions.length > 0) {

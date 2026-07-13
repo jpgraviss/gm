@@ -21,6 +21,7 @@ function createSupabaseChain(defaultResult = { data: null, error: null }) {
 
 let automationsResult: { data: unknown; error: unknown }
 const insertCalls: Record<string, unknown[]> = {}
+const updateCalls: Record<string, unknown[]> = {}
 
 const mockDb = {
   from: vi.fn((table: string) => {
@@ -29,13 +30,19 @@ const mockDb = {
       (chain._state as { _result: unknown })._result = automationsResult
       return chain
     }
-    // For any other table, capture inserts
+    // For any other table, capture inserts and updates
     const chain = createSupabaseChain()
     const origInsert = chain.insert as (data: unknown) => unknown
     chain.insert = vi.fn().mockImplementation((data: unknown) => {
       if (!insertCalls[table]) insertCalls[table] = []
       insertCalls[table].push(data)
       return origInsert(data)
+    })
+    const origUpdate = chain.update as (data: unknown) => unknown
+    chain.update = vi.fn().mockImplementation((data: unknown) => {
+      if (!updateCalls[table]) updateCalls[table] = []
+      updateCalls[table].push(data)
+      return origUpdate(data)
     })
     return chain
   }),
@@ -56,9 +63,11 @@ describe('automations-engine', () => {
     vi.clearAllMocks()
     automationsResult = { data: [], error: null }
     for (const key of Object.keys(insertCalls)) delete insertCalls[key]
+    for (const key of Object.keys(updateCalls)) delete updateCalls[key]
   })
 
-  function setupAutomations(trigger: string, actions: string[], name = 'Test Auto') {
+  type RawAction = string | { type: string; config?: Record<string, unknown> }
+  function setupAutomations(trigger: string, actions: RawAction[], name = 'Test Auto') {
     automationsResult = {
       data: [{ id: 'auto-1', name, trigger, actions, status: 'Active', runs: 0 }],
       error: null,
@@ -286,5 +295,58 @@ describe('automations-engine', () => {
     await flushPromises()
 
     expect(insertCalls['app_tasks']).toBeDefined()
+  })
+
+  // AUDIT.md #12, the actual reported scenario — two actions of the same
+  // type must be able to carry two different values. Previously every
+  // action shared one automation-level context, so two "Add Tag" actions
+  // were indistinguishable.
+  it('two Add Tag actions with different per-action config apply distinct tags', async () => {
+    setupAutomations('Contact Created', [
+      { type: 'Add Tag', config: { tag: 'nurture' } },
+      { type: 'Add Tag', config: { tag: 'high-value' } },
+    ])
+    fireAutomations('contact_created', { company: 'Lima Partners', contactId: 'ct-22' })
+    await flushPromises()
+
+    expect(updateCalls['crm_contacts']).toBeDefined()
+    const tagUpdates = (updateCalls['crm_contacts'] as { tags: string[] }[]).map(u => u.tags[0])
+    expect(tagUpdates).toEqual(['nurture', 'high-value'])
+  })
+
+  // AUDIT.md #12/#13 plan, key-translation finding — the builder UI's
+  // config field names (duration/unit) don't match the engine's context
+  // keys (waitDuration/waitUnit) for 7 of 9 configurable action types.
+  // Confirms the adapter layer actually translates them, using Wait's
+  // resume_at as the observable proof (a wrong translation would silently
+  // fall back to the 1-hour default instead of the configured 30 minutes).
+  it('per-action config is translated into the keys each action actually reads (Wait duration/unit)', async () => {
+    setupAutomations('Contact Created', [
+      { type: 'Wait', config: { duration: 30, unit: 'minutes' } },
+    ])
+    const before = Date.now()
+    fireAutomations('contact_created', { company: 'Mike Ventures', contactId: 'ct-30' })
+    await flushPromises()
+
+    expect(insertCalls['automation_pending_steps']).toBeDefined()
+    const pendingRow = insertCalls['automation_pending_steps'][0] as { resume_at: string }
+    const resumeMs = new Date(pendingRow.resume_at).getTime() - before
+    // ~30 minutes, generously bounded — would be ~60 minutes (the default)
+    // if the config translation silently failed.
+    expect(resumeMs).toBeGreaterThan(29 * 60_000)
+    expect(resumeMs).toBeLessThan(31 * 60_000)
+  })
+
+  // A bare string action alongside an object-shape action in the same
+  // automation must keep working — the migration backfills every existing
+  // row to {type, config:{}}, but the engine's normalizeAction() defensive
+  // fallback should tolerate either shape regardless.
+  it('tolerates a mix of legacy bare-string and new object-shape actions', async () => {
+    setupAutomations('Contact Created', ['Add Tag', { type: 'Create Task', config: { title: 'Follow up' } }])
+    fireAutomations('contact_created', { company: 'November Inc', contactId: 'ct-31', tag: 'legacy' })
+    await flushPromises()
+
+    expect(insertCalls['app_tasks']).toBeDefined()
+    expect(insertCalls['app_tasks'][0]).toEqual(expect.objectContaining({ title: 'Follow up' }))
   })
 })

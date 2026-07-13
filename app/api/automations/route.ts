@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { normalizeActionsForStorage } from '@/lib/automation-actions'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapAutomation(row: any, runStats?: { total: number; succeeded: number; failed: number; lastRunAt: string | null }) {
@@ -75,7 +76,7 @@ export const POST = withErrorHandler('automations POST', async (req) => {
       id:       body.id ?? `auto-${Date.now()}`,
       name:     body.name,
       trigger:  body.trigger,
-      actions:  body.actions ?? [],
+      actions:  normalizeActionsForStorage(body.actions ?? []),
       config:   body.config ?? {},
       status:   body.status ?? 'Active',
       runs:     body.runs ?? 0,

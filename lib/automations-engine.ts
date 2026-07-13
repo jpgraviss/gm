@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
 import { sendPushNotification } from '@/lib/push-notifications'
 import { wrapBrandedEmail } from '@/lib/email-template'
+import { getSettings } from '@/lib/settings'
 import { contractMonthlyValue } from '@/lib/metrics'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -152,6 +153,24 @@ export async function executeWorkflow(
   triggerData: Record<string, unknown>,
   db?: SupabaseClient,
   isResume = false,
+  // Index into the automation's ORIGINAL, full actions array that this
+  // call's `automation.actions` starts at. 0 for a fresh trigger. On
+  // resume, cron passes a truncated slice as `automation.actions` — without
+  // this offset, a second Wait step's step_index would be computed
+  // relative to that truncated array (loop-local index 0), not the
+  // original array cron re-slices from next time, causing the resumed
+  // range to be wrong and the same actions to re-execute forever.
+  indexOffset = 0,
+  // When resuming a paused run, the run_id of the ORIGINAL automation_runs
+  // row (from the pending step) plus that row's steps recorded before the
+  // pause. Reusing the id (instead of minting a new one) means the final
+  // status update below lands on the same row the pause left at 'waiting',
+  // so it actually finalizes to 'completed'/'failed' instead of being
+  // orphaned forever alongside a second, disconnected run for the same
+  // logical trigger. priorSteps seeds step history so the resumed run's
+  // steps append onto what already happened, not overwrite it.
+  resumeRunId?: string,
+  priorSteps: StepResult[] = [],
 ) {
   // Form-submission automations can be scoped to one specific form
   // (config.formScope === 'specific') rather than "any form" — the trigger
@@ -162,24 +181,26 @@ export async function executeWorkflow(
   }
 
   const supabase = db ?? createServiceClient()
-  const runId = `run-${uid()}`
+  const runId = resumeRunId ?? `run-${uid()}`
   const startedAt = new Date().toISOString()
-  const steps: StepResult[] = []
+  const steps: StepResult[] = [...priorSteps]
   let runStatus: RunRecord['status'] = 'running'
   let runError: string | null = null
   let skipRemaining = false
 
-  await supabase.from('automation_runs').insert({
-    id: runId,
-    automation_id: automation.id,
-    trigger_type: triggerType,
-    trigger_data: triggerData,
-    status: 'running',
-    started_at: startedAt,
-    completed_at: null,
-    steps: [],
-    error: null,
-  }).then(() => {}, () => {})
+  if (!resumeRunId) {
+    await supabase.from('automation_runs').insert({
+      id: runId,
+      automation_id: automation.id,
+      trigger_type: triggerType,
+      trigger_data: triggerData,
+      status: 'running',
+      started_at: startedAt,
+      completed_at: null,
+      steps: [],
+      error: null,
+    }).then(() => {}, () => {})
+  }
 
   try {
     for (let i = 0; i < automation.actions.length; i++) {
@@ -203,7 +224,7 @@ export async function executeWorkflow(
         const resumeContext = { ...automation.config, ...triggerData }
         const context = { ...automation.config, ...translateActionConfig(actionType, actionConfig), ...triggerData }
         const remainingActions = automation.actions.slice(i + 1)
-        const result = await executeAction(actionType, context, supabase, automation.id, runId, i, resumeContext)
+        const result = await executeAction(actionType, context, supabase, automation.id, runId, indexOffset + i, resumeContext)
         steps.push({
           name: actionType,
           status: 'success',
@@ -277,6 +298,25 @@ export async function executeWorkflow(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// Contract/invoice/proposal triggers carry a `company` name but have no
+// contact FK (unlike deals), so contactId is never in context for them.
+// Falls back to the same "primary contact for this company" lookup Send
+// Email already does, instead of silently no-oping every contact-targeting
+// action for every trigger that isn't deal-based.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveContactId(context: Record<string, unknown>, company: string, db: any): Promise<string | null> {
+  const direct = (context.contactId as string) ?? (context.contact_id as string) ?? null
+  if (direct) return direct
+  if (!company) return null
+  const { data: contacts } = await db
+    .from('crm_contacts')
+    .select('id')
+    .eq('company_name', company)
+    .order('is_primary', { ascending: false })
+    .limit(1)
+  return contacts?.[0]?.id ?? null
+}
+
 async function executeAction(
   action: string,
   context: Record<string, unknown>,
@@ -306,7 +346,9 @@ async function executeAction(
       const subject = (context.emailSubject as string) ?? `Update from GravHub — ${action}`
       const rawHtml = (context.emailBody as string) ?? `<p>Hi ${contact.full_name ?? 'there'},</p><p>This is an automated message regarding ${company}.</p>`
       const html = await wrapBrandedEmail(rawHtml, 'AUTOMATED NOTIFICATION')
-      await sendEmail({ to: contact.emails[0], subject, html })
+      const fromName = context.fromName as string | undefined
+      const from = fromName ? `${fromName} <${(await getSettings()).email.fromEmail}>` : undefined
+      await sendEmail({ to: contact.emails[0], subject, html, from })
       break
     }
 
@@ -331,7 +373,7 @@ async function executeAction(
 
     case 'Add Tag': {
       const tag = (context.tag as string) ?? ''
-      const contactId = (context.contactId as string) ?? (context.contact_id as string) ?? null
+      const contactId = await resolveContactId(context, company, db)
       if (!tag || !contactId) break
       const { data: existing } = await db
         .from('crm_contacts')
@@ -347,7 +389,7 @@ async function executeAction(
 
     case 'Remove Tag': {
       const tag = (context.tag as string) ?? ''
-      const contactId = (context.contactId as string) ?? (context.contact_id as string) ?? null
+      const contactId = await resolveContactId(context, company, db)
       if (!tag || !contactId) break
       const { data: existing } = await db
         .from('crm_contacts')
@@ -360,7 +402,7 @@ async function executeAction(
     }
 
     case 'Update Contact': {
-      const contactId = (context.contactId as string) ?? (context.contact_id as string) ?? null
+      const contactId = await resolveContactId(context, company, db)
       const field = (context.updateField as string) ?? ''
       const value = (context.updateValue as string) ?? ''
       if (!contactId || !field) break

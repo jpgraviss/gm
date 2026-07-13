@@ -37,7 +37,7 @@ export const GET = withErrorHandler('automations/[id]/runs GET', async (_req, { 
         name: (triggerData.full_name as string) ?? (triggerData.contactName as string) ?? (triggerData.company as string) ?? 'Unknown',
         email: ((triggerData.emails as string[] | undefined)?.[0]) ?? (triggerData.contactEmail as string) ?? '',
       },
-      status: run.status as 'success' | 'failed' | 'running',
+      status: run.status === 'completed' ? 'success' : (run.status as 'failed' | 'running' | 'waiting'),
       actions_completed: successCount,
       actions_total: steps.length,
       steps: steps.map(s => ({

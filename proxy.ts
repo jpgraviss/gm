@@ -38,6 +38,7 @@ const PUBLIC_PREFIXES = [
   '/api/portal-clients/complete-setup',
   '/api/drive/callback',
   '/api/signatures/',
+  '/api/proposals/view/',
   '/api/forms/public/',
   '/api/sequences/webhooks',
   '/api/sequences/unsubscribe',
@@ -49,7 +50,6 @@ const PUBLIC_PREFIXES = [
   '/api/portal/',
   '/api/intelligence/track',
   '/api/intelligence/script',
-  '/api/wordpress/seo/',
 ]
 
 function getClientIp(req: NextRequest): string {
@@ -62,18 +62,7 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
   // Only apply to API routes
   if (!pathname.startsWith('/api/')) return NextResponse.next()
 
-  // AUDIT.md #32 — every other route under /api/wordpress/seo/ is called by
-  // the WordPress plugin itself via a pre-shared X-GravHub-Key (immune to
-  // CSRF/cross-origin by construction, since a browser can't forge that
-  // header), which is why the whole prefix is exempt below. This one route
-  // is the exception: it's staff-only, cookie-authenticated (requireRole),
-  // and reassigns which client a connected site is billed against — a
-  // browser holding a logged-in staff session absolutely can be tricked
-  // into firing this cross-site, so it alone must not get the exemption.
-  const CSRF_NON_EXEMPT_ROUTES = new Set(['PATCH /api/wordpress/seo/health'])
-
   const isPublicRoute = PUBLIC_PREFIXES.some(p => pathname.startsWith(p))
-    && !CSRF_NON_EXEMPT_ROUTES.has(`${req.method} ${pathname}`)
 
   // ── CSRF protection for state-changing requests ─────────────────────────
   // Public routes are intentionally exempt — they're embedded on external
@@ -129,8 +118,16 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
   )
   const hasValidBridgeCookie = (await verifySessionCookie(req.cookies.get('gravhub-auth')?.value)) !== null
   const hasAuthHeader = !!req.headers.get('authorization')
+  // AUDIT.md #32 — the WordPress plugin authenticates every /api/wordpress/
+  // route via a pre-shared key in this header (lib/wordpress-auth.ts), not
+  // a cookie or Authorization header. Presence-only here, same as
+  // hasAuthHeader above — actual key validation happens downstream in
+  // requireWordPressAuth. This lets those routes stay OFF the public-route
+  // list (so CSRF/auth actually apply to their staff-cookie-authenticated
+  // paths) while still letting the plugin's key-only server calls through.
+  const hasGravHubKey = !!req.headers.get('x-gravhub-key')
 
-  if (!hasSupabaseCookie && !hasValidBridgeCookie && !hasAuthHeader) {
+  if (!hasSupabaseCookie && !hasValidBridgeCookie && !hasAuthHeader && !hasGravHubKey) {
     return NextResponse.json(
       { error: 'Authentication required' },
       { status: 401 }

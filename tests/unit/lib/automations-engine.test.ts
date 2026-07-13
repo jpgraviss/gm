@@ -52,7 +52,7 @@ vi.mock('@/lib/supabase', () => ({
   createServiceClient: () => mockDb,
 }))
 
-import { fireAutomations } from '@/lib/automations-engine'
+import { fireAutomations, executeWorkflow } from '@/lib/automations-engine'
 
 function flushPromises() {
   return new Promise(resolve => setTimeout(resolve, 50))
@@ -268,6 +268,47 @@ describe('automations-engine', () => {
     expect(pendingRow.run_id).toBeTruthy()
     // ...and did NOT fall through to execute the action after it.
     expect(insertCalls['app_tasks']).toBeUndefined()
+  })
+
+  // Regression test for a bug an adversarial audit pass found in the
+  // step_index fix above: cron's resumePendingAutomationSteps() calls
+  // executeWorkflow with a TRUNCATED actions array (only what's left after
+  // the first Wait). Without indexOffset, a second Wait inside that
+  // resumed call would compute step_index relative to the truncated
+  // array's own loop-local index (0-based again), not the original
+  // 5-action automation cron re-slices from on the NEXT resume — causing
+  // already-executed actions to run a second time and the automation to
+  // loop on the same Wait forever, without ever reaching the final action.
+  it('a second Wait during a resumed run computes step_index against the ORIGINAL action list, not the resumed slice', async () => {
+    // Simulates exactly what cron's resumePendingAutomationSteps passes on
+    // resume: the automation's actions truncated to what's left (as if the
+    // original 5-action automation was [A0, Wait1, A2, Wait3, A4] and the
+    // first Wait already resumed at step_index 2), plus indexOffset=2 so
+    // the loop's local index 0/1/2 maps back to global index 2/3/4.
+    const resumedActions = ['Add Tag', 'Wait', 'Create Task']
+    await executeWorkflow(
+      { id: 'auto-1', name: 'Two-Wait Auto', trigger: 'Contact Created', actions: resumedActions, status: 'Active', runs: 0 },
+      'pending_resume',
+      { company: 'Mike Bravo', contactId: 'ct-77', tag: 'nurture' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockDb as any,
+      true,
+      2, // indexOffset — this resumed call starts at global index 2
+    )
+    await flushPromises()
+
+    expect(insertCalls['automation_pending_steps']).toBeDefined()
+    expect(insertCalls['automation_pending_steps'][0]).toEqual(
+      expect.objectContaining({
+        automation_id: 'auto-1',
+        // Wait is at local index 1 of resumedActions; correct global
+        // step_index is indexOffset(2) + 1 + 1 = 4, pointing at the real
+        // next action (Create Task) in the original 5-action array — NOT
+        // 2, which is the bug (local-index-only math re-pointing at the
+        // action that already ran this same resume pass).
+        step_index: 4,
+      }),
+    )
   })
 
   // AUDIT.md #12/#13 plan, finding on the pre-existing If/Else bug — the

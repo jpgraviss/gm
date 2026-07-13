@@ -584,7 +584,7 @@ interface WorkflowRun {
   automation_id: string
   timestamp: string
   trigger_contact: { name: string; email: string }
-  status: 'success' | 'failed' | 'running'
+  status: 'success' | 'failed' | 'running' | 'waiting'
   actions_completed: number
   actions_total: number
   steps: RunStep[]
@@ -614,6 +614,13 @@ function StatusBadge({ status }: { status: WorkflowRun['status'] }) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-700">
         <AlertCircle size={10} /> Failed
+      </span>
+    )
+  }
+  if (status === 'waiting') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">
+        <Clock size={10} /> Waiting
       </span>
     )
   }

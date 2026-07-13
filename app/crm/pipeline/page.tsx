@@ -846,12 +846,14 @@ function ManagePipelinesPanel({
   pipelines,
   activePipelineId,
   dealCounts,
+  stageDealCounts,
   onClose,
   onChange,
 }: {
   pipelines: PipelineConfig[]
   activePipelineId: string
   dealCounts: Record<string, number>
+  stageDealCounts: Record<string, number>
   onClose: () => void
   onChange: (updated: PipelineConfig[]) => void
 }) {
@@ -876,6 +878,12 @@ function ManagePipelinesPanel({
   }
 
   function removeStage(stageId: string) {
+    const stage = pipeline.stages.find(s => s.id === stageId)
+    const count = stage ? (stageDealCounts[`${pipeline.id}::${stage.name}`] ?? 0) : 0
+    if (count > 0) {
+      const ok = window.confirm(`"${stage!.name}" has ${count} deal${count === 1 ? '' : 's'} in it. Deleting the stage won't delete those deals, but they'll no longer be visible in any pipeline view until moved to a valid stage. Delete anyway?`)
+      if (!ok) return
+    }
     setLocalPipelines(prev => prev.map(p =>
       p.id === selectedPipelineId
         ? { ...p, stages: p.stages.filter(s => s.id !== stageId) }
@@ -1223,8 +1231,15 @@ export default function PipelinePage() {
 
   const reps = ['All', ...ALL_REPS]
   const dealCountByPipeline: Record<string, number> = {}
+  const dealCountByStage: Record<string, number> = {}
   for (const p of pipelines) {
     dealCountByPipeline[p.id] = localDeals.filter(d => (d as LocalDeal & { pipelineId?: string }).pipelineId === p.id || (!('pipelineId' in d) && p.id === 'client-acquisition')).length
+    for (const s of p.stages) {
+      const key = `${p.id}::${s.name}`
+      dealCountByStage[key] = localDeals.filter(d =>
+        d.stage === s.name && ((d as LocalDeal & { pipelineId?: string }).pipelineId === p.id || (!('pipelineId' in d) && p.id === 'client-acquisition'))
+      ).length
+    }
   }
   const pipelineDeals = localDeals.filter(d => (d as LocalDeal & { pipelineId?: string }).pipelineId === activePipelineId || (!('pipelineId' in d) && activePipelineId === 'client-acquisition'))
   const filteredDeals = filterRep === 'All' ? pipelineDeals : pipelineDeals.filter(d => d.assignedRep === filterRep)
@@ -1563,6 +1578,7 @@ export default function PipelinePage() {
           pipelines={pipelines}
           activePipelineId={activePipeline.id}
           dealCounts={dealCountByPipeline}
+          stageDealCounts={dealCountByStage}
           onClose={() => setManagingPipeline(false)}
           onChange={updated => {
             setPipelines(updated)

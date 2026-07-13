@@ -5,6 +5,7 @@ import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
+import { requirePortalClient } from '@/lib/portal-auth'
 
 // Valid status transitions — keys are current status, values are allowed next statuses
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -63,18 +64,27 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
 
   const db = createServiceClient()
 
+  // Fetched unconditionally (not just on a status change) — the portal
+  // client's own Approvals page calls this route directly by id, so
+  // requirePortalClient below needs the contract's real company to confirm
+  // the caller is either staff or a client scoped to that same company,
+  // closing a gap where any authenticated caller (including a portal
+  // client for a different company) could otherwise PATCH any contract.
+  const { data: current, error: fetchErr } = await db
+    .from('contracts')
+    .select('status, company')
+    .eq('id', id)
+    .single()
+
+  if (fetchErr || !current) {
+    return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
+  }
+
+  const denied = await requirePortalClient(req, current.company)
+  if (denied) return denied
+
   // If status is being changed, validate the transition
   if (body.status !== undefined) {
-    const { data: current, error: fetchErr } = await db
-      .from('contracts')
-      .select('status')
-      .eq('id', id)
-      .single()
-
-    if (fetchErr || !current) {
-      return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
-    }
-
     const allowed = VALID_TRANSITIONS[current.status]
     if (!allowed || !allowed.includes(body.status)) {
       return NextResponse.json(

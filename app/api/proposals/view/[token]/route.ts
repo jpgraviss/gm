@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { fireAutomations } from '@/lib/automations-engine'
 
 export const GET = withErrorHandler('proposals/view/[token] GET', async (_req, ctx) => {
   const { token } = await ctx!.params
@@ -93,6 +94,18 @@ export const PATCH = withErrorHandler('proposals/view/[token] PATCH', async (req
   if (updateErr) {
     throw new Error(updateErr?.message || 'Failed to update proposal')
   }
+
+  // This is the real client-facing accept/decline flow (the emailed link);
+  // the internal /api/proposals/[id] PATCH also fires these triggers for
+  // staff-driven status changes, but that path was never reached by an
+  // actual client response — proposal_accepted/proposal_declined never
+  // fired in production until now.
+  fireAutomations(action === 'accept' ? 'proposal_accepted' : 'proposal_declined', {
+    proposalId: proposal.id,
+    ...proposal,
+    status: newStatus,
+    clientNotes: clientNotes || null,
+  })
 
   return NextResponse.json({ success: true, status: newStatus })
 })

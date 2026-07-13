@@ -48,6 +48,9 @@ interface SeoScore {
   page_title: string | null
   score: number
   issues: Array<{ type: string; message: string; severity: string }>
+  word_count: number | null
+  readability_score: number | null
+  focus_keyword: string | null
   checked_at: string
 }
 
@@ -163,7 +166,8 @@ export default function WordPressSeoPage() {
   const [scoresLoading, setScoresLoading] = useState(false)
   const [tab, setTab] = useState<'health' | 'scores' | 'meta' | 'reports' | 'apikeys'>('health')
   const [editingMeta, setEditingMeta] = useState<SeoSetting | null>(null)
-  const [metaDraft, setMetaDraft] = useState({ metaTitle: '', metaDescription: '', ogTitle: '', ogDescription: '' })
+  const [metaDraft, setMetaDraft] = useState({ metaTitle: '', metaDescription: '', ogTitle: '', ogDescription: '', ogImage: '', schemaMarkup: '' })
+  const [schemaError, setSchemaError] = useState('')
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [report, setReport] = useState<SiteReport | null>(null)
@@ -239,16 +243,31 @@ export default function WordPressSeoPage() {
 
   function startEditMeta(setting: SeoSetting) {
     setEditingMeta(setting)
+    setSchemaError('')
     setMetaDraft({
       metaTitle: setting.meta_title ?? '',
       metaDescription: setting.meta_description ?? '',
       ogTitle: setting.og_title ?? '',
       ogDescription: setting.og_description ?? '',
+      ogImage: setting.og_image ?? '',
+      schemaMarkup: setting.schema_markup ? JSON.stringify(setting.schema_markup, null, 2) : '',
     })
   }
 
   async function saveMeta() {
     if (!editingMeta || !selectedSite) return
+
+    let schemaMarkup: Record<string, unknown> | null = null
+    if (metaDraft.schemaMarkup.trim()) {
+      try {
+        schemaMarkup = JSON.parse(metaDraft.schemaMarkup)
+        setSchemaError('')
+      } catch {
+        setSchemaError('Schema markup must be valid JSON')
+        return
+      }
+    }
+
     setSaving(true)
     try {
       const res = await fetch('/api/wordpress/seo/settings', {
@@ -261,6 +280,8 @@ export default function WordPressSeoPage() {
           metaDescription: metaDraft.metaDescription || null,
           ogTitle: metaDraft.ogTitle || null,
           ogDescription: metaDraft.ogDescription || null,
+          ogImage: metaDraft.ogImage || null,
+          schemaMarkup,
         }),
       })
       if (!res.ok) throw new Error('Failed')
@@ -735,6 +756,33 @@ export default function WordPressSeoPage() {
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035] resize-none"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">OG Image URL (Social)</label>
+                  <input
+                    type="text"
+                    value={metaDraft.ogImage}
+                    onChange={e => setMetaDraft(d => ({ ...d, ogImage: e.target.value }))}
+                    placeholder="https://example.com/image.jpg"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
+                  />
+                  <p className="text-[10px] text-gray-300 mt-1">Image shown when this page is shared on social media</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Schema Markup (JSON-LD, optional)</label>
+                  <textarea
+                    value={metaDraft.schemaMarkup}
+                    onChange={e => { setMetaDraft(d => ({ ...d, schemaMarkup: e.target.value })); setSchemaError('') }}
+                    placeholder={'{\n  "@context": "https://schema.org",\n  "@type": "Article"\n}'}
+                    rows={5}
+                    spellCheck={false}
+                    className={`w-full border rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#015035]/20 resize-y ${schemaError ? 'border-red-300' : 'border-gray-200 focus:border-[#015035]'}`}
+                  />
+                  {schemaError ? (
+                    <p className="text-[10px] text-red-500 mt-1">{schemaError}</p>
+                  ) : (
+                    <p className="text-[10px] text-gray-300 mt-1">Raw JSON-LD structured data, rendered in the page's &lt;head&gt; by the plugin</p>
+                  )}
+                </div>
               </div>
               <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
                 <button onClick={() => setEditingMeta(null)} className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700">
@@ -886,14 +934,25 @@ function ScoresTab({ scores }: { scores: SeoScore[] }) {
                 <td className="px-4 py-3">
                   <p className="font-medium text-gray-900 truncate max-w-[200px]">{sc.page_title ?? sc.page_path}</p>
                   <p className="text-[11px] text-gray-400 truncate max-w-[200px]">{sc.page_path}</p>
-                  {expanded === sc.id && sc.issues.length > 0 && (
-                    <div className="mt-2 space-y-1 border-t border-gray-100 pt-2">
-                      {sc.issues.map((issue, i) => (
-                        <div key={i} className="flex items-start gap-1.5">
-                          <SeverityDot severity={issue.severity} />
-                          <span className="text-xs text-gray-500">{issue.message}</span>
+                  {expanded === sc.id && (
+                    <div className="mt-2 border-t border-gray-100 pt-2">
+                      {(sc.word_count != null || sc.readability_score != null || sc.focus_keyword) && (
+                        <div className="flex flex-wrap gap-3 mb-2 text-[11px] text-gray-400">
+                          {sc.word_count != null && <span>Word count: <strong className="text-gray-600">{sc.word_count}</strong></span>}
+                          {sc.readability_score != null && <span>Readability: <strong className="text-gray-600">{sc.readability_score}/100</strong></span>}
+                          {sc.focus_keyword && <span>Focus keyword: <strong className="text-gray-600">&ldquo;{sc.focus_keyword}&rdquo;</strong></span>}
                         </div>
-                      ))}
+                      )}
+                      {sc.issues.length > 0 && (
+                        <div className="space-y-1">
+                          {sc.issues.map((issue, i) => (
+                            <div key={i} className="flex items-start gap-1.5">
+                              <SeverityDot severity={issue.severity} />
+                              <span className="text-xs text-gray-500">{issue.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </td>
@@ -903,7 +962,7 @@ function ScoresTab({ scores }: { scores: SeoScore[] }) {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500">{sc.issues.length} issue{sc.issues.length !== 1 ? 's' : ''}</span>
-                    {sc.issues.length > 0 && (
+                    {(sc.issues.length > 0 || sc.word_count != null || sc.readability_score != null || sc.focus_keyword) && (
                       <ChevronDown size={12} className={`text-gray-300 transition-transform ${expanded === sc.id ? 'rotate-180' : ''}`} />
                     )}
                   </div>

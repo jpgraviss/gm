@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { getGSCSummary, getGSCSearchAnalytics } from '@/lib/google-search-console'
 import { getGA4Report, getGA4TopPages } from '@/lib/google-analytics'
 import { getGBPSummary } from '@/lib/google-business-profile'
+import { generateWordPressSeoReport, type WordPressSeoReport } from '@/lib/wordpress-seo-report'
 
 /**
  * White-label monthly client report.
@@ -58,6 +59,7 @@ export interface ClientReportData {
     uptimePercent: number
     incidents: number
   }
+  wordpressSeo?: WordPressSeoReport
 }
 
 function daysBetween(start: string, end: string): number {
@@ -215,6 +217,24 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
     console.error('[client-report] uptime read failed', err)
   }
 
+  // ── WordPress SEO (site health + on-page scores, if a WP site is linked) ──
+  if (config.companyId) {
+    try {
+      const db = createServiceClient()
+      const { data: site } = await db
+        .from('wordpress_site_health')
+        .select('site_url')
+        .eq('company_id', config.companyId)
+        .maybeSingle()
+
+      if (site?.site_url) {
+        result.wordpressSeo = await generateWordPressSeoReport(db, site.site_url)
+      }
+    } catch (err) {
+      console.error('[client-report] WordPress SEO read failed', err)
+    }
+  }
+
   return result
 }
 
@@ -232,6 +252,7 @@ export function buildReportRecommendations(metrics: {
   ranking?: ClientReportData['ranking']
   reputation?: ClientReportData['reputation']
   uptime?: ClientReportData['uptime']
+  wordpressSeo?: WordPressSeoReport
 }): string[] {
   const recs: string[] = []
 
@@ -280,6 +301,19 @@ export function buildReportRecommendations(metrics: {
     }
   }
 
+  const wp = metrics.wordpressSeo
+  if (wp) {
+    if (wp.scoreDistribution.red > 0) {
+      recs.push(`${wp.scoreDistribution.red} page${wp.scoreDistribution.red === 1 ? '' : 's'} on the website ${wp.scoreDistribution.red === 1 ? 'has' : 'have'} a poor on-page SEO score (below 50) — recommend prioritizing ${wp.worstPages[0]?.path ?? 'the lowest-scoring pages'} first.`)
+    }
+    if (wp.environment.pluginUpdates > 0) {
+      recs.push(`${wp.environment.pluginUpdates} WordPress plugin${wp.environment.pluginUpdates === 1 ? '' : 's'} on the website ${wp.environment.pluginUpdates === 1 ? 'has' : 'have'} an update available — outdated plugins are a common security risk.`)
+    }
+    if (wp.securityIssues.length > 0) {
+      recs.push(`Website security check flagged: ${wp.securityIssues.join(', ')} — recommend addressing these with your developer or hosting provider.`)
+    }
+  }
+
   if (recs.length === 0) {
     recs.push('No urgent action items this month — performance is stable across tracked metrics.')
   }
@@ -300,6 +334,7 @@ export async function saveReportSnapshot(report: ClientReportData): Promise<void
   if (report.reputation) entries.push({ product: 'business_profile', metrics: report.reputation })
   if (report.ranking) entries.push({ product: 'rank_tracker', metrics: report.ranking })
   if (report.uptime) entries.push({ product: 'uptime', metrics: report.uptime })
+  if (report.wordpressSeo) entries.push({ product: 'wordpress_seo', metrics: report.wordpressSeo as unknown as Record<string, unknown> })
 
   for (const entry of entries) {
     await db.from('client_data_snapshots').insert({

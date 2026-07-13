@@ -1,8 +1,23 @@
 import { createServiceClient } from '@/lib/supabase'
-import { buildClientReport, saveReportSnapshot, buildReportRecommendations, type ClientReportConfig } from '@/lib/client-reports'
+import { buildClientReport, saveReportSnapshot, buildReportRecommendations, type ClientReportConfig, type ClientReportData } from '@/lib/client-reports'
 import { generateMonthlyReportHtml, type MonthlyReportData } from '@/lib/templates/generate-monthly-report'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
+
+// The template only needs a trimmed view of the full WordPressSeoReport
+// (email templates don't need siteUrl/generatedAt/etc.) — flattens
+// environment.pluginUpdates to the shape the template expects.
+function toReportSectionShape(wp: ClientReportData['wordpressSeo']): MonthlyReportData['metrics']['wordpressSeo'] {
+  if (!wp) return undefined
+  return {
+    averageScore: wp.averageScore,
+    totalPages: wp.totalPages,
+    scoreDistribution: wp.scoreDistribution,
+    pluginUpdates: wp.environment.pluginUpdates,
+    securityIssues: wp.securityIssues,
+    worstPages: wp.worstPages.map(p => ({ path: p.path, title: p.title, score: p.score })),
+  }
+}
 
 interface ClientIntegration {
   id: string
@@ -131,8 +146,9 @@ export async function sendMonthlyClientReports(): Promise<{ sent: number; failed
           reputation: reportData.reputation,
           ranking: reportData.ranking,
           uptime: reportData.uptime,
+          wordpressSeo: toReportSectionShape(reportData.wordpressSeo),
         },
-        recommendations: buildReportRecommendations({ ranking: reportData.ranking, reputation: reportData.reputation, uptime: reportData.uptime }),
+        recommendations: buildReportRecommendations({ ranking: reportData.ranking, reputation: reportData.reputation, uptime: reportData.uptime, wordpressSeo: reportData.wordpressSeo }),
         changelog: [],
       }
 
@@ -214,8 +230,9 @@ export async function sendSingleReport(companyName: string, options?: { recipien
       reputation: reportData.reputation,
       ranking: reportData.ranking,
       uptime: reportData.uptime,
+      wordpressSeo: toReportSectionShape(reportData.wordpressSeo),
     },
-    recommendations: buildReportRecommendations({ ranking: reportData.ranking, reputation: reportData.reputation, uptime: reportData.uptime }),
+    recommendations: buildReportRecommendations({ ranking: reportData.ranking, reputation: reportData.reputation, uptime: reportData.uptime, wordpressSeo: reportData.wordpressSeo }),
     changelog: [],
   }
 

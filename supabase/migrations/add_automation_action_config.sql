@@ -28,9 +28,16 @@ as $$
   from unnest(arr) as a
 $$;
 
+-- The column's existing default (a text[] literal) can't be
+-- auto-cast to jsonb as part of the type change ("default for column
+-- actions cannot be cast automatically to type jsonb") — drop it first,
+-- change the type, then set the new jsonb default as a separate step.
+alter table public.automations alter column actions drop default;
+
 alter table public.automations
   alter column actions type jsonb
-  using public._migrate_actions_to_jsonb(actions),
-  alter column actions set default '[]'::jsonb;
+  using public._migrate_actions_to_jsonb(actions);
+
+alter table public.automations alter column actions set default '[]'::jsonb;
 
 drop function public._migrate_actions_to_jsonb(text[]);

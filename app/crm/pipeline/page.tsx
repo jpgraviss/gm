@@ -867,7 +867,7 @@ function DealPanel({
               <p className="text-xs text-gray-500 mt-0.5">
                 {confirmDelete === 'deal'
                   ? `Remove the deal for "${deal.company}" permanently.`
-                  : `Remove "${deal.company}" and all its data permanently.`}
+                  : `Remove "${deal.company}" permanently. Blocked if it still has contacts, deals, contracts, invoices, projects, or proposals attached.`}
               </p>
             </div>
           </div>
@@ -1372,8 +1372,22 @@ export default function PipelinePage() {
   }
 
   async function handleDeleteCompany(companyId: string) {
+    const removed = crmCompanies.find(c => c.id === companyId)
     setCrmCompanies(prev => prev.filter(c => c.id !== companyId))
-    fetch(`/api/crm/companies/${companyId}`, { method: 'DELETE' }).catch(() => toast('Failed to delete company', 'error'))
+    try {
+      const res = await fetch(`/api/crm/companies/${companyId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        // Most commonly a 409 — company still has related records (AUDIT
+        // #96 blocks rather than cascade-deletes them). Revert the
+        // optimistic removal so the UI doesn't show it as gone when it isn't.
+        const body = await res.json().catch(() => ({}))
+        if (removed) setCrmCompanies(prev => [...prev, removed])
+        toast(body.error || 'Failed to delete company', 'error')
+      }
+    } catch {
+      if (removed) setCrmCompanies(prev => [...prev, removed])
+      toast('Failed to delete company', 'error')
+    }
   }
 
   const someSelected = selectedIds.size > 0

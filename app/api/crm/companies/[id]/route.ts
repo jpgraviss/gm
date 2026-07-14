@@ -4,6 +4,7 @@ import { validate, validationError } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getCompanyRelatedCounts, hasBlockingRelatedRecords, describeRelatedCounts, deleteCompanyActivities } from '@/lib/crm-cascade'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCompany(row: any) {
@@ -122,10 +123,29 @@ export const DELETE = withErrorHandler('crm/companies/[id] DELETE', async (
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
   const db = createServiceClient()
+
+  const { data: company } = await db.from('crm_companies').select('id, name').eq('id', id).single()
+  if (!company) return NextResponse.json({ error: 'Company not found' }, { status: 404 })
+
+  // AUDIT #96: block rather than cascade-destroy real business records —
+  // irreversible data loss outweighs the inconvenience of requiring
+  // reassignment first. The company's own activity log is the one
+  // exception (see deleteCompanyActivities) since it has no independent
+  // value once the company itself is gone.
+  const counts = await getCompanyRelatedCounts(db, company.id, company.name)
+  if (hasBlockingRelatedRecords(counts)) {
+    return NextResponse.json({
+      error: `Cannot delete "${company.name}" — it still has ${describeRelatedCounts(counts)}. Reassign or remove these first.`,
+      relatedCounts: counts,
+    }, { status: 409 })
+  }
+
+  await deleteCompanyActivities(db, company.id, company.name)
+
   const { error } = await db.from('crm_companies').delete().eq('id', id)
   if (error) {
     throw new Error(error?.message || 'Failed to delete company')
   }
-  logAudit({ userName: 'system', action: 'deleted_company', module: 'crm', type: 'warning', metadata: { companyId: id } })
+  logAudit({ userName: 'system', action: 'deleted_company', module: 'crm', type: 'warning', metadata: { companyId: id, companyName: company.name } })
   return NextResponse.json({ success: true })
 })

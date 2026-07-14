@@ -1657,9 +1657,23 @@ export default function CompaniesPage() {
 
   async function handleDeleteCompany(id: string) {
     if (!confirm('Delete this company? This action cannot be undone.')) return
+    const removed = localCompanies.find(c => c.id === id)
     setLocalCompanies(prev => prev.filter(c => c.id !== id))
     if (selectedCompany?.id === id) setSelectedCompany(null)
-    await fetch(`/api/crm/companies/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete company', 'error'))
+    try {
+      const res = await fetch(`/api/crm/companies/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        // Most commonly a 409 — company still has related records (AUDIT
+        // #96 blocks rather than cascade-deletes them). Revert the
+        // optimistic removal so the UI doesn't show it as gone when it isn't.
+        const body = await res.json().catch(() => ({}))
+        if (removed) setLocalCompanies(prev => [removed, ...prev])
+        toast(body.error || 'Failed to delete company', 'error')
+      }
+    } catch {
+      if (removed) setLocalCompanies(prev => [removed, ...prev])
+      toast('Failed to delete company', 'error')
+    }
   }
 
   const filtered = localCompanies.filter(c => {
@@ -1691,16 +1705,31 @@ export default function CompaniesPage() {
 
   async function handleBulkDelete() {
     const ids = Array.from(selectedIds)
-    setLocalCompanies(prev => prev.filter(c => !selectedIds.has(c.id)))
     setSelectedIds(new Set())
     setShowBulkDeleteConfirm(false)
     try {
-      await fetch('/api/crm/bulk-delete', {
+      const res = await fetch('/api/crm/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'companies', ids }),
       })
-      toast(`${ids.length} companies deleted`, 'success')
+      if (!res.ok) {
+        toast('Failed to delete companies', 'error')
+        return
+      }
+      const body = await res.json() as { deleted: number; skipped: { id: string; name: string; reason: string }[] }
+      // AUDIT #96: blocks per-company rather than cascade-destroying real
+      // business records — only actually-deleted companies (never the
+      // skipped ones) get removed from the visible list, since they
+      // weren't removed server-side either.
+      const skippedIds = new Set(body.skipped.map(s => s.id))
+      setLocalCompanies(prev => prev.filter(c => !selectedIds.has(c.id) || skippedIds.has(c.id)))
+      if (body.skipped.length > 0) {
+        const detail = body.skipped.map(s => `${s.name} (${s.reason})`).join('; ')
+        toast(`${body.deleted} deleted, ${body.skipped.length} skipped — ${detail}`, body.deleted > 0 ? 'success' : 'error')
+      } else {
+        toast(`${body.deleted} companies deleted`, 'success')
+      }
     } catch {
       toast('Failed to delete companies', 'error')
     }
@@ -2034,7 +2063,7 @@ export default function CompaniesPage() {
       {showBulkDeleteConfirm && (
         <ConfirmModal
           title={`Delete ${selectedIds.size} companies?`}
-          description="This will also remove associated contacts, deals, and contracts."
+          description="Companies with existing contacts, deals, contracts, invoices, projects, or proposals will be skipped — reassign or remove those first."
           onConfirm={handleBulkDelete}
           onCancel={() => setShowBulkDeleteConfirm(false)}
         />

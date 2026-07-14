@@ -8,6 +8,7 @@ import { publishSocialPost } from '@/lib/social-publish'
 import { processScheduledEmails } from '@/lib/email-scheduler'
 import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender'
 import { syncGranolaNotes, isGranolaConfigured } from '@/lib/granola'
+import { dispatchReviewCampaign } from '@/lib/review-campaigns'
 
 /**
  * Cron endpoint — called on a schedule (e.g. every 6 hours via Vercel Cron).
@@ -169,8 +170,64 @@ export const GET = withErrorHandler('cron GET', async (req) => {
     results.granola = { error: 'Failed' }
   }
 
+  // 10. Dispatch scheduled review campaigns whose scheduled_at has passed.
+  try {
+    results.reviewCampaigns = await dispatchScheduledReviewCampaigns()
+  } catch (err) {
+    console.error('[cron] Review campaign dispatch failed:', err)
+    results.reviewCampaigns = { error: 'Failed' }
+  }
+
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })
 })
+
+/**
+ * Send review campaigns whose scheduled_at has arrived. Each row is claimed
+ * atomically (status 'scheduled' -> 'active', only proceeding if the update
+ * actually returned a row) so two overlapping cron ticks can't both dispatch
+ * the same campaign twice.
+ */
+async function dispatchScheduledReviewCampaigns(): Promise<{ dispatched: number; sent: number; failed: number }> {
+  const db = createServiceClient()
+  const now = new Date().toISOString()
+
+  const { data: due } = await db
+    .from('review_campaigns')
+    .select('id')
+    .eq('status', 'scheduled')
+    .lte('scheduled_at', now)
+    .limit(20)
+
+  let dispatched = 0
+  let sent = 0
+  let failed = 0
+
+  for (const row of due ?? []) {
+    const { data: claimed } = await db
+      .from('review_campaigns')
+      .update({ status: 'active' })
+      .eq('id', row.id)
+      .eq('status', 'scheduled')
+      .select('*')
+      .maybeSingle()
+    if (!claimed) continue
+
+    dispatched++
+    try {
+      const result = await dispatchReviewCampaign(db, claimed)
+      sent += result.sent
+      failed += result.failed
+      await db.from('review_campaigns').update({ status: 'sent' }).eq('id', claimed.id)
+    } catch (err) {
+      console.error('[cron] Failed to dispatch review campaign', claimed.id, err)
+      // Leave it claimable again rather than stuck 'active' forever.
+      await db.from('review_campaigns').update({ status: 'scheduled' }).eq('id', claimed.id)
+      failed++
+    }
+  }
+
+  return { dispatched, sent, failed }
+}
 
 /**
  * Determine if we should run the daily rank-tracking job on this cron tick.

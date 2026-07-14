@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
+import { getSettings } from '@/lib/settings'
+import { dispatchReviewCampaign, getTemplatePreviews } from '@/lib/review-campaigns'
 
-export const GET = withErrorHandler('reputation/requests GET', async () => {
+export const GET = withErrorHandler('reputation/requests GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
   const { data: campaigns, error } = await db
     .from('review_campaigns')
@@ -13,10 +19,14 @@ export const GET = withErrorHandler('reputation/requests GET', async () => {
     throw new Error(error.message || 'Failed to fetch campaigns')
   }
 
-  return NextResponse.json({ campaigns: campaigns ?? [], templates: {} })
+  const settings = await getSettings()
+  return NextResponse.json({ campaigns: campaigns ?? [], templates: getTemplatePreviews(settings.company.name) })
 })
 
-export const POST = withErrorHandler('reputation/requests POST', async (req) => {
+export const POST = withErrorHandler('reputation/requests POST', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const { name, template, audience, scheduled_at, workspace_id } = body as {
     name: string
@@ -49,6 +59,26 @@ export const POST = withErrorHandler('reputation/requests POST', async (req) => 
 
   if (error) {
     throw new Error(error.message || 'Failed to create campaign')
+  }
+
+  // No schedule set — dispatch right away rather than leaving it as an
+  // inert draft with no way to ever send it (there's no separate "Send
+  // Now" action in the UI). Best-effort: a dispatch failure still leaves
+  // the campaign row behind so it's visible and can be investigated.
+  if (!scheduled_at) {
+    try {
+      await dispatchReviewCampaign(db, data)
+      const { data: updated } = await db
+        .from('review_campaigns')
+        .update({ status: 'sent' })
+        .eq('id', data.id)
+        .select()
+        .single()
+      return NextResponse.json(updated ?? data, { status: 201 })
+    } catch (err) {
+      console.error(`[reputation/requests] dispatch failed for campaign ${data.id}:`, err)
+      return NextResponse.json(data, { status: 201 })
+    }
   }
 
   return NextResponse.json(data, { status: 201 })

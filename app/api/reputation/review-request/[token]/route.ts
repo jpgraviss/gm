@@ -17,7 +17,7 @@ export const GET = withErrorHandler('reputation/review-request/[token] GET', asy
   const db = createServiceClient()
   const { data, error } = await db
     .from('review_requests')
-    .select('id, token, customer_name, company_name, google_review_url, status')
+    .select('id, token, customer_name, company_name, google_review_url, status, campaign_id, opened_at')
     .eq('token', token)
     .maybeSingle()
 
@@ -25,7 +25,24 @@ export const GET = withErrorHandler('reputation/review-request/[token] GET', asy
     return NextResponse.json({ error: 'Review request not found' }, { status: 404 })
   }
 
-  return NextResponse.json(data)
+  // Track "opened" for campaign analytics — a conditional update (only
+  // where opened_at IS NULL) so repeat page loads don't double-count, and
+  // so two concurrent loads can't both win the increment race.
+  if (data.campaign_id && !data.opened_at) {
+    const { data: claimed } = await db
+      .from('review_requests')
+      .update({ opened_at: new Date().toISOString() })
+      .eq('token', token)
+      .is('opened_at', null)
+      .select('id')
+      .maybeSingle()
+    if (claimed) {
+      await db.rpc('increment_review_campaign_counts', { p_campaign_id: data.campaign_id, p_sent: 0, p_opened: 1, p_reviews: 0 })
+    }
+  }
+
+  const { campaign_id: _campaignId, opened_at: _openedAt, ...publicData } = data
+  return NextResponse.json(publicData)
 })
 
 /** POST — submit a rating (and optional feedback) for a review request */
@@ -83,6 +100,10 @@ export const POST = withErrorHandler('reputation/review-request/[token] POST', a
 
   if (updateErr) {
     throw new Error(updateErr?.message || 'Failed to save review')
+  }
+
+  if (request.campaign_id) {
+    await db.rpc('increment_review_campaign_counts', { p_campaign_id: request.campaign_id, p_sent: 0, p_opened: 0, p_reviews: 1 })
   }
 
   // If rating is 1-3 (negative/neutral), save as internal feedback in the reviews table

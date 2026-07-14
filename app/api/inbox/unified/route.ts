@@ -67,7 +67,11 @@ export const GET = withErrorHandler('inbox/unified GET', async (req) => {
   const { data: crmActivities } = await db
     .from('crm_activities')
     .select('id, type, body, contact_id, company_id, timestamp, user_name')
-    .in('type', ['Email', 'Call', 'Meeting', 'Note'])
+    // Real ActivityType values are lowercase (lib/types.ts) — this filter
+    // previously compared against capitalized values that no write path
+    // ever produces, so the Unified Inbox's activity source silently never
+    // matched any real logged activity.
+    .in('type', ['email', 'call', 'meeting', 'note', 'call_note'])
     .order('timestamp', { ascending: false })
     .limit(limit)
 

@@ -72,7 +72,10 @@ export function getOutlook365CalendarLink(event: CalendarLinkEvent): string {
 }
 
 export function getYahooCalendarLink(event: CalendarLinkEvent): string {
-  const start = toCompact(event.startDateTime)
+  // Yahoo's st param has no separate timezone declaration (no ctz-style
+  // param like Google's link) — same requirement as Outlook, needs a real
+  // UTC instant, not raw wall-clock digits.
+  const start = toUTCCompact(event.startDateTime, event.timezone)
   // Both parsed the same (server-local) way — their difference is the
   // correct duration regardless of that basis being "wrong" in isolation.
   const d1 = new Date(event.startDateTime)

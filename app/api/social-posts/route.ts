@@ -48,6 +48,15 @@ export const POST = withErrorHandler('social-posts POST', async (req) => {
     )
   }
 
+  // Only these two are ever legitimately client-set on create — the rest
+  // of the PostStatus union (approved/publishing/published/failed/etc.) is
+  // reached only through the real approval/publish flow, never a raw
+  // create. Previously hardcoded to 'draft' regardless of what the
+  // composer's "Submit for Approval" button sent, so no post could ever
+  // reach the client portal's approval queue.
+  const CREATABLE_STATUSES = new Set(['draft', 'pending_approval'])
+  const status = CREATABLE_STATUSES.has(body.status) ? body.status : 'draft'
+
   const db = createServiceClient()
   const id = `sp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 
@@ -62,7 +71,7 @@ export const POST = withErrorHandler('social-posts POST', async (req) => {
       hashtags:        body.hashtags ?? [],
       link_url:        body.linkUrl ?? null,
       media_urls:      body.mediaUrls ?? [],
-      status:          'draft',
+      status,
       approval_status: 'pending',
     })
     .select()

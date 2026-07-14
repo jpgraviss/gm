@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import FileUpload from '@/components/ui/FileUpload'
 import CompanySelect from '@/components/ui/CompanySelect'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import {
   ArrowLeft, Plus, X, CheckCircle2, Clock, Circle, LayoutList, Columns3,
   MoreHorizontal, Pencil, Trash2, ChevronDown, ChevronRight, Calendar,
@@ -636,6 +637,13 @@ export default function ProjectDetailPage() {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   const [newSectionName, setNewSectionName] = useState('')
   const [showAddSection, setShowAddSection] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [showAddMilestone, setShowAddMilestone] = useState(false)
+  const [newMilestoneName, setNewMilestoneName] = useState('')
+  const [newMilestoneDue, setNewMilestoneDue] = useState('')
+  const [showNoteForm, setShowNoteForm] = useState(false)
+  const [noteText, setNoteText] = useState('')
 
   useEffect(() => {
     if (!id) return
@@ -767,6 +775,52 @@ export default function ProjectDetailPage() {
     }).catch(() => toast('Failed to update project', 'error'))
   }, [id, toast])
 
+  const deleteProject = useCallback(async () => {
+    if (!id) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        toast('Failed to delete project', 'error')
+        setDeleting(false)
+        return
+      }
+      toast('Project deleted', 'success')
+      router.push('/projects')
+    } catch {
+      toast('Failed to delete project', 'error')
+      setDeleting(false)
+    }
+  }, [id, router, toast])
+
+  const toggleMilestone = useCallback((milestoneId: string) => {
+    if (!project) return
+    const updated = project.milestones.map(m => m.id === milestoneId ? { ...m, completed: !m.completed } : m)
+    updateProject({ milestones: updated })
+  }, [project, updateProject])
+
+  const addMilestone = useCallback(() => {
+    if (!project || !newMilestoneName.trim() || !newMilestoneDue) return
+    const newMilestone = { id: `ms-${Date.now()}`, name: newMilestoneName.trim(), dueDate: newMilestoneDue, completed: false }
+    updateProject({ milestones: [...project.milestones, newMilestone] })
+    setNewMilestoneName('')
+    setNewMilestoneDue('')
+    setShowAddMilestone(false)
+  }, [project, newMilestoneName, newMilestoneDue, updateProject])
+
+  const addNote = useCallback(() => {
+    if (!project || !noteText.trim()) return
+    const newNote = {
+      id: `note-${Date.now()}`,
+      text: noteText.trim(),
+      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      author: 'You',
+    }
+    updateProject({ notes: [...(project.notes ?? []), newNote] })
+    setNoteText('')
+    setShowNoteForm(false)
+  }, [project, noteText, updateProject])
+
   const addSection = useCallback((name: string) => {
     if (!name.trim() || sections.includes(name.trim())) return
     const newSections = [...sections, name.trim()]
@@ -846,6 +900,9 @@ export default function ProjectDetailPage() {
               </div>
               <button onClick={() => setShowSettings(true)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400" title="Project settings">
                 <Settings size={16} />
+              </button>
+              <button onClick={() => setConfirmDelete(true)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500" title="Delete project">
+                <Trash2 size={16} />
               </button>
             </div>
           </div>
@@ -1075,28 +1132,65 @@ export default function ProjectDetailPage() {
             </div>
 
             {/* Milestones */}
-            {project.milestones.length > 0 && (
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Milestones</h3>
-                <div className="flex flex-col gap-2">
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Milestones</h3>
+              {project.milestones.length > 0 && (
+                <div className="flex flex-col gap-2 mb-2">
                   {project.milestones.map((m, i) => (
-                    <div key={m.id} className={`flex items-center gap-3 p-3 rounded-xl border ${m.completed ? 'bg-emerald-50 border-emerald-100' : 'bg-gray-50 border-gray-100'}`}>
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${m.completed ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                    <button
+                      key={m.id}
+                      onClick={() => toggleMilestone(m.id)}
+                      className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-colors ${m.completed ? 'bg-emerald-50 border-emerald-100 hover:bg-emerald-100/60' : 'bg-gray-50 border-gray-100 hover:bg-gray-100'}`}
+                    >
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${m.completed ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
                         {m.completed ? <CheckCircle2 size={12} /> : i + 1}
                       </div>
                       <span className={`text-sm flex-1 ${m.completed ? 'text-emerald-700' : 'text-gray-800'}`}>{m.name}</span>
-                      <span className="text-xs text-gray-400">{formatDate(m.dueDate)}</span>
-                    </div>
+                      <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.dueDate)}</span>
+                    </button>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+              {showAddMilestone ? (
+                <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <input
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+                    placeholder="Milestone name"
+                    value={newMilestoneName}
+                    onChange={e => setNewMilestoneName(e.target.value)}
+                    autoFocus
+                  />
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700"
+                    value={newMilestoneDue}
+                    onChange={e => setNewMilestoneDue(e.target.value)}
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={addMilestone} className="flex-1 py-2 rounded-xl text-white text-sm font-semibold" style={{ background: projectColor }}>Add</button>
+                    <button
+                      onClick={() => { setShowAddMilestone(false); setNewMilestoneName(''); setNewMilestoneDue('') }}
+                      className="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAddMilestone(true)}
+                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} /> Add Milestone
+                </button>
+              )}
+            </div>
 
             {/* Notes */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">Notes</h3>
-              {(project.notes ?? []).length > 0 ? (
-                <div className="flex flex-col gap-2">
+              {(project.notes ?? []).length > 0 && (
+                <div className="flex flex-col gap-2 mb-2">
                   {project.notes!.map(note => (
                     <div key={note.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
                       <p className="text-sm text-gray-800 whitespace-pre-wrap">{note.text}</p>
@@ -1104,8 +1198,36 @@ export default function ProjectDetailPage() {
                     </div>
                   ))}
                 </div>
+              )}
+              {showNoteForm ? (
+                <div className="flex flex-col gap-2">
+                  <textarea
+                    className="w-full p-3 rounded-xl border border-gray-200 text-sm text-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-green-800/30 focus:border-green-800/40"
+                    rows={4}
+                    placeholder="Write a note..."
+                    value={noteText}
+                    onChange={e => setNoteText(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={addNote} className="flex-1 py-2 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90" style={{ background: projectColor }}>
+                      Save Note
+                    </button>
+                    <button
+                      onClick={() => { setShowNoteForm(false); setNoteText('') }}
+                      className="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               ) : (
-                <p className="text-sm text-gray-400">No notes yet</p>
+                <button
+                  onClick={() => setShowNoteForm(true)}
+                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} /> Add Note
+                </button>
               )}
             </div>
           </div>
@@ -1137,6 +1259,16 @@ export default function ProjectDetailPage() {
           project={project}
           onClose={() => setShowSettings(false)}
           onUpdate={updateProject}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete Project?"
+          description={`This will permanently delete ${project.company}. This action cannot be undone.`}
+          confirmLabel={deleting ? 'Deleting…' : 'Delete'}
+          onConfirm={deleteProject}
+          onCancel={() => setConfirmDelete(false)}
         />
       )}
     </>

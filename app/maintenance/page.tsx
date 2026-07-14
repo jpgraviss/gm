@@ -210,6 +210,7 @@ function MaintenancePanel({
   onClose,
   onConfirmCancellation,
   onUpdateBilling,
+  onUpdateDocuments,
   onEdit,
   onDelete,
   crmContacts,
@@ -220,6 +221,7 @@ function MaintenancePanel({
   onClose: () => void
   onConfirmCancellation: (id: string) => void
   onUpdateBilling: (id: string, fee: number, nextDate: string) => void
+  onUpdateDocuments: (id: string, documents: MaintenanceRecord['documents']) => void
   onEdit: (record: MaintenanceRecord) => void
   onDelete: (id: string) => void
   crmContacts: CRMContact[]
@@ -257,17 +259,31 @@ function MaintenancePanel({
     if (!file) return
     const reader = new FileReader()
     reader.onload = ev => {
-      setDocuments(prev => [...prev, {
+      // Previously local React state only, with no fetch call anywhere —
+      // uploads looked successful (appeared in the list immediately) but
+      // silently vanished the moment the panel was closed and reopened,
+      // since `documents` re-initializes from the record's real (unchanged)
+      // array every time. Persists via the same PATCH pattern onUpdateBilling
+      // already uses.
+      const next = [...documents, {
         id: `doc-${Date.now()}`,
         name: file.name,
         type: file.type,
         size: file.size,
         uploadedDate: new Date().toISOString().split('T')[0],
         dataUrl: ev.target?.result as string,
-      }])
+      }]
+      setDocuments(next)
+      onUpdateDocuments(record.id, next)
     }
     reader.readAsDataURL(file)
     e.target.value = ''
+  }
+
+  function handleDeleteDocument(docId: string) {
+    const next = documents.filter(d => d.id !== docId)
+    setDocuments(next)
+    onUpdateDocuments(record.id, next)
   }
 
   return (
@@ -537,7 +553,7 @@ function MaintenancePanel({
                     <a href={doc.dataUrl} download={doc.name} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg">
                       <FileText size={14} />
                     </a>
-                    <button onClick={() => setDocuments(prev => prev.filter(d => d.id !== doc.id))} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg">
+                    <button onClick={() => handleDeleteDocument(doc.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg">
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -691,6 +707,16 @@ export default function MaintenancePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ monthlyFee: fee, nextBillingDate: nextDate }),
     }).catch(() => toast('Failed to update billing details', 'error'))
+  }
+
+  function updateDocuments(id: string, documents: MaintenanceRecord['documents']) {
+    setRecords(prev => prev.map(r => r.id === id ? { ...r, documents } : r))
+    if (selected?.id === id) setSelected(prev => prev ? { ...prev, documents } : prev)
+    fetch(`/api/maintenance/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documents }),
+    }).catch(() => toast('Failed to save document', 'error'))
   }
 
   async function handleDeleteRecord(id: string) {
@@ -896,6 +922,7 @@ export default function MaintenancePage() {
           onClose={() => setSelected(null)}
           onConfirmCancellation={confirmCancellation}
           onUpdateBilling={updateBilling}
+          onUpdateDocuments={updateDocuments}
           onEdit={r => { setSelected(null); setEditingRecord(r) }}
           onDelete={handleDeleteRecord}
           crmContacts={crmContacts}

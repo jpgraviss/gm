@@ -181,7 +181,11 @@ export default function ReputationPage() {
         setAddDate(new Date().toISOString().slice(0, 10))
         setAddSource('Google')
         setAddCompany('')
+      } else {
+        toast('Failed to add review', 'error')
       }
+    } catch {
+      toast('Failed to add review', 'error')
     } finally {
       setAddSubmitting(false)
     }
@@ -294,7 +298,11 @@ export default function ReputationPage() {
         setReviews((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
         setResponseText('')
         setExpandedId(null)
+      } else {
+        toast('Failed to send response', 'error')
       }
+    } catch {
+      toast('Failed to send response', 'error')
     } finally {
       setSubmitting(false)
     }

@@ -192,7 +192,7 @@ function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: I
   )
 }
 
-function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImported: (count: number) => void }) {
+function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImported: (count: number, failed: number, skipped: number) => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [rows, setRows] = useState<string[][]>([])
   const [headers, setHeaders] = useState<string[]>([])
@@ -240,6 +240,8 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
     if (!rows.length) return
     setImporting(true)
     let imported = 0
+    let failed = 0
+    let skipped = 0
     for (const row of rows) {
       const getValue = (field: string) => {
         const header = mapping[field]
@@ -249,7 +251,7 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
       }
       const company = getValue('company')
       const amount = parseFloat(getValue('amount') || '0')
-      if (!company || !amount) continue
+      if (!company || !amount) { skipped++; continue }
 
       try {
         const res = await fetch('/api/invoices', {
@@ -266,9 +268,12 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
           }),
         })
         if (res.ok) imported++
-      } catch {}
+        else failed++
+      } catch {
+        failed++
+      }
     }
-    onImported(imported)
+    onImported(imported, failed, skipped)
   }
 
   return (
@@ -696,8 +701,14 @@ export default function BillingPage() {
       {showImportModal && (
         <CSVImportModal
           onClose={() => setShowImportModal(false)}
-          onImported={(count) => {
-            toast(`${count} invoice${count !== 1 ? 's' : ''} imported`, 'success')
+          onImported={(count, failed, skipped) => {
+            // Previously reported only the success count with a bare
+            // `catch {}` around each row — no indication which rows
+            // failed or why.
+            const parts = [`${count} invoice${count !== 1 ? 's' : ''} imported`]
+            if (failed > 0) parts.push(`${failed} failed`)
+            if (skipped > 0) parts.push(`${skipped} skipped (missing company/amount)`)
+            toast(parts.join(', '), failed > 0 ? 'error' : 'success')
             setShowImportModal(false)
             fetch('/api/invoices').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalInvoices(data) })
           }}

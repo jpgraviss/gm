@@ -48,3 +48,22 @@ export async function requirePortalClient(
 
   return null
 }
+
+// requirePortalClient only checks that the caller may touch a record
+// belonging to its CURRENT company — it doesn't restrict which fields they
+// may change. A route that lets a portal client PATCH a record's `company`/
+// `companyId` (a reassignment, not a status update) needs this to know
+// whether to restrict the field set: a portal client should never be able
+// to move a record they own to a different company, or edit fields their
+// own portal UI never sends in the first place.
+export async function isStaffCaller(req: NextRequest): Promise<boolean> {
+  const email = await getAuthenticatedEmail(req)
+  if (!email) return false
+  const db = createServiceClient()
+  const { data: staff } = await db
+    .from('team_members')
+    .select('id')
+    .ilike('email', email)
+    .maybeSingle()
+  return !!staff
+}

@@ -4,8 +4,17 @@ import { validate, validationError, PROPOSAL_STATUSES } from '@/lib/validation'
 import { fireAutomations } from '@/lib/automations-engine'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
-import { requirePortalClient } from '@/lib/portal-auth'
+import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
+
+// Fields the real portal Approvals UI ever sends (app/portal/approvals/page.tsx:
+// { status: 'Accepted'|'Declined', respondedDate }, { status: 'Draft', renewalNotes }).
+// Everything else — including company, which has been PATCH-able since
+// before this session — is staff-only: requirePortalClient only checks the
+// proposal's CURRENT company, not what a portal client is trying to change
+// it TO, so an unrestricted field set would let a portal client reassign
+// their own proposal to an arbitrary different company.
+const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['status', 'respondedDate', 'renewalNotes'])
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProposal(row: any) {
@@ -67,6 +76,19 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
 
   const denied = await requirePortalClient(req, currentProposal.company)
   if (denied) return denied
+
+  // requirePortalClient only confirms the caller may touch a proposal
+  // CURRENTLY belonging to their company — it says nothing about which
+  // fields they may set it TO. Without this, a portal client could set
+  // company to a different company's, silently reassigning their own
+  // proposal (with fully attacker-controlled value/items/serviceType)
+  // into another client's portal view.
+  if (!(await isStaffCaller(req))) {
+    const disallowed = Object.keys(body).filter(k => !PORTAL_CLIENT_EDITABLE_FIELDS.has(k))
+    if (disallowed.length > 0) {
+      return NextResponse.json({ error: `Not permitted to update: ${disallowed.join(', ')}` }, { status: 403 })
+    }
+  }
 
   // Map camelCase body keys to snake_case columns
   const update: Record<string, unknown> = {}

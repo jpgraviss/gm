@@ -5,7 +5,16 @@ import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
-import { requirePortalClient } from '@/lib/portal-auth'
+import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
+
+// Fields the real portal Approvals UI ever sends (app/portal/approvals/page.tsx:
+// { status: 'Signed by Client', clientSigned }, { status: 'Expired' },
+// { status: 'Draft' }). Everything else — including company/companyId,
+// added this session — is staff-only: requirePortalClient only checks the
+// record's CURRENT company, not what a portal client is trying to change
+// it TO, so an unrestricted field set would let a portal client reassign
+// their own contract to an arbitrary different company.
+const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['status', 'clientSigned'])
 
 // Valid status transitions — keys are current status, values are allowed next statuses
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -87,6 +96,19 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
 
   const denied = await requirePortalClient(req, current.company)
   if (denied) return denied
+
+  // requirePortalClient only confirms the caller may touch a contract
+  // CURRENTLY belonging to their company — it says nothing about which
+  // fields they may set it TO. Without this, a portal client could set
+  // company/companyId to a different company's, silently reassigning
+  // their own contract (with fully attacker-controlled value/billing/
+  // dates) into another client's portal view.
+  if (!(await isStaffCaller(req))) {
+    const disallowed = Object.keys(body).filter(k => !PORTAL_CLIENT_EDITABLE_FIELDS.has(k))
+    if (disallowed.length > 0) {
+      return NextResponse.json({ error: `Not permitted to update: ${disallowed.join(', ')}` }, { status: 403 })
+    }
+  }
 
   // If status is being changed, validate the transition
   if (body.status !== undefined) {

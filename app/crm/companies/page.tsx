@@ -1253,7 +1253,39 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
     )}
     {creatingProposal && (
       <NewProposalPanel
-        onSave={(_data: NewProposalFormData) => setCreatingProposal(false)}
+        onSave={async (data: NewProposalFormData) => {
+          setCreatingProposal(false)
+          try {
+            const res = await fetch('/api/proposals', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                dealId: '',
+                company: data.company,
+                companyId: company.id,
+                serviceType: data.serviceType,
+                assignedRep: data.assignedRep,
+                value: Number(data.value) || 0,
+                items: [{
+                  id: `item-${Date.now()}`,
+                  description: data.notes || data.serviceType,
+                  type: 'one-time',
+                  quantity: 1,
+                  unitPrice: Number(data.value) || 0,
+                  total: Number(data.value) || 0,
+                }],
+              }),
+            })
+            if (res.ok) {
+              toast('Proposal created', 'success')
+            } else {
+              const err = await res.json().catch(() => ({}))
+              toast(err.error || 'Failed to create proposal', 'error')
+            }
+          } catch {
+            toast('Network error — could not create proposal', 'error')
+          }
+        }}
         onClose={() => setCreatingProposal(false)}
       />
     )}

@@ -439,11 +439,11 @@ async function executeAction(
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
         type: 'Note',
-        description: note,
+        title: note,
         company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
         timestamp: new Date().toISOString(),
-        logged_by: 'System',
+        user_name: 'System',
       })
       break
     }
@@ -455,11 +455,11 @@ async function executeAction(
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
         type: 'Notification',
-        description: `[Auto] ${message}`,
+        title: `[Auto] ${message}`,
         company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
         timestamp: new Date().toISOString(),
-        logged_by: 'System',
+        user_name: 'System',
       })
 
       const targetUserIds: string[] = []
@@ -621,11 +621,11 @@ async function executeAction(
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
         type: 'Notification',
-        description: `[Auto] ${notifMessage}`,
+        title: `[Auto] ${notifMessage}`,
         company_id: (context.companyId as string) ?? null,
         contact_id: (context.contactId as string) ?? null,
         timestamp: new Date().toISOString(),
-        logged_by: 'System',
+        user_name: 'System',
       })
 
       const unitMap: Record<string, string> = {
@@ -657,11 +657,11 @@ async function executeAction(
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
         type: 'Touchpoint',
-        description: `[Auto] ${context.trigger ?? 'Automation'} for ${company}`,
+        title: `[Auto] ${context.trigger ?? 'Automation'} for ${company}`,
         company_id: (context.companyId as string) ?? null,
         contact_id: (context.contactId as string) ?? null,
         timestamp: new Date().toISOString(),
-        logged_by: 'System',
+        user_name: 'System',
       })
       break
     }
@@ -670,10 +670,10 @@ async function executeAction(
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
         type: 'FLAG',
-        description: `[Auto] Flagged for attention — ${context.trigger ?? action}`,
+        title: `[Auto] Flagged for attention — ${context.trigger ?? action}`,
         company_id: (context.companyId as string) ?? null,
         timestamp: new Date().toISOString(),
-        logged_by: 'System',
+        user_name: 'System',
       })
       break
     }
@@ -713,10 +713,10 @@ async function executeAction(
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
         type: 'Template',
-        description: `[Auto] Applied service template "${template.name}" to ${company}`,
+        title: `[Auto] Applied service template "${template.name}" to ${company}`,
         company_id: (context.companyId as string) ?? null,
         timestamp: new Date().toISOString(),
-        logged_by: 'System',
+        user_name: 'System',
       })
       break
     }

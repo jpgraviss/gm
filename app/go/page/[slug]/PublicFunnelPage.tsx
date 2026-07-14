@@ -30,6 +30,7 @@ function FormBlock({ data, funnelSlug, pageId }: { data: Record<string, unknown>
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(false)
 
   const bgColor = (data.bgColor as string) ?? '#ffffff'
   const textColor = (data.textColor as string) ?? '#111827'
@@ -38,15 +39,20 @@ function FormBlock({ data, funnelSlug, pageId }: { data: Record<string, unknown>
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSubmitting(true)
+    setError(false)
     try {
-      await fetch('/api/forms/public/funnel-submit', {
+      const res = await fetch('/api/forms/public/funnel-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ funnelSlug, pageId, data: formData }),
       })
-      setSubmitted(true)
+      if (!res.ok) {
+        setError(true)
+      } else {
+        setSubmitted(true)
+      }
     } catch {
-      // silent fail
+      setError(true)
     } finally {
       setSubmitting(false)
     }
@@ -89,6 +95,9 @@ function FormBlock({ data, funnelSlug, pageId }: { data: Record<string, unknown>
               )}
             </div>
           ))}
+          {error && (
+            <p className="text-sm text-red-600 text-center">Something went wrong — please try again.</p>
+          )}
           <button
             type="submit"
             disabled={submitting}

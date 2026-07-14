@@ -154,7 +154,7 @@ export default function FormsPage() {
   }
 
   async function deleteForm(id: string) {
-    if (!confirm('Delete this form? Submissions will be kept.')) return
+    if (!confirm('Delete this form? All of its submissions will be permanently deleted too.')) return
     try {
       const res = await fetch(`/api/forms/${id}`, { method: 'DELETE' })
       if (!res.ok) { toast('Failed to delete form', 'error'); return }

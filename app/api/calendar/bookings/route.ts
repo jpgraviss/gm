@@ -6,6 +6,7 @@ import { getGoogleCalendarLink, getOutlookCalendarLink, getOutlook365CalendarLin
 import { getResend } from '@/lib/resend'
 import { getSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
   const { searchParams } = new URL(req.url)
@@ -16,6 +17,8 @@ export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
   const db = createServiceClient()
 
   if (slug && date) {
+    // Public slot-availability check (the /go/book/[slug] page) — no auth,
+    // matches the older /api/calendar/slots route's public nature.
     const { data: bt } = await db
       .from('booking_types')
       .select('id, duration_minutes, buffer_minutes, availability, active')
@@ -126,6 +129,12 @@ export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
 
     return NextResponse.json({ slots })
   }
+
+  // Below this point is the internal staff listing (no slug/date) — this
+  // whole route is in proxy.ts's public prefix list for the slot-check
+  // path above, so this branch needs its own auth check.
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
 
   let query = db
     .from('booking_type_bookings')

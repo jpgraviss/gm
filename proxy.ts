@@ -30,6 +30,8 @@ const PUBLIC_PREFIXES = [
   '/api/calendar/slots',
   '/api/calendar/callback',
   '/api/calendar/feed/',
+  '/api/calendar/booking-types',
+  '/api/calendar/bookings',
   '/api/bookings',
   '/api/portal-clients/magic-link',
   '/api/portal-clients/verify-code',
@@ -50,6 +52,7 @@ const PUBLIC_PREFIXES = [
   '/api/portal/',
   '/api/intelligence/track',
   '/api/intelligence/script',
+  '/api/reputation/review-request/',
 ]
 
 function getClientIp(req: NextRequest): string {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 function slugify(name: string): string {
   return name
@@ -23,6 +24,12 @@ export const GET = withErrorHandler('calendar/booking-types GET', async () => {
 })
 
 export const POST = withErrorHandler('calendar/booking-types POST', async (req) => {
+  // The GET on this route is intentionally public (the /go/book/[slug] page
+  // needs it), which means proxy.ts's outer gate can't distinguish this
+  // POST from that GET by path prefix alone — this route-level check is
+  // now the only thing keeping booking-type creation/editing staff-only.
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const body = await req.json()
   const { name, description, duration_minutes, location, color, availability, buffer_minutes, active, id, intake_questions } = body
 

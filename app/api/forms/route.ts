@@ -4,6 +4,7 @@ import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pa
 import { slugifyForm } from '@/lib/forms'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapForm(row: any) {
@@ -57,6 +58,8 @@ export const GET = withErrorHandler('forms GET', async (req: NextRequest) => {
 })
 
 export const POST = withErrorHandler('forms POST', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const body = await req.json()
 
   if (!body.name || typeof body.name !== 'string') {

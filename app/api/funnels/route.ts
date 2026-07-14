@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { slugifyForm } from '@/lib/forms'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('funnels GET', async () => {
   const db = createServiceClient()
@@ -39,6 +40,8 @@ export const GET = withErrorHandler('funnels GET', async () => {
 })
 
 export const POST = withErrorHandler('funnels POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const body = await req.json()
   if (!body.name || typeof body.name !== 'string') {
     return NextResponse.json({ error: 'name is required' }, { status: 400 })

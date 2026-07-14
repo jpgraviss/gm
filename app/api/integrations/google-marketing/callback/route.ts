@@ -7,6 +7,7 @@ import {
 } from '@/lib/google-marketing'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { verifyOAuthState } from '@/lib/oauth-state'
 
 /**
  * OAuth callback. Exchanges the authorization code for tokens, introspects
@@ -19,11 +20,16 @@ export const GET = withErrorHandler('integrations/google-marketing/callback GET'
   const err = searchParams.get('error')
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
 
+  const { valid, clearCookie } = verifyOAuthState(req, 'google-marketing', searchParams.get('state'))
+  if (!valid) {
+    return clearCookie(NextResponse.redirect(`${appUrl}/settings?tab=integrations&google_err=invalid_state`))
+  }
+
   if (err) {
-    return NextResponse.redirect(`${appUrl}/settings?tab=integrations&google_err=${encodeURIComponent(err)}`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/settings?tab=integrations&google_err=${encodeURIComponent(err)}`))
   }
   if (!code) {
-    return NextResponse.redirect(`${appUrl}/settings?tab=integrations&google_err=missing_code`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/settings?tab=integrations&google_err=missing_code`))
   }
 
   try {
@@ -45,7 +51,7 @@ export const GET = withErrorHandler('integrations/google-marketing/callback GET'
 
     // Need refresh token to auto-refresh later
     if (!token.refresh_token) {
-      return NextResponse.redirect(`${appUrl}/settings?tab=integrations&google_err=missing_refresh_token`)
+      return clearCookie(NextResponse.redirect(`${appUrl}/settings?tab=integrations&google_err=missing_refresh_token`))
     }
 
     // Write one row per product that was consented to
@@ -75,9 +81,9 @@ export const GET = withErrorHandler('integrations/google-marketing/callback GET'
       metadata: { connected, accountEmail },
     })
 
-    return NextResponse.redirect(`${appUrl}/settings?tab=integrations&google_ok=${connected.join(',')}`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/settings?tab=integrations&google_ok=${connected.join(',')}`))
   } catch (exchangeErr) {
     console.error('[google-marketing callback]', exchangeErr)
-    return NextResponse.redirect(`${appUrl}/settings?tab=integrations&google_err=exchange_failed`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/settings?tab=integrations&google_err=exchange_failed`))
   }
 })

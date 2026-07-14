@@ -3,6 +3,7 @@ import { exchangeLinkedInCode } from '@/lib/linkedin'
 import { saveConnection } from '@/lib/social-connections'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { verifyOAuthState } from '@/lib/oauth-state'
 
 /**
  * GET /api/integrations/linkedin/callback?code=...
@@ -15,11 +16,16 @@ export const GET = withErrorHandler('integrations/linkedin/callback GET', async 
   const err = searchParams.get('error')
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
 
+  const { valid, clearCookie } = verifyOAuthState(req, 'linkedin', searchParams.get('state'))
+  if (!valid) {
+    return clearCookie(NextResponse.redirect(`${appUrl}/social?li_err=invalid_state`))
+  }
+
   if (err) {
-    return NextResponse.redirect(`${appUrl}/social?li_err=${encodeURIComponent(err)}`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/social?li_err=${encodeURIComponent(err)}`))
   }
   if (!code) {
-    return NextResponse.redirect(`${appUrl}/social?li_err=missing_code`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/social?li_err=missing_code`))
   }
 
   try {
@@ -31,9 +37,9 @@ export const GET = withErrorHandler('integrations/linkedin/callback GET', async 
       token: result.accessToken,
     })
     logAudit({ userName: 'system', action: 'linkedin_connected', module: 'integrations', type: 'action', metadata: { author: result.displayName } })
-    return NextResponse.redirect(`${appUrl}/social?li_ok=1`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/social?li_ok=1`))
   } catch (exchangeErr) {
     console.error('[linkedin callback]', exchangeErr)
-    return NextResponse.redirect(`${appUrl}/social?li_err=exchange_failed`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/social?li_err=exchange_failed`))
   }
 })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { exchangeMetaCode, upsertMetaIntegration } from '@/lib/meta-ads'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { verifyOAuthState } from '@/lib/oauth-state'
 
 /**
  * GET /api/integrations/meta/callback?code=...
@@ -14,11 +15,16 @@ export const GET = withErrorHandler('integrations/meta/callback GET', async (req
   const err = searchParams.get('error')
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
 
+  const { valid, clearCookie } = verifyOAuthState(req, 'meta', searchParams.get('state'))
+  if (!valid) {
+    return clearCookie(NextResponse.redirect(`${appUrl}/settings?tab=integrations&meta_err=invalid_state`))
+  }
+
   if (err) {
-    return NextResponse.redirect(`${appUrl}/settings?tab=integrations&meta_err=${encodeURIComponent(err)}`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/settings?tab=integrations&meta_err=${encodeURIComponent(err)}`))
   }
   if (!code) {
-    return NextResponse.redirect(`${appUrl}/settings?tab=integrations&meta_err=missing_code`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/settings?tab=integrations&meta_err=missing_code`))
   }
 
   try {
@@ -38,9 +44,9 @@ export const GET = withErrorHandler('integrations/meta/callback GET', async (req
       metadata: { accountEmail: result.accountEmail ?? null },
     })
 
-    return NextResponse.redirect(`${appUrl}/settings?tab=integrations&meta_ok=1`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/settings?tab=integrations&meta_ok=1`))
   } catch (exchangeErr) {
     console.error('[meta callback]', exchangeErr)
-    return NextResponse.redirect(`${appUrl}/settings?tab=integrations&meta_err=exchange_failed`)
+    return clearCookie(NextResponse.redirect(`${appUrl}/settings?tab=integrations&meta_err=exchange_failed`))
   }
 })

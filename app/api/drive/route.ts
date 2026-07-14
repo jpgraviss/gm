@@ -5,6 +5,7 @@ import {
   downloadFile, shareFile, shareFilePublic, deleteFile,
 } from '@/lib/google-drive'
 import { withErrorHandler } from '@/lib/api-handler'
+import { issueOAuthState } from '@/lib/oauth-state'
 
 // GET /api/drive?action=status|list|auth-url|client-folder
 export const GET = withErrorHandler('drive GET', async (req: NextRequest) => {
@@ -12,8 +13,8 @@ export const GET = withErrorHandler('drive GET', async (req: NextRequest) => {
   const action = searchParams.get('action') ?? 'status'
 
   if (action === 'auth-url') {
-    const state = Buffer.from(JSON.stringify({ ts: Date.now() })).toString('base64url')
-    return NextResponse.json({ url: getDriveAuthUrl(state) })
+    const { state, setCookie } = issueOAuthState('drive')
+    return setCookie(NextResponse.json({ url: getDriveAuthUrl(state) }))
   }
 
   if (action === 'status') {

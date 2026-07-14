@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { exchangeDriveCode, saveDriveConfig } from '@/lib/google-drive'
 import { encrypt } from '@/lib/encryption'
 import { withErrorHandler } from '@/lib/api-handler'
+import { verifyOAuthState } from '@/lib/oauth-state'
 
 // GET /api/drive/callback?code=...&state=...
 export const GET = withErrorHandler('drive/callback GET', async (req: NextRequest) => {
@@ -10,11 +11,16 @@ export const GET = withErrorHandler('drive/callback GET', async (req: NextReques
   const error = searchParams.get('error')
   const origin = req.nextUrl.origin
 
+  const { valid, clearCookie } = verifyOAuthState(req, 'drive', searchParams.get('state'))
+  if (!valid) {
+    return clearCookie(NextResponse.redirect(`${origin}/admin?tab=integrations&drive=error&msg=invalid_state`))
+  }
+
   if (error) {
-    return NextResponse.redirect(`${origin}/admin?tab=integrations&drive=error&msg=${encodeURIComponent(error)}`)
+    return clearCookie(NextResponse.redirect(`${origin}/admin?tab=integrations&drive=error&msg=${encodeURIComponent(error)}`))
   }
   if (!code) {
-    return NextResponse.redirect(`${origin}/admin?tab=integrations&drive=error&msg=missing_code`)
+    return clearCookie(NextResponse.redirect(`${origin}/admin?tab=integrations&drive=error&msg=missing_code`))
   }
 
   try {
@@ -26,9 +32,9 @@ export const GET = withErrorHandler('drive/callback GET', async (req: NextReques
       google_drive_token_expiry:  new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
     })
 
-    return NextResponse.redirect(`${origin}/admin?tab=integrations&drive=connected`)
+    return clearCookie(NextResponse.redirect(`${origin}/admin?tab=integrations&drive=connected`))
   } catch (err) {
     console.error('[drive/callback GET]', err)
-    return NextResponse.redirect(`${origin}/admin?tab=integrations&drive=error&msg=token_exchange_failed`)
+    return clearCookie(NextResponse.redirect(`${origin}/admin?tab=integrations&drive=error&msg=token_exchange_failed`))
   }
 })

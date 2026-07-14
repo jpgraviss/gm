@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { googleMarketingAuthUrl } from '@/lib/google-marketing'
 import { withErrorHandler } from '@/lib/api-handler'
+import { issueOAuthState } from '@/lib/oauth-state'
 
 /**
  * GET /api/integrations/google-marketing/connect
@@ -8,7 +9,7 @@ import { withErrorHandler } from '@/lib/api-handler'
  * access to GSC, GA4, Ads, and Business Profile.
  */
 export const GET = withErrorHandler('integrations/google-marketing/connect GET', async () => {
-  const state = Buffer.from(JSON.stringify({ ts: Date.now() })).toString('base64url')
+  const { state, setCookie } = issueOAuthState('google-marketing')
   const url = googleMarketingAuthUrl(state)
-  return NextResponse.redirect(url)
+  return setCookie(NextResponse.redirect(url))
 })

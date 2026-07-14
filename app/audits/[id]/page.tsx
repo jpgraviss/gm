@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import { generateAuditPdf, downloadBlob } from '@/lib/pdf-audit'
 import { gradeColorHex } from '@/lib/brand'
 import {
   Globe, ArrowLeft, Download, Loader2,
-  AlertTriangle, TrendingUp,
+  AlertTriangle, TrendingUp, Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -61,6 +62,8 @@ export default function AuditDetailPage() {
   const [audit, setAudit] = useState<AuditData | null>(null)
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -93,6 +96,20 @@ export default function AuditDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/ai/audit?id=${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      toast('Audit deleted', 'success')
+      router.push('/audits')
+    } catch {
+      toast('Failed to delete audit', 'error')
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
+
   if (loading) {
     return (
       <>
@@ -116,14 +133,23 @@ export default function AuditDetailPage() {
           <Link href="/audits" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
             <ArrowLeft size={14} /> Back to Audits
           </Link>
-          <button
-            onClick={handleDownloadPdf}
-            disabled={downloading}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#015035] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-            Download PDF
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 border border-gray-200 text-gray-500 rounded-lg text-sm font-medium hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+            >
+              <Trash2 size={14} />
+              Delete
+            </button>
+            <button
+              onClick={handleDownloadPdf}
+              disabled={downloading}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#015035] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              Download PDF
+            </button>
+          </div>
         </div>
 
         {/* Overview Card — dark brand header band, matches the PDF export */}
@@ -234,6 +260,16 @@ export default function AuditDetailPage() {
           </div>
         ))}
       </main>
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete this audit?"
+          description="This permanently deletes the audit and its results. This can't be undone."
+          confirmLabel={deleting ? 'Deleting...' : 'Delete'}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </>
   )
 }

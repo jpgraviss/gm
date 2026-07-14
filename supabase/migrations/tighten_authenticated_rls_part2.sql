@@ -29,6 +29,27 @@
 --
 -- This migration closes both gaps. Safe to run multiple times (all drops
 -- are `if exists`).
+--
+-- Self-contained: redefines is_staff() (idempotent `create or replace`,
+-- identical body to tighten_authenticated_rls.sql) so this script doesn't
+-- depend on that one having already committed successfully. Supabase's SQL
+-- editor runs a pasted script as a single transaction — if any statement in
+-- tighten_authenticated_rls.sql errored, the whole script (including the
+-- original is_staff() creation) rolls back with nothing applied, which is
+-- exactly what produces "function public.is_staff() does not exist" if you
+-- then run this file on its own.
+
+create or replace function public.is_staff()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.team_members tm where tm.id = auth.uid()::text
+  );
+$$;
 
 -- ── Part 1: drop the stale auth_read_X policies whose write-side sibling
 --    was already replaced by staff_all_X in tighten_authenticated_rls.sql —

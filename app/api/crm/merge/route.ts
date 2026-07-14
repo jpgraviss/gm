@@ -61,9 +61,22 @@ export const POST = withErrorHandler('crm/merge POST', async (req) => {
     const { error: updateErr } = await db.from('crm_contacts').update(updates).eq('id', primaryId)
     if (updateErr) throw new Error(updateErr.message || 'Merge update failed')
 
+    // deals.contact is a denormalized {id,name,email,phone,title} blob shown
+    // on the deal card, alongside the real contact_id FK — the merge must
+    // repoint both, or a merged deal keeps showing the deleted contact's name.
+    const primaryContactBlob = {
+      id: primaryId,
+      name: primary.full_name ?? '',
+      email: [...allEmails][0] ?? '',
+      phone: [...allPhones][0] ?? '',
+      title: primary.title ?? '',
+    }
+
     for (const mergeId of mergeIds) {
       await db.from('crm_activities').update({ contact_id: primaryId }).eq('contact_id', mergeId)
-      await db.from('deals').update({ 'contact->>id': primaryId } as Record<string, unknown>).eq('contact->>id' as string, mergeId)
+      await db.from('deals')
+        .update({ contact_id: primaryId, contact: primaryContactBlob })
+        .eq('contact_id', mergeId)
     }
 
     const { error: deleteErr } = await db.from('crm_contacts').delete().in('id', mergeIds)
@@ -114,17 +127,26 @@ export const POST = withErrorHandler('crm/merge POST', async (req) => {
     const { error: updateErr } = await db.from('crm_companies').update(updates).eq('id', primaryId)
     if (updateErr) throw new Error(updateErr.message || 'Merge update failed')
 
+    // deals/contracts/invoices/projects/proposals all carry a real company_id
+    // FK (ON DELETE SET NULL) alongside the denormalized `company` name text.
+    // Reassign by id first (authoritative); only fall back to a name match
+    // for legacy rows that never got a company_id backfilled, and never
+    // touch a row whose company_id already points somewhere else — matching
+    // by name alone risks repointing an unrelated company's data if two
+    // companies happen to share a display name.
+    const fkTables = ['deals', 'contracts', 'invoices', 'projects', 'proposals'] as const
+
     for (const mergeId of mergeIds) {
       const mergeRec = mergeRecords.find(r => r.id === mergeId)
       if (!mergeRec) continue
 
       await db.from('crm_contacts').update({ company_id: primaryId, company_name: primary.name }).eq('company_id', mergeId)
-      await db.from('deals').update({ company: primary.name }).eq('company', mergeRec.name)
-      await db.from('contracts').update({ company: primary.name }).eq('company', mergeRec.name)
-      await db.from('invoices').update({ company: primary.name }).eq('company', mergeRec.name)
-      await db.from('projects').update({ company: primary.name }).eq('company', mergeRec.name)
-      await db.from('proposals').update({ company: primary.name }).eq('company', mergeRec.name)
       await db.from('crm_activities').update({ company_id: primaryId, company_name: primary.name }).eq('company_id', mergeId)
+
+      for (const table of fkTables) {
+        await db.from(table).update({ company_id: primaryId, company: primary.name }).eq('company_id', mergeId)
+        await db.from(table).update({ company_id: primaryId, company: primary.name }).is('company_id', null).eq('company', mergeRec.name)
+      }
     }
 
     const { error: deleteErr } = await db.from('crm_companies').delete().in('id', mergeIds)

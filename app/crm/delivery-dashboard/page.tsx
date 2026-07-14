@@ -344,19 +344,24 @@ export default function DeliveryDashboardPage() {
     if (!sendModal || !sendModalEmail.trim()) return
     const templateType = STEP_TEMPLATE_MAP[sendModal.step]
     if (!templateType) { toast('No template for this step', 'error'); return }
-    const payload: Record<string, unknown> = {
-      workflowId: sendModal.workflowId,
-      step: sendModal.step,
-      templateType,
-      recipientEmail: sendModalEmail.trim(),
-      sendEmail: true,
-    }
+
+    // Step 8's monthly-report template has no manual customization data to
+    // fill in — it must be aggregated from real GSC/GA4/reputation/ranking/
+    // uptime sources, which only send-monthly-report does. Routing it
+    // through the generic send-template endpoint (as the other two step
+    // templates correctly do) rendered a blank report with no real metrics.
+    const isMonthlyReport = templateType === 'monthly_report'
+    const endpoint = isMonthlyReport ? '/api/delivery/send-monthly-report' : '/api/delivery/send-template'
+    const payload: Record<string, unknown> = isMonthlyReport
+      ? { workflowId: sendModal.workflowId, recipientEmail: sendModalEmail.trim() }
+      : { workflowId: sendModal.workflowId, step: sendModal.step, templateType, recipientEmail: sendModalEmail.trim(), sendEmail: true }
+
     if (sendModalMode === 'schedule' && sendModalScheduleDate) {
       payload.scheduleAt = new Date(`${sendModalScheduleDate}T${sendModalScheduleTime}`).toISOString()
       if (sendModalRecurring !== 'none') payload.recurring = sendModalRecurring
     }
     try {
-      const res = await fetch('/api/delivery/send-template', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

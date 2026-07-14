@@ -14,14 +14,16 @@ export const POST = withErrorHandler('delivery/send-monthly-report POST', async 
     reportDate: { type: 'string', maxLength: 10 },
     scheduleAt: { type: 'string' },
     recurring: { type: 'string', enum: ['none', 'daily', 'weekly', 'biweekly', 'monthly', 'quarterly'] },
+    recipientEmail: { type: 'string', maxLength: 320 },
   })
   if (!result.valid) return validationError(result.error)
 
-  const { workflowId, reportDate, scheduleAt, recurring } = body as {
+  const { workflowId, reportDate, scheduleAt, recurring, recipientEmail: recipientOverride } = body as {
     workflowId: string
     reportDate?: string
     scheduleAt?: string
     recurring?: string
+    recipientEmail?: string
   }
   void reportDate
 
@@ -58,9 +60,9 @@ export const POST = withErrorHandler('delivery/send-monthly-report POST', async 
   const html = generateMonthlyReportHtml(reportData, settings)
 
   const companyId = workflow.company_id as string | null
-  let recipientEmail: string | null = null
+  let recipientEmail: string | null = recipientOverride?.trim() || null
 
-  if (companyId) {
+  if (!recipientEmail && companyId) {
     const { data: contacts } = await db
       .from('crm_contacts')
       .select('emails')

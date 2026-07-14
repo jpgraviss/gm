@@ -134,10 +134,12 @@ export const GET = withErrorHandler('delivery/monthly-report/[id] GET', async (_
     }
   }
 
-  const reviewFilter = companyId
-    ? db.from('reviews').select('rating, date').eq('company_id', companyId)
-    : db.from('reviews').select('rating, date')
-  const { data: reviews } = await reviewFilter
+  // reviews has no company_id column (only company_name, added in
+  // add_review_requests.sql) — filtering by company_id here always errored
+  // silently, and the no-companyId fallback returned every client's reviews
+  // unfiltered into this client's outbound report. Match on company_name,
+  // same as every other query in this function.
+  const { data: reviews } = await db.from('reviews').select('rating, date').eq('company_name', companyName)
   if (reviews && reviews.length > 0) {
     type RRow = { rating: number; date: string }
     const allReviews = reviews as RRow[]

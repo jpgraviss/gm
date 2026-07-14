@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { applyAudienceFilter } from '@/lib/broadcasts'
+import { applyAudienceFilter, resolveEngagementFilters } from '@/lib/broadcasts'
 import { withErrorHandler } from '@/lib/api-handler'
 
 /**
@@ -22,40 +22,8 @@ export const GET = withErrorHandler('broadcasts/[id]/audience GET', async (_req,
   const filter = broadcast.audience_filter ?? {}
 
   // Build engagement exclusion sets before the main query
-  let engagementContactIds: Set<string> | null = null
-
-  if (filter.hasOpenedPrevious || filter.hasClickedPrevious) {
-    const conditions: string[] = []
-    if (filter.hasOpenedPrevious) conditions.push('opened_at')
-    if (filter.hasClickedPrevious) conditions.push('clicked_at')
-
-    let recipientQuery = db.from('broadcast_recipients').select('contact_id')
-    if (conditions.length === 1) {
-      recipientQuery = recipientQuery.not(conditions[0], 'is', null)
-    } else {
-      recipientQuery = recipientQuery.or(conditions.map(c => `${c}.not.is.null`).join(','))
-    }
-
-    const { data: engaged } = await recipientQuery
-    engagementContactIds = new Set(
-      (engaged ?? []).map((r: { contact_id: string | null }) => r.contact_id).filter(Boolean) as string[]
-    )
-  }
-
-  let excludeRecentContactIds: Set<string> | null = null
-
-  if (filter.excludeRecentRecipientsDays && filter.excludeRecentRecipientsDays > 0) {
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - filter.excludeRecentRecipientsDays)
-    const { data: recentRecipients } = await db
-      .from('broadcast_recipients')
-      .select('contact_id')
-      .gte('sent_at', cutoff.toISOString())
-
-    excludeRecentContactIds = new Set(
-      (recentRecipients ?? []).map((r: { contact_id: string | null }) => r.contact_id).filter(Boolean) as string[]
-    )
-  }
+  const { includeContactIds: engagementContactIds, excludeContactIds: excludeRecentContactIds } =
+    await resolveEngagementFilters(db, filter)
 
   // Build the query with filter applied
   let query = db.from('crm_contacts').select('id, emails, full_name', { count: 'exact' })

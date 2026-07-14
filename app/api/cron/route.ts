@@ -3,7 +3,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { checkSite, recordCheck, computeUptime30d, type MonitoredSiteRow } from '@/lib/uptime'
-import { checkAllRanks } from '@/lib/rank-tracker'
+import { checkAllRanks, sendDueScheduledReports } from '@/lib/rank-tracker'
 import { publishSocialPost } from '@/lib/social-publish'
 import { processScheduledEmails } from '@/lib/email-scheduler'
 import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender'
@@ -176,6 +176,14 @@ export const GET = withErrorHandler('cron GET', async (req) => {
   } catch (err) {
     console.error('[cron] Review campaign dispatch failed:', err)
     results.reviewCampaigns = { error: 'Failed' }
+  }
+
+  // 11. Send scheduled rank-tracker ranking reports whose cadence is due.
+  try {
+    results.rankTrackerReports = await sendDueScheduledReports()
+  } catch (err) {
+    console.error('[cron] Rank tracker scheduled reports failed:', err)
+    results.rankTrackerReports = { error: 'Failed' }
   }
 
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })

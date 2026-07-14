@@ -50,6 +50,12 @@ export const GET = withErrorHandler('broadcasts/[id] GET', async (_req, { params
 })
 
 export const PATCH = withErrorHandler('broadcasts/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  // Matches the role level its sibling DELETE/POST-send routes already
+  // require — without it, any authenticated staff member could set
+  // status: 'sent' directly, marking a broadcast sent with nothing emailed.
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
+
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()

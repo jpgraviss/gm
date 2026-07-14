@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { sendEmail } from '@/lib/email'
-import { applyAudienceFilter, renderMergeFields, wrapWithFooter } from '@/lib/broadcasts'
+import { applyAudienceFilter, renderMergeFields, wrapWithFooter, resolveEngagementFilters } from '@/lib/broadcasts'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -35,17 +35,29 @@ export const POST = withErrorHandler('broadcasts/[id]/send POST', async (req, { 
   await db.from('broadcasts').update({ status: 'sending', sent_at: new Date().toISOString() }).eq('id', id)
 
   // Fetch all contacts matching the audience filter
+  const audienceFilter = broadcast.audience_filter ?? {}
   let query = db
     .from('crm_contacts')
     .select('id, first_name, last_name, full_name, emails, company_name')
     .not('emails', 'is', null)
-  query = applyAudienceFilter(query, broadcast.audience_filter ?? {})
+  query = applyAudienceFilter(query, audienceFilter)
 
-  const { data: contacts, error: contactErr } = await query
+  const { data: rawContacts, error: contactErr } = await query
   if (contactErr) {
     await db.from('broadcasts').update({ status: 'failed' }).eq('id', id)
     throw new Error(contactErr.message)
   }
+
+  // hasOpenedPrevious/hasClickedPrevious/excludeRecentRecipientsDays can't be
+  // expressed as a column filter — apply the same lookup-based logic the
+  // audience-preview endpoint uses, or a broadcast configured to skip
+  // recently-emailed contacts would silently send to the full list anyway.
+  const { includeContactIds, excludeContactIds } = await resolveEngagementFilters(db, audienceFilter)
+  const contacts = (rawContacts ?? []).filter((c: { id: string }) => {
+    if (includeContactIds !== null && !includeContactIds.has(c.id)) return false
+    if (excludeContactIds.has(c.id)) return false
+    return true
+  })
 
   // Suppression list
   const allEmails = (contacts ?? [])

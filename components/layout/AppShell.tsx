@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useState, useRef, Suspense, type PointerEvent as ReactPointerEvent } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUI } from '@/contexts/UIContext'
@@ -10,6 +10,7 @@ import AssistantPanel from '@/components/ai/AssistantPanel'
 import CommandPalette from '@/components/ui/CommandPalette'
 import { ShieldAlert, X, Sparkles } from 'lucide-react'
 import PushNotificationBanner from '@/components/ui/PushNotificationBanner'
+import PageLoadingOverlay from './PageLoadingOverlay'
 
 const PUBLIC_ROUTES = ['/login', '/team-login']
 
@@ -184,6 +185,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (user.userType === 'client') {
     return (
       <main className="flex min-h-screen flex-col" style={{ background: 'var(--page-bg)' }}>
+        <Suspense fallback={null}><PageLoadingOverlay /></Suspense>
         {children}
       </main>
     )
@@ -191,6 +193,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
+      <Suspense fallback={null}><PageLoadingOverlay /></Suspense>
       <CommandPalette />
       {/* Mobile backdrop */}
       {sidebarOpen && (

@@ -75,6 +75,58 @@ export function applyAudienceFilter(query: any, filter: AudienceFilter): any {
 }
 
 /**
+ * Resolve the `hasOpenedPrevious`/`hasClickedPrevious`/
+ * `excludeRecentRecipientsDays` audience filters, which can't be expressed
+ * as a simple column filter on crm_contacts — they require a lookup against
+ * broadcast_recipients first. Shared by the audience-preview endpoint and
+ * the real send route so the two can never drift out of sync again (send
+ * previously ignored all three, silently mailing an unfiltered list while
+ * the preview count looked correctly narrowed).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function resolveEngagementFilters(db: any, filter: AudienceFilter): Promise<{
+  includeContactIds: Set<string> | null
+  excludeContactIds: Set<string>
+}> {
+  let includeContactIds: Set<string> | null = null
+
+  if (filter.hasOpenedPrevious || filter.hasClickedPrevious) {
+    const conditions: string[] = []
+    if (filter.hasOpenedPrevious) conditions.push('opened_at')
+    if (filter.hasClickedPrevious) conditions.push('clicked_at')
+
+    let recipientQuery = db.from('broadcast_recipients').select('contact_id')
+    recipientQuery = conditions.length === 1
+      ? recipientQuery.not(conditions[0], 'is', null)
+      : recipientQuery.or(conditions.map(c => `${c}.not.is.null`).join(','))
+
+    const { data: engaged } = await recipientQuery
+    includeContactIds = new Set(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (engaged ?? []).map((r: any) => r.contact_id).filter(Boolean) as string[]
+    )
+  }
+
+  let excludeContactIds = new Set<string>()
+
+  if (filter.excludeRecentRecipientsDays && filter.excludeRecentRecipientsDays > 0) {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - filter.excludeRecentRecipientsDays)
+    const { data: recentRecipients } = await db
+      .from('broadcast_recipients')
+      .select('contact_id')
+      .gte('sent_at', cutoff.toISOString())
+
+    excludeContactIds = new Set(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (recentRecipients ?? []).map((r: any) => r.contact_id).filter(Boolean) as string[]
+    )
+  }
+
+  return { includeContactIds, excludeContactIds }
+}
+
+/**
  * Replace merge tags in the HTML body with recipient data.
  * Supports: {{first_name}}, {{last_name}}, {{full_name}}, {{company}}
  */

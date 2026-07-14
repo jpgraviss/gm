@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   Plus, X, Trash2, Copy, ExternalLink, FileText, Eye, Pencil,
   Type, Mail, Phone, AlignLeft, ListChecks, CheckSquare, Hash, Link2,
   GripVertical, Code, MousePointerClick, Clock, ArrowUpFromDot, ScrollText, Check,
-  Calendar, Star, PenTool, EyeOff, List, SeparatorHorizontal, Filter,
+  Calendar, Star, PenTool, EyeOff, List, SeparatorHorizontal, Filter, Inbox, Loader2,
 } from 'lucide-react'
 
 interface FieldCondition {
@@ -62,6 +63,8 @@ interface LeadForm {
   sendConfirmation?: boolean
   confirmationSubject?: string
   confirmationMessage?: string
+  notifyEmails?: string[]
+  redirectUrl?: string
   createdAt: string
 }
 
@@ -306,7 +309,7 @@ const DEFAULT_POPUP: PopupConfig = {
 
 function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => void; onSave: (f: LeadForm) => void }) {
   const [draft, setDraft] = useState<LeadForm>(form)
-  const [tab, setTab] = useState<'fields' | 'embed'>('fields')
+  const [tab, setTab] = useState<'fields' | 'submissions' | 'embed'>('fields')
 
   function addField(type: string, mapsTo?: string) {
     setDraft(d => ({ ...d, fields: [...d.fields, newField(type, mapsTo)] }))
@@ -348,6 +351,12 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
             className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${tab === 'fields' ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700'}`}
           >
             Fields & Settings
+          </button>
+          <button
+            onClick={() => setTab('submissions')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${tab === 'submissions' ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <Inbox size={12} /> Submissions
           </button>
           <button
             onClick={() => setTab('embed')}
@@ -613,6 +622,31 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
                     <p className="text-[10px] text-gray-400 mt-1">Sends a POST with submission data on each response</p>
                   </div>
 
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Notify team (emails)</label>
+                    <input
+                      value={(draft.notifyEmails ?? []).join(', ')}
+                      onChange={e => setDraft(d => ({
+                        ...d,
+                        notifyEmails: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
+                      }))}
+                      placeholder="sales@gravissmarketing.com, ops@gravissmarketing.com"
+                      className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Comma-separated — sent an email whenever this form is submitted</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Redirect after submit</label>
+                    <input
+                      value={draft.redirectUrl ?? ''}
+                      onChange={e => setDraft(d => ({ ...d, redirectUrl: e.target.value || undefined }))}
+                      placeholder="https://gravissmarketing.com/thank-you"
+                      className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Leave blank to just show the success message in place</p>
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -649,6 +683,10 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
                 </div>
               </section>
             </>
+          )}
+
+          {tab === 'submissions' && (
+            <SubmissionsTabContent formId={draft.id} fields={draft.fields} />
           )}
 
           {tab === 'embed' && (
@@ -956,6 +994,97 @@ function EmbedTabContent({ draft, setDraft }: { draft: LeadForm; setDraft: React
         </ol>
       </section>
     </>
+  )
+}
+
+interface FormSubmission {
+  id: string
+  formId: string
+  data: Record<string, unknown>
+  sourceUrl?: string
+  contactId?: string
+  status: string
+  createdAt: string
+}
+
+function SubmissionsTabContent({ formId, fields }: { formId: string; fields: FormField[] }) {
+  const [submissions, setSubmissions] = useState<FormSubmission[] | null>(null)
+  const [loadError, setLoadError] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setSubmissions(null)
+    setLoadError(false)
+    fetchAllPages<FormSubmission>(`/api/forms/${formId}/submissions`)
+      .then(rows => { if (!cancelled) setSubmissions(rows) })
+      .catch(() => { if (!cancelled) setLoadError(true) })
+    return () => { cancelled = true }
+  }, [formId])
+
+  const labelFor = (name: string) => fields.find(f => f.name === name)?.label ?? name
+
+  if (loadError) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-xs text-gray-400">Couldn&apos;t load submissions.</p>
+      </div>
+    )
+  }
+
+  if (submissions === null) {
+    return (
+      <div className="flex items-center justify-center py-12 text-gray-300">
+        <Loader2 size={18} className="animate-spin" />
+      </div>
+    )
+  }
+
+  if (submissions.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Inbox size={28} className="mx-auto text-gray-300 mb-2" />
+        <p className="text-xs text-gray-400">No submissions yet</p>
+        <p className="text-[11px] text-gray-400 mt-1">Submissions will appear here once visitors fill out this form.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">
+        {submissions.length} submission{submissions.length === 1 ? '' : 's'}
+      </p>
+      {submissions.map(sub => (
+        <div key={sub.id} className="rounded-xl border border-gray-200 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] text-gray-400">
+              {new Date(sub.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </span>
+            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${sub.status === 'new' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+              {sub.status}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            {Object.entries(sub.data).map(([key, value]) => (
+              <div key={key} className="flex gap-2 text-xs">
+                <span className="text-gray-400 min-w-[100px] shrink-0">{labelFor(key)}</span>
+                <span className="text-gray-700 break-words">{String(value)}</span>
+              </div>
+            ))}
+          </div>
+          {sub.sourceUrl && (
+            <a
+              href={sub.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700"
+            >
+              <ExternalLink size={10} /> {sub.sourceUrl}
+            </a>
+          )}
+        </div>
+      ))}
+    </div>
   )
 }
 

@@ -79,6 +79,11 @@ const VALID_PRIORITIES = ['High', 'Medium', 'Low']
 const VALID_CATEGORIES = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'Email', 'General']
 
 export const POST = withErrorHandler('tasks POST', async (req: NextRequest) => {
+  const user = await getAuthUser(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const body = await req.json()
 
   if (!body.title || typeof body.title !== 'string' || !body.title.trim()) {

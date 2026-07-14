@@ -31,6 +31,9 @@ function mapProject(row: any) {
 }
 
 export const PATCH = withErrorHandler('projects/[id] PATCH', async (req, ctx) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await ctx!.params
   const body = await req.json()
   const result = validate(body, {

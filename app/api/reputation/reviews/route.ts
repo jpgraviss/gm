@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('reputation/reviews GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
 
@@ -30,6 +34,9 @@ export const GET = withErrorHandler('reputation/reviews GET', async (req) => {
 })
 
 export const POST = withErrorHandler('reputation/reviews POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
   let body: Record<string, unknown>
   try {

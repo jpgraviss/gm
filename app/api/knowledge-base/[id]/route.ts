@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
-export const GET = withErrorHandler('knowledge-base/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('knowledge-base/[id] GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
 
@@ -22,7 +26,10 @@ export const PATCH = withErrorHandler('knowledge-base/[id] PATCH', async (req, {
   const body = await req.json()
   const db = createServiceClient()
 
-  // Handle feedback increment separately (doesn't update updated_at)
+  // Handle feedback increment separately (doesn't update updated_at) — this
+  // is the one legitimate portal-client call site (the "was this helpful?"
+  // widget), so it stays open to any authenticated caller. Everything else
+  // below (real content edits) requires staff.
   if (body.feedback === 'helpful' || body.feedback === 'not_helpful') {
     const col = body.feedback === 'helpful' ? 'helpful_count' : 'not_helpful_count'
     const { data: current } = await db.from('knowledge_articles').select(col).eq('id', id).single()
@@ -33,6 +40,9 @@ export const PATCH = withErrorHandler('knowledge-base/[id] PATCH', async (req, {
     }
     return NextResponse.json({ ok: true })
   }
+
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (body.title !== undefined) update.title = body.title
@@ -49,7 +59,10 @@ export const PATCH = withErrorHandler('knowledge-base/[id] PATCH', async (req, {
   return NextResponse.json(data)
 })
 
-export const DELETE = withErrorHandler('knowledge-base/[id] DELETE', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withErrorHandler('knowledge-base/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('knowledge_articles').delete().eq('id', id)

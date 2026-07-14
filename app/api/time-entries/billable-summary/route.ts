@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
-export const GET = withErrorHandler('time-entries/billable-summary GET', async () => {
+export const GET = withErrorHandler('time-entries/billable-summary GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
 
   const { data, error } = await db

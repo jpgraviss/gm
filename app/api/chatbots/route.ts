@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/admin-auth'
 
-export const GET = withErrorHandler('chatbots GET', async () => {
+// /api/chatbots/ is in proxy.ts's PUBLIC_PREFIXES (needed so the public
+// chat widget can reach [id]/chat unauthenticated) — that only bypasses
+// the outer session gate, not this route's own requireAdmin check below,
+// which still correctly 401s a real anonymous caller.
+export const GET = withErrorHandler('chatbots GET', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('chatbots')
@@ -23,6 +31,9 @@ export const GET = withErrorHandler('chatbots GET', async () => {
 })
 
 export const POST = withErrorHandler('chatbots POST', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const body = await req.json()
 
   if (!body.name || typeof body.name !== 'string' || !body.name.trim()) {

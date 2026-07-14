@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const PATCH = withErrorHandler('time-entries/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const body = await req.json()
   const result = validate(body, {
@@ -37,7 +41,10 @@ export const PATCH = withErrorHandler('time-entries/[id] PATCH', async (req: Nex
   return NextResponse.json(data)
 })
 
-export const DELETE = withErrorHandler('time-entries/[id] DELETE', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withErrorHandler('time-entries/[id] DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('time_entries').delete().eq('id', id)

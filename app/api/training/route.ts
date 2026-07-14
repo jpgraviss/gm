@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 const SETTINGS_ID = 'global'
 
-export const GET = withErrorHandler('training GET', async () => {
+export const GET = withErrorHandler('training GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('app_settings')
@@ -22,6 +26,9 @@ export const GET = withErrorHandler('training GET', async () => {
 })
 
 export const PUT = withErrorHandler('training PUT', async (req) => {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
+
   let body: { modules: unknown[] }
   try {
     body = await req.json()

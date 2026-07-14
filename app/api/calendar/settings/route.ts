@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthUser } from '@/lib/rbac'
+
+function isOwnerOrAdmin(user: { email: string; isAdmin: boolean; role: string }, targetEmail: string): boolean {
+  return user.isAdmin || user.role === 'Leadership' || user.email.toLowerCase() === targetEmail.toLowerCase()
+}
 
 // GET /api/calendar/settings?email=...
 export const GET = withErrorHandler('calendar/settings GET', async (req) => {
+  const user = await getAuthUser(req)
+  if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+
   const email = req.nextUrl.searchParams.get('email')
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
@@ -23,6 +31,9 @@ export const GET = withErrorHandler('calendar/settings GET', async (req) => {
 
 // POST /api/calendar/settings — create or update calendar settings
 export const POST = withErrorHandler('calendar/settings POST', async (req) => {
+  const user = await getAuthUser(req)
+  if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+
   const body = await req.json()
   const {
     userEmail, userName, slug, title, description,
@@ -32,6 +43,9 @@ export const POST = withErrorHandler('calendar/settings POST', async (req) => {
 
   if (!userEmail || !slug) {
     return NextResponse.json({ error: 'userEmail and slug required' }, { status: 400 })
+  }
+  if (!isOwnerOrAdmin(user, userEmail)) {
+    return NextResponse.json({ error: 'Cannot modify another team member\'s booking calendar' }, { status: 403 })
   }
 
   const db = createServiceClient()
@@ -58,8 +72,14 @@ export const POST = withErrorHandler('calendar/settings POST', async (req) => {
 // DELETE /api/calendar/settings — delete a booking link / calendar settings
 // Bookings cascade-delete via FK on calendar_settings(slug)
 export const DELETE = withErrorHandler('calendar/settings DELETE', async (req) => {
+  const user = await getAuthUser(req)
+  if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+
   const { email } = await req.json()
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
+  if (!isOwnerOrAdmin(user, email)) {
+    return NextResponse.json({ error: 'Cannot delete another team member\'s booking calendar' }, { status: 403 })
+  }
 
   const db = createServiceClient()
   const { error } = await db

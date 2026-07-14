@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCourse(row: any) {
@@ -24,6 +25,9 @@ function mapCourse(row: any) {
 }
 
 export const GET = withErrorHandler('courses GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const pag = parsePagination(req)
   const db = createServiceClient()
 
@@ -41,6 +45,9 @@ export const GET = withErrorHandler('courses GET', async (req) => {
 })
 
 export const POST = withErrorHandler('courses POST', async (req) => {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
+
   const body = await req.json()
 
   if (!body.title || typeof body.title !== 'string') {

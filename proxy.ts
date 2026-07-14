@@ -102,6 +102,19 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
         )
       }
     }
+    // Unauthenticated widget endpoint that calls a real LLM per message —
+    // otherwise the only public route with zero request throttling,
+    // a real cost/DoS vector (unlimited scripted requests run up live
+    // AI-provider spend with no server-side limit at all).
+    if (/^\/api\/chatbots\/[^/]+\/chat$/.test(pathname) && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`chatbot-chat:${ip}`, 30, 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many messages. Please wait a moment and try again.' },
+          { status: 429 }
+        )
+      }
+    }
     return NextResponse.next()
   }
 

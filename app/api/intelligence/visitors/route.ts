@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listPeople, getPerson, getPersonEvents } from '@/lib/maverick'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('intelligence/visitors GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const params = new URL(req.url).searchParams
   const id = params.get('id')
   const events = params.get('events')

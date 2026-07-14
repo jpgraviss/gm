@@ -5,6 +5,8 @@ import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pa
 import { withErrorHandler } from '@/lib/api-handler'
 import { ALL_SERVICE_VALUES } from '@/lib/services'
 import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
+import { requireRole } from '@/lib/rbac'
+import { requirePortalClient } from '@/lib/portal-auth'
 
 const SERVICE_TYPES = [...ALL_SERVICE_VALUES]
 
@@ -61,6 +63,9 @@ function mapWorkflow(row: any) {
 }
 
 export const POST = withErrorHandler('delivery/workflow POST', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const result = validate(body, {
     companyName: { required: true, type: 'string', maxLength: 200 },
@@ -107,6 +112,18 @@ export const POST = withErrorHandler('delivery/workflow POST', async (req: NextR
 export const GET = withErrorHandler('delivery/workflow GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
   const companyId = searchParams.get('company_id')
+  const company = searchParams.get('company')
+
+  // Portal clients (portal workflow page) legitimately call this scoped to
+  // their own company — see matching comment in app/api/proposals/route.ts.
+  // Previously had no auth check at all, so any authenticated caller could
+  // list every client's delivery workflow status by omitting the filter or
+  // querying another company's id.
+  const denied = company
+    ? await requirePortalClient(req, company)
+    : await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const pag = parsePagination(req)
 
   const db = createServiceClient()
@@ -115,7 +132,6 @@ export const GET = withErrorHandler('delivery/workflow GET', async (req: NextReq
     .select('*')
 
   if (companyId) query = query.eq('company_id', companyId)
-  const company = searchParams.get('company')
   if (company) query = query.eq('company_name', company)
   query = applyCursor(query, pag)
 

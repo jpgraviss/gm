@@ -3,6 +3,8 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROJECT_STATUSES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
+import { requirePortalClient } from '@/lib/portal-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProject(row: any) {
@@ -33,6 +35,17 @@ export const GET = withErrorHandler('projects GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const status  = searchParams.get('status')
   const company = searchParams.get('company')
+
+  // Portal clients (portal projects page/dashboard) legitimately call this
+  // scoped to their own company — see matching comment in
+  // app/api/proposals/route.ts. Previously had no scoping check at all, so
+  // a portal client could read any other client's projects by changing
+  // the company param.
+  const denied = company
+    ? await requirePortalClient(req, company)
+    : await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
@@ -50,6 +63,9 @@ export const GET = withErrorHandler('projects GET', async (req) => {
 })
 
 export const POST = withErrorHandler('projects POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const result = validate(body, {
     company: { required: true, type: 'string', maxLength: 200 },

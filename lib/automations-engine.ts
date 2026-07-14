@@ -180,6 +180,28 @@ export async function executeWorkflow(
     return { runId: null, status: 'skipped' as const, steps: [] }
   }
 
+  // Deal-stage automations can be scoped to one target stage (builder's
+  // "Target Stage" field) rather than any stage change — previously
+  // collected in the UI but discarded on save (AUDIT #110), so this check
+  // never had anything to read regardless.
+  if (automation.config?.stage && automation.config.stage !== triggerData.stage) {
+    return { runId: null, status: 'skipped' as const, steps: [] }
+  }
+
+  // Invoice-overdue automations can target a specific overdue threshold.
+  // checkTimeBasedTriggers() only ever fires two real checkpoints today —
+  // the initial Sent→Overdue transition (triggerData.overdueDays unset,
+  // i.e. day 0) and the 3-day-overdue recheck (overdueDays: 3) — so an
+  // exact match against those is what's actually achievable without a
+  // larger cron rework to support arbitrary per-automation thresholds.
+  if (
+    triggerType === 'invoice_overdue' &&
+    automation.config?.overdueDays !== undefined &&
+    automation.config.overdueDays !== (triggerData.overdueDays ?? 0)
+  ) {
+    return { runId: null, status: 'skipped' as const, steps: [] }
+  }
+
   const supabase = db ?? createServiceClient()
   const runId = resumeRunId ?? `run-${uid()}`
   const startedAt = new Date().toISOString()

@@ -1,3 +1,5 @@
+import { compactWallClock, zonedWallTimeToUtc } from './timezone'
+
 export interface CalendarLinkEvent {
   title: string
   startDateTime: string
@@ -7,43 +9,27 @@ export interface CalendarLinkEvent {
   location: string
 }
 
+// Outlook's deep link takes an absolute UTC instant (no separate timezone
+// param), so startDateTime/endDateTime — wall-clock strings meaning "this
+// time, in `timezone`" — must actually be converted to UTC here.
 function toUTCCompact(dateStr: string, timezone: string): string {
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) {
+  try {
+    return zonedWallTimeToUtc(dateStr, timezone).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')
+  } catch {
     return dateStr.replace(/[-:]/g, '').replace(/\.\d+/, '') + 'Z'
   }
-  const utc = new Date(
-    d.toLocaleString('en-US', { timeZone: timezone }),
-  )
-  const offset = utc.getTime() - d.getTime()
-  const adjusted = new Date(d.getTime() - offset)
-  return adjusted.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')
 }
 
-function toCompact(dateStr: string, timezone: string): string {
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) {
-    return dateStr.replace(/[-:]/g, '').slice(0, 15)
-  }
-  const formatted = d.toLocaleString('en-US', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
-  const match = formatted.match(/(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2}):(\d{2}):(\d{2})/)
-  if (!match) return dateStr.replace(/[-:]/g, '').slice(0, 15)
-  const [, mo, day, yr, hr, min, sec] = match
-  return `${yr}${mo}${day}T${hr}${min}${sec}`
+// Google's link carries a separate `ctz` param declaring the timezone, so
+// (like ICS's TZID) the digits themselves need no conversion — just
+// reformatted, matching the wall-clock time the string already means.
+function toCompact(dateStr: string): string {
+  return compactWallClock(dateStr)
 }
 
 export function getGoogleCalendarLink(event: CalendarLinkEvent): string {
-  const start = toCompact(event.startDateTime, event.timezone)
-  const end = toCompact(event.endDateTime, event.timezone)
+  const start = toCompact(event.startDateTime)
+  const end = toCompact(event.endDateTime)
   const params = new URLSearchParams({
     action: 'TEMPLATE',
     text: event.title,
@@ -86,7 +72,9 @@ export function getOutlook365CalendarLink(event: CalendarLinkEvent): string {
 }
 
 export function getYahooCalendarLink(event: CalendarLinkEvent): string {
-  const start = toCompact(event.startDateTime, event.timezone)
+  const start = toCompact(event.startDateTime)
+  // Both parsed the same (server-local) way — their difference is the
+  // correct duration regardless of that basis being "wrong" in isolation.
   const d1 = new Date(event.startDateTime)
   const d2 = new Date(event.endDateTime)
   const durationMs = d2.getTime() - d1.getTime()

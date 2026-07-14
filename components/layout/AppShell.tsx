@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUI } from '@/contexts/UIContext'
@@ -45,6 +45,67 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
+
+  // Draggable AI Assistant FAB position — previously hardcoded to a fixed
+  // corner with no way to move it. null = default bottom-right corner
+  // (via CSS); once dragged, an explicit {x,y} takes over and persists
+  // across sessions/devices via localStorage.
+  const FAB_SIZE = 48
+  const FAB_STORAGE_KEY = 'gravhub-assistant-fab-pos'
+  const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(null)
+  const [fabDragging, setFabDragging] = useState(false)
+  const fabDragMoved = useRef(false)
+  const fabDragOffset = useRef({ x: 0, y: 0 })
+
+  function clampFabPos(pos: { x: number; y: number }): { x: number; y: number } {
+    const margin = 8
+    const maxX = window.innerWidth - FAB_SIZE - margin
+    const maxY = window.innerHeight - FAB_SIZE - margin
+    return {
+      x: Math.min(Math.max(margin, pos.x), Math.max(margin, maxX)),
+      y: Math.min(Math.max(margin, pos.y), Math.max(margin, maxY)),
+    }
+  }
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(FAB_STORAGE_KEY)
+    if (!saved) return
+    try {
+      setFabPos(clampFabPos(JSON.parse(saved)))
+    } catch { /* ignore corrupt saved position */ }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleFabPointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    fabDragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    fabDragMoved.current = false
+    setFabDragging(true)
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  function handleFabPointerMove(e: ReactPointerEvent<HTMLButtonElement>) {
+    if (!fabDragging) return
+    fabDragMoved.current = true
+    setFabPos(clampFabPos({ x: e.clientX - fabDragOffset.current.x, y: e.clientY - fabDragOffset.current.y }))
+  }
+
+  function handleFabPointerUp() {
+    setFabDragging(false)
+    setFabPos(prev => {
+      if (prev) window.localStorage.setItem(FAB_STORAGE_KEY, JSON.stringify(prev))
+      return prev
+    })
+  }
+
+  function handleFabClick() {
+    // A drag ends with a pointerup, which also fires a click — only treat
+    // it as "open the assistant" when the pointer never actually moved.
+    if (fabDragMoved.current) {
+      fabDragMoved.current = false
+      return
+    }
+    setAssistantOpen(true)
+  }
 
   // /go/* routes are public — clients access booking pages, forms, and funnels without logging in
   const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/') || pathname.startsWith('/unsubscribe/') || pathname.startsWith('/go/') 
@@ -165,13 +226,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* AI Assistant FAB */}
+      {/* AI Assistant FAB — draggable; position persists in localStorage */}
       {!assistantOpen && (
         <button
-          onClick={() => setAssistantOpen(true)}
-          className="fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
-          style={{ background: '#015035' }}
-          title="Open AI Assistant"
+          onPointerDown={handleFabPointerDown}
+          onPointerMove={handleFabPointerMove}
+          onPointerUp={handleFabPointerUp}
+          onClick={handleFabClick}
+          className={`fixed z-40 w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 active:scale-95 touch-none ${fabDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+          style={
+            fabPos
+              ? { left: fabPos.x, top: fabPos.y, background: '#015035' }
+              : { bottom: '1.5rem', right: '1.5rem', background: '#015035' }
+          }
+          title="Open AI Assistant (drag to move)"
         >
           <Sparkles size={20} className="text-white" />
         </button>

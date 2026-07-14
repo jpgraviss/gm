@@ -43,12 +43,13 @@ interface Addendum {
 }
 
 function ContractPanel({
-  contract, onClose, onUpdateStatus, addendums, onAddAddendum, onUpdateAddendumStatus,
+  contract, onClose, onEdit, onUpdateStatus, addendums, onAddAddendum, onUpdateAddendumStatus,
   invoices, projects, proposals, signatures, onRequestSignature, onSignInternally,
   onTerminate, onUpdateInvoice,
 }: {
   contract: Contract
   onClose: () => void
+  onEdit: (contract: Contract) => void
   onUpdateStatus: (id: string, status: ContractStatus) => void
   addendums: Addendum[]
   onAddAddendum: (contractId: string, title: string, description: string) => void
@@ -159,9 +160,14 @@ function ContractPanel({
                 {contract.company}
               </h2>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-              <X size={16} className="text-white/60" />
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button onClick={() => onEdit(contract)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors" title="Edit contract">
+                <Pencil size={14} className="text-white/60" />
+              </button>
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                <X size={16} className="text-white/60" />
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge label={contract.status} colorClass={contractStatusColors[contract.status]} />
@@ -797,6 +803,7 @@ export default function ContractsPage() {
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'All'>('All')
   const [searchQuery, setSearchQuery] = useState('')
   const [creatingContract, setCreatingContract] = useState(false)
+  const [editingContract, setEditingContract] = useState<Contract | null>(null)
   const [creatingAddendum, setCreatingAddendum] = useState(false)
   const [localAddendums, setLocalAddendums] = useState<Addendum[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -1046,6 +1053,7 @@ export default function ContractsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           company: data.company,
+          companyId: data.companyId,
           status: 'Draft',
           value: Number(data.value),
           serviceType: data.serviceType,
@@ -1068,6 +1076,51 @@ export default function ContractsPage() {
       toast('Contract created', 'success')
     } catch {
       toast('Failed to create contract', 'error')
+    }
+  }
+
+  async function handleSaveContractEdit(data: NewContractFormData) {
+    if (!editingContract) return
+    const startDate = data.startDate
+    const renewalDate = (() => {
+      const d = new Date(startDate)
+      d.setMonth(d.getMonth() + Number(data.duration))
+      return d.toISOString().split('T')[0]
+    })()
+
+    const updates = {
+      company: data.company,
+      companyId: data.companyId,
+      value: Number(data.value),
+      serviceType: data.serviceType,
+      assignedRep: data.assignedRep,
+      billingStructure: data.billingStructure,
+      duration: Number(data.duration),
+      startDate,
+      renewalDate,
+    }
+
+    const prev = localContracts
+    const id = editingContract.id
+    setLocalContracts(list => list.map(c => c.id === id ? { ...c, ...updates } : c))
+    setSelected(s => s && s.id === id ? { ...s, ...updates } : s)
+    setEditingContract(null)
+
+    try {
+      const res = await fetch(`/api/contracts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      const updated = await res.json()
+      if (!res.ok) throw new Error(updated.error || 'Failed to update contract')
+      setLocalContracts(list => list.map(c => c.id === id ? updated : c))
+      setSelected(s => s && s.id === id ? updated : s)
+      toast('Contract updated', 'success')
+    } catch (err) {
+      setLocalContracts(prev)
+      setSelected(s => s && s.id === id ? prev.find(c => c.id === id) ?? s : s)
+      toast(err instanceof Error ? err.message : 'Failed to update contract', 'error')
     }
   }
 
@@ -1334,7 +1387,7 @@ export default function ContractsPage() {
                           <Eye size={14} />
                         </button>
                         <button
-                          onClick={() => setSelected(c)}
+                          onClick={() => setEditingContract(c)}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
                           title="Edit"
                         >
@@ -1410,6 +1463,7 @@ export default function ContractsPage() {
         <ContractPanel
           contract={selected}
           onClose={() => setSelected(null)}
+          onEdit={c => setEditingContract(c)}
           onUpdateStatus={updateContractStatus}
           addendums={localAddendums}
           onAddAddendum={addAddendum}
@@ -1431,6 +1485,13 @@ export default function ContractsPage() {
           onSave={handleNewContract}
           onClose={() => { setCreatingContract(false); setGenerateFromProposalId(undefined) }}
           initialProposalId={generateFromProposalId}
+        />
+      )}
+      {editingContract && (
+        <NewContractPanel
+          initialData={editingContract}
+          onSave={handleSaveContractEdit}
+          onClose={() => setEditingContract(null)}
         />
       )}
       {creatingAddendum && (

@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import {
   Search, Plus, Globe, CheckCircle, Clock, AlertTriangle, Loader2,
-  FileSearch, ChevronRight,
+  FileSearch, ChevronRight, Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -49,6 +50,8 @@ export default function AuditsPage() {
   const [companyName, setCompanyName] = useState('')
   const [auditType, setAuditType] = useState<string>('full')
   const [running, setRunning] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const { toast } = useToast()
 
   async function loadAudits() {
@@ -63,6 +66,25 @@ export default function AuditsPage() {
   }
 
   useEffect(() => { loadAudits() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleDeleteAudit() {
+    if (!confirmDeleteId) return
+    const id = confirmDeleteId
+    setDeleting(true)
+    const prev = audits
+    setAudits(list => list.filter(a => a.id !== id))
+    try {
+      const res = await fetch(`/api/ai/audit?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      toast('Audit deleted', 'success')
+    } catch {
+      setAudits(prev)
+      toast('Failed to delete audit', 'error')
+    } finally {
+      setDeleting(false)
+      setConfirmDeleteId(null)
+    }
+  }
 
   async function runAudit() {
     if (!url.trim()) return
@@ -235,14 +257,23 @@ export default function AuditsPage() {
                       {new Date(audit.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </td>
                     <td className="px-4 py-3">
-                      {audit.status === 'completed' && (
-                        <Link
-                          href={`/audits/${audit.id}`}
-                          className="inline-flex items-center gap-1 text-[#015035] text-xs font-medium hover:underline"
+                      <div className="flex items-center justify-end gap-3">
+                        {audit.status === 'completed' && (
+                          <Link
+                            href={`/audits/${audit.id}`}
+                            className="inline-flex items-center gap-1 text-[#015035] text-xs font-medium hover:underline"
+                          >
+                            View <ChevronRight size={12} />
+                          </Link>
+                        )}
+                        <button
+                          onClick={() => setConfirmDeleteId(audit.id)}
+                          className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          title="Delete audit"
                         >
-                          View <ChevronRight size={12} />
-                        </Link>
-                      )}
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -251,6 +282,16 @@ export default function AuditsPage() {
           </div>
         )}
       </main>
+
+      {confirmDeleteId && (
+        <ConfirmModal
+          title="Delete this audit?"
+          description="This permanently deletes the audit and its results. This can't be undone."
+          confirmLabel={deleting ? 'Deleting...' : 'Delete'}
+          onConfirm={handleDeleteAudit}
+          onCancel={() => setConfirmDeleteId(null)}
+        />
+      )}
     </>
   )
 }

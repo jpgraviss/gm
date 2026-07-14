@@ -59,6 +59,11 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
     renewalDate:      { type: 'string', maxLength: 30 },
     terminatedReason: { type: 'string', maxLength: 1000 },
     terminatedDate:   { type: 'string', maxLength: 30 },
+    company:          { type: 'string', maxLength: 200 },
+    companyId:        { type: 'string', maxLength: 100 },
+    serviceType:      { type: 'string', maxLength: 100 },
+    startDate:        { type: 'string', maxLength: 30 },
+    duration:         { type: 'number', min: 1, max: 120 },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -105,6 +110,16 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
   if (body.terminatedReason !== undefined)  update.terminated_reason = body.terminatedReason
   if (body.terminatedDate !== undefined)    update.terminated_date = body.terminatedDate
   if (body.companyId !== undefined)         update.company_id = body.companyId
+  // Renaming a contract's company is a legitimate correction (e.g. wrong
+  // company selected at creation), but app/crm/pipeline/page.tsx and
+  // app/renewals/page.tsx still link deals/renewals to a contract by
+  // matching this NAME string, not companyId — a rename here won't
+  // retroactively update those existing string matches. Not fixed here
+  // (out of scope for "let me edit a contract"); flagged in AUDIT.md.
+  if (body.company !== undefined)           update.company = body.company
+  if (body.serviceType !== undefined)       update.service_type = body.serviceType
+  if (body.startDate !== undefined)         update.start_date = body.startDate
+  if (body.duration !== undefined)          update.duration = body.duration
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })

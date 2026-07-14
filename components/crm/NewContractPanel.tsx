@@ -5,14 +5,20 @@ import { X, DollarSign, User, Calendar, ChevronLeft, Search, FileText } from 'lu
 import { fetchProposals } from '@/lib/supabase'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import CompanySelect from '@/components/ui/CompanySelect'
-import type { ServiceType, Proposal } from '@/lib/types'
+import type { ServiceType, Proposal, Contract } from '@/lib/types'
 import { SERVICE_NAMES } from '@/lib/services'
 
 const SERVICE_TYPES: ServiceType[] = [...SERVICE_NAMES]
-const BILLING_STRUCTURES = ['One-Time', 'Monthly Retainer', 'Quarterly', 'Annual']
+// Must match the enum both /api/contracts and /api/contracts/[id] validate
+// against exactly (app/api/contracts/route.ts, app/api/contracts/[id]/route.ts)
+// — the previous list ('One-Time', 'Monthly Retainer') didn't match the
+// server's enum at all, so saving with the default value (or "One-Time")
+// always failed validation with a 400.
+const BILLING_STRUCTURES = ['Monthly', 'Quarterly', 'Annual', 'One-time', 'Custom']
 
 export interface NewContractFormData {
   company: string
+  companyId?: string
   serviceType: ServiceType
   assignedRep: string
   value: string
@@ -50,17 +56,32 @@ interface Props {
   onSave: (data: NewContractFormData) => void
   onClose: () => void
   initialProposalId?: string
+  // When present, the panel edits this contract instead of creating a new
+  // one — seeds the form from it, hides the proposal-linking section (a
+  // contract's proposalId isn't editable after creation), and relabels
+  // the header/footer accordingly.
+  initialData?: Contract
 }
 
-export default function NewContractPanel({ onSave, onClose, initialProposalId }: Props) {
+export default function NewContractPanel({ onSave, onClose, initialProposalId, initialData }: Props) {
   const REPS = useTeamMembers()
   const today = new Date().toISOString().split('T')[0]
-  const [form, setForm] = useState<NewContractFormData>({
+  const isEditing = !!initialData
+  const [form, setForm] = useState<NewContractFormData>(() => initialData ? {
+    company: initialData.company,
+    companyId: initialData.companyId ?? undefined,
+    serviceType: initialData.serviceType,
+    assignedRep: initialData.assignedRep,
+    value: String(initialData.value ?? ''),
+    billingStructure: initialData.billingStructure,
+    duration: String(initialData.duration ?? ''),
+    startDate: initialData.startDate || today,
+  } : {
     company: '',
     serviceType: 'Website Build',
     assignedRep: 'Graviss Marketing',
     value: '',
-    billingStructure: 'Monthly Retainer',
+    billingStructure: 'Monthly',
     duration: '12',
     startDate: today,
   })
@@ -71,6 +92,7 @@ export default function NewContractPanel({ onSave, onClose, initialProposalId }:
   const [linkedProposal, setLinkedProposal] = useState<Proposal | null>(null)
 
   useEffect(() => {
+    if (isEditing) return
     fetchProposals().then(fetched => {
       setProposals(fetched)
       if (initialProposalId) {
@@ -146,8 +168,8 @@ export default function NewContractPanel({ onSave, onClose, initialProposalId }:
             <ChevronLeft size={14} /> Back
           </button>
           <div>
-            <h2 className="text-white font-bold text-base">New Contract</h2>
-            <p className="text-white/50 text-xs mt-0.5">Create a draft contract</p>
+            <h2 className="text-white font-bold text-base">{isEditing ? 'Edit Contract' : 'New Contract'}</h2>
+            <p className="text-white/50 text-xs mt-0.5">{isEditing ? `${initialData?.company} · ${initialData?.id}` : 'Create a draft contract'}</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10">
             <X size={16} className="text-white/70" />
@@ -157,7 +179,11 @@ export default function NewContractPanel({ onSave, onClose, initialProposalId }:
         {/* Form */}
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
 
-          {/* Proposal lookup — generates contract from an existing proposal */}
+          {/* Proposal lookup — generates contract from an existing proposal.
+              Not shown when editing: proposalId isn't editable after a
+              contract is created (app/api/contracts/[id]/route.ts doesn't
+              accept it), so a relink control here would silently do nothing. */}
+          {!isEditing && (
           <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
             {linkedProposal ? (
               <div className="flex items-start gap-2.5">
@@ -239,12 +265,13 @@ export default function NewContractPanel({ onSave, onClose, initialProposalId }:
               </>
             )}
           </div>
+          )}
 
           <div>
             <FieldLabel>Company</FieldLabel>
             <CompanySelect
               value={form.company}
-              onChange={(name) => set('company', name)}
+              onChange={(name, companyId) => setForm(prev => ({ ...prev, company: name, companyId }))}
               placeholder="Select a company..."
             />
           </div>
@@ -318,7 +345,7 @@ export default function NewContractPanel({ onSave, onClose, initialProposalId }:
             className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 transition-opacity hover:opacity-90"
             style={{ background: '#015035' }}
           >
-            Create Draft
+            {isEditing ? 'Save Changes' : 'Create Draft'}
           </button>
           <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
             Cancel

@@ -23,12 +23,16 @@ vi.mock('@/lib/supabase', () => ({
   createServiceClient: () => createMockDb({
     selectResult: { data: [MOCK_CONTRACT_ROW], error: null },
     insertResult: { data: MOCK_CONTRACT_ROW, error: null },
+    updateResult: { data: { ...MOCK_CONTRACT_ROW, company: 'Renamed Co', value: 45000, service_type: 'SEO' }, error: null },
   }),
 }))
 
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }))
+vi.mock('@/lib/portal-auth', () => ({ requirePortalClient: vi.fn().mockResolvedValue(null) }))
+vi.mock('@/lib/automations-engine', () => ({ fireAutomations: vi.fn() }))
 
 import { GET, POST } from '@/app/api/contracts/route'
+import { PATCH } from '@/app/api/contracts/[id]/route'
 
 describe('GET /api/contracts', () => {
   it('returns mapped contracts', async () => {
@@ -90,6 +94,40 @@ describe('POST /api/contracts', () => {
     })
 
     const res = await POST(req)
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('PATCH /api/contracts/[id]', () => {
+  it('updates company, value, serviceType, startDate, and duration — previously create-only fields', async () => {
+    const req = new NextRequest(new URL('http://localhost/api/contracts/c-123'), {
+      method: 'PATCH',
+      body: JSON.stringify({
+        company: 'Renamed Co',
+        companyId: 'company-99',
+        value: 45000,
+        serviceType: 'SEO',
+        startDate: '2026-06-01',
+        duration: 6,
+      }),
+    })
+
+    const res = await PATCH(req, { params: Promise.resolve({ id: 'c-123' }) })
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.company).toBe('Renamed Co')
+    expect(data.value).toBe(45000)
+    expect(data.serviceType).toBe('SEO')
+  })
+
+  it('rejects an invalid billing structure on edit, same enum as create', async () => {
+    const req = new NextRequest(new URL('http://localhost/api/contracts/c-123'), {
+      method: 'PATCH',
+      body: JSON.stringify({ billingStructure: 'BiWeekly' }),
+    })
+
+    const res = await PATCH(req, { params: Promise.resolve({ id: 'c-123' }) })
     expect(res.status).toBe(400)
   })
 })

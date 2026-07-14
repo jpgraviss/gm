@@ -14,6 +14,7 @@ import type { SequenceStatus, SequenceStepType, SequenceStep, EmailSequence, Tea
 import SequenceStepEditor from '@/components/crm/SequenceStepEditor'
 import SequenceAutomateTab from '@/components/crm/SequenceAutomateTab'
 import { fetchTeamMembers } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 type StepType = SequenceStepType
 
@@ -113,9 +114,12 @@ function EnrollContactsModal({
   const [enrolling, setEnrolling] = useState(false)
 
   useEffect(() => {
-    fetch('/api/crm/contacts')
-      .then(r => r.ok ? r.json() : [])
-      .then(d => { if (Array.isArray(d)) setContacts(d) })
+    // GET /api/crm/contacts is cursor-paginated at 100 rows/page — a raw
+    // fetch() here silently limited enrollment to the 100 most-recently-
+    // created contacts, with no indication older contacts were excluded.
+    // fetchAllPages follows X-Next-Cursor until the full list is loaded.
+    fetchAllPages<CRMContact>('/api/crm/contacts')
+      .then(d => setContacts(d))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])

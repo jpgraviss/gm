@@ -144,7 +144,12 @@ export default function NewContractPanel({ onSave, onClose, initialProposalId, i
     setForm(prev => ({ ...prev, proposalId: undefined }))
   }
 
-  const canSave = form.company.trim() && form.value && form.startDate
+  // Duration wasn't checked here — an empty/zero/out-of-range value looked
+  // saveable in the UI and only failed after a round trip to the server's
+  // own validate() (min 1, max 120).
+  const durationNum = Number(form.duration)
+  const canSave = form.company.trim() && form.value && form.startDate &&
+    form.duration !== '' && durationNum >= 1 && durationNum <= 120
 
   // Compute renewal date preview
   const renewalDate = (() => {
@@ -322,7 +327,7 @@ export default function NewContractPanel({ onSave, onClose, initialProposalId, i
                 type="number"
                 placeholder="12"
                 min="1"
-                max="60"
+                max="120"
                 value={form.duration}
                 onChange={e => set('duration', e.target.value)}
               />

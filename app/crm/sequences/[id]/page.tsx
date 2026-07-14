@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useDeferredValue } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/Toast'
 import Header from '@/components/layout/Header'
@@ -110,6 +110,11 @@ function EnrollContactsModal({
   const [contacts, setContacts] = useState<CRMContact[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  // Filtering runs over the full (unpaginated, potentially thousands-of-
+  // rows) contact list on every keystroke — defer it so fast typing keeps
+  // the input responsive instead of re-filtering/re-rendering synchronously
+  // on each character.
+  const deferredSearch = useDeferredValue(search)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [enrolling, setEnrolling] = useState(false)
 
@@ -126,7 +131,7 @@ function EnrollContactsModal({
 
   const filtered = contacts.filter(c => {
     if (!c.emails?.length) return false
-    const q = search.toLowerCase()
+    const q = deferredSearch.toLowerCase()
     if (!q) return true
     return (
       c.fullName?.toLowerCase().includes(q) ||
@@ -144,13 +149,23 @@ function EnrollContactsModal({
     })
   }
 
+  const eligibleFilteredIds = filtered.filter(c => !existingEmails.has(c.emails[0])).map(c => c.id)
+  const allFilteredSelected = eligibleFilteredIds.length > 0 && eligibleFilteredIds.every(id => selected.has(id))
+
   function selectAll() {
-    const eligible = filtered.filter(c => !existingEmails.has(c.emails[0]))
-    if (selected.size === eligible.length) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(eligible.map(c => c.id)))
-    }
+    // Only add/remove the CURRENTLY filtered contacts — a full replace here
+    // would silently drop contacts selected while a different search query
+    // was active (select someone under "smith", search "jones", click
+    // Select all — a replace wipes out the "smith" selection).
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (allFilteredSelected) {
+        eligibleFilteredIds.forEach(id => next.delete(id))
+      } else {
+        eligibleFilteredIds.forEach(id => next.add(id))
+      }
+      return next
+    })
   }
 
   async function enroll() {
@@ -223,7 +238,7 @@ function EnrollContactsModal({
             <>
               <div className="flex items-center justify-between mb-2">
                 <button onClick={selectAll} className="text-xs text-emerald-600 font-medium hover:underline">
-                  {selected.size === filtered.filter(c => !existingEmails.has(c.emails[0])).length ? 'Deselect all' : 'Select all'}
+                  {allFilteredSelected ? 'Deselect all' : 'Select all'}
                 </button>
                 <span className="text-xs text-gray-400">{filtered.length} contacts</span>
               </div>

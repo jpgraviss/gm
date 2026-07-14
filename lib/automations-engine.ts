@@ -790,7 +790,7 @@ async function executeAction(
       const seqId = (context.sequenceId as string) ?? ''
       const seqName = (context.sequenceName as string) ?? ''
       if (!seqId && !seqName) break
-      let seqQuery = db.from('sequences').select('id, steps, enrolled_count, active_count').eq('status', 'Active')
+      let seqQuery = db.from('sequences').select('id, steps').eq('status', 'Active')
       seqQuery = seqId ? seqQuery.eq('id', seqId) : seqQuery.eq('name', seqName)
       const { data: targetSeq } = await seqQuery.single()
       if (!targetSeq) break
@@ -866,10 +866,11 @@ async function executeAction(
         throw new Error(enrollErr.message || 'Failed to enroll contact')
       }
 
-      await db.from('sequences').update({
-        enrolled_count: (targetSeq.enrolled_count ?? 0) + 1,
-        active_count: (targetSeq.active_count ?? 0) + 1,
-      }).eq('id', targetSeq.id)
+      await db.rpc('adjust_sequence_counts', {
+        p_sequence_id: targetSeq.id,
+        p_enrolled_delta: 1,
+        p_active_delta: 1,
+      })
       break
     }
 
@@ -892,13 +893,11 @@ async function executeAction(
           .update({ status: 'unenrolled', unenroll_reason: 'automation' })
           .eq('id', enr.id)
 
-        const { data: seq } = await db.from('sequences')
-          .select('active_count').eq('id', enr.sequence_id).single()
-        if (seq) {
-          await db.from('sequences')
-            .update({ active_count: Math.max(0, (seq.active_count ?? 1) - 1) })
-            .eq('id', enr.sequence_id)
-        }
+        await db.rpc('adjust_sequence_counts', {
+          p_sequence_id: enr.sequence_id,
+          p_enrolled_delta: 0,
+          p_active_delta: -1,
+        })
       }
       break
     }

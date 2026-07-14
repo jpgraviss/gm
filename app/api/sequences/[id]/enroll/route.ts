@@ -27,7 +27,7 @@ export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: N
   // Fetch the sequence to get steps and counts
   const { data: seq, error: seqErr } = await db
     .from('sequences')
-    .select('steps, enrolled_count, active_count')
+    .select('steps')
     .eq('id', id)
     .single()
   if (seqErr || !seq) return NextResponse.json({ error: 'Sequence not found' }, { status: 404 })
@@ -103,14 +103,12 @@ export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: N
   }
 
   if (enrolledCount > 0) {
-    await db
-      .from('sequences')
-      .update({
-        enrolled_count: (seq.enrolled_count ?? 0) + enrolledCount,
-        active_count: (seq.active_count ?? 0) + enrolledCount,
-        last_modified: now.toISOString().split('T')[0],
-      })
-      .eq('id', id)
+    await db.rpc('adjust_sequence_counts', {
+      p_sequence_id: id,
+      p_enrolled_delta: enrolledCount,
+      p_active_delta: enrolledCount,
+      p_last_modified: now.toISOString().split('T')[0],
+    })
   }
 
   return NextResponse.json({ enrolled: enrolledCount })

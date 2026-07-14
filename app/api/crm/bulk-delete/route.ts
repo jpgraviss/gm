@@ -49,14 +49,17 @@ export const POST = withErrorHandler('crm/bulk-delete POST', async (req) => {
     }
 
     if (deletableIds.length > 0) {
-      for (const c of companies ?? []) {
-        if (deletableIds.includes(c.id)) await deleteCompanyActivities(db, c.id, c.name)
-      }
+      // Delete the company rows FIRST, activities second — see matching
+      // comment in app/api/crm/companies/[id]/route.ts.
       const { error, count } = await db.from('crm_companies').delete({ count: 'exact' }).in('id', deletableIds)
       if (error) {
         throw new Error(error.message)
       }
       deleted = count ?? 0
+
+      for (const id of deletableIds) {
+        await deleteCompanyActivities(db, id)
+      }
     }
   } else {
     const { error, count } = await db.from(table).delete({ count: 'exact' }).in('id', ids)

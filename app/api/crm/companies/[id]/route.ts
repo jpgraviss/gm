@@ -140,12 +140,17 @@ export const DELETE = withErrorHandler('crm/companies/[id] DELETE', async (
     }, { status: 409 })
   }
 
-  await deleteCompanyActivities(db, company.id, company.name)
-
+  // Delete the company row FIRST, activities second — if the company
+  // delete itself fails (DB blip, an unaccounted-for FK), the activity
+  // log is never touched, so the request can safely fail closed instead
+  // of silently destroying history for a company that's still there.
   const { error } = await db.from('crm_companies').delete().eq('id', id)
   if (error) {
     throw new Error(error?.message || 'Failed to delete company')
   }
+
+  await deleteCompanyActivities(db, company.id)
+
   logAudit({ userName: 'system', action: 'deleted_company', module: 'crm', type: 'warning', metadata: { companyId: id, companyName: company.name } })
   return NextResponse.json({ success: true })
 })

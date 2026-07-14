@@ -134,7 +134,7 @@ export const POST = withErrorHandler('crm/merge POST', async (req) => {
     // touch a row whose company_id already points somewhere else — matching
     // by name alone risks repointing an unrelated company's data if two
     // companies happen to share a display name.
-    const fkTables = ['deals', 'contracts', 'invoices', 'projects', 'proposals'] as const
+    const fkTables = ['deals', 'contracts', 'invoices', 'projects', 'proposals', 'renewals', 'maintenance_records'] as const
 
     for (const mergeId of mergeIds) {
       const mergeRec = mergeRecords.find(r => r.id === mergeId)

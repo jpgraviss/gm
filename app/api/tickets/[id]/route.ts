@@ -3,7 +3,12 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TASK_PRIORITIES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
+import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
+
+// Portal clients can only reply to their own ticket (Tickets page's Reply
+// box) — status/priority/assignedTo/tags/companyId are staff-only.
+const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['messages'])
 
 export const PATCH = withErrorHandler('tickets/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
@@ -13,7 +18,28 @@ export const PATCH = withErrorHandler('tickets/[id] PATCH', async (req: NextRequ
     priority: { type: 'string', enum: [...TASK_PRIORITIES] },
   })
   if (!result.valid) return validationError(result.error)
+
   const db = createServiceClient()
+
+  const { data: current, error: fetchErr } = await db
+    .from('tickets')
+    .select('company')
+    .eq('id', id)
+    .single()
+  if (fetchErr || !current) {
+    return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+  }
+
+  const denied = await requirePortalClient(req, current.company)
+  if (denied) return denied
+
+  if (!(await isStaffCaller(req))) {
+    const disallowed = Object.keys(body).filter(k => !PORTAL_CLIENT_EDITABLE_FIELDS.has(k))
+    if (disallowed.length > 0) {
+      return NextResponse.json({ error: `Not permitted to update: ${disallowed.join(', ')}` }, { status: 403 })
+    }
+  }
+
   const update: Record<string, unknown> = {
     updated_date: new Date().toISOString().split('T')[0],
   }

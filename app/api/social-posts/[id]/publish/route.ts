@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 import { publishSocialPost } from '@/lib/social-publish'
 
-export const POST = withErrorHandler('social-posts/[id]/publish POST', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const POST = withErrorHandler('social-posts/[id]/publish POST', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
 
   const result = await publishSocialPost(id)
@@ -12,6 +16,9 @@ export const POST = withErrorHandler('social-posts/[id]/publish POST', async (_r
   }
   if (result.reason === 'already_done') {
     return NextResponse.json({ error: `Post is already ${result.post?.status}` }, { status: 400 })
+  }
+  if (result.reason === 'not_approved') {
+    return NextResponse.json({ error: 'Post has not been approved by the client yet' }, { status: 400 })
   }
   if (result.reason === 'no_platforms') {
     return NextResponse.json({ error: 'Post has no target platforms' }, { status: 400 })

@@ -6,6 +6,8 @@ import { requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
 
 export const PATCH = withErrorHandler('renewals/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const body = await req.json()
   const result = validate(body, {

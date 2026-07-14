@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('sequences/analytics GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const sequenceId = req.nextUrl.searchParams.get('sequenceId')
   if (!sequenceId) {
     return NextResponse.json({ error: 'sequenceId is required' }, { status: 400 })

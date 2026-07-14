@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
+
+const ALLOWED_FILE_TYPES = new Set([
+  'application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain', 'text/csv',
+])
+const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
 
 export const GET = withErrorHandler('crm/companies/[id]/files GET', async (
-  _req,
+  req,
   { params }: { params: Promise<{ id: string }> },
 ) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db
@@ -24,6 +35,8 @@ export const POST = withErrorHandler('crm/companies/[id]/files POST', async (
   req,
   { params }: { params: Promise<{ id: string }> },
 ) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const formData = await req.formData()
   const file = formData.get('file') as File | null
@@ -32,6 +45,12 @@ export const POST = withErrorHandler('crm/companies/[id]/files POST', async (
 
   if (!file) {
     return NextResponse.json({ error: 'File is required' }, { status: 400 })
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return NextResponse.json({ error: 'File exceeds 25MB limit' }, { status: 400 })
+  }
+  if (!ALLOWED_FILE_TYPES.has(file.type)) {
+    return NextResponse.json({ error: `Unsupported file type: ${file.type || 'unknown'}` }, { status: 400 })
   }
 
   const db = createServiceClient()
@@ -82,6 +101,8 @@ export const DELETE = withErrorHandler('crm/companies/[id]/files DELETE', async 
   req,
   { params }: { params: Promise<{ id: string }> },
 ) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const { fileId } = await req.json()
   if (!fileId) {

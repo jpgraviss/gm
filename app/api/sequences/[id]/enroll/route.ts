@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const { contacts } = await req.json() as { contacts: { id?: string; name: string; email: string }[] }
 

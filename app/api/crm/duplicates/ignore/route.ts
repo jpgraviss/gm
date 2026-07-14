@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
+import { requireRole } from '@/lib/rbac'
 
 const SETTINGS_ID = 'global'
 
 export const POST = withErrorHandler('crm/duplicates/ignore POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
 

@@ -1,12 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
+import { isStaffCaller } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
+
+// A portal client may only read/write their OWN notification feed; staff may
+// act on behalf of any client. Without this, clientId is a fully caller-
+// controlled query param / body field with no ownership check at all.
+async function verifyNotificationAccess(req: NextRequest, clientId: string): Promise<NextResponse | null> {
+  const email = await getAuthenticatedEmail(req)
+  if (!email) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  if (await isStaffCaller(req)) return null
+
+  const db = createServiceClient()
+  const { data: client } = await db.from('portal_clients').select('id, email').eq('id', clientId).maybeSingle()
+  if (!client || client.email?.toLowerCase() !== email.toLowerCase()) {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
+  return null
+}
 
 export const GET = withErrorHandler('portal-clients/notifications GET', async (req) => {
   const clientId = req.nextUrl.searchParams.get('clientId')
   if (!clientId) {
     return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
   }
+
+  const denied = await verifyNotificationAccess(req, clientId)
+  if (denied) return denied
 
   const db = createServiceClient()
   let query = db
@@ -30,7 +53,13 @@ export const GET = withErrorHandler('portal-clients/notifications GET', async (r
 })
 
 export const POST = withErrorHandler('portal-clients/notifications POST', async (req) => {
-  const { portalClientId, type, title, message, link } = await req.json()
+  if (!(await isStaffCaller(req))) {
+    return NextResponse.json({ error: 'Staff access required' }, { status: 403 })
+  }
+
+  const body = await req.json()
+  const portalClientId = body.portalClientId ?? body.portal_client_id
+  const { type, title, message, link } = body
 
   if (!portalClientId || !type || !title) {
     return NextResponse.json({ error: 'portalClientId, type, and title are required' }, { status: 400 })
@@ -62,7 +91,26 @@ export const PATCH = withErrorHandler('portal-clients/notifications PATCH', asyn
     return NextResponse.json({ error: 'ids array is required' }, { status: 400 })
   }
 
+  const email = await getAuthenticatedEmail(req)
+  if (!email) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const db = createServiceClient()
+
+  if (!(await isStaffCaller(req))) {
+    // Non-staff callers may only mark their OWN notifications read.
+    const { data: client } = await db.from('portal_clients').select('id').ilike('email', email).maybeSingle()
+    const { count } = await db
+      .from('portal_notifications')
+      .select('id', { count: 'exact', head: true })
+      .in('id', ids)
+      .neq('portal_client_id', client?.id ?? '')
+    if (!client || (count ?? 0) > 0) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+  }
+
   const { error } = await db
     .from('portal_notifications')
     .update({ read: true })

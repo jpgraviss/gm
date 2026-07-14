@@ -30,6 +30,7 @@ vi.mock('@/lib/supabase', () => ({
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }))
 vi.mock('@/lib/portal-auth', () => ({ requirePortalClient: vi.fn().mockResolvedValue(null), isStaffCaller: vi.fn().mockResolvedValue(true) }))
 vi.mock('@/lib/automations-engine', () => ({ fireAutomations: vi.fn() }))
+vi.mock('@/lib/rbac', () => ({ requireRole: vi.fn().mockResolvedValue(null) }))
 
 import { GET, POST } from '@/app/api/contracts/route'
 import { PATCH } from '@/app/api/contracts/[id]/route'

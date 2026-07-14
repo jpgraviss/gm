@@ -3,6 +3,8 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
+import { requireRole } from '@/lib/rbac'
+import { requirePortalClient } from '@/lib/portal-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContract(row: any) {
@@ -29,6 +31,15 @@ function mapContract(row: any) {
 export const GET = withErrorHandler('contracts GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
+
+  // Portal clients (Approvals/Agreement/dashboard pages) legitimately call
+  // this scoped to their own company — see matching comment in
+  // app/api/proposals/route.ts.
+  const denied = company
+    ? await requirePortalClient(req, company)
+    : await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
@@ -45,6 +56,8 @@ export const GET = withErrorHandler('contracts GET', async (req) => {
 })
 
 export const POST = withErrorHandler('contracts POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const body = await req.json()
 
   const result = validate(body, {

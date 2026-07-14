@@ -25,6 +25,7 @@ vi.mock('@/lib/supabase', () => ({
 }))
 
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }))
+vi.mock('@/lib/rbac', () => ({ requireRole: vi.fn().mockResolvedValue(null) }))
 
 import { GET, POST } from '@/app/api/deals/route'
 

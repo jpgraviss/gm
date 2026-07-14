@@ -1,13 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server'
+import dns from 'dns/promises'
+import net from 'net'
 import { withErrorHandler } from '@/lib/api-handler'
 import { chatCompletion } from '@/lib/ai-client'
+import { requireRole } from '@/lib/rbac'
 
 const INDUSTRIES = [
   'OOH', 'Real Estate', 'Healthcare', 'Technology', 'Finance', 'Retail',
   'Education', 'Construction', 'Hospitality', 'Legal', 'Non-Profit', 'Other',
 ]
 
+// This route fetches a caller-supplied URL server-side, so it's a classic
+// SSRF vector — without this check, an authenticated caller could point it
+// at http://169.254.169.254/ (cloud metadata), an internal service, or
+// localhost and read back whatever "enrichment" data comes back.
+function isPrivateOrLoopbackIp(ip: string): boolean {
+  if (net.isIPv6(ip)) {
+    const lower = ip.toLowerCase()
+    return lower === '::1' || lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')
+  }
+  const parts = ip.split('.').map(Number)
+  if (parts.length !== 4 || parts.some(n => Number.isNaN(n))) return true
+  const [a, b] = parts
+  if (a === 127) return true // loopback
+  if (a === 10) return true // 10.0.0.0/8
+  if (a === 172 && b >= 16 && b <= 31) return true // 172.16.0.0/12
+  if (a === 192 && b === 168) return true // 192.168.0.0/16
+  if (a === 169 && b === 254) return true // link-local / cloud metadata
+  if (a === 0) return true
+  return false
+}
+
+async function isSafeToFetch(url: URL): Promise<boolean> {
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+  const hostname = url.hostname.toLowerCase()
+  if (hostname === 'localhost' || hostname.endsWith('.localhost')) return false
+  try {
+    const addresses = await dns.lookup(hostname, { all: true })
+    return addresses.every(a => !isPrivateOrLoopbackIp(a.address))
+  } catch {
+    return false
+  }
+}
+
 export const POST = withErrorHandler('crm/enrich POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   let body: { url?: string }
   try {
     body = await req.json()
@@ -26,6 +65,10 @@ export const POST = withErrorHandler('crm/enrich POST', async (req) => {
     url = new URL(normalized)
   } catch {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
+  }
+
+  if (!(await isSafeToFetch(url))) {
+    return NextResponse.json({ error: 'This URL cannot be enriched' }, { status: 400 })
   }
 
   let html: string

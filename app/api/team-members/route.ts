@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,6 +27,8 @@ function mapMember(row: any) {
 }
 
 export const GET = withErrorHandler('team-members GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const db = createServiceClient()
   const includeInactive = req.nextUrl.searchParams.get('include_inactive') === 'true'
   let query = db.from('team_members').select('*').order('name')
@@ -40,6 +43,8 @@ export const GET = withErrorHandler('team-members GET', async (req: NextRequest)
 })
 
 export const POST = withErrorHandler('team-members POST', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Super Admin')
+  if (denied) return denied
   const body = await req.json()
   const db = createServiceClient()
   const initials = body.initials ?? body.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -64,6 +69,8 @@ export const POST = withErrorHandler('team-members POST', async (req: NextReques
 })
 
 export const PATCH = withErrorHandler('team-members PATCH', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Super Admin')
+  if (denied) return denied
   const body = await req.json()
   const { id, action, reason, suspendUntil, accessSchedule } = body as {
     id: string

@@ -6,9 +6,9 @@ import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
 export const POST = withErrorHandler('portal-clients/complete-setup POST', async (req) => {
-  const { email, password, displayName } = await req.json()
-  if (!email || !password) {
-    return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
+  const { email, code, password, displayName } = await req.json()
+  if (!email || !code || !password) {
+    return NextResponse.json({ error: 'Email, verification code, and password are required' }, { status: 400 })
   }
 
   if (password.length < 8) {
@@ -20,12 +20,24 @@ export const POST = withErrorHandler('portal-clients/complete-setup POST', async
 
   const { data: client, error: clientErr } = await db
     .from('portal_clients')
-    .select('id, company, contact')
+    .select('id, company, contact, verification_code, verification_expires')
     .ilike('email', normalizedEmail)
     .maybeSingle()
 
   if (clientErr || !client) {
     return NextResponse.json({ error: 'No portal account found' }, { status: 404 })
+  }
+
+  // Re-validate the verification code server-side — the setup page's
+  // earlier /verify-code call only gated which step of the wizard is shown
+  // client-side; it never actually gated this route, which is the one that
+  // sets a real password. Without this, anyone who knows/guesses a portal
+  // client's email could set that account's password directly.
+  if (!client.verification_code || client.verification_code !== String(code).trim()) {
+    return NextResponse.json({ error: 'Invalid verification code' }, { status: 400 })
+  }
+  if (client.verification_expires && new Date(client.verification_expires) < new Date()) {
+    return NextResponse.json({ error: 'Verification code has expired. Please contact your administrator for a new invite.' }, { status: 400 })
   }
 
   const { data: { users }, error: listErr } = await db.auth.admin.listUsers()

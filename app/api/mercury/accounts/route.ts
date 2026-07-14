@@ -1,8 +1,11 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { listAccounts } from '@/lib/mercury'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
-export const GET = withErrorHandler('mercury/accounts GET', async () => {
+export const GET = withErrorHandler('mercury/accounts GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   try {
     const accounts = await listAccounts()
     return NextResponse.json({ accounts })

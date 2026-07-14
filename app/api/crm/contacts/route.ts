@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
+import { requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {
@@ -35,6 +36,8 @@ function mapContact(row: any) {
 }
 
 export const GET = withErrorHandler('crm/contacts GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { searchParams } = new URL(req.url)
   const companyId = searchParams.get('companyId')
   const pag = parsePagination(req)
@@ -53,6 +56,8 @@ export const GET = withErrorHandler('crm/contacts GET', async (req) => {
 })
 
 export const POST = withErrorHandler('crm/contacts POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const body = await req.json()
 
   const result = validate(body, {

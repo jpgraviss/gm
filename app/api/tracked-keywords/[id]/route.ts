@@ -5,7 +5,9 @@ import { logAudit } from '@/lib/audit'
 import { mapTracked } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
 
-export const GET = withErrorHandler('tracked-keywords/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('tracked-keywords/[id] GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db
@@ -38,6 +40,7 @@ export const PATCH = withErrorHandler('tracked-keywords/[id] PATCH', async (req,
   if (body.searchEngine !== undefined) update.search_engine = body.searchEngine
   if (body.location !== undefined)    update.location     = body.location
   if (body.searchVolume !== undefined) update.search_volume = body.searchVolume
+  if (body.portalVisible !== undefined) update.portal_visible = body.portalVisible
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })

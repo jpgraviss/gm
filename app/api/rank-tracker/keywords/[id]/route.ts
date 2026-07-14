@@ -6,7 +6,9 @@ import { mapTracked } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
 import { validate, validationError } from '@/lib/validation'
 
-export const GET = withErrorHandler('rank-tracker/keywords/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('rank-tracker/keywords/[id] GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db

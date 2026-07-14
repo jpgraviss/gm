@@ -6,8 +6,12 @@ import { getSettings } from '@/lib/settings'
 import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireAdmin } from '@/lib/admin-auth'
 
 export const POST = withErrorHandler('portal-clients/invite POST', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   let body: Record<string, unknown>
   try {
     body = await req.json()

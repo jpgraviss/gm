@@ -2,14 +2,34 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
+import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 import { logAudit } from '@/lib/audit'
 import { mapPost } from '@/lib/social-media'
 
-export const GET = withErrorHandler('social-posts/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+// company_name can be null on older/malformed rows — requirePortalClient
+// requires a real string, and a null company has no legitimate portal
+// client to scope against, so treat it as staff-only.
+async function requirePostAccess(req: NextRequest, companyName: string | null) {
+  if (!companyName) return await requireRole(req, 'Team Member')
+  return await requirePortalClient(req, companyName)
+}
+
+// Fields the real portal approval UI ever sends (app/client/page.tsx
+// handleApprovePost/handleRejectPost). Everything else — content,
+// platforms, scheduling, media — is staff-only: requirePortalClient only
+// validates the post CURRENTLY belongs to the caller's company, not which
+// fields they may set it to.
+const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['approvalStatus', 'rejectionReason'])
+
+export const GET = withErrorHandler('social-posts/[id] GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
   const { data } = await db.from('social_posts').select('*').eq('id', id).single()
   if (!data) return NextResponse.json({ error: 'Social post not found' }, { status: 404 })
+
+  const denied = await requirePostAccess(req, data.company_name)
+  if (denied) return denied
+
   return NextResponse.json(mapPost(data))
 })
 
@@ -17,6 +37,25 @@ export const PATCH = withErrorHandler('social-posts/[id] PATCH', async (req, { p
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()
+
+  const { data: current, error: fetchErr } = await db
+    .from('social_posts')
+    .select('company_name')
+    .eq('id', id)
+    .single()
+  if (fetchErr || !current) {
+    return NextResponse.json({ error: 'Social post not found' }, { status: 404 })
+  }
+
+  const denied = await requirePostAccess(req, current.company_name)
+  if (denied) return denied
+
+  if (!(await isStaffCaller(req))) {
+    const disallowed = Object.keys(body).filter(k => !PORTAL_CLIENT_EDITABLE_FIELDS.has(k))
+    if (disallowed.length > 0) {
+      return NextResponse.json({ error: `Not permitted to update: ${disallowed.join(', ')}` }, { status: 403 })
+    }
+  }
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (body.content !== undefined)         update.content = body.content

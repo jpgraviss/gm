@@ -26,6 +26,8 @@ function mapActivity(row: any) {
 }
 
 export const GET = withErrorHandler('crm/activities GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { searchParams } = new URL(req.url)
   const companyId = searchParams.get('companyId')
   const contactId = searchParams.get('contactId')

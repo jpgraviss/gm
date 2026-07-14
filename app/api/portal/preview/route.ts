@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireAdmin } from '@/lib/admin-auth'
 
 export const GET = withErrorHandler('portal/preview GET', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   if (!company) {

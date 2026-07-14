@@ -270,7 +270,7 @@ export interface PublishPostResult {
   anySucceeded: boolean
   partial: boolean
   /** Set when the post can't be published (not found / already published). */
-  reason?: 'not_found' | 'already_done' | 'no_platforms' | 'db_error'
+  reason?: 'not_found' | 'already_done' | 'no_platforms' | 'not_approved' | 'db_error'
   error?: string
 }
 
@@ -287,6 +287,14 @@ export async function publishSocialPost(id: string): Promise<PublishPostResult> 
 
   if (post.status === 'published' || post.status === 'publishing') {
     return { post: mapPost(post), anySucceeded: false, partial: false, reason: 'already_done' }
+  }
+
+  // The schema's own stated intent ("Approval workflow lets clients review
+  // before posts go live") was previously enforced only by the staff UI
+  // conditionally showing a Publish button — nothing server-side stopped a
+  // draft or rejected post from actually going live.
+  if (post.approval_status !== 'approved') {
+    return { post: mapPost(post), anySucceeded: false, partial: false, reason: 'not_approved' }
   }
 
   const platforms = (post.platforms as SocialPlatform[]) ?? []

@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { checkSite, recordCheck, computeUptime30d } from '@/lib/uptime'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 /**
  * POST /api/monitored-sites/:id/check — manually trigger a check for a
  * single site. Returns the check result.
  */
-export const POST = withErrorHandler('monitored-sites/[id]/check POST', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const POST = withErrorHandler('monitored-sites/[id]/check POST', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
 

@@ -7,6 +7,8 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { validate, validationError } from '@/lib/validation'
 
 export const GET = withErrorHandler('rank-tracker/keywords GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')

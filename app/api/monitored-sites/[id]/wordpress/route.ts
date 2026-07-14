@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { runAndStoreWPCheck } from '@/lib/wordpress'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
-export const POST = withErrorHandler('monitored-sites/[id]/wordpress POST', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const POST = withErrorHandler('monitored-sites/[id]/wordpress POST', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
 
@@ -21,7 +24,9 @@ export const POST = withErrorHandler('monitored-sites/[id]/wordpress POST', asyn
   return NextResponse.json(result)
 })
 
-export const GET = withErrorHandler('monitored-sites/[id]/wordpress GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('monitored-sites/[id]/wordpress GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
 

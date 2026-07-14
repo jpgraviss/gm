@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('funnels/[id] GET', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
@@ -33,6 +34,8 @@ export const GET = withErrorHandler('funnels/[id] GET', async (_req: NextRequest
 })
 
 export const PATCH = withErrorHandler('funnels/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()
@@ -49,7 +52,9 @@ export const PATCH = withErrorHandler('funnels/[id] PATCH', async (req: NextRequ
   return NextResponse.json(data)
 })
 
-export const DELETE = withErrorHandler('funnels/[id] DELETE', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withErrorHandler('funnels/[id] DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('funnels').delete().eq('id', id)

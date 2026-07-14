@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapClient(row: any) {
@@ -23,6 +24,8 @@ function mapClient(row: any) {
 }
 
 export const GET = withErrorHandler('portal-clients GET', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
   const db = createServiceClient()
   const companyFilter = req.nextUrl.searchParams.get('company')
   const pendingFilter = req.nextUrl.searchParams.get('pending_approval')
@@ -61,6 +64,9 @@ export const GET = withErrorHandler('portal-clients GET', async (req) => {
 })
 
 export const POST = withErrorHandler('portal-clients POST', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   let body: Record<string, unknown>
   try {
     body = await req.json()
@@ -127,6 +133,9 @@ export const POST = withErrorHandler('portal-clients POST', async (req) => {
 
 // DELETE /api/portal-clients?company=... — delete all portal clients for a company
 export const DELETE = withErrorHandler('portal-clients DELETE', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const company = req.nextUrl.searchParams.get('company')
   if (!company) {
     return NextResponse.json({ error: 'company query parameter is required' }, { status: 400 })

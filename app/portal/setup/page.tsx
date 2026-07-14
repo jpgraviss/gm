@@ -94,7 +94,7 @@ export default function PortalSetupPage() {
       const res = await fetch('/api/portal-clients/complete-setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, displayName: displayName.trim() || undefined }),
+        body: JSON.stringify({ email, code, password, displayName: displayName.trim() || undefined }),
       })
       const data = await res.json()
       if (!res.ok) {

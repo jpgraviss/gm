@@ -49,6 +49,8 @@ export const GET = withErrorHandler('forms/[id] GET', async (_req: NextRequest, 
 })
 
 export const PATCH = withErrorHandler('forms/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()

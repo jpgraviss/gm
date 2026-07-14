@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getKeywordHistory } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('rank-tracker/keywords/[id]/history GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const { searchParams } = new URL(req.url)
   const daysParam = searchParams.get('days')

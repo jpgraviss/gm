@@ -175,7 +175,7 @@ describe('automations-engine', () => {
     expect(insertCalls['crm_activities'][0]).toEqual(
       expect.objectContaining({
         type: 'Notification',
-        logged_by: 'System',
+        user_name: 'System',
       }),
     )
   })
@@ -193,7 +193,7 @@ describe('automations-engine', () => {
     expect(insertCalls['crm_activities'][0]).toEqual(
       expect.objectContaining({
         type: 'Note',
-        logged_by: 'System',
+        user_name: 'System',
       }),
     )
   })

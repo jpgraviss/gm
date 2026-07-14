@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { sendViaGmail } from '@/lib/gmail-send'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
 
 // POST /api/gmail/send — send an email via the authenticated user's Gmail
 export const POST = withErrorHandler('gmail/send POST', async (req) => {
@@ -12,6 +13,16 @@ export const POST = withErrorHandler('gmail/send POST', async (req) => {
     if (!userEmail) {
       return NextResponse.json({ error: 'userEmail is required' }, { status: 400 })
     }
+
+    // userEmail was previously trusted from the request body with no
+    // verification the caller actually IS that user — any authenticated
+    // caller could send real email from any team member's connected Gmail
+    // account just by naming a different userEmail.
+    const callerEmail = await getAuthenticatedEmail(req)
+    if (!callerEmail || callerEmail.toLowerCase() !== String(userEmail).toLowerCase()) {
+      return NextResponse.json({ error: 'You may only send from your own connected Gmail account' }, { status: 403 })
+    }
+
     if (!to || !subject || !htmlBody) {
       return NextResponse.json(
         { error: 'to, subject, and htmlBody are required' },

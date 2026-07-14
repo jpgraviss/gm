@@ -4,14 +4,23 @@ import { requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { addTrackedKeyword, mapTracked } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requirePortalClient } from '@/lib/portal-auth'
 
 export const GET = withErrorHandler('tracked-keywords GET', async (req) => {
-  const denied = await requireRole(req, 'Team Member')
+  const { searchParams } = new URL(req.url)
+  const company = searchParams.get('company')
+
+  // Portal clients (services/seo page's live keyword-ranking table)
+  // legitimately call this scoped to their own company — previously
+  // blanket staff-only, so every portal request 401'd and was silently
+  // swallowed client-side, meaning the portal never showed real tracked
+  // positions at all. See matching comment in app/api/proposals/route.ts.
+  const denied = company
+    ? await requirePortalClient(req, company)
+    : await requireRole(req, 'Team Member')
   if (denied) return denied
 
   const db = createServiceClient()
-  const { searchParams } = new URL(req.url)
-  const company = searchParams.get('company')
 
   let query = db
     .from('tracked_keywords')

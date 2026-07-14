@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { slugifyForm } from '@/lib/forms'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('funnels/[id]/pages GET', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
@@ -19,6 +20,8 @@ export const GET = withErrorHandler('funnels/[id]/pages GET', async (_req: NextR
 })
 
 export const POST = withErrorHandler('funnels/[id]/pages POST', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const body = await req.json()
   if (!body.name) {
@@ -57,6 +60,8 @@ export const POST = withErrorHandler('funnels/[id]/pages POST', async (req: Next
 })
 
 export const PATCH = withErrorHandler('funnels/[id]/pages PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const body = await req.json()
 

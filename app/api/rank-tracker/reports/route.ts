@@ -5,7 +5,9 @@ import { getScheduledReports, createScheduledReport } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
 import { validate, validationError } from '@/lib/validation'
 
-export const GET = withErrorHandler('rank-tracker/reports GET', async () => {
+export const GET = withErrorHandler('rank-tracker/reports GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const reports = await getScheduledReports()
   return NextResponse.json(reports)
 })

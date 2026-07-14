@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 function mapRecord(row: any) {
   return {
@@ -22,6 +23,8 @@ function mapRecord(row: any) {
 }
 
 export const PATCH = withErrorHandler('maintenance/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const body = await req.json()
   const result = validate(body, {
@@ -50,7 +53,9 @@ export const PATCH = withErrorHandler('maintenance/[id] PATCH', async (req, { pa
   return NextResponse.json(mapRecord(data))
 })
 
-export const DELETE = withErrorHandler('maintenance/[id] DELETE', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withErrorHandler('maintenance/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('maintenance_records').delete().eq('id', id)

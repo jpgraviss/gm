@@ -38,12 +38,32 @@ class GravHub_Meta_Manager {
 	}
 
 	/**
-	 * Get SEO settings for current page. Checks per-post meta first, then GravHub API.
+	 * Get SEO settings for current page: GravHub API settings as the base
+	 * layer, with per-post meta overriding individual fields on top.
+	 *
+	 * Previously this returned per-post meta OR API settings, whichever was
+	 * present — if a post had ANY per-post meta field set (even a legacy
+	 * meta_title from before GravHub app-managed SEO existed), the API's
+	 * settings for that page (e.g. og_image/schema_markup set via the
+	 * GravHub app's Meta tab) were silently discarded entirely, not just
+	 * the one field the per-post meta actually overrode.
 	 */
 	private function get_page_settings() {
 		$settings = array();
 
-		// 1. Per-post meta (highest priority)
+		// 1. GravHub managed settings (from API) — base layer
+		$api_settings = $this->api_client->get_seo_settings();
+		if ( ! is_wp_error( $api_settings ) && is_array( $api_settings ) ) {
+			$current_path = $this->get_current_path();
+			foreach ( $api_settings as $page_settings ) {
+				if ( is_array( $page_settings ) && isset( $page_settings['page_path'] ) && $page_settings['page_path'] === $current_path ) {
+					$settings = $page_settings;
+					break;
+				}
+			}
+		}
+
+		// 2. Per-post meta overrides individual fields (highest priority)
 		if ( is_singular() ) {
 			$post_id = get_queried_object_id();
 			if ( $post_id ) {
@@ -66,31 +86,10 @@ class GravHub_Meta_Manager {
 				if ( $noindex )          $settings['noindex']          = true;
 				if ( $nofollow )         $settings['nofollow']         = true;
 				if ( $schema_markup )    $settings['schema_markup']    = $schema_markup;
-
-				if ( ! empty( $settings ) ) {
-					return $settings;
-				}
 			}
 		}
 
-		// 2. GravHub managed settings (from API)
-		$api_settings = $this->api_client->get_seo_settings();
-
-		if ( is_wp_error( $api_settings ) || empty( $api_settings ) ) {
-			return null;
-		}
-
-		$current_path = $this->get_current_path();
-
-		if ( is_array( $api_settings ) ) {
-			foreach ( $api_settings as $page_settings ) {
-				if ( is_array( $page_settings ) && isset( $page_settings['page_path'] ) && $page_settings['page_path'] === $current_path ) {
-					return $page_settings;
-				}
-			}
-		}
-
-		return null;
+		return ! empty( $settings ) ? $settings : null;
 	}
 
 	/**

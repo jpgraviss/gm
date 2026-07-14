@@ -26,7 +26,9 @@ function mapSite(row: any) {
   }
 }
 
-export const GET = withErrorHandler('monitored-sites/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('monitored-sites/[id] GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db.from('monitored_sites').select('*').eq('id', id).single()

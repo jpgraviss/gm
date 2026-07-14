@@ -75,6 +75,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     } catch { /* ignore corrupt saved position */ }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A saved position can end up off-screen after a viewport resize (window
+  // resize, device rotation) — re-clamp whenever that happens, not just on
+  // initial load.
+  useEffect(() => {
+    function handleResize() {
+      setFabPos(prev => (prev ? clampFabPos(prev) : prev))
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleFabPointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
     const rect = e.currentTarget.getBoundingClientRect()
     fabDragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }

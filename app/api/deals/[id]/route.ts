@@ -36,6 +36,8 @@ function mapDeal(row: any) {
 }
 
 export const PATCH = withErrorHandler('deals/[id] PATCH', async (req, ctx) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await ctx!.params
   const body = await req.json()
   const db = createServiceClient()

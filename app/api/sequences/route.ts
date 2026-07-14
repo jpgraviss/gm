@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSequence(row: any) {
@@ -40,7 +41,9 @@ function mapSequence(row: any) {
   }
 }
 
-export const GET = withErrorHandler('sequences GET', async () => {
+export const GET = withErrorHandler('sequences GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const db = createServiceClient()
   const { data, error } = await db
     .from('sequences')
@@ -53,6 +56,8 @@ export const GET = withErrorHandler('sequences GET', async () => {
 })
 
 export const POST = withErrorHandler('sequences POST', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const body = await req.json()
 
   const result = validate(body, {

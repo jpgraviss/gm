@@ -4,12 +4,22 @@ import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { mapPost } from '@/lib/social-media'
 import { logAudit } from '@/lib/audit'
+import { requireRole } from '@/lib/rbac'
+import { requirePortalClient } from '@/lib/portal-auth'
 
 export const GET = withErrorHandler('social-posts GET', async (req) => {
   const pag = parsePagination(req)
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   const status = searchParams.get('status')
+
+  // Portal clients (services/social-media page) legitimately call this
+  // scoped to their own company — see matching comment in
+  // app/api/proposals/route.ts.
+  const denied = company
+    ? await requirePortalClient(req, company)
+    : await requireRole(req, 'Team Member')
+  if (denied) return denied
 
   const db = createServiceClient()
   let query = db
@@ -28,6 +38,8 @@ export const GET = withErrorHandler('social-posts GET', async (req) => {
 })
 
 export const POST = withErrorHandler('social-posts POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const body = await req.json()
   if (!body.companyName || !body.content || !body.platforms?.length) {
     return NextResponse.json(

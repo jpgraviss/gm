@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapLog(row: any) {
@@ -16,6 +17,8 @@ function mapLog(row: any) {
 }
 
 export const GET = withErrorHandler('audit-logs GET', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
   const { searchParams } = new URL(req.url)
   const limit = parseInt(searchParams.get('limit') ?? '50', 10)
   const db = createServiceClient()
@@ -31,6 +34,8 @@ export const GET = withErrorHandler('audit-logs GET', async (req) => {
 })
 
 export const POST = withErrorHandler('audit-logs POST', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
   const body = await req.json()
   const db = createServiceClient()
   const { data, error } = await db

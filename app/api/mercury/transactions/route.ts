@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listAccounts, listTransactions } from '@/lib/mercury'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('mercury/transactions GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { searchParams } = new URL(req.url)
   const accountId = searchParams.get('accountId')
   const limit = parseInt(searchParams.get('limit') ?? '50', 10)

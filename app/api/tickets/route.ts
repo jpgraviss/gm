@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TASK_PRIORITIES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { requireRole } from '@/lib/rbac'
+import { requirePortalClient } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,6 +33,16 @@ export const GET = withErrorHandler('tickets GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
   const company = searchParams.get('company')
+
+  // Portal clients (Tickets page) legitimately call this scoped to their
+  // own company — see matching comment in app/api/proposals/route.ts. This
+  // also closes a real cross-company leak: without company scoping, GET
+  // returned internal-only ticket notes for every company to any caller.
+  const denied = company
+    ? await requirePortalClient(req, company)
+    : await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
@@ -98,9 +109,6 @@ async function applyRoutingRules(
 }
 
 export const POST = withErrorHandler('tickets POST', async (req: NextRequest) => {
-  const denied = await requireRole(req, 'Team Member')
-  if (denied) return denied
-
   const body = await req.json()
   const result = validate(body, {
     subject: { required: true, type: 'string', maxLength: 500 },
@@ -109,6 +117,14 @@ export const POST = withErrorHandler('tickets POST', async (req: NextRequest) =>
     priority: { type: 'string', enum: [...TASK_PRIORITIES] },
   })
   if (!result.valid) return validationError(result.error)
+
+  // Portal clients (Tickets page's "New Ticket" form, source: 'Portal')
+  // legitimately create their own tickets — requirePortalClient lets staff
+  // through unconditionally and restricts portal clients to their own
+  // company. This was previously blanket staff-only, which meant portal
+  // clients could never actually submit a ticket through this route.
+  const denied = await requirePortalClient(req, body.company)
+  if (denied) return denied
   const today = new Date().toISOString().split('T')[0]
   const db = createServiceClient()
 

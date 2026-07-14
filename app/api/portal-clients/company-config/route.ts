@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireAdmin } from '@/lib/admin-auth'
 
 export const PATCH = withErrorHandler('portal-clients/company-config PATCH', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const { company, portalConfig } = await req.json()
   if (!company || typeof company !== 'string') {
     return NextResponse.json({ error: 'company is required' }, { status: 400 })

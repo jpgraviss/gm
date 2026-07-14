@@ -5,7 +5,9 @@ import { getCompetitors, addCompetitor } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
 import { validate, validationError } from '@/lib/validation'
 
-export const GET = withErrorHandler('rank-tracker/competitors GET', async () => {
+export const GET = withErrorHandler('rank-tracker/competitors GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const competitors = await getCompetitors()
   return NextResponse.json(competitors)
 })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
+import { requireRole } from '@/lib/rbac'
 
 function normalizePhone(phone: string): string {
   return phone.replace(/[\s\-().\+]/g, '')
@@ -24,6 +25,8 @@ interface DuplicateGroup {
 }
 
 export const GET = withErrorHandler('crm/duplicates GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { searchParams } = new URL(req.url)
   const type = searchParams.get('type')
 

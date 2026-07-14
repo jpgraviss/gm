@@ -3,8 +3,11 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import crypto from 'crypto'
 import { logAudit } from '@/lib/audit'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('signatures GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const contractId = req.nextUrl.searchParams.get('contractId')
   if (!contractId) {
     return NextResponse.json({ error: 'contractId query param is required' }, { status: 400 })
@@ -41,6 +44,8 @@ export const GET = withErrorHandler('signatures GET', async (req) => {
 })
 
 export const POST = withErrorHandler('signatures POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { contractId, signerEmail, signerName, type } = await req.json()
 
   if (!contractId || !signerEmail) {

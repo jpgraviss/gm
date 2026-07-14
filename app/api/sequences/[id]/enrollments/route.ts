@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
-export const GET = withErrorHandler('sequences/[id]/enrollments GET', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('sequences/[id]/enrollments GET', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db
@@ -37,6 +40,8 @@ export const GET = withErrorHandler('sequences/[id]/enrollments GET', async (_re
 })
 
 export const DELETE = withErrorHandler('sequences/[id]/enrollments DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const { enrollmentIds } = await req.json() as { enrollmentIds: string[] }
 

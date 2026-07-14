@@ -3,6 +3,8 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROPOSAL_STATUSES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
+import { requirePortalClient } from '@/lib/portal-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProposal(row: any) {
@@ -34,6 +36,16 @@ function mapProposal(row: any) {
 export const GET = withErrorHandler('proposals GET', async (req) => {
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
+
+  // Portal clients (the real Approvals/Agreement pages) legitimately call
+  // this scoped to their own company — requirePortalClient lets staff
+  // through unconditionally and restricts portal clients to their own
+  // company. Omitting company is a full cross-company listing, staff-only.
+  const denied = company
+    ? await requirePortalClient(req, company)
+    : await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
@@ -50,6 +62,8 @@ export const GET = withErrorHandler('proposals GET', async (req) => {
 })
 
 export const POST = withErrorHandler('proposals POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const body = await req.json()
 
   const result = validate(body, {

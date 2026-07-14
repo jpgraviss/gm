@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { requireRole } from '@/lib/rbac'
 
 const ADDENDUM_STATUSES = ['Draft', 'Sent', 'Accepted', 'Declined'] as const
 const CHANGE_TYPES = ['Scope Change', 'Value Change', 'Term Extension', 'Termination', 'Other'] as const
@@ -25,7 +26,9 @@ function mapAddendum(row: any) {
   }
 }
 
-export const GET = withErrorHandler('contracts/[id]/addendums GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('contracts/[id]/addendums GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
 
@@ -43,6 +46,8 @@ export const GET = withErrorHandler('contracts/[id]/addendums GET', async (_req,
 })
 
 export const POST = withErrorHandler('contracts/[id]/addendums POST', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id: contractId } = await params
   const body = await req.json()
 
@@ -96,6 +101,8 @@ export const POST = withErrorHandler('contracts/[id]/addendums POST', async (req
 })
 
 export const PATCH = withErrorHandler('contracts/[id]/addendums PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   // This PATCH uses a query param ?addendumId=xxx to identify the addendum
   const { id: contractId } = await params
   const body = await req.json()

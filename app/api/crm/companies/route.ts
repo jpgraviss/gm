@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCompany(row: any) {
@@ -29,6 +30,8 @@ function mapCompany(row: any) {
 }
 
 export const GET = withErrorHandler('crm/companies GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
@@ -44,6 +47,8 @@ export const GET = withErrorHandler('crm/companies GET', async (req) => {
 })
 
 export const POST = withErrorHandler('crm/companies POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const body = await req.json()
 
   const result = validate(body, {

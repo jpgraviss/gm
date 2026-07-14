@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const { contacts } = await req.json() as { contacts: { id?: string; name: string; email: string }[] }
 
@@ -27,7 +30,7 @@ export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: N
   // Fetch the sequence to get steps and counts
   const { data: seq, error: seqErr } = await db
     .from('sequences')
-    .select('steps, enrolled_count, active_count')
+    .select('steps')
     .eq('id', id)
     .single()
   if (seqErr || !seq) return NextResponse.json({ error: 'Sequence not found' }, { status: 404 })
@@ -103,14 +106,12 @@ export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: N
   }
 
   if (enrolledCount > 0) {
-    await db
-      .from('sequences')
-      .update({
-        enrolled_count: (seq.enrolled_count ?? 0) + enrolledCount,
-        active_count: (seq.active_count ?? 0) + enrolledCount,
-        last_modified: now.toISOString().split('T')[0],
-      })
-      .eq('id', id)
+    await db.rpc('adjust_sequence_counts', {
+      p_sequence_id: id,
+      p_enrolled_delta: enrolledCount,
+      p_active_delta: enrolledCount,
+      p_last_modified: now.toISOString().split('T')[0],
+    })
   }
 
   return NextResponse.json({ enrolled: enrolledCount })

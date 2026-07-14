@@ -2,17 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { analyzeSocialPresence } from '@/lib/ai/social-analysis'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('crm/companies/[id]/social-analysis GET', async (
-  _req,
+  req,
   { params }: { params: Promise<{ id: string }> },
 ) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
 
+  // `social_links` was previously selected here, but no such column exists
+  // on crm_companies (confirmed against schema.sql) and nothing anywhere
+  // in the app ever writes one — selecting it made PostgREST error on
+  // every call, which this route silently swallowed by destructuring
+  // `company` as undefined, so this endpoint 404'd for every real company.
   const { data: company } = await db
     .from('crm_companies')
-    .select('id, name, website, social_links')
+    .select('id, name, website')
     .eq('id', id)
     .single()
 
@@ -21,11 +29,8 @@ export const GET = withErrorHandler('crm/companies/[id]/social-analysis GET', as
   }
 
   const socialUrls: Record<string, string> = {}
-  if (company.social_links && typeof company.social_links === 'object') {
-    Object.assign(socialUrls, company.social_links)
-  }
 
-  if (Object.keys(socialUrls).length === 0 && company.website) {
+  if (company.website) {
     try {
       const normalized = /^https?:\/\//i.test(company.website) ? company.website : `https://${company.website}`
       const controller = new AbortController()

@@ -26,6 +26,14 @@ function mapActivity(row: any) {
 }
 
 export const GET = withErrorHandler('crm/activities GET', async (req) => {
+  // Contractor is a real, selectable staff role (see app/admin/page.tsx)
+  // documented in lib/rbac.ts's own ROLE_HIERARCHY as having "limited read
+  // access to assigned projects" — gating this at 'Team Member' silently
+  // 403'd every Contractor-role account out of the Activity tab entirely
+  // (POST/PATCH correctly stay at 'Team Member' — logging/editing activity
+  // already required that before this fix, this route only ever read).
+  const denied = await requireRole(req, 'Contractor')
+  if (denied) return denied
   const { searchParams } = new URL(req.url)
   const companyId = searchParams.get('companyId')
   const contactId = searchParams.get('contactId')

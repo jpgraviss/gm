@@ -7,8 +7,12 @@ import {
   getGSCCoreWebVitals,
 } from '@/lib/google-search-console'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('integrations/gsc GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { searchParams } = new URL(req.url)
   const type = searchParams.get('type') ?? 'analytics'
   const siteUrl = searchParams.get('siteUrl')

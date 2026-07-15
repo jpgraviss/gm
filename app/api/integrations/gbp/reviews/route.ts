@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGBPReviews, getGBPSummary } from '@/lib/google-business-profile'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 /**
  * GET /api/integrations/gbp/reviews?location=accounts/123/locations/456&days=28&limit=50
  * Returns reviews + summary for a given location.
  */
 export const GET = withErrorHandler('integrations/gbp/reviews GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { searchParams } = new URL(req.url)
   const location = searchParams.get('location')
   const days = parseInt(searchParams.get('days') ?? '28', 10)

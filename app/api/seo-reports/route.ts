@@ -4,7 +4,10 @@ import { requireRole } from '@/lib/rbac'
 import { sendSingleReport } from '@/lib/seo-report-sender'
 import { withErrorHandler } from '@/lib/api-handler'
 
-export const GET = withErrorHandler('seo-reports GET', async () => {
+export const GET = withErrorHandler('seo-reports GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('client_integrations')

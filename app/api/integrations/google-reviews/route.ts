@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { getGBPReviews, replyToGBPReview, STAR_TO_NUMBER } from '@/lib/google-business-profile'
 import type { GBPStarRating } from '@/lib/google-business-profile'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 interface MappedReview {
   id: string
@@ -42,6 +43,9 @@ function mapGBPReview(review: {
 }
 
 export const GET = withErrorHandler('integrations/google-reviews GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { searchParams } = new URL(req.url)
   const locationName = searchParams.get('location')
 
@@ -74,6 +78,9 @@ async function fetchAndReturn(locationName: string) {
 }
 
 export const POST = withErrorHandler('integrations/google-reviews POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   let body: { location?: string; reviewId?: string; comment?: string }
   try {
     body = await req.json()

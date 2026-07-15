@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapBrandKit(row: any) {
@@ -21,7 +22,10 @@ function mapBrandKit(row: any) {
   }
 }
 
-export const GET = withErrorHandler('brand-kits GET', async (req) => {
+export const GET = withErrorHandler('brand-kits GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const pag = parsePagination(req)
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
@@ -41,7 +45,10 @@ export const GET = withErrorHandler('brand-kits GET', async (req) => {
   return paginatedJson(rows.map(mapBrandKit), nextCursor)
 })
 
-export const POST = withErrorHandler('brand-kits POST', async (req) => {
+export const POST = withErrorHandler('brand-kits POST', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   if (!body.companyName) {
     return NextResponse.json({ error: 'companyName is required' }, { status: 400 })

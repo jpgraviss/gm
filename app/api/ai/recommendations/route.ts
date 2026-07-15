@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getRecommendations } from '@/lib/ai/recommendations'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('ai/recommendations GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const companyId = req.nextUrl.searchParams.get('companyId') ?? undefined
   const db = createServiceClient()
 

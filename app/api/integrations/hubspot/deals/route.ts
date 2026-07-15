@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 import { normalizeServiceType } from '@/lib/services'
 
 const HUBSPOT_DEALS_URL = 'https://api.hubapi.com/crm/v3/objects/deals'
@@ -111,6 +112,9 @@ function mapDealToResponse(d: HubSpotDeal) {
 }
 
 export const GET = withErrorHandler('integrations/hubspot/deals GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(
@@ -150,6 +154,9 @@ export const GET = withErrorHandler('integrations/hubspot/deals GET', async (req
 })
 
 export const POST = withErrorHandler('integrations/hubspot/deals POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(

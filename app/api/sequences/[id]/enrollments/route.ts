@@ -73,22 +73,12 @@ export const DELETE = withErrorHandler('sequences/[id]/enrollments DELETE', asyn
 
   // Update sequence counts
   if (totalRemoved > 0) {
-    const { data: seq } = await db
-      .from('sequences')
-      .select('enrolled_count, active_count')
-      .eq('id', id)
-      .single()
-
-    if (seq) {
-      await db
-        .from('sequences')
-        .update({
-          enrolled_count: Math.max(0, (seq.enrolled_count ?? 0) - totalRemoved),
-          active_count: Math.max(0, (seq.active_count ?? 0) - activeRemoved),
-          last_modified: new Date().toISOString().split('T')[0],
-        })
-        .eq('id', id)
-    }
+    await db.rpc('adjust_sequence_counts', {
+      p_sequence_id: id,
+      p_enrolled_delta: -totalRemoved,
+      p_active_delta: -activeRemoved,
+      p_last_modified: new Date().toISOString().split('T')[0],
+    })
   }
 
   return NextResponse.json({ removed: totalRemoved })

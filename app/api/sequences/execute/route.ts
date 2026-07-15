@@ -735,13 +735,16 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
       // All steps complete
       update.status = 'completed'
       completed++
-      await db
-        .from('sequences')
-        .update({
-          active_count: Math.max(0, (seq.active_count ?? 1) - 1),
-          completed_count: (seq.completed_count ?? 0) + 1,
-        })
-        .eq('id', seq.id)
+      // Atomic column update — `seq` is a per-sequence snapshot fetched
+      // once before this loop, so a plain read-then-write here would lose
+      // increments whenever two enrollments in the same sequence complete
+      // within the same batch (not just across concurrent requests).
+      await db.rpc('adjust_sequence_counts', {
+        p_sequence_id: seq.id,
+        p_enrolled_delta: 0,
+        p_active_delta: -1,
+        p_completed_delta: 1,
+      })
 
       // Reset contact in_sequence flag
       if (enrollment.contact_id) {

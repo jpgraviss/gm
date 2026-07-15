@@ -121,7 +121,7 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
           // Update sequence reply_rate and active_count
           const { data: seq } = await db
             .from('sequences')
-            .select('reply_rate, enrolled_count, active_count, name')
+            .select('enrolled_count, name')
             .eq('id', enrollment.sequence_id)
             .single()
 
@@ -140,11 +140,18 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
 
             await db
               .from('sequences')
-              .update({
-                reply_rate: replyRate,
-                active_count: Math.max(0, (seq.active_count ?? 1) - 1),
-              })
+              .update({ reply_rate: replyRate })
               .eq('id', enrollment.sequence_id)
+
+            // active_count decrement via the atomic RPC (#66) — a plain
+            // read-then-write here would lose a decrement whenever two
+            // replies for the same sequence are processed in the same
+            // reply-check batch.
+            await db.rpc('adjust_sequence_counts', {
+              p_sequence_id: enrollment.sequence_id,
+              p_enrolled_delta: 0,
+              p_active_delta: -1,
+            })
           }
 
           // Reset contact in_sequence flag

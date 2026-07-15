@@ -114,17 +114,11 @@ export const POST = withErrorHandler('sequences/unsubscribe POST', async (req: N
     const sequenceIds = Array.from(new Set(activeEnrollments.map((e: { sequence_id: string }) => e.sequence_id)))
     for (const seqId of sequenceIds) {
       const countInSeq = activeEnrollments.filter((e: { sequence_id: string }) => e.sequence_id === seqId).length
-      const { data: seq } = await db
-        .from('sequences')
-        .select('active_count')
-        .eq('id', seqId)
-        .single()
-      if (seq) {
-        await db
-          .from('sequences')
-          .update({ active_count: Math.max(0, (seq.active_count ?? 0) - countInSeq) })
-          .eq('id', seqId)
-      }
+      await db.rpc('adjust_sequence_counts', {
+        p_sequence_id: seqId,
+        p_enrolled_delta: 0,
+        p_active_delta: -countInSeq,
+      })
     }
 
     // Insert activity records

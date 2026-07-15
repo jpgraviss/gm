@@ -313,18 +313,17 @@ export const POST = withErrorHandler('sequences/webhooks POST', async (req: Next
       .update({ status: 'bounced', unenroll_reason: 'bounced' })
       .eq('id', enrollment.id)
 
-    // Decrement active count
     const { data: seq } = await db
       .from('sequences')
-      .select('active_count, name')
+      .select('name')
       .eq('id', seqId)
       .single()
-    if (seq) {
-      await db
-        .from('sequences')
-        .update({ active_count: Math.max(0, (seq.active_count ?? 1) - 1) })
-        .eq('id', seqId)
-    }
+
+    await db.rpc('adjust_sequence_counts', {
+      p_sequence_id: seqId,
+      p_enrolled_delta: 0,
+      p_active_delta: -1,
+    })
 
     // Reset contact in_sequence flag
     if (enrollment.contact_id) {
@@ -365,17 +364,11 @@ export const POST = withErrorHandler('sequences/webhooks POST', async (req: Next
       .update({ status: 'unenrolled', unenroll_reason: 'complained' })
       .eq('id', enrollment.id)
 
-    const { data: seq } = await db
-      .from('sequences')
-      .select('active_count')
-      .eq('id', seqId)
-      .single()
-    if (seq) {
-      await db
-        .from('sequences')
-        .update({ active_count: Math.max(0, (seq.active_count ?? 1) - 1) })
-        .eq('id', seqId)
-    }
+    await db.rpc('adjust_sequence_counts', {
+      p_sequence_id: seqId,
+      p_enrolled_delta: 0,
+      p_active_delta: -1,
+    })
 
     // Reset contact in_sequence flag
     if (enrollment.contact_id) {

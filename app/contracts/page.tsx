@@ -120,7 +120,17 @@ function ContractPanel({
   const clientSig = contractSigs.find(s => s.type === 'client' && s.status === 'signed') || contractSigs.find(s => s.type === 'client')
   const internalSig = contractSigs.find(s => s.type === 'internal' && s.status === 'signed') || contractSigs.find(s => s.type === 'internal')
 
-  const linkedInvoices = invoices.filter(i => i.contractId === contract.id)
+  // POST /api/invoices has exactly one caller (billing/page.tsx's CSV bulk
+  // import), and it never sends a contractId — every invoice in the app is
+  // created with contract_id null, so a strict contractId match here always
+  // returns an empty array regardless of real data. Fall back to matching
+  // by company (id first, then denormalized name) so this section shows
+  // real invoices instead of always being empty; a contractId match still
+  // wins first in case that ever gets populated by a future flow.
+  const linkedInvoicesById = invoices.filter(i => i.contractId === contract.id)
+  const linkedInvoices = linkedInvoicesById.length > 0
+    ? linkedInvoicesById
+    : invoices.filter(i => contract.companyId ? i.companyId === contract.companyId : i.company === contract.company)
   const linkedProject = projects.find(p => p.contractId === contract.id)
   const linkedProposal = contract.proposalId ? proposals.find(p => p.id === contract.proposalId) : null
 

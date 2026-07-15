@@ -148,21 +148,45 @@ function CompanyFilesTab({ companyId }: { companyId: string }) {
   }
 
   async function handleDelete(fileId: string) {
+    const removed = files.find(f => f.id === fileId)
+    const removedIndex = files.findIndex(f => f.id === fileId)
     setFiles(prev => prev.filter(f => f.id !== fileId))
     try {
-      await fetch(`/api/crm/companies/${companyId}/files`, {
+      const res = await fetch(`/api/crm/companies/${companyId}/files`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileId }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        if (removed) setFiles(prev => [...prev.slice(0, removedIndex), removed, ...prev.slice(removedIndex)])
+        toast(err.error || 'Failed to delete file', 'error')
+        return
+      }
       toast('File deleted', 'success')
     } catch {
+      if (removed) setFiles(prev => [...prev.slice(0, removedIndex), removed, ...prev.slice(removedIndex)])
       toast('Failed to delete file', 'error')
     }
   }
 
   async function handleCategoryChange(fileId: string, category: string) {
+    const prevCategory = files.find(f => f.id === fileId)?.category
     setFiles(prev => prev.map(f => f.id === fileId ? { ...f, category } : f))
+    try {
+      const res = await fetch(`/api/crm/companies/${companyId}/files`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId, category }),
+      })
+      if (!res.ok) {
+        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, category: prevCategory ?? f.category } : f))
+        toast('Failed to update file category', 'error')
+      }
+    } catch {
+      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, category: prevCategory ?? f.category } : f))
+      toast('Failed to update file category', 'error')
+    }
   }
 
   function formatSize(bytes: number) {

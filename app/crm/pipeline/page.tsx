@@ -373,15 +373,21 @@ function DealPanel({
     setLocalActivities(prev => [entry, ...prev])
     setLoggingActivity(false)
     setTab('activity')
-    // Previously never persisted — logging an activity from the deal panel
-    // only ever updated local state, so it silently vanished on refresh.
+    // Previously never checked res.ok — a failed persist (validation
+    // error, transient failure) looked identical to success and silently
+    // never made it to the server, vanishing on next reload. Matches
+    // handleUpdateActivity's revert-and-toast pattern right below.
     try {
-      await fetch('/api/crm/activities', {
+      const res = await fetch('/api/crm/activities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(entry),
       })
-    } catch { console.warn('Failed to persist activity to server') }
+      if (!res.ok) throw new Error()
+    } catch {
+      setLocalActivities(prev => prev.filter(a => a.id !== entry.id))
+      toast('Failed to save activity', 'error')
+    }
   }
 
   async function handleUpdateActivity(id: string, updates: { title: string; body: string }) {
@@ -1314,9 +1320,26 @@ export default function PipelinePage() {
     if (!targetStage) return
     const updates: { stage: string; probability?: number } = { stage: targetStage.name }
     if (targetStage.probability !== undefined) updates.probability = targetStage.probability
+    const previousDeal = localDeals.find(d => d.id === draggableId)
     setLocalDeals(prev => prev.map(d => d.id === draggableId ? { ...d, ...updates } : d))
     setSelectedDeal(prev => prev?.id === draggableId ? { ...prev, ...updates } : prev)
-    fetch(`/api/deals/${draggableId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) }).catch(() => toast('Failed to update deal stage', 'error'))
+    // Previously only caught network-level failures — fetch doesn't reject
+    // on a non-2xx response, so a server-side rejection (e.g. a Team
+    // Member's card genuinely being dragged is fine, but any validation
+    // error) left the card showing the new stage while the server never
+    // actually moved it, silently reverting on next reload with no
+    // explanation. Revert immediately instead.
+    fetch(`/api/deals/${draggableId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+      .then(res => {
+        if (!res.ok) throw new Error()
+      })
+      .catch(() => {
+        if (previousDeal) {
+          setLocalDeals(prev => prev.map(d => d.id === draggableId ? previousDeal : d))
+          setSelectedDeal(prev => prev?.id === draggableId ? previousDeal : prev)
+        }
+        toast('Failed to update deal stage', 'error')
+      })
   }
 
   async function handleNewDeal(data: NewDealData) {
@@ -1338,10 +1361,24 @@ export default function PipelinePage() {
     }
     try {
       const res = await fetch('/api/deals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      const saved = await res.json()
-      setLocalDeals(prev => [saved as LocalDeal, ...prev])
+      // Previously called res.json() unconditionally and pushed the result
+      // straight into localDeals even on failure — the server's error body
+      // ({error: "..."}) has no id/company/stage, and `openDeals` filters
+      // on `!d.stage.startsWith('Closed')` on every render, so this threw
+      // "Cannot read properties of undefined" and crashed the whole page.
+      // Also never toasted at all, success or failure, unlike every other
+      // mutation in this file.
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        toast(body.error || 'Failed to create deal', 'error')
+      } else {
+        const saved = await res.json()
+        setLocalDeals(prev => [saved as LocalDeal, ...prev])
+        toast('Deal created', 'success')
+      }
     } catch {
       setLocalDeals(prev => [{ ...payload, id: `deal-${Date.now()}`, lastActivity: new Date().toISOString().split('T')[0] } as LocalDeal, ...prev])
+      toast('Network error — deal was not saved, please retry', 'error')
     }
     setCreatingDeal(false)
   }
@@ -1350,25 +1387,63 @@ export default function PipelinePage() {
     const targetStage = activeStages.find(s => s.name === newStage)
     const updates: { stage: string; probability?: number } = { stage: newStage }
     if (targetStage?.probability !== undefined) updates.probability = targetStage.probability
+    const previousDeal = localDeals.find(d => d.id === dealId)
     setLocalDeals(prev => prev.map(d => d.id === dealId ? { ...d, ...updates } : d))
     setSelectedDeal(prev => prev?.id === dealId ? { ...prev, ...updates } as LocalDeal : prev)
-    fetch(`/api/deals/${dealId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) }).catch(() => toast('Failed to advance deal stage', 'error'))
+    fetch(`/api/deals/${dealId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+      .then(res => {
+        if (!res.ok) throw new Error()
+      })
+      .catch(() => {
+        if (previousDeal) {
+          setLocalDeals(prev => prev.map(d => d.id === dealId ? previousDeal : d))
+          setSelectedDeal(prev => prev?.id === dealId ? previousDeal : prev)
+        }
+        toast('Failed to advance deal stage', 'error')
+      })
   }
 
   function handleUpdateDeal(id: string, updates: Partial<LocalDeal>) {
+    const previousDeal = localDeals.find(d => d.id === id)
     setLocalDeals(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d))
     setSelectedDeal(prev => prev?.id === id ? { ...prev, ...updates } as LocalDeal : prev)
     fetch(`/api/deals/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    }).catch(() => toast('Failed to update deal', 'error'))
+    })
+      .then(res => {
+        if (!res.ok) throw new Error()
+      })
+      .catch(() => {
+        if (previousDeal) {
+          setLocalDeals(prev => prev.map(d => d.id === id ? previousDeal : d))
+          setSelectedDeal(prev => prev?.id === id ? previousDeal : prev)
+        }
+        toast('Failed to update deal', 'error')
+      })
   }
 
   async function handleDeleteDeal(id: string) {
+    const removed = localDeals.find(d => d.id === id)
     setLocalDeals(prev => prev.filter(d => d.id !== id))
     setSelectedDeal(null)
-    fetch(`/api/deals/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete deal', 'error'))
+    try {
+      const res = await fetch(`/api/deals/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        // DELETE requires Dept Manager (a higher bar than the Team Member
+        // role needed to view/drag/edit deals) — a plain Team Member could
+        // previously click Delete, watch the card vanish, while the
+        // server 403'd and the deal was never actually removed, silently
+        // reappearing on the next reload with no explanation.
+        const body = await res.json().catch(() => ({}))
+        if (removed) setLocalDeals(prev => [removed, ...prev])
+        toast(body.error || 'Failed to delete deal', 'error')
+      }
+    } catch {
+      if (removed) setLocalDeals(prev => [removed, ...prev])
+      toast('Failed to delete deal', 'error')
+    }
   }
 
   async function handleDeleteCompany(companyId: string) {
@@ -1403,17 +1478,22 @@ export default function PipelinePage() {
 
   async function handleBulkDeleteDeals() {
     const ids = Array.from(selectedIds)
+    const removed = localDeals.filter(d => selectedIds.has(d.id))
     setLocalDeals(prev => prev.filter(d => !selectedIds.has(d.id)))
     setSelectedIds(new Set())
     setShowBulkDeleteConfirm(false)
     try {
-      await fetch('/api/crm/bulk-delete', {
+      const res = await fetch('/api/crm/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'deals', ids }),
       })
+      if (!res.ok) throw new Error()
       toast(`${ids.length} deals deleted`, 'success')
     } catch {
+      // Previously never checked res.ok — a 403 (bulk-delete requires
+      // Dept Manager) always toasted success regardless.
+      if (removed.length > 0) setLocalDeals(prev => [...removed, ...prev])
       toast('Failed to delete deals', 'error')
     }
   }

@@ -137,6 +137,7 @@ export const defaultNavigation: NavSection[] = [
       { label: 'Integrations',     href: '/integrations',              icon: <Plug size={16} />,        allowedUnits: ['Leadership/Admin'] },
       { label: 'Portal Management', href: '/admin/portal-management',  icon: <Globe size={16} />,       adminOnly: true },
       { label: 'SOPs',             href: '/admin/sops',                icon: <FileText size={16} />,    adminOnly: true },
+      { label: 'Document Templates', href: '/admin/document-templates', icon: <FileText size={16} />,   allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
     ],
   },
 ]

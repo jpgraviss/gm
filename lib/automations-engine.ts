@@ -725,9 +725,12 @@ async function executeAction(
     case 'Apply Service Template': {
       const templateName = (context.templateName as string) ?? String(context.trigger ?? '')
       if (!templateName) break
+      // `content` isn't a real column on document_templates (it's `body`,
+      // never actually read here) — selecting it made this query fail on
+      // every call, so the action always silently no-op'd via `!template`.
       const { data: template } = await db
         .from('document_templates')
-        .select('id, name, content')
+        .select('id, name')
         .ilike('name', `%${templateName}%`)
         .limit(1)
         .maybeSingle()

@@ -28,7 +28,7 @@
 4. **No payment processing** — no Stripe integration for clients to pay invoices
 5. ~~No real ticket routing rules~~ — Routing rules implemented (priority escalation, company rep matching, service-type unit assignment).
 6. ~~Sequences lack tracking~~ — Full delivery tracking: open/click/bounce/unsubscribe via Resend webhooks.
-7. **Dashboard queries load full tables** — will break at 10K contacts
+7. ~~Dashboard queries load full tables~~ — All growing-table endpoints now cursor-paginated (100/page default) with frontend pages following the cursor to completion instead of truncating.
 
 ---
 
@@ -96,9 +96,9 @@ Must-do before anything else. These are things we claim to have but don't actual
 | A2 | ~~QuickBooks sync~~ — **DONE.** Removed QB, native invoicing in place. | ✅ |
 | A3 | ~~Enforce RBAC in API routes~~ — **DONE.** Middleware auth + requireRole on critical routes. | ✅ |
 | A4 | ~~Sequence tracking~~ — **DONE.** Full delivery tracking via Resend webhooks. | ✅ |
-| A5 | **Dashboard pagination** — add `.limit(100)` and cursor pagination to all list endpoints | 2 days |
+| A5 | ~~Dashboard pagination~~ — **DONE.** All growing-table list endpoints (`crm_activities`, sequence enrollments, tracked keywords, reviews, tasks/tickets/projects/proposals, contracts) now cursor-paginated + frontend follows to completion via `fetchAllPages()`. | ✅ |
 | A6 | ~~Ticket routing rules~~ — **DONE.** Priority escalation + company rep + service-type routing. | ✅ |
-| A7 | **Contract template builder UI** — `document_templates` table exists, add CRUD page | 3 days |
+| A7 | ~~Contract template builder UI~~ — **DONE.** Full CRUD at `/admin/document-templates`, wired into Sidebar + Cmd+K. | ✅ |
 
 ### PHASE B — Core agency features we're missing (4 weeks)
 Core features every agency CRM has that we don't.

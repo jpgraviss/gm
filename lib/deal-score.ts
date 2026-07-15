@@ -22,7 +22,13 @@ export interface DealScoreResult {
   factors: DealScoreFactor[]
 }
 
-const CLOSED_STAGES = new Set(['Closed Won', 'Closed Lost'])
+// Exact-match set was inconsistent with the startsWith('Closed') convention
+// used everywhere else this bug class was fixed (AUDIT #53/#68/#105) — a
+// deal in a custom "Closed - Duplicate"-style stage would get a spurious
+// overdue penalty and a "N days past due" factor shown as if still open.
+function isClosedStage(stage: string): boolean {
+  return stage.startsWith('Closed')
+}
 
 function daysSince(dateStr: string): number {
   const then = new Date(dateStr).getTime()
@@ -58,7 +64,7 @@ export function computeDealScore(deal: DealScoreInput): DealScoreResult {
   }
 
   let overduePenalty = 0
-  if (deal.closeDate && !CLOSED_STAGES.has(deal.stage)) {
+  if (deal.closeDate && !isClosedStage(deal.stage)) {
     const overdueDays = daysSince(deal.closeDate) // positive = past due
     if (overdueDays > 0) {
       overduePenalty = 15

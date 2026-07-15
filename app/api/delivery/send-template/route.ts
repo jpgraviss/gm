@@ -17,7 +17,7 @@ const SUBJECT_MAP: Record<string, string> = {
   monthly_report: 'Your Monthly Report',
 }
 
-function generateHtml(templateType: string, customizationData: Record<string, unknown>): string {
+function generateHtml(templateType: string, customizationData: Record<string, unknown>, recipientEmail: string): string {
   switch (templateType) {
     case 'welcome': {
       const mgr = customizationData.accountManager as { name: string; email: string; phone: string } | undefined
@@ -25,6 +25,7 @@ function generateHtml(templateType: string, customizationData: Record<string, un
         firstName: String(customizationData.clientName ?? customizationData.firstName ?? ''),
         companyName: String(customizationData.companyName ?? 'Graviss Marketing'),
         portalUrl: String(customizationData.portalUrl ?? 'https://app.gravissmarketing.com'),
+        email: recipientEmail,
         accountManager: mgr,
         projectName: customizationData.projectName ? String(customizationData.projectName) : undefined,
         serviceType: customizationData.serviceType ? String(customizationData.serviceType) : undefined,
@@ -108,7 +109,7 @@ export const POST = withErrorHandler('delivery/send-template POST', async (req) 
 
   let html: string
   try {
-    html = generateHtml(templateType, customizationData)
+    html = generateHtml(templateType, customizationData, recipientEmail)
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Template generation failed' }, { status: 400 })
   }

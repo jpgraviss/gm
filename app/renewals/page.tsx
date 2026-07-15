@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { fetchContracts, fetchCrmContacts, fetchProposals } from '@/lib/supabase'
 import { formatCurrency, renewalStatusColors, formatDate } from '@/lib/utils'
+import { contractMonthlyValue } from '@/lib/metrics'
 import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
@@ -75,7 +76,12 @@ function RenewalProposalSidebar({
   const [includeSetup, setIncludeSetup] = useState(false)
   const [setupFee, setSetupFee] = useState(0)
 
-  const baseMonthly = contract ? contract.value : renewal.renewalValue
+  // contract.value is billing-structure-relative, not always a monthly
+  // figure — using it directly showed "Current Monthly: $12,000" for a
+  // $12,000/yr Annual contract (12x too high), and computed the same
+  // wrong Total Contract Value for the generated renewal proposal a rep
+  // could actually quote to a client.
+  const baseMonthly = contract ? contractMonthlyValue(contract) : renewal.renewalValue
   const newMonthly = Math.round(baseMonthly * (1 + increasePercent / 100))
   const newContractTotal = newMonthly * months
   const totalWithSetup = newContractTotal + setupFee

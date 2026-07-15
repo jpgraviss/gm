@@ -4,12 +4,23 @@ import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 
+const APPROVAL_FIELDS = ['approvalStatus', 'approvedBy', 'approvedAt', 'rejectionNote']
+
 export const PATCH = withErrorHandler('time-entries/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
   const { id } = await params
   const body = await req.json()
+
+  // Approval fields have their own bulk endpoint gated at Dept Manager
+  // (POST /api/time-entries) — this single-entry PATCH previously let any
+  // Team Member self-approve/reject their own (or anyone's) time entry by
+  // setting these fields directly, completely bypassing that gate.
+  if (APPROVAL_FIELDS.some(f => body[f] !== undefined)) {
+    const approveDenied = await requireRole(req, 'Dept Manager')
+    if (approveDenied) return approveDenied
+  }
   const result = validate(body, {
     date: { type: 'string', maxLength: 20 },
     description: { type: 'string', maxLength: 1000 },

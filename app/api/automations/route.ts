@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
@@ -23,7 +23,10 @@ function mapAutomation(row: any, runStats?: { total: number; succeeded: number; 
   }
 }
 
-export const GET = withErrorHandler('automations GET', async () => {
+export const GET = withErrorHandler('automations GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('automations')

@@ -22,7 +22,10 @@ function mapTemplate(row: any) {
   }
 }
 
-export const GET = withErrorHandler('sales-templates/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('sales-templates/[id] GET', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db.from('sales_templates').select('*').eq('id', id).single()
@@ -32,7 +35,10 @@ export const GET = withErrorHandler('sales-templates/[id] GET', async (_req, { p
   return NextResponse.json(mapTemplate(data))
 })
 
-export const PATCH = withErrorHandler('sales-templates/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
+export const PATCH = withErrorHandler('sales-templates/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()
@@ -45,6 +51,10 @@ export const PATCH = withErrorHandler('sales-templates/[id] PATCH', async (req, 
   if (body.tags !== undefined)        update.tags = body.tags
   if (body.status !== undefined)      update.status = body.status
   if (body.workspaceId !== undefined) update.workspace_id = body.workspaceId
+  // "Use Template" (app/sales-enablement/page.tsx applyTemplate) PATCHes
+  // this to increment the display counter — previously silently dropped
+  // since it wasn't in this whitelist, so the "X uses" count never moved.
+  if (body.usageCount !== undefined)  update.usage_count = body.usageCount
 
   const { data, error } = await db.from('sales_templates').update(update).eq('id', id).select().single()
   if (error || !data) {

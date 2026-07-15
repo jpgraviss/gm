@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -24,9 +25,15 @@ function mapCourse(row: any) {
 }
 
 export const GET = withErrorHandler('courses/[id] GET', async (
-  _req,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) => {
+  // Portal-visible catalog item — see matching comment in courses/route.ts.
+  const email = await getAuthenticatedEmail(req)
+  if (!email) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db.from('courses').select('*').eq('id', id).single()

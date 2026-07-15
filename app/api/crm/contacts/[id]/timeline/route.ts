@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
+import { requireRole } from '@/lib/rbac'
 
 export interface TimelineEntry {
   id: string
@@ -19,7 +20,10 @@ export interface TimelineEntry {
   editable?: boolean
 }
 
-export const GET = withErrorHandler('crm/contacts/[id]/timeline GET', async (_req, ctx) => {
+export const GET = withErrorHandler('crm/contacts/[id]/timeline GET', async (req: NextRequest, ctx) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await ctx!.params
   const db = createServiceClient()
 

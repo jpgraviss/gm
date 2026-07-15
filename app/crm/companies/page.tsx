@@ -30,6 +30,7 @@ import {
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
+import SmartListBar from '@/components/crm/SmartListBar'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { useEnrichment } from '@/lib/useEnrichment'
@@ -1885,6 +1886,17 @@ export default function CompaniesPage() {
             <Upload size={13} /> Import CSV
           </button>
           <span className="ml-auto text-sm text-gray-400">{filtered.length} companies</span>
+        </div>
+
+        <div className="mb-4">
+          <SmartListBar
+            entityType="companies"
+            currentCriteria={{ search, statusFilter }}
+            onApply={criteria => {
+              setSearch(criteria.search ?? '')
+              setStatusFilter(criteria.statusFilter ?? 'All')
+            }}
+          />
         </div>
 
         {/* Table */}

@@ -500,6 +500,17 @@ export interface CRMCompany {
   notes?: string
 }
 
+export type SavedFilterEntityType = 'contacts' | 'companies' | 'deals'
+
+export interface SavedFilter {
+  id: string
+  name: string
+  entityType: SavedFilterEntityType
+  criteria: Record<string, string>
+  createdBy?: string
+  createdDate: string
+}
+
 export interface CRMActivity {
   id: string
   type: ActivityType

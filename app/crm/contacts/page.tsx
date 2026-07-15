@@ -29,6 +29,7 @@ import {
   MapPin, Smartphone, NotebookPen, Check, UserCog,
 } from 'lucide-react'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
+import SmartListBar from '@/components/crm/SmartListBar'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import Pagination from '@/components/ui/Pagination'
@@ -1750,6 +1751,17 @@ export default function ContactsPage() {
             <Upload size={13} /> Import CSV
           </button>
           <span className="ml-auto text-sm text-gray-400">{filtered.length} contacts</span>
+        </div>
+
+        <div className="mb-4">
+          <SmartListBar
+            entityType="contacts"
+            currentCriteria={{ search, stageFilter }}
+            onApply={criteria => {
+              setSearch(criteria.search ?? '')
+              setStageFilter(criteria.stageFilter ?? 'All')
+            }}
+          />
         </div>
 
         {/* Table */}

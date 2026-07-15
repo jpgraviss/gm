@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import SmartListBar from '@/components/crm/SmartListBar'
 
 // ─── Pipeline Config Types ────────────────────────────────────────────────────
 
@@ -1591,6 +1592,14 @@ export default function PipelinePage() {
                 <Settings size={13} />
               </button>
             </div>
+          </div>
+
+          <div className="mb-4">
+            <SmartListBar
+              entityType="deals"
+              currentCriteria={{ filterRep }}
+              onApply={criteria => setFilterRep(criteria.filterRep ?? 'All')}
+            />
           </div>
 
           <div className="grid grid-cols-3 gap-3">

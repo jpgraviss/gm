@@ -127,14 +127,15 @@ export const POST = withErrorHandler('crm/merge POST', async (req) => {
     const { error: updateErr } = await db.from('crm_companies').update(updates).eq('id', primaryId)
     if (updateErr) throw new Error(updateErr.message || 'Merge update failed')
 
-    // deals/contracts/invoices/projects/proposals all carry a real company_id
-    // FK (ON DELETE SET NULL) alongside the denormalized `company` name text.
-    // Reassign by id first (authoritative); only fall back to a name match
-    // for legacy rows that never got a company_id backfilled, and never
-    // touch a row whose company_id already points somewhere else — matching
-    // by name alone risks repointing an unrelated company's data if two
-    // companies happen to share a display name.
-    const fkTables = ['deals', 'contracts', 'invoices', 'projects', 'proposals', 'renewals', 'maintenance_records'] as const
+    // deals/contracts/invoices/projects/proposals/renewals/maintenance_records/
+    // app_tasks/tickets all carry a real company_id FK (ON DELETE SET NULL)
+    // alongside the denormalized `company` name text. Reassign by id first
+    // (authoritative); only fall back to a name match for legacy rows that
+    // never got a company_id backfilled, and never touch a row whose
+    // company_id already points somewhere else — matching by name alone
+    // risks repointing an unrelated company's data if two companies happen
+    // to share a display name.
+    const fkTables = ['deals', 'contracts', 'invoices', 'projects', 'proposals', 'renewals', 'maintenance_records', 'app_tasks', 'tickets'] as const
 
     for (const mergeId of mergeIds) {
       const mergeRec = mergeRecords.find(r => r.id === mergeId)
@@ -147,6 +148,10 @@ export const POST = withErrorHandler('crm/merge POST', async (req) => {
         await db.from(table).update({ company_id: primaryId, company: primary.name }).eq('company_id', mergeId)
         await db.from(table).update({ company_id: primaryId, company: primary.name }).is('company_id', null).eq('company', mergeRec.name)
       }
+
+      // company_files.company_id is NOT NULL with no denormalized name
+      // column to fall back on — a straight id reassignment, no name match.
+      await db.from('company_files').update({ company_id: primaryId }).eq('company_id', mergeId)
     }
 
     const { error: deleteErr } = await db.from('crm_companies').delete().in('id', mergeIds)

@@ -1,8 +1,12 @@
 // Shared by both company-delete paths (DELETE /api/crm/companies/[id] and
 // POST /api/crm/bulk-delete's company path) — AUDIT #96. Decision: block
 // deletion when real business records still reference the company
-// (contacts/deals/contracts/invoices/projects/proposals), rather than
-// cascade-destroy them, since data loss there is irreversible. The
+// (contacts/deals/contracts/invoices/projects/proposals/tasks/tickets/
+// files), rather than cascade-destroy them, since data loss there is
+// irreversible. company_files.company_id is ON DELETE CASCADE at the DB
+// level — without this check a company delete would silently destroy its
+// uploaded documents with zero warning, so it's blocked here same as any
+// other real record even though the DB itself wouldn't stop it. The
 // company's own activity log is the one exception — it's just a history
 // of interactions with the company, unreachable in the UI once the
 // company itself is gone, so it deletes along with it rather than
@@ -17,6 +21,9 @@ export interface CompanyRelatedCounts {
   proposals: number
   renewals: number
   maintenanceRecords: number
+  appTasks: number
+  tickets: number
+  companyFiles: number
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,9 +38,17 @@ async function countByCompany(db: any, table: string, nameColumn: string, compan
   return (byId.count ?? 0) + (byName.count ?? 0)
 }
 
+// company_files has no legacy name column to fall back on (company_id is
+// NOT NULL there, added straight to the schema) — company_id-only match.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function countByCompanyIdOnly(db: any, table: string, companyId: string): Promise<number> {
+  const { count } = await db.from(table).select('id', { count: 'exact', head: true }).eq('company_id', companyId)
+  return count ?? 0
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getCompanyRelatedCounts(db: any, companyId: string, companyName: string): Promise<CompanyRelatedCounts> {
-  const [contacts, deals, contracts, invoices, projects, proposals, renewals, maintenanceRecords] = await Promise.all([
+  const [contacts, deals, contracts, invoices, projects, proposals, renewals, maintenanceRecords, appTasks, tickets, companyFiles] = await Promise.all([
     countByCompany(db, 'crm_contacts', 'company_name', companyId, companyName),
     countByCompany(db, 'deals', 'company', companyId, companyName),
     countByCompany(db, 'contracts', 'company', companyId, companyName),
@@ -42,8 +57,11 @@ export async function getCompanyRelatedCounts(db: any, companyId: string, compan
     countByCompany(db, 'proposals', 'company', companyId, companyName),
     countByCompany(db, 'renewals', 'company', companyId, companyName),
     countByCompany(db, 'maintenance_records', 'company', companyId, companyName),
+    countByCompany(db, 'app_tasks', 'company', companyId, companyName),
+    countByCompany(db, 'tickets', 'company', companyId, companyName),
+    countByCompanyIdOnly(db, 'company_files', companyId),
   ])
-  return { contacts, deals, contracts, invoices, projects, proposals, renewals, maintenanceRecords }
+  return { contacts, deals, contracts, invoices, projects, proposals, renewals, maintenanceRecords, appTasks, tickets, companyFiles }
 }
 
 export function hasBlockingRelatedRecords(counts: CompanyRelatedCounts): boolean {
@@ -59,6 +77,9 @@ const COUNT_LABELS: Record<keyof CompanyRelatedCounts, string> = {
   proposals: 'proposals',
   renewals: 'renewals',
   maintenanceRecords: 'maintenance records',
+  appTasks: 'tasks',
+  tickets: 'tickets',
+  companyFiles: 'files',
 }
 
 export function describeRelatedCounts(counts: CompanyRelatedCounts): string {

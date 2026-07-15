@@ -91,19 +91,25 @@ export default function NewClientModal({ open, onClose }: Props) {
         }),
       })
 
-      const portalRes = await fetch('/api/portal-clients', {
+      // /api/portal-clients/invite creates the portal_clients row AND the
+      // working login (magic-link token + invite email) in one call; it
+      // 409s if the row already exists. Calling plain /api/portal-clients
+      // POST first (which also creates the row) and then invite would
+      // always hit that 409 — the invite email would never send and the
+      // client would have no way to log in despite the "success" toast.
+      const inviteRes = await fetch('/api/portal-clients/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          company: companyName,
+          name: `${firstName} ${lastName}`,
           email,
-          contact: `${firstName} ${lastName}`,
-          service: services.join(', '),
-          services,
+          company: companyName,
           companyId: resolvedCompanyId,
+          role: 'Viewer',
+          services,
         }),
       })
-      if (!portalRes.ok) throw new Error('Failed to create portal client')
+      if (!inviteRes.ok) throw new Error('Failed to create portal client')
 
       await fetch('/api/delivery/workflow', {
         method: 'POST',
@@ -114,17 +120,6 @@ export default function NewClientModal({ open, onClose }: Props) {
           serviceType: services[0] || SERVICES[0],
         }),
       })
-
-      await fetch('/api/portal-clients/invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: `${firstName} ${lastName}`,
-          email,
-          company: companyName,
-          role: 'Viewer',
-        }),
-      }).catch(() => {})
 
       toast('Client created successfully', 'success')
       handleClose()

@@ -20,10 +20,11 @@ export const POST = withErrorHandler('portal-clients/invite POST', async (req) =
   }
 
   const result = validate(body, {
-    name:    { required: true, type: 'string', maxLength: 200 },
-    email:   { required: true, type: 'string', pattern: EMAIL_PATTERN },
-    company: { required: true, type: 'string', maxLength: 200 },
-    role:    { required: true, type: 'string', enum: ['Admin', 'Viewer'] },
+    name:      { required: true, type: 'string', maxLength: 200 },
+    email:     { required: true, type: 'string', pattern: EMAIL_PATTERN },
+    company:   { required: true, type: 'string', maxLength: 200 },
+    role:      { required: true, type: 'string', enum: ['Admin', 'Viewer'] },
+    companyId: { required: false, type: 'string', maxLength: 100 },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -53,18 +54,22 @@ export const POST = withErrorHandler('portal-clients/invite POST', async (req) =
     throw new Error(authError?.message || 'Failed to create auth account')
   }
 
-  let portalConfig = null
+  // A caller-supplied portalConfig (e.g. the new-client wizard's
+  // showAgreement/showInvoices/showReports toggles) wins over inheriting
+  // an existing member's config for this company.
+  let portalConfig = (body.portalConfig as Record<string, unknown> | undefined) ?? null
   const { data: existingMembers } = await db
     .from('portal_clients')
     .select('portal_config, service')
     .eq('company', company)
     .not('portal_config', 'is', null)
     .limit(1)
-  if (existingMembers && existingMembers.length > 0) {
+  if (!portalConfig && existingMembers && existingMembers.length > 0) {
     portalConfig = existingMembers[0].portal_config
   }
 
-  const service = existingMembers?.[0]?.service ?? (body.service as string | undefined) ?? ''
+  const services = Array.isArray(body.services) ? body.services as string[] : []
+  const service = (body.service as string | undefined) ?? (services.length ? services.join(', ') : undefined) ?? existingMembers?.[0]?.service ?? ''
   const clientId = `pc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 
   const { data: newClient, error: insertErr } = await db
@@ -72,9 +77,11 @@ export const POST = withErrorHandler('portal-clients/invite POST', async (req) =
     .insert({
       id:            clientId,
       company,
+      company_id:    (body.companyId as string | undefined) ?? null,
       contact:       name,
       email,
       service,
+      services,
       access:        'Not Setup',
       last_login:    'Never',
       portal_role:   role,

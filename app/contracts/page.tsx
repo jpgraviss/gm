@@ -998,8 +998,13 @@ export default function ContractsPage() {
       ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
     }
 
-    const prevContracts = localContracts
-    const prevSelected = selected
+    // Snapshot only the one contract being changed, not the whole list —
+    // reverting via setLocalContracts(prevContracts) (a full-array replace)
+    // would clobber any other optimistic update that completed in the
+    // meantime (e.g. a second status change or a bulk-delete), silently
+    // resurrecting/undoing unrelated rows until the next refetch.
+    const prevContract = localContracts.find(c => c.id === id)
+    const prevSelected = selected?.id === id ? selected : null
 
     setLocalContracts(prev => prev.map(c => {
       if (c.id !== id) return c
@@ -1010,6 +1015,11 @@ export default function ContractsPage() {
       return { ...prev, ...patchData }
     })
 
+    function revert() {
+      if (prevContract) setLocalContracts(prev => prev.map(c => c.id === id ? prevContract : c))
+      if (prevSelected) setSelected(prev => prev?.id === id ? prevSelected : prev)
+    }
+
     try {
       const res = await fetch(`/api/contracts/${id}`, {
         method: 'PATCH',
@@ -1018,14 +1028,12 @@ export default function ContractsPage() {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        setLocalContracts(prevContracts)
-        setSelected(prevSelected)
+        revert()
         toast(err.error || 'Failed to update contract status', 'error')
       }
     } catch (err) {
       console.error('Failed to PATCH contract status:', err)
-      setLocalContracts(prevContracts)
-      setSelected(prevSelected)
+      revert()
       toast('Failed to update contract status', 'error')
     }
   }

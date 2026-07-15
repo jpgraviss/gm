@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchDeals, fetchContracts } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, proposalStatusColors, serviceTypeColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import ProposalBuilderPanel from '@/components/crm/ProposalBuilderPanel'
@@ -484,6 +486,7 @@ function WinProbabilityIndicator({ status }: { status: ProposalStatus }) {
 
 export default function ProposalsPage() {
   const { toast } = useToast()
+  const searchParams = useSearchParams()
   const [localProposals, setLocalProposals] = useState<Proposal[]>([])
   const [selected, setSelected] = useState<Proposal | null>(null)
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'All'>('All')
@@ -497,14 +500,26 @@ export default function ProposalsPage() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
 
   useEffect(() => {
-    fetch('/api/proposals')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalProposals(data) })
+    // /api/proposals is cursor-paginated (100/page) — fetchAllPages()
+    // follows X-Next-Cursor to completion instead of a raw fetch() that
+    // would silently show only the newest page as "the full list."
+    fetchAllPages<Proposal>('/api/proposals')
+      .then(setLocalProposals)
       .catch(() => toast('Failed to load proposals', 'error'))
       .finally(() => setLoading(false))
     fetchDeals().then(setDeals)
     fetchContracts().then(setContracts)
   }, [])
+
+  // Deep-link support for global search (Cmd+K) results, which link here
+  // with ?open=<id>.
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (openId && localProposals.length > 0 && !selected) {
+      const match = localProposals.find(p => p.id === openId)
+      if (match) setSelected(match)
+    }
+  }, [searchParams, localProposals, selected])
 
   async function updateProposalStatus(id: string, status: ProposalStatus) {
     const today = new Date().toISOString().split('T')[0]

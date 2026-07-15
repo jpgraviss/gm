@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import NewTicketPanel, { type NewTicketFormData } from '@/components/crm/NewTicketPanel'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import { downloadCsv } from '@/lib/csv-export'
@@ -265,6 +267,7 @@ function TicketPanel({
 
 export default function TicketsPage() {
   const { toast } = useToast()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [localTickets, setLocalTickets] = useState<Ticket[]>([])
   const [selected, setSelected] = useState<Ticket | null>(null)
@@ -276,12 +279,24 @@ export default function TicketsPage() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
 
   useEffect(() => {
-    fetch('/api/tickets')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalTickets(data) })
+    // /api/tickets is cursor-paginated (100/page) — fetchAllPages() follows
+    // X-Next-Cursor to completion instead of a raw fetch() that would
+    // silently show only the newest page as "the full ticket list."
+    fetchAllPages<Ticket>('/api/tickets')
+      .then(setLocalTickets)
       .catch(() => toast('Failed to load tickets', 'error'))
       .finally(() => setLoading(false))
   }, [])
+
+  // Deep-link support for global search (Cmd+K) results, which link here
+  // with ?open=<id>.
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (openId && localTickets.length > 0 && !selected) {
+      const match = localTickets.find(t => t.id === openId)
+      if (match) setSelected(match)
+    }
+  }, [searchParams, localTickets, selected])
 
   function sendReply(id: string, body: string, isInternal: boolean) {
     const now = new Date()

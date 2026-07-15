@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import CompanySelect from '@/components/ui/CompanySelect'
 import { projectStatusColors, formatDate } from '@/lib/utils'
 import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
@@ -310,9 +311,11 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
-    fetch('/api/projects')
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setLocalProjects(data) })
+    // /api/projects is cursor-paginated (100/page) — fetchAllPages()
+    // follows X-Next-Cursor to completion instead of a raw fetch() that
+    // would silently show only the newest page as "the full list."
+    fetchAllPages<Project>('/api/projects')
+      .then(setLocalProjects)
       .catch(() => toast('Failed to load projects', 'error'))
       .finally(() => setLoading(false))
   }, [])

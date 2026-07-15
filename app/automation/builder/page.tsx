@@ -9,12 +9,12 @@ import {
   Clock, GitBranch, Bell, ListTodo, Activity, Trash2,
   X, Play, Pause, ZoomIn, ZoomOut, Maximize2,
   FileText, CheckCircle, ChevronRight, Check, AlertCircle, Loader2,
-  Edit3, Copy, MousePointer,
+  Edit3, Copy,
 } from 'lucide-react'
 
 type TriggerType =
   | 'contact_created' | 'deal_stage_changed' | 'invoice_overdue'
-  | 'contract_signed' | 'form_submitted' | 'manual_trigger'
+  | 'contract_signed' | 'form_submitted'
   | 'proposal_accepted' | 'proposal_declined' | 'invoice_paid'
 
 type ActionType =
@@ -40,7 +40,6 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string; icon: React.ReactNod
   { value: 'proposal_accepted',  label: 'Proposal Accepted',    icon: <CheckCircle size={18} />,description: 'When a proposal is accepted by client' },
   { value: 'proposal_declined',  label: 'Proposal Declined',    icon: <X size={18} />,          description: 'When a proposal is declined by client' },
   { value: 'invoice_paid',       label: 'Invoice Paid',         icon: <CheckCircle size={18} />,description: 'When a payment is received for an invoice' },
-  { value: 'manual_trigger',     label: 'Manual Trigger',       icon: <MousePointer size={18} />, description: 'Run this workflow manually on demand' },
 ]
 
 const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: string; icon: React.ReactNode; description: string }[] }[] = [
@@ -85,7 +84,6 @@ const TRIGGER_TO_DB: Record<TriggerType, string> = {
   proposal_accepted:  'Proposal Accepted',
   proposal_declined:  'Proposal Declined',
   invoice_paid:       'Invoice Paid',
-  manual_trigger:     'Manual Trigger',
 }
 
 const ACTION_TO_DB: Record<ActionType, string> = {

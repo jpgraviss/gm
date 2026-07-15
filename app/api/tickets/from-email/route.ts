@@ -120,8 +120,15 @@ async function processInbox(
     }
     body = extractText(msg.payload) || subject
 
+    // A malformed/non-standard RFC 2822 Date header makes new Date(...)
+    // return Invalid Date, and .toISOString() on that throws RangeError —
+    // which previously escaped this loop entirely, aborting processing of
+    // every remaining unread message in the account for this poll.
+    const parsedDate = dateHeader ? new Date(dateHeader) : new Date()
+    const createdDate = (Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate).toISOString().split('T')[0]
+
     const ticketId = `tkt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    await db.from('tickets').insert({
+    const { error: ticketErr } = await db.from('tickets').insert({
       id: ticketId,
       subject,
       company: matchedCompany || 'Unknown',
@@ -129,7 +136,7 @@ async function processInbox(
       priority: 'Medium',
       source: 'Email',
       assigned_to: '',
-      created_date: dateHeader ? new Date(dateHeader).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      created_date: createdDate,
       tags: [],
       // Field names must match what mapTicket()/the tickets UI actually
       // read (body/timestamp/isInternal, see app/api/tickets/route.ts and
@@ -145,6 +152,18 @@ async function processInbox(
       }],
       gmail_message_id: msgId,
     })
+
+    if (ticketErr) {
+      // The processed_emails claim above already committed atomically —
+      // if ticket creation itself then fails, release that claim instead
+      // of leaving it permanently marked processed with no ticket ever
+      // created (which would silently drop the email forever). Deleting
+      // it lets the next poll re-fetch and retry this same message.
+      console.error(`[tickets/from-email] ticket insert failed for ${msgId}:`, ticketErr.message)
+      await db.from('processed_emails').delete().eq('id', claimId)
+      skipped++
+      continue
+    }
 
     await db.from('processed_emails').update({ ticket_id: ticketId }).eq('id', claimId)
 

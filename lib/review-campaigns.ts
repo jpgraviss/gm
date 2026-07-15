@@ -215,7 +215,14 @@ export async function dispatchReviewCampaign(
   }
 
   if (sent > 0) {
-    await db.rpc('increment_review_campaign_counts', { p_campaign_id: campaign.id, p_sent: sent, p_opened: 0, p_reviews: 0 })
+    // supabase-js resolves {error} on an RPC failure rather than
+    // rejecting — an unchecked call here would silently freeze
+    // sent_count forever even though every email actually sent,
+    // recreating the exact bug this feature was built to fix.
+    const { error: rpcErr } = await db.rpc('increment_review_campaign_counts', { p_campaign_id: campaign.id, p_sent: sent, p_opened: 0, p_reviews: 0 })
+    if (rpcErr) {
+      console.error(`[review-campaigns] increment_review_campaign_counts failed for campaign ${campaign.id}:`, rpcErr.message)
+    }
   }
 
   return { sent, failed, recipients: recipients.length }

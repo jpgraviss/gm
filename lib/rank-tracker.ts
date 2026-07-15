@@ -543,10 +543,21 @@ export async function sendDueScheduledReports(): Promise<{ sent: number; failed:
     const lastSent = report.lastSentAt ? new Date(report.lastSentAt).getTime() : new Date(report.createdAt).getTime()
     if (now - lastSent < interval) { skipped++; continue }
 
-    try {
-      const html = await buildRankingReportHtml(db, report)
-      if (!html) { skipped++; continue }
+    const html = await buildRankingReportHtml(db, report)
+    if (!html) { skipped++; continue }
 
+    // Atomic claim — matches dispatchScheduledReviewCampaigns' claim
+    // pattern (app/api/cron/route.ts): only proceed if last_sent_at still
+    // matches the value just read. Without this, two overlapping cron
+    // ticks (GitHub Actions pings every 5 min with no execution-time
+    // guard) could both see the same report as due and send duplicate
+    // ranking emails to real clients.
+    let claimQuery = db.from('rank_tracker_reports').update({ last_sent_at: new Date().toISOString() }).eq('id', report.id)
+    claimQuery = report.lastSentAt ? claimQuery.eq('last_sent_at', report.lastSentAt) : claimQuery.is('last_sent_at', null)
+    const { data: claimed } = await claimQuery.select('id').maybeSingle()
+    if (!claimed) { skipped++; continue }
+
+    try {
       const result = await sendEmail({
         to: report.recipients,
         subject: `${report.name} — Ranking Report`,
@@ -554,7 +565,6 @@ export async function sendDueScheduledReports(): Promise<{ sent: number; failed:
       })
       if (!result.success) throw new Error(result.error || 'Failed to send email')
 
-      await db.from('rank_tracker_reports').update({ last_sent_at: new Date().toISOString() }).eq('id', report.id)
       sent++
     } catch (err) {
       console.error(`[rank-tracker] failed to send scheduled report ${report.id}:`, err)

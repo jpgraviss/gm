@@ -37,7 +37,10 @@ export const GET = withErrorHandler('reputation/review-request/[token] GET', asy
       .select('id')
       .maybeSingle()
     if (claimed) {
-      await db.rpc('increment_review_campaign_counts', { p_campaign_id: data.campaign_id, p_sent: 0, p_opened: 1, p_reviews: 0 })
+      const { error: rpcErr } = await db.rpc('increment_review_campaign_counts', { p_campaign_id: data.campaign_id, p_sent: 0, p_opened: 1, p_reviews: 0 })
+      if (rpcErr) {
+        console.error(`[review-request] increment_review_campaign_counts (opened) failed for campaign ${data.campaign_id}:`, rpcErr.message)
+      }
     }
   }
 
@@ -86,8 +89,12 @@ export const POST = withErrorHandler('reputation/review-request/[token] POST', a
 
   const now = new Date().toISOString()
 
-  // Update the review request with the rating and feedback
-  const { error: updateErr } = await db
+  // Conditional on status still being 'pending' — the earlier check above
+  // reads a snapshot that a near-simultaneous second submission (e.g. the
+  // same link opened on two devices) could also pass before either write
+  // lands. Only the request whose UPDATE actually claims the row (returns
+  // a row) proceeds to count a review.
+  const { data: claimed, error: updateErr } = await db
     .from('review_requests')
     .update({
       rating,
@@ -97,13 +104,22 @@ export const POST = withErrorHandler('reputation/review-request/[token] POST', a
       completed_at: now,
     })
     .eq('token', token)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle()
 
   if (updateErr) {
     throw new Error(updateErr?.message || 'Failed to save review')
   }
+  if (!claimed) {
+    return NextResponse.json({ error: 'This review request has already been completed' }, { status: 400 })
+  }
 
   if (request.campaign_id) {
-    await db.rpc('increment_review_campaign_counts', { p_campaign_id: request.campaign_id, p_sent: 0, p_opened: 0, p_reviews: 1 })
+    const { error: rpcErr } = await db.rpc('increment_review_campaign_counts', { p_campaign_id: request.campaign_id, p_sent: 0, p_opened: 0, p_reviews: 1 })
+    if (rpcErr) {
+      console.error(`[review-request] increment_review_campaign_counts (reviews) failed for campaign ${request.campaign_id}:`, rpcErr.message)
+    }
   }
 
   // If rating is 1-3 (negative/neutral), save as internal feedback in the reviews table

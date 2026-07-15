@@ -296,10 +296,14 @@ export default function PortalWorkflowPage() {
       requestAnimationFrame(() => setLoading(false))
       return
     }
+    // GET /api/delivery/workflow always returns a JSON array (it's
+    // cursor-paginated), even scoped to a single company — treating it as
+    // a lone WorkflowData object threw on every render (`workflow.steps`
+    // was undefined on an array). Take the first/most recent match.
     fetch(`/api/delivery/workflow?company=${encodeURIComponent(company)}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((data: WorkflowData | null) => {
-        if (data) setWorkflow(data)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: WorkflowData[]) => {
+        if (Array.isArray(data) && data.length > 0) setWorkflow(data[0])
       })
       .catch(() => toast('Failed to load workflow', 'error'))
       .finally(() => setLoading(false))

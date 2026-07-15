@@ -127,6 +127,14 @@ export const DELETE = withErrorHandler('crm/contacts/[id] DELETE', async (req, c
   const denied = await requireRole(req, 'Dept Manager')
   if (denied) return denied
   const db = createServiceClient()
+
+  // deals.contact_id is ON DELETE SET NULL, but deals.contact is a
+  // separate denormalized {id,name,email,phone,title} blob the deal card
+  // renders directly (with working mailto:/tel: links) — the FK nulling
+  // doesn't touch it, so a deal kept showing the deleted contact's full
+  // details indefinitely, indistinguishable from a live contact.
+  await db.from('deals').update({ contact: null }).eq('contact_id', id)
+
   const { error } = await db.from('crm_contacts').delete().eq('id', id)
   if (error) {
     throw new Error(error?.message || 'Failed to delete contact')

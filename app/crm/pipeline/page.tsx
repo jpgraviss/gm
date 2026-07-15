@@ -103,7 +103,7 @@ function DealCard({
             )}
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-gray-900 truncate" title={deal.company}>{deal.company}</p>
-              <p className="text-xs text-gray-400 mt-0.5 truncate" title={deal.contact.name}>{deal.contact.name}</p>
+              <p className="text-xs text-gray-400 mt-0.5 truncate" title={deal.contact?.name}>{deal.contact?.name || 'No contact linked'}</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-1 mb-2">
@@ -669,17 +669,17 @@ function DealPanel({
                   <>
                     <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-100">
                       <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
-                        {deal.contact.name.split(' ').map((n: string) => n[0]).join('')}
+                        {deal.contact?.name?.split(' ').map((n: string) => n[0]).join('') ?? '?'}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900">{deal.contact.name}</p>
-                        <p className="text-xs text-gray-400">{deal.contact.title}</p>
+                        <p className="text-sm font-semibold text-gray-900">{deal.contact?.name || 'No contact linked'}</p>
+                        <p className="text-xs text-gray-400">{deal.contact?.title}</p>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <a href={`mailto:${deal.contact.email}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                        <a href={`mailto:${deal.contact?.email}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                           <Mail size={13} />
                         </a>
-                        <a href={`tel:${deal.contact.phone}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                        <a href={`tel:${deal.contact?.phone}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                           <Phone size={13} />
                         </a>
                       </div>
@@ -830,6 +830,7 @@ function DealPanel({
               body: JSON.stringify({
                 dealId: deal.id,
                 company: data.company,
+                companyId: company?.id,
                 serviceType: data.serviceType,
                 assignedRep: data.assignedRep,
                 value: Number(data.value) || 0,
@@ -1348,6 +1349,7 @@ export default function PipelinePage() {
       : [data.serviceType]
     const payload = {
       company: data.company,
+      companyId: data.companyId,
       contact: { id: `contact-${Date.now()}`, name: data.contactName, email: data.contactEmail, phone: data.contactPhone, title: data.contactTitle },
       stage: data.stage,
       value: Number(data.value) || 0,

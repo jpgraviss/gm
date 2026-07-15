@@ -382,6 +382,7 @@ async function spawnRecurringTasks() {
     if (isNaN(baseDue.getTime())) continue
 
     const nextDue = new Date(baseDue)
+    const originalDay = nextDue.getDate()
     switch (rec.frequency) {
       case 'daily':
         nextDue.setDate(nextDue.getDate() + rec.interval)
@@ -391,6 +392,10 @@ async function spawnRecurringTasks() {
         break
       case 'monthly':
         nextDue.setMonth(nextDue.getMonth() + rec.interval)
+        // setMonth silently overflows for due-days 29-31 into whatever day
+        // the target month lands on (Jan 31 + 1mo -> Mar 3, skipping
+        // February entirely) — clamp back to the target month's last day.
+        if (nextDue.getDate() !== originalDay) nextDue.setDate(0)
         break
       default:
         continue
@@ -398,10 +403,25 @@ async function spawnRecurringTasks() {
 
     const nextDueStr = nextDue.toISOString().split('T')[0]
 
+    // Atomic claim — null recurrence first, conditioned on it still being
+    // set, so two overlapping cron ticks (GH Actions pings every 5 min,
+    // no execution-time guard) can't both read this same completed task
+    // and both spawn a duplicate next occurrence. Sibling jobs in this
+    // file (resumePendingAutomationSteps, dispatchScheduledReviewCampaigns)
+    // already use this claim-before-work pattern; this was the one job
+    // missing it.
+    const { data: claimed } = await db
+      .from('app_tasks')
+      .update({ recurrence: null })
+      .eq('id', task.id)
+      .not('recurrence', 'is', null)
+      .select('id')
+      .maybeSingle()
+    if (!claimed) continue
+
     // Respect endDate — don't spawn if next date is past endDate
+    // (recurrence is already cleared above, so it won't be re-checked)
     if (rec.endDate && nextDueStr > rec.endDate) {
-      // Clear recurrence on the completed task so we don't check it again
-      await db.from('app_tasks').update({ recurrence: null }).eq('id', task.id)
       continue
     }
 
@@ -422,9 +442,6 @@ async function spawnRecurringTasks() {
       recurrence:        task.recurrence,
       parent_task_id:    task.id,
     })
-
-    // Null out recurrence on the completed task so it doesn't spawn again
-    await db.from('app_tasks').update({ recurrence: null }).eq('id', task.id)
   }
 }
 

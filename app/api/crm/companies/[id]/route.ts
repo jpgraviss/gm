@@ -94,6 +94,7 @@ export const PATCH = withErrorHandler('crm/companies/[id] PATCH', async (
     status: { type: 'string', enum: ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned'] },
     tags:   { type: 'array' },
     notes:  { type: 'string', maxLength: 20000 },
+    owner:  { type: 'string', maxLength: 200 },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -103,6 +104,7 @@ export const PATCH = withErrorHandler('crm/companies/[id] PATCH', async (
   if (body.status !== undefined) updates.status = body.status
   if (body.lastActivity !== undefined) updates.last_activity = body.lastActivity
   if (body.notes !== undefined) updates.notes = body.notes
+  if (body.owner !== undefined) updates.owner = body.owner
   const { data, error } = await db
     .from('crm_companies')
     .update(updates)

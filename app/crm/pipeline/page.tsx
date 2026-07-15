@@ -24,7 +24,7 @@ import {
   FileText, ScrollText, User, ChevronRight, ChevronLeft, Plus,
   CheckCircle2, Circle, AlertCircle, Settings, Upload,
   GripVertical, Pencil, Trash2, Check, Download, Search, Link2,
-  LayoutGrid, List, ArrowUpDown,
+  LayoutGrid, List, ArrowUpDown, UserCog,
 } from 'lucide-react'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
@@ -1260,6 +1260,8 @@ export default function PipelinePage() {
   const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  const [showBulkReassign, setShowBulkReassign] = useState(false)
+  const [bulkReassignValue, setBulkReassignValue] = useState('')
 
   useEffect(() => { setMounted(true) }, []) // eslint-disable-line react-hooks/set-state-in-effect
 
@@ -1498,6 +1500,24 @@ export default function PipelinePage() {
       if (removed.length > 0) setLocalDeals(prev => [...removed, ...prev])
       toast('Failed to delete deals', 'error')
     }
+  }
+
+  async function handleBulkReassign() {
+    const assignedRep = bulkReassignValue.trim()
+    if (!assignedRep) return
+    const ids = Array.from(selectedIds)
+    setLocalDeals(prev => prev.map(d => selectedIds.has(d.id) ? { ...d, assignedRep } : d))
+    setShowBulkReassign(false)
+    setBulkReassignValue('')
+    setSelectedIds(new Set())
+    for (const id of ids) {
+      fetch(`/api/deals/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedRep }),
+      }).catch(() => {})
+    }
+    toast(`${ids.length} deals reassigned to ${assignedRep}`, 'success')
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
@@ -1767,6 +1787,7 @@ export default function PipelinePage() {
                 { key: 'assignedRep', label: 'Assigned Rep' },
               ], 'deals-export.csv')
             } },
+            { label: 'Reassign', icon: <UserCog size={13} />, onClick: () => setShowBulkReassign(true) },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />
@@ -1778,6 +1799,30 @@ export default function PipelinePage() {
           onConfirm={handleBulkDeleteDeals}
           onCancel={() => setShowBulkDeleteConfirm(false)}
         />
+      )}
+      {showBulkReassign && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBulkReassign(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 flex flex-col gap-4">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Reassign {selectedIds.size} deals</p>
+              <p className="text-xs text-gray-500 mt-0.5">Set the assigned rep for all selected deals</p>
+            </div>
+            <select
+              value={bulkReassignValue}
+              onChange={e => setBulkReassignValue(e.target.value)}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              autoFocus
+            >
+              <option value="">Select rep...</option>
+              {ALL_REPS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <div className="flex gap-2">
+              <button onClick={handleBulkReassign} disabled={!bulkReassignValue.trim()} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>Reassign</button>
+              <button onClick={() => setShowBulkReassign(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

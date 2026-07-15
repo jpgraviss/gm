@@ -26,7 +26,7 @@ import {
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
   PhoneCall, Video, Pencil, Trash2, Upload, Eye, MessageSquare, MousePointerClick,
   Flame, Thermometer, Snowflake, Sparkles, Brain, Wand2, GitMerge, Download, Tag, ArrowUpDown,
-  MapPin, Smartphone, NotebookPen, Check,
+  MapPin, Smartphone, NotebookPen, Check, UserCog,
 } from 'lucide-react'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
 import BulkActionBar from '@/components/ui/BulkActionBar'
@@ -1447,6 +1447,7 @@ function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function ContactsPage() {
   const { toast } = useToast()
+  const REPS = useTeamMembers()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -1460,6 +1461,8 @@ export default function ContactsPage() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
   const [showBulkTag, setShowBulkTag] = useState(false)
   const [bulkTagValue, setBulkTagValue] = useState('')
+  const [showBulkReassign, setShowBulkReassign] = useState(false)
+  const [bulkReassignValue, setBulkReassignValue] = useState('')
   const [stageFilter, setStageFilter] = useState<string>('All')
 
   const [sortKey, setSortKey] = useState<string>('name')
@@ -1653,6 +1656,24 @@ export default function ContactsPage() {
       }
     }
     toast(`Tag "${tag}" applied to ${ids.length} contacts`, 'success')
+  }
+
+  async function handleBulkReassign() {
+    const owner = bulkReassignValue.trim()
+    if (!owner) return
+    const ids = Array.from(selectedIds)
+    setLocalContacts(prev => prev.map(c => selectedIds.has(c.id) ? { ...c, owner } : c))
+    setShowBulkReassign(false)
+    setBulkReassignValue('')
+    setSelectedIds(new Set())
+    for (const id of ids) {
+      fetch(`/api/crm/contacts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner }),
+      }).catch(() => {})
+    }
+    toast(`${ids.length} contacts reassigned to ${owner}`, 'success')
   }
 
   useEffect(() => { queueMicrotask(() => setCurrentPage(1)) }, [search, stageFilter])
@@ -1980,6 +2001,7 @@ export default function ContactsPage() {
               ], 'contacts-export.csv')
             } },
             { label: 'Tag', icon: <Tag size={13} />, onClick: () => setShowBulkTag(true) },
+            { label: 'Reassign', icon: <UserCog size={13} />, onClick: () => setShowBulkReassign(true) },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />
@@ -2011,6 +2033,30 @@ export default function ContactsPage() {
             <div className="flex gap-2">
               <button onClick={handleBulkTag} disabled={!bulkTagValue.trim()} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>Apply Tag</button>
               <button onClick={() => setShowBulkTag(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showBulkReassign && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBulkReassign(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 flex flex-col gap-4">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Reassign {selectedIds.size} contacts</p>
+              <p className="text-xs text-gray-500 mt-0.5">Set the owner for all selected contacts</p>
+            </div>
+            <select
+              value={bulkReassignValue}
+              onChange={e => setBulkReassignValue(e.target.value)}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              autoFocus
+            >
+              <option value="">Select owner...</option>
+              {REPS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <div className="flex gap-2">
+              <button onClick={handleBulkReassign} disabled={!bulkReassignValue.trim()} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>Reassign</button>
+              <button onClick={() => setShowBulkReassign(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
             </div>
           </div>
         </div>

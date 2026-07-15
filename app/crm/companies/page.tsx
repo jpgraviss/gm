@@ -26,7 +26,7 @@ import {
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
   ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload, BarChart3,
   Monitor, Loader2, Sparkles, Wand2, Share2, Brain, Download, GitMerge, ArrowUpDown,
-  CheckSquare, Circle, CheckCircle2,
+  CheckSquare, Circle, CheckCircle2, UserCog,
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
@@ -1557,6 +1557,7 @@ function EditCompanyPanel({
 
 export default function CompaniesPage() {
   const { toast } = useToast()
+  const REPS = useTeamMembers()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -1570,6 +1571,10 @@ export default function CompaniesPage() {
   const [showDuplicates, setShowDuplicates] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  const [showBulkTag, setShowBulkTag] = useState(false)
+  const [bulkTagValue, setBulkTagValue] = useState('')
+  const [showBulkReassign, setShowBulkReassign] = useState(false)
+  const [bulkReassignValue, setBulkReassignValue] = useState('')
 
   const [sortKey, setSortKey] = useState<string>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -1757,6 +1762,49 @@ export default function CompaniesPage() {
     } catch {
       toast('Failed to delete companies', 'error')
     }
+  }
+
+  async function handleBulkTag() {
+    const tag = bulkTagValue.trim()
+    if (!tag) return
+    const ids = Array.from(selectedIds)
+    setLocalCompanies(prev => prev.map(c =>
+      selectedIds.has(c.id) && !c.tags.includes(tag)
+        ? { ...c, tags: [...c.tags, tag] }
+        : c
+    ))
+    setShowBulkTag(false)
+    setBulkTagValue('')
+    setSelectedIds(new Set())
+    for (const id of ids) {
+      const company = localCompanies.find(c => c.id === id)
+      if (company && !company.tags.includes(tag)) {
+        fetch(`/api/crm/companies/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tags: [...company.tags, tag] }),
+        }).catch(() => {})
+      }
+    }
+    toast(`Tag "${tag}" applied to ${ids.length} companies`, 'success')
+  }
+
+  async function handleBulkReassign() {
+    const owner = bulkReassignValue.trim()
+    if (!owner) return
+    const ids = Array.from(selectedIds)
+    setLocalCompanies(prev => prev.map(c => selectedIds.has(c.id) ? { ...c, owner } : c))
+    setShowBulkReassign(false)
+    setBulkReassignValue('')
+    setSelectedIds(new Set())
+    for (const id of ids) {
+      fetch(`/api/crm/companies/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner }),
+      }).catch(() => {})
+    }
+    toast(`${ids.length} companies reassigned to ${owner}`, 'success')
   }
 
   useEffect(() => { queueMicrotask(() => setCurrentPage(1)) }, [search, statusFilter])
@@ -2080,6 +2128,8 @@ export default function CompaniesPage() {
                 { key: 'owner', label: 'Owner' },
               ], 'companies-export.csv')
             } },
+            { label: 'Tag', icon: <Tag size={13} />, onClick: () => setShowBulkTag(true) },
+            { label: 'Reassign', icon: <UserCog size={13} />, onClick: () => setShowBulkReassign(true) },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />
@@ -2091,6 +2141,53 @@ export default function CompaniesPage() {
           onConfirm={handleBulkDelete}
           onCancel={() => setShowBulkDeleteConfirm(false)}
         />
+      )}
+      {showBulkTag && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBulkTag(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 flex flex-col gap-4">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Tag {selectedIds.size} companies</p>
+              <p className="text-xs text-gray-500 mt-0.5">Apply a tag to all selected companies</p>
+            </div>
+            <input
+              value={bulkTagValue}
+              onChange={e => setBulkTagValue(e.target.value)}
+              placeholder="Tag name..."
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') handleBulkTag() }}
+            />
+            <div className="flex gap-2">
+              <button onClick={handleBulkTag} disabled={!bulkTagValue.trim()} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>Apply Tag</button>
+              <button onClick={() => setShowBulkTag(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showBulkReassign && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBulkReassign(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 flex flex-col gap-4">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Reassign {selectedIds.size} companies</p>
+              <p className="text-xs text-gray-500 mt-0.5">Set the owner for all selected companies</p>
+            </div>
+            <select
+              value={bulkReassignValue}
+              onChange={e => setBulkReassignValue(e.target.value)}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              autoFocus
+            >
+              <option value="">Select owner...</option>
+              {REPS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <div className="flex gap-2">
+              <button onClick={handleBulkReassign} disabled={!bulkReassignValue.trim()} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>Reassign</button>
+              <button onClick={() => setShowBulkReassign(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
       {showDuplicates && (
         <DuplicatesPanel

@@ -32,6 +32,7 @@ function mapContact(row: any) {
     createdDate:    row.created_date ?? '',
     lastActivity:   row.last_activity ?? undefined,
     hubspotData:    row.hubspot_data ?? undefined,
+    customFields:   row.custom_fields ?? {},
   }
 }
 

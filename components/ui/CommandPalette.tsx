@@ -7,7 +7,7 @@ import {
   ScrollText, FolderKanban, CheckSquare, Clock, CalendarDays, Wrench,
   RefreshCw, Mail, MessageSquare, CreditCard, Settings, Zap,
   Globe, BarChart3, Plug, Share2, ClipboardList, Inbox, ArrowRight,
-  BookOpen, ShieldCheck, UserCircle, Briefcase,
+  BookOpen, ShieldCheck, UserCircle, Briefcase, SlidersHorizontal,
 } from 'lucide-react'
 
 interface CommandItem {
@@ -68,6 +68,7 @@ const COMMANDS: CommandItem[] = [
   { id: 'audit-log',      label: 'Audit Log',        section: 'System',     href: '/admin/audit-log', icon: <Briefcase size={15} />,        keywords: ['activity', 'history'] },
   { id: 'portal-mgmt',   label: 'Portal Management', section: 'System',    href: '/admin/portal-management', icon: <Globe size={15} />, keywords: ['portal', 'clients', 'companies'] },
   { id: 'document-templates', label: 'Document Templates', section: 'System', href: '/admin/document-templates', icon: <FileText size={15} />, keywords: ['proposal', 'contract', 'addendum', 'template'] },
+  { id: 'custom-fields',  label: 'Custom Fields',    section: 'System',     href: '/admin/custom-fields', icon: <SlidersHorizontal size={15} />, keywords: ['fields', 'contacts', 'companies', 'deals'] },
 ]
 
 const RECENT_KEY = 'gravhub_recent_searches'

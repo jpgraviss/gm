@@ -32,6 +32,7 @@ function mapDeal(row: any) {
     contactId:    row.contact_id ?? null,
     dealScore:    score,
     dealScoreFactors: factors,
+    customFields: row.custom_fields ?? {},
   }
 }
 

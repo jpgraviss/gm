@@ -32,6 +32,7 @@ function mapDeal(row: any) {
     contactId:    row.contact_id ?? null,
     dealScore:    score,
     dealScoreFactors: factors,
+    customFields: row.custom_fields ?? {},
   }
 }
 
@@ -58,6 +59,7 @@ export const PATCH = withErrorHandler('deals/[id] PATCH', async (req, ctx) => {
   if (body.companyId !== undefined)   update.company_id = body.companyId
   if (body.contactId !== undefined)   update.contact_id = body.contactId
   if (body.company !== undefined)     update.company = body.company
+  if (body.customFields !== undefined) update.custom_fields = body.customFields
   // Only a stage change counts as real pipeline activity for Deal Score's
   // engagement factor and the stale-deal guided action — bumping this on
   // every PATCH (a probability tweak, a close-date typo fix, a contact

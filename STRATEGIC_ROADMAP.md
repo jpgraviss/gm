@@ -106,9 +106,9 @@ Core features every agency CRM has that we don't.
 | # | Item | Effort |
 |---|---|---|
 | B1 | ~~Stripe integration for client invoicing~~ — Checkout Session payment link + webhook, DONE. Card-on-file/auto-collect not built (Checkout is one-time payment per invoice, not a saved payment method) | 4 days |
-| B2 | **Custom fields on contacts, companies, deals** — JSONB column + schema-defined field library | 4 days |
+| B2 | ~~Custom fields on contacts, companies, deals~~ — field-definition library (`/admin/custom-fields`) + jsonb storage, wired into display and edit views for all three entities, DONE. Edit-only for v1 (not on the create panels) | 4 days |
 | B3 | ~~Smart lists~~ — saved filter criteria per list (contacts/companies/deals), re-applied against live data on click, DONE | 3 days |
-| B4 | **Bulk operations** — bulk tag, bulk reassign, bulk delete on CRM lists DONE (contacts/companies/deals). Bulk email still missing (needs a send-path decision) | 3 days |
+| B4 | ~~Bulk operations~~ — bulk tag, bulk reassign, bulk delete on CRM lists DONE (contacts/companies/deals). Bulk email still missing (needs a send-path decision) | 3 days |
 | B5 | **Email marketing builder** — drag-drop editor, templates, bulk send, A/B testing. Use Resend Broadcast API + template DB | 6 days |
 | B6 | **Forms builder** — embedded lead-capture forms, webhook to CRM | 4 days |
 | B7 | **Landing pages** — simple template-based landing page builder (not full Webflow) | 6 days |

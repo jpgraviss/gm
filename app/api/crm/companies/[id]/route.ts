@@ -27,6 +27,7 @@ function mapCompany(row: any) {
     createdDate:    row.created_date ?? '',
     lastActivity:   row.last_activity ?? undefined,
     notes:          row.notes ?? undefined,
+    customFields:   row.custom_fields ?? {},
   }
 }
 
@@ -70,6 +71,7 @@ export const PUT = withErrorHandler('crm/companies/[id] PUT', async (
       total_deal_value: body.totalDealValue ?? 0,
       last_activity:    body.lastActivity ?? null,
       notes:            body.notes ?? null,
+      custom_fields:    body.customFields ?? {},
     })
     .eq('id', id)
     .select()
@@ -105,6 +107,7 @@ export const PATCH = withErrorHandler('crm/companies/[id] PATCH', async (
   if (body.lastActivity !== undefined) updates.last_activity = body.lastActivity
   if (body.notes !== undefined) updates.notes = body.notes
   if (body.owner !== undefined) updates.owner = body.owner
+  if (body.customFields !== undefined) updates.custom_fields = body.customFields
   const { data, error } = await db
     .from('crm_companies')
     .update(updates)

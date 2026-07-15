@@ -29,6 +29,7 @@ import {
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import SmartListBar from '@/components/crm/SmartListBar'
+import CustomFieldsSection from '@/components/crm/CustomFieldsSection'
 
 // ─── Pipeline Config Types ────────────────────────────────────────────────────
 
@@ -295,6 +296,7 @@ function DealPanel({
     stage: deal.stage,
     serviceTypes: dealServiceTypes as string[],
   })
+  const [customFields, setCustomFields] = useState<Record<string, string>>(deal.customFields ?? {})
   const dealAny = deal as LocalDeal & { companyId?: string; contactId?: string }
   const company = dealAny.companyId
     ? crmCompanies.find(c => c.id === dealAny.companyId)
@@ -328,6 +330,7 @@ function DealPanel({
       stage: editForm.stage,
       serviceType: selectedTypes[0] as LocalDeal['serviceType'],
       serviceTypes: selectedTypes as LocalDeal['serviceTypes'],
+      customFields,
     }
     onUpdateDeal(deal.id, updates)
     setEditing(false)
@@ -438,7 +441,7 @@ function DealPanel({
             <div className="flex items-center gap-1">
               {onUpdateDeal && (
                 <button
-                  onClick={() => { setEditing(e => !e); setEditForm({ value: String(deal.value), probability: String(deal.probability), closeDate: deal.closeDate, stage: deal.stage, serviceTypes: (deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]) as string[] }) }}
+                  onClick={() => { setEditing(e => !e); setEditForm({ value: String(deal.value), probability: String(deal.probability), closeDate: deal.closeDate, stage: deal.stage, serviceTypes: (deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]) as string[] }); setCustomFields(deal.customFields ?? {}) }}
                   className="p-2 rounded-lg hover:bg-gray-50"
                   title="Edit deal"
                 >
@@ -566,6 +569,14 @@ function DealPanel({
                   <InfoRow icon={<Calendar size={14} />} label="Last Activity" value={deal.lastActivity} />
                 </div>
               </div>
+
+              <CustomFieldsSection
+                entityType="deals"
+                values={editing ? customFields : (deal.customFields ?? {})}
+                editing={editing}
+                onChange={(key, value) => setCustomFields(prev => ({ ...prev, [key]: value }))}
+                variant="card"
+              />
 
               {/* Advance Stage */}
               {nextStage && (

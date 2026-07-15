@@ -31,6 +31,7 @@ import {
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
 import SmartListBar from '@/components/crm/SmartListBar'
+import CustomFieldsSection from '@/components/crm/CustomFieldsSection'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { useEnrichment } from '@/lib/useEnrichment'
@@ -654,6 +655,8 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                   <p className="text-sm text-gray-700 leading-relaxed">{company.description}</p>
                 </div>
               )}
+
+              <CustomFieldsSection entityType="companies" values={company.customFields ?? {}} editing={false} variant="card" />
 
               {/* Primary contact quick view */}
               {companyContacts.filter(c => c.isPrimary).map(c => (
@@ -1342,6 +1345,7 @@ function EditCompanyPanel({
     description: company.description ?? '',
     status: company.status as CompanyStatus,
   })
+  const [customFields, setCustomFields] = useState<Record<string, string>>(company.customFields ?? {})
 
   const { enriching, enrichedFields, enrich, markEnriched, clearEnriched } = useEnrichment()
 
@@ -1383,6 +1387,7 @@ function EditCompanyPanel({
       owner: form.owner,
       description: form.description.trim() || undefined,
       status: form.status,
+      customFields,
     })
   }
 
@@ -1534,6 +1539,13 @@ function EditCompanyPanel({
               placeholder="About this company..."
               className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none ${ec('description')}`} />
           </div>
+
+          <CustomFieldsSection
+            entityType="companies"
+            values={customFields}
+            editing
+            onChange={(key, value) => setCustomFields(prev => ({ ...prev, [key]: value }))}
+          />
         </div>
 
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">

@@ -31,6 +31,7 @@ function mapContact(row: any) {
     createdDate:    row.created_date ?? '',
     lastActivity:   row.last_activity ?? undefined,
     hubspotData:    row.hubspot_data ?? undefined,
+    customFields:   row.custom_fields ?? {},
   }
 }
 
@@ -75,6 +76,7 @@ export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) =>
       contact_notes:   body.contactNotes ?? [],
       contact_tasks:   body.contactTasks ?? [],
       last_activity:   body.lastActivity ?? null,
+      custom_fields:   body.customFields ?? {},
     })
     .eq('id', id)
     .select()
@@ -113,6 +115,7 @@ export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx
   if (body.contactTasks !== undefined) updates.contact_tasks = body.contactTasks
   if (body.owner !== undefined) updates.owner = body.owner
   if (body.ownerId !== undefined) updates.owner_id = body.ownerId
+  if (body.customFields !== undefined) updates.custom_fields = body.customFields
   const { data, error } = await db
     .from('crm_contacts')
     .update(updates)

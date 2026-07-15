@@ -30,6 +30,7 @@ import {
 } from 'lucide-react'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
 import SmartListBar from '@/components/crm/SmartListBar'
+import CustomFieldsSection from '@/components/crm/CustomFieldsSection'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import Pagination from '@/components/ui/Pagination'
@@ -175,6 +176,7 @@ function EditContactPanel({
     owner: contact.owner,
     notes: contact.notes ?? '',
   })
+  const [customFields, setCustomFields] = useState<Record<string, string>>(contact.customFields ?? {})
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   function set(field: keyof typeof form, value: string) {
@@ -194,6 +196,7 @@ function EditContactPanel({
       website: form.website.trim() || undefined,
       owner: form.owner,
       notes: form.notes.trim() || undefined,
+      customFields,
     })
   }
 
@@ -316,6 +319,13 @@ function EditContactPanel({
               className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
             />
           </div>
+
+          <CustomFieldsSection
+            entityType="contacts"
+            values={customFields}
+            editing
+            onChange={(key, value) => setCustomFields(prev => ({ ...prev, [key]: value }))}
+          />
 
           {/* Delete section */}
           <div className="pt-2 border-t border-gray-200">
@@ -1388,6 +1398,8 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                   })()}
                 </div>
               )}
+
+              <CustomFieldsSection entityType="contacts" values={contact.customFields ?? {}} editing={false} />
 
               {/* Tags */}
               <div className="px-5 py-4 border-t border-gray-100">

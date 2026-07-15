@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
-export const GET = withErrorHandler('delivery/workflow/[id] GET', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('delivery/workflow/[id] GET', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   if (!id) return NextResponse.json({ error: 'Missing workflow id' }, { status: 400 })
 
@@ -26,7 +30,10 @@ export const GET = withErrorHandler('delivery/workflow/[id] GET', async (_req: N
   })
 })
 
-export const DELETE = withErrorHandler('delivery/workflow/[id] DELETE', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withErrorHandler('delivery/workflow/[id] DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
+
   const { id } = await params
   if (!id) return NextResponse.json({ error: 'Missing workflow id' }, { status: 400 })
 

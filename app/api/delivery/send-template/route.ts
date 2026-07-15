@@ -8,6 +8,7 @@ import { generateWelcomeEmail } from '@/lib/templates/generate-welcome'
 import { generateUsageGuideEmail } from '@/lib/templates/generate-usage-guide'
 import { generateMonthlyReportHtml } from '@/lib/templates/generate-monthly-report'
 import { generatePdf } from '@/lib/pdf-generator'
+import { requireRole } from '@/lib/rbac'
 
 const TEMPLATE_TYPES = ['welcome', 'usage_guide', 'monthly_report']
 const SUBJECT_MAP: Record<string, string> = {
@@ -69,6 +70,9 @@ const STEP_SENT_COLUMN: Record<number, string> = {
 }
 
 export const POST = withErrorHandler('delivery/send-template POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const result = validate(body, {
     workflowId: { required: true, type: 'string', maxLength: 100 },

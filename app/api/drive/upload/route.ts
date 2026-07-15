@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getValidDriveToken, uploadFile } from '@/lib/google-drive'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
 const ALLOWED_MIME_TYPES = new Set([
@@ -25,6 +26,9 @@ const ALLOWED_MIME_TYPES = new Set([
 
 // POST /api/drive/upload — upload a file to Google Drive
 export const POST = withErrorHandler('drive/upload POST', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const token = await getValidDriveToken()
   if (!token) return NextResponse.json({ error: 'Google Drive not connected' }, { status: 401 })
 

@@ -875,7 +875,7 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
                             }
                             // If file has a path, fetch a fresh signed URL
                             if (file.path) {
-                              const res = await fetch(`/api/files/download?path=${encodeURIComponent(file.path)}`)
+                              const res = await fetch(`/api/files/download?path=${encodeURIComponent(file.path)}&company=${encodeURIComponent(company)}`)
                               if (res.ok) {
                                 const data = await res.json()
                                 if (data.url) {

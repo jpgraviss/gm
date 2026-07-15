@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { buildReportRecommendations } from '@/lib/client-reports'
+import { requireRole } from '@/lib/rbac'
 
-export const GET = withErrorHandler('delivery/monthly-report/[id] GET', async (_req, ctx) => {
+export const GET = withErrorHandler('delivery/monthly-report/[id] GET', async (req: NextRequest, ctx) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await ctx!.params
   if (!id) return NextResponse.json({ error: 'Missing workflow id' }, { status: 400 })
 

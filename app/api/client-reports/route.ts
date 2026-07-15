@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { buildClientReport, saveReportSnapshot, type ClientReportConfig } from '@/lib/client-reports'
+import { requireRole } from '@/lib/rbac'
 
 /**
  * POST /api/client-reports
  * Builds a client report from the supplied config (company + integrations +
- * date window). Does NOT require role elevation since it's read-only.
+ * date window).
  *
  * Request body:
  * {
@@ -20,6 +21,14 @@ import { buildClientReport, saveReportSnapshot, type ClientReportConfig } from '
  * }
  */
 export const POST = withErrorHandler('client-reports POST', async (req) => {
+  // "Read-only" is about not mutating a business record, not about being
+  // safe to leave unauthenticated: any caller could otherwise harvest a
+  // client's live GSC/GA4/GBP data (and, with save:true, write real rows
+  // into client_data_snapshots) by supplying its integration IDs directly.
+  // The one real caller (app/reports/client/page.tsx) is staff-only.
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = (await req.json().catch(() => ({}))) as Partial<ClientReportConfig> & { save?: boolean }
 
   if (!body.companyName || !body.startDate || !body.endDate) {

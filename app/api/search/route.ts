@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 const LIMIT_PER_TYPE = 5
 
@@ -13,6 +14,9 @@ interface SearchResult {
 }
 
 export const GET = withErrorHandler('search GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const q = req.nextUrl.searchParams.get('q')?.trim()
   if (!q || q.length < 2) {
     return NextResponse.json([])

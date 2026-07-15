@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parseICS } from '@/lib/ical-parser'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthUser } from '@/lib/rbac'
 
 function isIcsUrl(link: string): boolean {
   return (
@@ -18,6 +19,15 @@ function normalizeIcsUrl(url: string): string {
 }
 
 export const POST = withErrorHandler('calendar/import-link POST', async (req) => {
+  // Matches the sibling calendar/subscriptions route's gate — without it,
+  // any authenticated caller (including a portal client) could trigger a
+  // server-side fetch of an attacker-supplied URL and insert fabricated
+  // "imported" events into bookings.
+  const user = await getAuthUser(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const { link, userEmail, subscriptionName } = await req.json()
   if (!link || typeof link !== 'string') {
     return NextResponse.json({ error: 'Missing link' }, { status: 400 })

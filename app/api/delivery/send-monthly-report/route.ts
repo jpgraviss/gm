@@ -6,8 +6,12 @@ import { sendEmail } from '@/lib/email'
 import { scheduleEmail } from '@/lib/email-scheduler'
 import { getSettings } from '@/lib/settings'
 import { generateMonthlyReportHtml, type MonthlyReportData } from '@/lib/templates/generate-monthly-report'
+import { requireRole } from '@/lib/rbac'
 
 export const POST = withErrorHandler('delivery/send-monthly-report POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const result = validate(body, {
     workflowId: { required: true, type: 'string', maxLength: 100 },

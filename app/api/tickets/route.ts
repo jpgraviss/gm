@@ -3,11 +3,19 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TASK_PRIORITIES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { requireRole } from '@/lib/rbac'
-import { requirePortalClient } from '@/lib/portal-auth'
+import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapTicket(row: any) {
+function mapTicket(row: any, includeInternal: boolean) {
+  // Staff mark replies isInternal in the same messages array as
+  // client-visible ones (app/tickets/page.tsx). Filtering only happened
+  // client-side in the staff UI — this route returned the raw array
+  // verbatim to portal-scoped callers too, so any internal note (client
+  // risk flags, pricing/margin discussion) was delivered straight to
+  // that client's portal.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const messages = (row.messages ?? []) as any[]
   return {
     id:            row.id,
     subject:       row.subject,
@@ -22,7 +30,7 @@ function mapTicket(row: any) {
     projectId:     row.project_id ?? undefined,
     assignedTo:    row.assigned_to ?? undefined,
     tags:          row.tags ?? [],
-    messages:      row.messages ?? [],
+    messages:      includeInternal ? messages : messages.filter(m => !m?.isInternal),
     linkedTaskId:  row.linked_task_id ?? undefined,
     createdDate:   row.created_date ?? '',
     updatedDate:   row.updated_date ?? '',
@@ -43,6 +51,8 @@ export const GET = withErrorHandler('tickets GET', async (req: NextRequest) => {
     : await requireRole(req, 'Team Member')
   if (denied) return denied
 
+  const includeInternal = await isStaffCaller(req)
+
   const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
@@ -56,7 +66,7 @@ export const GET = withErrorHandler('tickets GET', async (req: NextRequest) => {
     throw new Error(error?.message || 'Failed to fetch tickets')
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
-  return paginatedJson(rows.map(mapTicket), nextCursor)
+  return paginatedJson(rows.map(row => mapTicket(row, includeInternal)), nextCursor)
 })
 
 async function applyRoutingRules(
@@ -163,5 +173,5 @@ export const POST = withErrorHandler('tickets POST', async (req: NextRequest) =>
   if (error) {
     throw new Error(error?.message || 'Failed to create ticket')
   }
-  return NextResponse.json(mapTicket(data), { status: 201 })
+  return NextResponse.json(mapTicket(data, true), { status: 201 })
 })

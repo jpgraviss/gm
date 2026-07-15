@@ -54,6 +54,7 @@ const PUBLIC_PREFIXES = [
   '/api/intelligence/track',
   '/api/intelligence/script',
   '/api/reputation/review-request/',
+  '/api/stripe/webhook',
 ]
 
 function getClientIp(req: NextRequest): string {

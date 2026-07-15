@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import StatusBadge from '@/components/ui/StatusBadge'
 import { formatCurrency, formatDate, invoiceStatusColors } from '@/lib/utils'
 import {
-  ArrowLeft, FileText, Download, DollarSign, AlertTriangle, CheckCircle,
+  ArrowLeft, FileText, Download, DollarSign, AlertTriangle, CheckCircle, CreditCard,
 } from 'lucide-react'
 
 interface Invoice {
@@ -25,9 +26,11 @@ interface Invoice {
 export default function PortalBillingPage() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const searchParams = useSearchParams()
   const company = user?.company ?? ''
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
+  const [payingId, setPayingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!company) {
@@ -40,6 +43,34 @@ export default function PortalBillingPage() {
       .catch(() => toast('Failed to load invoices', 'error'))
       .finally(() => setLoading(false))
   }, [company])
+
+  // Stripe redirects back here after a successful payment — the webhook
+  // (not this redirect, which could be reached without actually paying)
+  // is the real source of truth for marking the invoice Paid, so this
+  // just gives the client an honest "processing" heads-up and lets the
+  // subsequent invoice fetch above pick up the real status.
+  useEffect(() => {
+    if (searchParams.get('paid')) {
+      toast("Payment received — it may take a moment to reflect below.", 'success')
+    }
+  }, [searchParams, toast])
+
+  async function handlePayNow(inv: Invoice) {
+    setPayingId(inv.id)
+    try {
+      const res = await fetch(`/api/invoices/${inv.id}/checkout`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to start payment', 'error')
+        setPayingId(null)
+        return
+      }
+      window.location.href = data.url
+    } catch {
+      toast('Failed to start payment', 'error')
+      setPayingId(null)
+    }
+  }
 
   const totalInvoiced = useMemo(() => invoices.reduce((s, i) => s + i.amount, 0), [invoices])
   const totalPaid = useMemo(() => invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0), [invoices])
@@ -139,6 +170,16 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <p className="text-sm font-bold text-gray-900">{formatCurrency(inv.amount)}</p>
                     <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status] ?? 'bg-gray-100 text-gray-600'} />
+                    {inv.status !== 'Paid' && (
+                      <button
+                        onClick={() => handlePayNow(inv)}
+                        disabled={payingId === inv.id}
+                        className="flex items-center gap-1 text-xs text-white px-2.5 py-1 rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+                        style={{ background: '#015035' }}
+                      >
+                        <CreditCard size={13} /> {payingId === inv.id ? 'Loading...' : 'Pay Now'}
+                      </button>
+                    )}
                     <button
                       onClick={() => downloadInvoice(inv)}
                       className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors px-2 py-1 rounded-md hover:bg-gray-50"

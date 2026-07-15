@@ -71,10 +71,30 @@ function downloadReceipt(invoice: Invoice) {
 }
 
 function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: Invoice; onClose: () => void; contracts: Contract[]; allInvoices: Invoice[] }) {
+  const { toast } = useToast()
+  const [generatingLink, setGeneratingLink] = useState(false)
   const linkedContract = contracts.find(c => c.id === invoice.contractId)
   const relatedInvoices = allInvoices.filter(i => i.contractId === invoice.contractId && i.id !== invoice.id)
   const isOverdue = invoice.status === 'Overdue'
   const isPaid = invoice.status === 'Paid'
+
+  async function handleCopyPaymentLink() {
+    setGeneratingLink(true)
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/checkout`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to generate payment link', 'error')
+        return
+      }
+      await navigator.clipboard.writeText(data.url)
+      toast('Payment link copied to clipboard', 'success')
+    } catch {
+      toast('Failed to generate payment link', 'error')
+    } finally {
+      setGeneratingLink(false)
+    }
+  }
 
   return (
     <div className="pointer-events-none fixed inset-0 z-40 flex">
@@ -180,6 +200,16 @@ function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: I
             {invoice.status === 'Paid' && (
               <button onClick={() => downloadReceipt(invoice)} className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
                 Download Receipt
+              </button>
+            )}
+            {invoice.status !== 'Paid' && (
+              <button
+                onClick={handleCopyPaymentLink}
+                disabled={generatingLink}
+                className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={{ background: '#015035' }}
+              >
+                {generatingLink ? 'Generating...' : 'Copy Payment Link'}
               </button>
             )}
             <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors">

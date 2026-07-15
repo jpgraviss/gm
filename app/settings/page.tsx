@@ -1965,6 +1965,8 @@ export default function SettingsPage() {
 
             <GranolaIntegrationSection />
 
+            <StripeIntegrationSection />
+
             <GoogleReviewsIntegrationSection />
 
             <MaverickIntegrationSection />
@@ -3044,6 +3046,157 @@ function GranolaIntegrationSection() {
               Sync Now
             </button>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StripeIntegrationSection() {
+  const [secretKey, setSecretKey] = useState('')
+  const [webhookSecret, setWebhookSecret] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const cfg = d?.stripe as { secretKey?: string; webhookSecret?: string } | undefined
+        if (cfg?.secretKey) {
+          setSecretKey(cfg.secretKey)
+          setStatus('connected')
+        }
+        if (cfg?.webhookSecret) setWebhookSecret(cfg.webhookSecret)
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleTest() {
+    if (!secretKey.trim()) return
+    setStatus('testing')
+    setErrorMsg('')
+    try {
+      const res = await fetch('/api/integrations/stripe/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secretKey: secretKey.trim() }),
+      })
+      const data = await res.json()
+      if (data.connected) {
+        setStatus('connected')
+      } else {
+        setStatus('error')
+        setErrorMsg(data.error || 'Connection failed')
+      }
+    } catch {
+      setStatus('error')
+      setErrorMsg('Failed to test connection')
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stripe: { secretKey: secretKey.trim(), webhookSecret: webhookSecret.trim() } }),
+      })
+    } catch { /* ignore */ }
+    setSaving(false)
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
+          <DollarSign size={18} className="text-indigo-600" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-800">Stripe</p>
+          <p className="text-xs text-gray-500">Let clients pay invoices online — Pay Now buttons on Billing and the client portal</p>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          {status === 'connected' && <CheckCircle size={13} className="text-emerald-600" />}
+          {status === 'error' && <AlertCircle size={13} className="text-red-500" />}
+          <span className={`text-[11px] font-semibold ${
+            status === 'connected' ? 'text-emerald-600' :
+            status === 'error' ? 'text-red-500' :
+            status === 'testing' ? 'text-gray-500' :
+            'text-gray-400'
+          }`}>
+            {status === 'connected' ? 'Connected' :
+             status === 'error' ? 'Connection Failed' :
+             status === 'testing' ? 'Testing...' :
+             'Not Connected'}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Secret Key</label>
+          <div className="relative">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={secretKey}
+              onChange={e => { setSecretKey(e.target.value); if (status === 'connected' || status === 'error') setStatus('idle') }}
+              placeholder="Paste your Stripe secret key"
+              className="w-full px-3 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1">
+            From the Stripe Dashboard → Developers → API keys (starts with sk_live_ or sk_test_).
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Webhook Signing Secret</label>
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={webhookSecret}
+            onChange={e => setWebhookSecret(e.target.value)}
+            placeholder="Paste the webhook signing secret"
+            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            In Stripe Dashboard → Developers → Webhooks, add an endpoint pointing at{' '}
+            <code className="bg-gray-100 px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/api/stripe/webhook</code>
+            {' '}listening for <code className="bg-gray-100 px-1 rounded">checkout.session.completed</code> — Stripe shows the signing secret for that endpoint once it's created.
+          </p>
+        </div>
+
+        {errorMsg && (
+          <p className="text-xs text-red-500">{errorMsg}</p>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={handleTest}
+            disabled={!secretKey.trim() || status === 'testing'}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+            style={{ background: '#015035' }}
+          >
+            {status === 'testing' && <RefreshCw size={13} className="animate-spin" />}
+            Test Connection
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!secretKey.trim() || saving}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+          >
+            {saving ? 'Saving...' : 'Save Keys'}
+          </button>
         </div>
       </div>
     </div>

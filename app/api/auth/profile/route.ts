@@ -22,6 +22,9 @@ export const POST = withErrorHandler('auth/profile POST', async (req) => {
     .single()
 
   if (teamRow) {
+    if (teamRow.status !== 'active') {
+      return NextResponse.json({ error: 'Your account is not active. Contact an administrator.' }, { status: 403 })
+    }
     return NextResponse.json({
       user: {
         id:       teamRow.id,

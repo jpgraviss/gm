@@ -38,6 +38,7 @@ const PUBLIC_PREFIXES = [
   '/api/portal-clients/reset-password',
   '/api/portal-clients/check-approval',
   '/api/portal-clients/complete-setup',
+  '/api/team-members/check-approval',
   '/api/drive/callback',
   '/api/signatures/',
   '/api/proposals/view/',
@@ -111,6 +112,18 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
       if (memoryLimited(`chatbot-chat:${ip}`, 30, 60 * 1000)) {
         return NextResponse.json(
           { error: 'Too many messages. Please wait a moment and try again.' },
+          { status: 429 }
+        )
+      }
+    }
+    // Onboarding 6-digit codes (~900k possibilities, 24h validity) are
+    // otherwise unthrottled brute-force targets — success here feeds
+    // directly into setting a real account password.
+    if ((pathname === '/api/auth/verify-code' || pathname === '/api/auth/setup-account') && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`auth-code:${ip}`, 15, 60 * 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many attempts. Please wait a while and try again.' },
           { status: 429 }
         )
       }

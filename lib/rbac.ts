@@ -53,11 +53,15 @@ async function getCurrentUser(req: NextRequest): Promise<AuthenticatedUser | nul
 
   const { data: member } = await db
     .from('team_members')
-    .select('id, name, email, role, unit, is_admin')
+    .select('id, name, email, role, unit, is_admin, status')
     .eq('email', email)
     .maybeSingle()
 
-  if (!member) return null
+  // A suspended/soft-deleted staff member's team_members row previously
+  // stayed matchable here forever — status was fetched nowhere in this
+  // function, so an existing session (or a fresh sign-in) kept full access
+  // for as long as it lived, regardless of admin action.
+  if (!member || member.status !== 'active') return null
 
   return {
     userId: member.id,

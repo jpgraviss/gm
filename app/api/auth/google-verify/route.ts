@@ -128,6 +128,16 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   }
 
   if (teamRow) {
+    // Unlike the portal_clients branch below (which already rejects
+    // access === 'Disabled'), this never checked status — a suspended or
+    // soft-deleted staff member could complete a fresh Google sign-in and
+    // get a brand-new session regardless of admin action.
+    if (teamRow.status !== 'active') {
+      return NextResponse.json(
+        { error: 'Your account is not active. Contact an administrator.' },
+        { status: 403 },
+      )
+    }
     return respondWithUser({
       id:       teamRow.id,
       email:    teamRow.email,

@@ -61,7 +61,6 @@ export default function SetupAccountPage() {
   const [code, setCode] = useState(['', '', '', '', '', ''])
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
-  const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -132,29 +131,30 @@ export default function SetupAccountPage() {
         return
       }
 
-      setUserId(data.userId)
       setWaitingForApproval(true)
-      pollApproval(data.userId)
+      pollApproval()
     } catch {
       setError('Network error. Please try again.')
     }
     setLoading(false)
   }
 
-  function pollApproval(uid: string) {
+  function pollApproval() {
+    // Polls a public, unauthenticated status endpoint — at this point the
+    // new hire has no session yet (only an email + code), so an
+    // authenticated endpoint like GET /api/team-members would always 401
+    // here and leave them stuck at "AWAITING APPROVAL" forever.
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/team-members?include_inactive=true`)
+        const res = await fetch(`/api/team-members/check-approval?email=${encodeURIComponent(emailParam ?? '')}`)
         if (!res.ok) return
-        const members = await res.json()
-        const member = members.find((m: { id: string; status: string; pending_approval: boolean }) => m.id === uid)
-        if (!member) return
+        const status = await res.json()
 
-        if (!member.pendingApproval && member.status === 'active') {
+        if (status.approved) {
           clearInterval(interval)
           setWaitingForApproval(false)
           setStep('password')
-        } else if (member.status === 'suspended') {
+        } else if (status.denied) {
           clearInterval(interval)
           setWaitingForApproval(false)
           setError('Your account setup was denied by an administrator.')
@@ -183,7 +183,8 @@ export default function SetupAccountPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId,
+          email: emailParam,
+          code: code.join(''),
           password,
           avatarUrl: photoPreview,
         }),
@@ -224,7 +225,7 @@ export default function SetupAccountPage() {
         await fetch('/api/auth/setup-account', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, password, avatarUrl: photoPreview }),
+          body: JSON.stringify({ email: emailParam, code: code.join(''), password, avatarUrl: photoPreview }),
         })
       } catch { /* non-critical */ }
     }

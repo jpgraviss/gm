@@ -25,9 +25,17 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
 
   const { data: teamRow } = await db
     .from('team_members')
-    .select('id, email, role, is_admin')
+    .select('id, email, role, is_admin, status')
     .ilike('email', email)
     .maybeSingle()
+
+  // Mirrors the portal_clients branch below, which already rejects
+  // access === 'Disabled' — this never checked status, so a suspended or
+  // soft-deleted staff member could still exchange a live Supabase token
+  // for a fresh gravhub-auth session.
+  if (teamRow && teamRow.status !== 'active') {
+    return NextResponse.json({ error: 'Your account is not active. Contact an administrator.' }, { status: 403 })
+  }
 
   if (teamRow) {
     const res = NextResponse.json({ ok: true })

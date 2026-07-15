@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Header from '@/components/layout/Header'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchCrmContacts } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import type { CRMContact } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
 import {
@@ -111,11 +112,14 @@ export default function InboxPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Load already-logged Gmail activity IDs from the API
+  // Load already-logged Gmail activity IDs from the API. /api/crm/activities
+  // is now cursor-paginated (100/page) — a raw single fetch() here would
+  // only see the most recent page and start silently missing older
+  // gmail_-prefixed ids past that, letting the same email get re-logged as
+  // a duplicate activity. fetchAllPages() follows the cursor to completion.
   useEffect(() => {
-    fetch('/api/crm/activities')
-      .then(r => r.ok ? r.json() : [])
-      .then((activities: { id: string }[]) => {
+    fetchAllPages<{ id: string }>('/api/crm/activities')
+      .then(activities => {
         setLoggedIds(new Set(
           activities
             .filter((a: { id: string }) => a.id.startsWith('gmail_'))

@@ -7,6 +7,7 @@ import {
   Mail, Share2, ClipboardList, Layers, Search, BookOpen,
   Send, ArrowRight, RefreshCw,
 } from 'lucide-react'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 const CARDS = [
   { title: 'Broadcasts',    href: '/marketing',      icon: <Mail size={20} />,          color: '#015035', description: 'Email campaigns and broadcasts' },
@@ -27,10 +28,12 @@ export default function MarketingHub() {
   async function loadKPIs() {
     setRefreshing(true)
     try {
-      const [broadcastsRes, formsRes, keywordsRes, postsRes] = await Promise.all([
+      const [broadcastsRes, formsRes, kws, postsRes] = await Promise.all([
         fetch('/api/broadcasts').then(r => r.ok ? r.json() : { data: [] }),
         fetch('/api/forms').then(r => r.ok ? r.json() : { data: [] }),
-        fetch('/api/rank-tracker/keywords').then(r => r.ok ? r.json() : []),
+        // /api/rank-tracker/keywords is cursor-paginated (100/page) — fetch
+        // the complete count instead of just the first page's length.
+        fetchAllPages<unknown>('/api/rank-tracker/keywords'),
         fetch('/api/social-posts').then(r => r.ok ? r.json() : { data: [] }),
       ])
 
@@ -44,7 +47,6 @@ export default function MarketingHub() {
       const subs = forms.reduce((s: number, f: { submissionsCount?: number }) => s + (f.submissionsCount ?? 0), 0)
       setFormSubs(subs)
 
-      const kws = Array.isArray(keywordsRes) ? keywordsRes : (keywordsRes.data ?? [])
       setKeywords(kws.length)
 
       const posts = Array.isArray(postsRes) ? postsRes : (postsRes.data ?? [])

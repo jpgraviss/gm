@@ -2,22 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 
 export const GET = withErrorHandler('sequences/[id]/enrollments GET', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
   const { id } = await params
+  const pag = { ...parsePagination(req), orderBy: 'enrolled_at' }
   const db = createServiceClient()
-  const { data, error } = await db
-    .from('sequence_enrollments')
-    .select('*')
-    .eq('sequence_id', id)
-    .order('enrolled_at', { ascending: false })
+  let query = db.from('sequence_enrollments').select('*').eq('sequence_id', id)
+  query = applyCursor(query, pag)
+  const { data, error } = await query
   if (error) {
     throw new Error(error?.message || 'Failed to fetch enrollments')
   }
-  return NextResponse.json(
-    (data ?? []).map(r => ({
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'enrolled_at')
+  return paginatedJson(
+    rows.map(r => ({
       id: r.id,
       sequenceId: r.sequence_id,
       contactId: r.contact_id,
@@ -35,7 +36,8 @@ export const GET = withErrorHandler('sequences/[id]/enrollments GET', async (req
       deliveryStatus: r.delivery_status,
       lastMessageId: r.last_message_id,
       abVariant: r.ab_variant,
-    }))
+    })),
+    nextCursor,
   )
 })
 

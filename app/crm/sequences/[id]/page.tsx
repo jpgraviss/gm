@@ -383,9 +383,14 @@ export default function SequenceDetailPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [seqRes, enrollRes] = await Promise.all([
+      // /api/sequences/[id]/enrollments is cursor-paginated (100/page) — a
+      // sequence can realistically enroll thousands of contacts, so this
+      // must follow X-Next-Cursor to completion like the contacts fetch
+      // above does, instead of a raw fetch() that would silently show only
+      // the most recently enrolled page as "the full enrollment list."
+      const [seqRes, enrollments] = await Promise.all([
         fetch(`/api/sequences`),
-        fetch(`/api/sequences/${sequenceId}/enrollments`),
+        fetchAllPages<Enrollment>(`/api/sequences/${sequenceId}/enrollments`),
       ])
       if (seqRes.ok) {
         const seqs = await seqRes.json()
@@ -393,10 +398,7 @@ export default function SequenceDetailPage() {
         setSequence(found ?? null)
         if (found && found.steps.length === 0) setTab('steps')
       }
-      if (enrollRes.ok) {
-        const data = await enrollRes.json()
-        if (Array.isArray(data)) setEnrollments(data)
-      }
+      setEnrollments(enrollments)
     } catch {
       toast('Failed to load sequence', 'error')
     } finally {

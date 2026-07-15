@@ -9,6 +9,7 @@ import {
   RefreshCw, Plus, Settings, Loader2,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 type ReviewSource = 'Google' | 'Yelp' | 'Facebook' | 'Manual' | 'Internal'
 type ReviewStatus = 'pending' | 'responded'
@@ -118,9 +119,11 @@ export default function ReputationPage() {
   const { toast } = useToast()
 
   useEffect(() => {
-    fetch('/api/reputation/reviews')
-      .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setReviews(data) })
+    // /api/reputation/reviews is cursor-paginated (100/page) — review
+    // volume compounds with every sync across every client, so this must
+    // follow X-Next-Cursor to completion.
+    fetchAllPages<Review>('/api/reputation/reviews')
+      .then(setReviews)
       .finally(() => setLoading(false))
 
     fetch('/api/settings')
@@ -144,9 +147,7 @@ export default function ReputationPage() {
       }
       setSyncMessage(`Synced ${data.total} reviews (${data.new} new, ${data.updated} updated)`)
       setLastSyncAt(data.lastSyncAt)
-      const reviewsRes = await fetch('/api/reputation/reviews')
-      const reviewsData = await reviewsRes.json()
-      if (Array.isArray(reviewsData)) setReviews(reviewsData)
+      setReviews(await fetchAllPages<Review>('/api/reputation/reviews'))
     } catch {
       setSyncMessage('Failed to sync reviews')
     } finally {

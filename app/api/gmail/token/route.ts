@@ -11,6 +11,21 @@ async function verifyOwnership(req: NextRequest, targetEmail: string): Promise<N
   if (callerEmail !== targetEmail.toLowerCase()) {
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
+
+  // getAuthenticatedEmail() only verifies the caller HOLDS a valid session
+  // — it never checks team_members.status, so a suspended employee's
+  // still-valid Supabase session (suspending someone doesn't revoke it)
+  // could otherwise keep reading/rotating/clearing their own Gmail token.
+  const db = createServiceClient()
+  const { data: member } = await db
+    .from('team_members')
+    .select('status')
+    .eq('email', targetEmail)
+    .maybeSingle()
+  if (member && member.status !== 'active') {
+    return NextResponse.json({ error: 'Account is not active' }, { status: 403 })
+  }
+
   return null
 }
 

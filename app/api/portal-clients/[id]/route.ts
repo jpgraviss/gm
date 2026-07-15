@@ -22,8 +22,13 @@ export const PATCH = withErrorHandler('portal-clients/[id] PATCH', async (req, {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
   }
 
-  const { data: staffRow } = await db.from('team_members').select('id').ilike('email', email).maybeSingle()
-  const isStaff = !!staffRow
+  // getAuthenticatedEmail() only verifies the caller HOLDS a valid session
+  // — it never checks status, so existence alone would let a suspended
+  // employee's still-valid session (suspending someone doesn't revoke it)
+  // retain full staff-level write access to any portal client record,
+  // not just the restricted self-service field set below.
+  const { data: staffRow } = await db.from('team_members').select('id, status').ilike('email', email).maybeSingle()
+  const isStaff = !!staffRow && staffRow.status === 'active'
 
   let body: Record<string, unknown>
   try {

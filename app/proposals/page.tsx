@@ -727,17 +727,25 @@ export default function ProposalsPage() {
 
   async function handleBulkDelete() {
     const ids = Array.from(selectedIds)
+    const removed = localProposals.filter(p => selectedIds.has(p.id))
     setLocalProposals(prev => prev.filter(p => !selectedIds.has(p.id)))
     setSelectedIds(new Set())
     setShowBulkDeleteConfirm(false)
     try {
-      await fetch('/api/crm/bulk-delete', {
+      const res = await fetch('/api/crm/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'proposals', ids }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setLocalProposals(prev => [...removed, ...prev])
+        toast(err.error || 'Failed to delete proposals', 'error')
+        return
+      }
       toast(`${ids.length} proposals deleted`, 'success')
     } catch {
+      setLocalProposals(prev => [...removed, ...prev])
       toast('Failed to delete proposals', 'error')
     }
   }

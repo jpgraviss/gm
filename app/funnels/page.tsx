@@ -186,7 +186,12 @@ export default function FunnelsPage() {
   async function deleteFunnel(id: string) {
     if (!confirm('Delete this funnel and all its pages?')) return
     try {
-      await fetch(`/api/funnels/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/funnels/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        addToast(err.error || 'Failed to delete funnel', 'error')
+        return
+      }
       addToast('Funnel deleted', 'success')
       if (expandedId === id) { setExpandedId(null); setDetail(null) }
       loadFunnels()
@@ -236,11 +241,16 @@ export default function FunnelsPage() {
   async function updateFunnelName(id: string) {
     if (!editName.trim()) return
     try {
-      await fetch(`/api/funnels/${id}`, {
+      const res = await fetch(`/api/funnels/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: editName.trim() }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        addToast(err.error || 'Failed to update funnel', 'error')
+        return
+      }
       setEditingName(null)
       addToast('Funnel updated', 'success')
       loadFunnels()
@@ -284,18 +294,25 @@ export default function FunnelsPage() {
     const orderA = pages[idx].sort_order
     const orderB = pages[swapIdx].sort_order
 
-    await Promise.all([
-      fetch(`/api/funnels/${funnelId}/pages`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: pages[idx].id, sort_order: orderB }),
-      }),
-      fetch(`/api/funnels/${funnelId}/pages`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: pages[swapIdx].id, sort_order: orderA }),
-      }),
-    ])
+    try {
+      const [resA, resB] = await Promise.all([
+        fetch(`/api/funnels/${funnelId}/pages`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId: pages[idx].id, sort_order: orderB }),
+        }),
+        fetch(`/api/funnels/${funnelId}/pages`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId: pages[swapIdx].id, sort_order: orderA }),
+        }),
+      ])
+      if (!resA.ok || !resB.ok) {
+        addToast('Failed to reorder page', 'error')
+      }
+    } catch {
+      addToast('Failed to reorder page', 'error')
+    }
 
     const refreshRes = await fetch(`/api/funnels/${funnelId}`)
     if (refreshRes.ok) setDetail(await refreshRes.json())

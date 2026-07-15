@@ -988,6 +988,9 @@ export default function ContractsPage() {
       ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
     }
 
+    const prevContracts = localContracts
+    const prevSelected = selected
+
     setLocalContracts(prev => prev.map(c => {
       if (c.id !== id) return c
       return { ...c, ...patchData }
@@ -998,13 +1001,22 @@ export default function ContractsPage() {
     })
 
     try {
-      await fetch(`/api/contracts/${id}`, {
+      const res = await fetch(`/api/contracts/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patchData),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setLocalContracts(prevContracts)
+        setSelected(prevSelected)
+        toast(err.error || 'Failed to update contract status', 'error')
+      }
     } catch (err) {
       console.error('Failed to PATCH contract status:', err)
+      setLocalContracts(prevContracts)
+      setSelected(prevSelected)
+      toast('Failed to update contract status', 'error')
     }
   }
 
@@ -1156,17 +1168,25 @@ export default function ContractsPage() {
 
   async function handleBulkDelete() {
     const ids = Array.from(selectedIds)
+    const removed = localContracts.filter(c => selectedIds.has(c.id))
     setLocalContracts(prev => prev.filter(c => !selectedIds.has(c.id)))
     setSelectedIds(new Set())
     setShowBulkDeleteConfirm(false)
     try {
-      await fetch('/api/crm/bulk-delete', {
+      const res = await fetch('/api/crm/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'contracts', ids }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setLocalContracts(prev => [...removed, ...prev])
+        toast(err.error || 'Failed to delete contracts', 'error')
+        return
+      }
       toast(`${ids.length} contracts deleted`, 'success')
     } catch {
+      setLocalContracts(prev => [...removed, ...prev])
       toast('Failed to delete contracts', 'error')
     }
   }

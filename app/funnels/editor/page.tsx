@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import {
-  Save, Eye, EyeOff, Upload, ArrowUp, ArrowDown, Trash2, X,
+  Save, Eye, EyeOff, Upload, Trash2, X,
   Type, LayoutGrid, MessageSquare, MousePointerClick, FileText,
   PlayCircle, HelpCircle, Copyright, ChevronDown, ChevronUp,
   Layers, Plus, GripVertical,
@@ -514,6 +515,7 @@ function EditorInner() {
   const pageId = searchParams.get('page')
 
   const [page, setPage] = useState<PageData | null>(null)
+  const [allPages, setAllPages] = useState<PageData[]>([])
   const [blocks, setBlocks] = useState<Block[]>([])
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [preview, setPreview] = useState(false)
@@ -536,7 +538,13 @@ function EditorInner() {
       const res = await fetch(`/api/funnels/${funnelId}`)
       if (!res.ok) return
       const data = await res.json()
-      const pg = (data.pages as PageData[])?.find((p) => p.id === pageId)
+      // The response's pages array is already sorted by sort_order server-side
+      // (app/api/funnels/[id]/route.ts) — used both to find the current page
+      // and to power the page switcher below, so editing a multi-page funnel
+      // doesn't require bouncing back to the Funnels list between pages.
+      const pagesList = (data.pages as PageData[]) ?? []
+      setAllPages(pagesList)
+      const pg = pagesList.find((p) => p.id === pageId)
       if (pg) {
         setPage(pg)
         setBlocks(pg.blocks ?? [])
@@ -557,14 +565,12 @@ function EditorInner() {
     setSelectedBlockId(newBlock.id)
   }, [])
 
-  const moveBlock = useCallback((id: string, direction: 'up' | 'down') => {
+  const reorderBlocks = useCallback((result: DropResult) => {
+    if (!result.destination) return
     setBlocks((prev) => {
-      const idx = prev.findIndex((b) => b.id === id)
-      if (idx < 0) return prev
-      const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-      if (swapIdx < 0 || swapIdx >= prev.length) return prev
-      const next = [...prev]
-      ;[next[idx], next[swapIdx]] = [next[swapIdx], next[idx]]
+      const next = Array.from(prev)
+      const [moved] = next.splice(result.source.index, 1)
+      next.splice(result.destination!.index, 0, moved)
       return next
     })
   }, [])
@@ -673,6 +679,20 @@ function EditorInner() {
           onChange={(e) => setPageName(e.target.value)}
           className="text-sm font-medium bg-transparent border-0 outline-none flex-1 min-w-0 text-gray-900 dark:text-white"
         />
+        {allPages.length > 1 && (
+          <select
+            value={pageId ?? ''}
+            onChange={(e) => {
+              if (e.target.value !== pageId) router.push(`/funnels/editor?funnel=${funnelId}&page=${e.target.value}`)
+            }}
+            className="hidden sm:block text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-600 dark:text-white/60 max-w-[160px] flex-shrink-0"
+            title="Switch to another page in this funnel"
+          >
+            {allPages.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 rounded hidden md:block"
@@ -753,40 +773,49 @@ function EditorInner() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-0 rounded-xl overflow-hidden shadow-sm border border-gray-200 dark:border-white/10">
-                {blocks.map((block, i) => (
-                  <div
-                    key={block.id}
-                    className={`relative group cursor-pointer ${selectedBlockId === block.id ? 'ring-2 ring-[#015035] ring-offset-1' : ''}`}
-                    onClick={() => setSelectedBlockId(block.id)}
-                  >
-                    <BlockPreview block={block} />
-                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-1 border border-gray-200 dark:border-white/10">
-                      <span className="text-[10px] text-gray-400 px-1.5 font-medium">{block.type}</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); moveBlock(block.id, 'up') }}
-                        disabled={i === 0}
-                        className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                      >
-                        <ArrowUp size={12} />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); moveBlock(block.id, 'down') }}
-                        disabled={i === blocks.length - 1}
-                        className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                      >
-                        <ArrowDown size={12} />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); deleteBlock(block.id) }}
-                        className="p-1 text-gray-400 hover:text-red-500"
-                      >
-                        <Trash2 size={12} />
-                      </button>
+              <DragDropContext onDragEnd={reorderBlocks}>
+                <Droppable droppableId="page-blocks">
+                  {(dropProvided) => (
+                    <div
+                      ref={dropProvided.innerRef}
+                      {...dropProvided.droppableProps}
+                      className="space-y-0 rounded-xl overflow-hidden shadow-sm border border-gray-200 dark:border-white/10"
+                    >
+                      {blocks.map((block, i) => (
+                        <Draggable key={block.id} draggableId={block.id} index={i}>
+                          {(dragProvided, dragSnapshot) => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              className={`relative group cursor-pointer ${selectedBlockId === block.id ? 'ring-2 ring-[#015035] ring-offset-1' : ''} ${dragSnapshot.isDragging ? 'ring-2 ring-gray-300' : ''}`}
+                              onClick={() => setSelectedBlockId(block.id)}
+                            >
+                              <BlockPreview block={block} />
+                              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-1 border border-gray-200 dark:border-white/10">
+                                <div
+                                  {...dragProvided.dragHandleProps}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="p-1 text-gray-400 hover:text-gray-600 cursor-grab"
+                                >
+                                  <GripVertical size={12} />
+                                </div>
+                                <span className="text-[10px] text-gray-400 px-1.5 font-medium">{block.type}</span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); deleteBlock(block.id) }}
+                                  className="p-1 text-gray-400 hover:text-red-500"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {dropProvided.placeholder}
                     </div>
-                  </div>
-                ))}
-              </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
             )}
           </div>
         </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download, DollarSign as RevenueIcon, HeartPulse, Megaphone, Search, ArrowRight } from 'lucide-react'
@@ -214,7 +215,7 @@ export default function ReportsPage() {
   }, [normalizedDeals])
   const maxService = Math.max(...serviceRevenue.map(s => s.revenue), 1)
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

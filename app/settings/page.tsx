@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import {
@@ -705,7 +706,7 @@ export default function SettingsPage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

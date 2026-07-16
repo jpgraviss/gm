@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   ArrowLeft, DollarSign, MousePointer, Target, TrendingUp,
   BarChart3, Calendar, ArrowUpRight, ArrowDownRight, Minus,
@@ -59,13 +60,7 @@ export default function PortalPpcPage() {
       .finally(() => setLoading(false))
   }, [company, toast])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#2563eb' }} />
-      </div>
-    )
-  }
+  if (loading) return <LoadingScreen />
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>

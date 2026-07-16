@@ -8,6 +8,7 @@ import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
 import Header from '@/components/layout/Header'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 function toDecimal(hours: number, minutes: number) {
   return hours + minutes / 60
@@ -497,7 +498,7 @@ export default function TimeTrackingPage() {
     setAnchor(d)
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#015035]" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <div className="min-h-screen bg-[#f8faf9]">

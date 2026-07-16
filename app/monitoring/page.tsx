@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   Activity, X, Trash2, RefreshCw, Pause, Play, Pencil, Globe, AlertCircle,
   CheckCircle2, Clock, Shield, ShieldAlert, Puzzle, Palette, ChevronDown,
@@ -255,7 +256,7 @@ export default function MonitoringPage() {
   const wpCount = sites.filter(s => s.isWordPress).length
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+    return <LoadingScreen />
   }
 
   return (
@@ -624,7 +625,7 @@ function SiteDetailPanel({
 
         {loading || !detail ? (
           <div className="flex-1 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
+            <LoadingScreen />
           </div>
         ) : (
           <>

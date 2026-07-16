@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/Toast'
 import Header from '@/components/layout/Header'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronRight, Edit2, Copy, TrendingUp, Search, MoreHorizontal,
@@ -290,7 +291,7 @@ export default function SequencesPage() {
     }
   })
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   const totalEnrolled = sequences.reduce((s, q) => s + q.enrolledCount, 0)
   const avgReplyRate = sequences.length > 0 ? (sequences.reduce((s, q) => s + q.replyRate, 0) / sequences.length).toFixed(1) : '0'

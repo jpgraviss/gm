@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   ArrowLeft, BookOpen, CheckCircle, Circle, Play, FileText,
   HelpCircle, Award, ChevronLeft, ChevronRight,
@@ -300,11 +301,7 @@ export default function CourseViewerPage() {
   }, [enrollment, course, modules, completedModules, toast])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
-      </div>
-    )
+    return <LoadingScreen fullScreen />
   }
 
   if (!course) {

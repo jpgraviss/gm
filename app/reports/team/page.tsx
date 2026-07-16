@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { useToast } from '@/components/ui/Toast'
 import { fetchTeamMembers } from '@/lib/supabase'
 import { formatCurrency } from '@/lib/utils'
@@ -127,7 +128,7 @@ export default function TeamProductivityPage() {
       .slice(0, 20)
   }, [tasks, timeEntries, cutoffDate, selectedMember])
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

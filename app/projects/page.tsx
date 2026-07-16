@@ -18,6 +18,7 @@ import {
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import FileUpload from '@/components/ui/FileUpload'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 const DEPARTMENTS = [...SERVICE_NAMES]
 
@@ -357,7 +358,7 @@ export default function ProjectsPage() {
     { key: 'On Hold', label: 'On Hold', count: localProjects.filter(p => p.status === 'Awaiting Client').length, icon: <PauseCircle size={14} /> },
   ]
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

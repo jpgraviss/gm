@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   Globe, FileText, Download, ChevronRight, Search, BarChart3,
   Megaphone, Mail, PenTool, HelpCircle, Ticket, FolderKanban,
@@ -89,7 +90,7 @@ export default function ReportsPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--page-bg)' }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
+        <LoadingScreen />
       </div>
     )
   }

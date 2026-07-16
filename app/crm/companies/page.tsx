@@ -36,6 +36,7 @@ import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { useEnrichment } from '@/lib/useEnrichment'
 import Pagination from '@/components/ui/Pagination'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 // ─── Status colors ────────────────────────────────────────────────────────────
 
@@ -1853,7 +1854,7 @@ export default function CompaniesPage() {
   const startIndex = (safeCurrentPage - 1) * pageSize
   const paginatedCompanies = sorted.slice(startIndex, startIndex + pageSize)
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

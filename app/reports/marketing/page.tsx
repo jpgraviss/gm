@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import Header from '@/components/layout/Header'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { useToast } from '@/components/ui/Toast'
 import { formatCurrency } from '@/lib/utils'
 import { Wand2, Loader2, X, RefreshCw } from 'lucide-react'
@@ -244,7 +245,7 @@ export default function MarketingAnalyticsPage() {
   const [aiNarrative, setAiNarrative] = useState<string | null>(null)
   const [aiNarrativeLoading, setAiNarrativeLoading] = useState(false)
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

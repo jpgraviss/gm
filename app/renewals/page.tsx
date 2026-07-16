@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import CompanySelect from '@/components/ui/CompanySelect'
 import StatusBadge from '@/components/ui/StatusBadge'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import type { Renewal, RenewalProposalData, Contract, CRMContact, Proposal } from '@/lib/types'
 import {
   X, AlertTriangle, Clock, CheckCircle, Calendar, DollarSign,
@@ -809,7 +810,7 @@ export default function RenewalsPage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   const FILTER_TABS: { key: FilterTab; label: string; icon: React.ReactNode }[] = [
     { key: 'active', label: 'Active', icon: <RefreshCw size={13} /> },

@@ -20,6 +20,7 @@ interface PortalInsights {
   uptime?: { sitesMonitored: number; uptimePercent: number; incidents: number }
 }
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 export default function ClientPortalPage() {
   const { toast } = useToast()
@@ -167,7 +168,7 @@ export default function ClientPortalPage() {
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: '#f8fafc' }}>

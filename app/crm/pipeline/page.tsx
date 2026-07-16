@@ -30,6 +30,7 @@ import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import SmartListBar from '@/components/crm/SmartListBar'
 import CustomFieldsSection from '@/components/crm/CustomFieldsSection'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 // ─── Pipeline Config Types ────────────────────────────────────────────────────
 
@@ -1532,7 +1533,7 @@ export default function PipelinePage() {
     toast(`${ids.length} deals reassigned to ${assignedRep}`, 'success')
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

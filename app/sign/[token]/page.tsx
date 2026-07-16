@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 interface ContractItem {
   description?: string
@@ -159,11 +160,7 @@ export default function SignPage() {
   const isSigned = sigReq?.status === 'signed'
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   if (error && !sigReq) {

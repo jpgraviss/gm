@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useDeferredValue } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/Toast'
 import Header from '@/components/layout/Header'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronLeft, Edit2, Copy, TrendingUp, Search, MoreHorizontal,
@@ -622,11 +623,7 @@ export default function SequenceDetailPage() {
   const existingEmails = new Set(enrollments.map(e => e.contactEmail))
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   if (!sequence) {

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   ArrowLeft, GraduationCap, BookOpen,
   CheckCircle, Play,
@@ -110,13 +111,7 @@ export default function PortalSalesTrainingPage() {
       .finally(() => setLoading(false))
   }, [company, user?.email, toast])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#be123c' }} />
-      </div>
-    )
-  }
+  if (loading) return <LoadingScreen />
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>

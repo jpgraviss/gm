@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import StatusBadge from '@/components/ui/StatusBadge'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { formatCurrency, formatDate, invoiceStatusColors } from '@/lib/utils'
 import {
   ArrowLeft, FileText, Download, DollarSign, AlertTriangle, CheckCircle, CreditCard,
@@ -99,11 +100,7 @@ ${inv.paidDate ? `<div class="row"><span class="label">Paid Date</span><span cla
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   return (

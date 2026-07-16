@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import CompanySelect from '@/components/ui/CompanySelect'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   Search, ChevronDown, ChevronUp, CheckCircle2, Circle, Clock,
   Plus, X, Send, Package, Filter, ArrowUpDown, UserPlus, Calendar,
@@ -479,9 +480,7 @@ export default function DeliveryDashboardPage() {
     return (
       <>
         <Header title="Delivery Dashboard" subtitle={`${DELIVERY_STEP_NAMES.length}-Step Client Delivery System`} />
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
-        </div>
+        <LoadingScreen />
       </>
     )
   }

@@ -15,6 +15,7 @@ import {
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
 import ClientDashboard from '@/components/portal/ClientDashboard'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1269,7 +1270,7 @@ function PortalAdminPage() {
     setDeleteConfirm(null)
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   if (viewAsClient) {
     return <ClientPortalView company={previewCompany} accountInfo={clients.find(c => c.company === previewCompany)} onExit={() => setViewAsClient(false)} />

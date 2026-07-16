@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { X, CheckCircle, Sparkles } from 'lucide-react'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { useToast } from '@/components/ui/Toast'
 
 interface ClientIntegrationBinding {
@@ -110,9 +111,7 @@ export default function ClientIntegrationsPanel({ companyName, companyId, onClos
         </div>
 
         {loading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
-          </div>
+          <LoadingScreen />
         ) : (
           <>
             <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">

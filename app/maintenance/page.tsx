@@ -7,6 +7,7 @@ import { formatCurrency, formatDate, getDaysUntil } from '@/lib/utils'
 import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import StatusBadge from '@/components/ui/StatusBadge'
 import CompanySelect from '@/components/ui/CompanySelect'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import type { MaintenanceRecord, MaintenanceStatus, CRMContact, Contract, Invoice } from '@/lib/types'
 import {
   X, RefreshCw, DollarSign, Calendar, AlertTriangle, CheckCircle,
@@ -731,7 +732,7 @@ export default function MaintenancePage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

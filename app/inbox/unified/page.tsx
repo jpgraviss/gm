@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   Inbox as InboxIcon, Search, RefreshCw, MessageSquare, Mail, Zap,
   Megaphone, Users, ChevronRight, Circle,
@@ -138,9 +139,7 @@ export default function UnifiedInboxPage() {
         </div>
 
         {loading && threads.length === 0 ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
-          </div>
+          <LoadingScreen />
         ) : filtered.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
             <InboxIcon size={28} className="text-gray-300 mx-auto mb-3" />

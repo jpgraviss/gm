@@ -13,6 +13,7 @@ import { useTeamMembers } from '@/lib/useTeamMembers'
 import FileUpload from '@/components/ui/FileUpload'
 import CompanySelect from '@/components/ui/CompanySelect'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   ArrowLeft, Plus, X, CheckCircle2, Clock, Circle, LayoutList, Columns3,
   MoreHorizontal, Pencil, Trash2, ChevronDown, ChevronRight, Calendar,
@@ -858,7 +859,7 @@ export default function ProjectDetailPage() {
     }
   }, [computedProgress, project, id])
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
   if (!project) return (
     <div className="flex flex-col items-center justify-center h-64 gap-3">
       <FolderKanban size={40} className="text-gray-300" />

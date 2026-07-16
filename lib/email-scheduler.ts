@@ -136,16 +136,31 @@ export async function processScheduledEmails(): Promise<{ sent: number; failed: 
   const db = createServiceClient()
   const now = new Date().toISOString()
 
-  const { data: dueEmails, error: fetchErr } = await db
+  // First, atomically claim due rows by flipping status pending → sending.
+  // Only rows we successfully claim are processed — prevents duplicate
+  // sends when two cron ticks overlap.
+  const { data: candidateIds, error: peekErr } = await db
     .from('scheduled_emails')
-    .select('*')
+    .select('id')
     .eq('status', 'pending')
     .lte('send_at', now)
     .order('send_at', { ascending: true })
     .limit(100)
 
-  if (fetchErr) throw new Error(fetchErr.message)
-  if (!dueEmails || dueEmails.length === 0) return { sent: 0, failed: 0 }
+  if (peekErr) throw new Error(peekErr.message)
+  if (!candidateIds || candidateIds.length === 0) return { sent: 0, failed: 0 }
+
+  const ids = candidateIds.map(r => r.id as string)
+  const { data: claimedRows, error: claimErr } = await db
+    .from('scheduled_emails')
+    .update({ status: 'sending' })
+    .in('id', ids)
+    .eq('status', 'pending')
+    .select('*')
+
+  if (claimErr) throw new Error(claimErr.message)
+  const dueEmails = claimedRows ?? []
+  if (dueEmails.length === 0) return { sent: 0, failed: 0 }
 
   let sent = 0
   let failed = 0

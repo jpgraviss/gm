@@ -218,6 +218,14 @@ export const POST = withErrorHandler('calendar/bookings POST', async (req) => {
     .single()
 
   if (error) {
+    // Unique constraint on (booking_type_id, date, start_time) — the second
+    // of two concurrent visitors hits this instead of double-booking.
+    if ((error as { code?: string }).code === '23505') {
+      return NextResponse.json(
+        { error: 'This time slot was just booked by someone else. Please choose another.' },
+        { status: 409 },
+      )
+    }
     throw new Error(error.message)
   }
 

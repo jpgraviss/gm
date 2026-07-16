@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
+import { useAuth } from '@/contexts/AuthContext'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   Inbox as InboxIcon, Search, RefreshCw, MessageSquare, Mail, Zap,
@@ -16,7 +17,7 @@ interface UnifiedThread {
   contactName: string
   company?: string
   lastMessage: {
-    source: 'ticket' | 'sequence' | 'broadcast' | 'activity'
+    source: 'ticket' | 'sequence' | 'broadcast' | 'activity' | 'gmail'
     title: string
     preview: string
     timestamp: string
@@ -32,29 +33,35 @@ const SOURCE_META: Record<string, { label: string; icon: React.ReactNode; color:
   sequence:  { label: 'Sequence',  icon: <Zap size={11} />,           color: '#8b5cf6' },
   broadcast: { label: 'Broadcast', icon: <Megaphone size={11} />,     color: '#f59e0b' },
   activity:  { label: 'Activity',  icon: <Mail size={11} />,          color: '#015035' },
+  gmail:     { label: 'Gmail',     icon: <Mail size={11} />,          color: '#dc2626' },
 }
 
 export default function UnifiedInboxPage() {
   const { toast } = useToast()
+  const { gmailToken, gmailEmail } = useAuth()
   const [threads, setThreads] = useState<UnifiedThread[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<string>('all')
   const [selected, setSelected] = useState<UnifiedThread | null>(null)
 
-  useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  function load() {
+  const load = useCallback(() => {
     setLoading(true)
-    fetch('/api/inbox/unified?limit=200')
+    const params = new URLSearchParams({ limit: '200' })
+    if (gmailToken && gmailEmail) {
+      params.set('gmailToken', gmailToken)
+      params.set('gmailEmail', gmailEmail)
+    }
+    fetch(`/api/inbox/unified?${params}`)
       .then(r => (r.ok ? r.json() : []))
       .then(data => { if (Array.isArray(data)) setThreads(data) })
       .catch(() => toast('Failed to load inbox', 'error'))
       .finally(() => setLoading(false))
-  }
+  }, [toast, gmailToken, gmailEmail])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   const filtered = useMemo(() => {
     let list = threads
@@ -114,7 +121,7 @@ export default function UnifiedInboxPage() {
             />
           </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5">
-            {(['all', 'ticket', 'sequence', 'broadcast', 'activity'] as const).map(s => (
+            {(['all', 'gmail', 'ticket', 'sequence', 'broadcast', 'activity'] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setSourceFilter(s)}
@@ -287,6 +294,15 @@ export default function UnifiedInboxPage() {
                           className="flex items-center justify-between p-3 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                         >
                           <span className="flex items-center gap-2"><Megaphone size={14} /> Open broadcasts</span>
+                          <ChevronRight size={14} className="text-gray-400" />
+                        </Link>
+                      )}
+                      {selected.sources.includes('gmail') && (
+                        <Link
+                          href="/inbox"
+                          className="flex items-center justify-between p-3 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <span className="flex items-center gap-2"><Mail size={14} /> Open Gmail</span>
                           <ChevronRight size={14} className="text-gray-400" />
                         </Link>
                       )}

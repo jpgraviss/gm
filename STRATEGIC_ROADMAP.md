@@ -109,11 +109,11 @@ Core features every agency CRM has that we don't.
 | B2 | ~~Custom fields on contacts, companies, deals~~ — field-definition library (`/admin/custom-fields`) + jsonb storage, wired into display and edit views for all three entities, DONE. Edit-only for v1 (not on the create panels) | 4 days |
 | B3 | ~~Smart lists~~ — saved filter criteria per list (contacts/companies/deals), re-applied against live data on click, DONE | 3 days |
 | B4 | ~~Bulk operations~~ — bulk tag, bulk reassign, bulk delete on CRM lists DONE (contacts/companies/deals). Bulk email still missing (needs a send-path decision) | 3 days |
-| B5 | **Email marketing builder** — drag-drop editor, templates, bulk send, A/B testing. Use Resend Broadcast API + template DB | 6 days |
-| B6 | **Forms builder** — embedded lead-capture forms, webhook to CRM | 4 days |
-| B7 | **Landing pages** — simple template-based landing page builder (not full Webflow) | 6 days |
-| B8 | **SMS channel** — Twilio integration, bulk SMS, 2-way in unified inbox | 4 days |
-| B9 | **Unified inbox** — merge Gmail, SMS, tickets into one conversation view keyed by contact | 5 days |
+| B5 | ~~Email marketing builder~~ — real block-based drag-drop editor (`EmailBlockEditor`, react-beautiful-dnd), templates, 15-field audience filtering, A/B subject testing with winner tracking, real Resend sends. DONE (this roadmap entry was stale — already built) | 6 days |
+| B6 | ~~Forms builder~~ — 14 field types incl. conditional logic + multi-step, real CRM/webhook/notification/confirmation wiring, embeddable iframe snippet. DONE (stale entry — already built) | 4 days |
+| B7 | **Landing pages** — a real block-based page builder already exists (`app/funnels/editor`) but framed as "funnels," always nested under a funnel rather than standalone, no custom domains, reorder is up/down buttons not drag-drop. Partially done — repositioning/renaming + standalone mode is the real remaining gap, not a from-scratch build | 6 days |
+| B8 | **SMS channel** — Twilio integration, bulk SMS, 2-way in unified inbox. Confirmed 100% missing (zero references anywhere in the codebase) — needs a Twilio account decision before building, not something to start unilaterally | 4 days |
+| B9 | ~~Unified inbox~~ — merges tickets/sequences/broadcasts/CRM-activities/Gmail into one contact-keyed view. DONE. SMS merging blocked on B8 | 5 days |
 
 ### PHASE C — SaaS readiness for reselling (8 weeks)
 This is the big one. Required before you can sell to another agency.

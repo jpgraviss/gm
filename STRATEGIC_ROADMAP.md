@@ -25,10 +25,10 @@
 1. ~~QuickBooks sync~~ — Removed. Native invoicing in place.
 2. ~~Automation actions are no-ops~~ — All 28 actions implemented and functional.
 3. ~~RBAC not enforced~~ — Middleware auth + requireRole guards on critical routes.
-4. **No payment processing** — no Stripe integration for clients to pay invoices
+4. ~~No payment processing~~ — Stripe Checkout integration shipped (B1): "Pay Now"/"Copy Payment Link" on invoices, webhook-driven paid-status updates.
 5. ~~No real ticket routing rules~~ — Routing rules implemented (priority escalation, company rep matching, service-type unit assignment).
 6. ~~Sequences lack tracking~~ — Full delivery tracking: open/click/bounce/unsubscribe via Resend webhooks.
-7. **Dashboard queries load full tables** — will break at 10K contacts
+7. ~~Dashboard queries load full tables~~ — All growing-table endpoints now cursor-paginated (100/page default) with frontend pages following the cursor to completion instead of truncating.
 
 ---
 
@@ -96,19 +96,19 @@ Must-do before anything else. These are things we claim to have but don't actual
 | A2 | ~~QuickBooks sync~~ — **DONE.** Removed QB, native invoicing in place. | ✅ |
 | A3 | ~~Enforce RBAC in API routes~~ — **DONE.** Middleware auth + requireRole on critical routes. | ✅ |
 | A4 | ~~Sequence tracking~~ — **DONE.** Full delivery tracking via Resend webhooks. | ✅ |
-| A5 | **Dashboard pagination** — add `.limit(100)` and cursor pagination to all list endpoints | 2 days |
+| A5 | ~~Dashboard pagination~~ — **DONE.** All growing-table list endpoints (`crm_activities`, sequence enrollments, tracked keywords, reviews, tasks/tickets/projects/proposals, contracts) now cursor-paginated + frontend follows to completion via `fetchAllPages()`. | ✅ |
 | A6 | ~~Ticket routing rules~~ — **DONE.** Priority escalation + company rep + service-type routing. | ✅ |
-| A7 | **Contract template builder UI** — `document_templates` table exists, add CRUD page | 3 days |
+| A7 | ~~Contract template builder UI~~ — **DONE.** Full CRUD at `/admin/document-templates`, wired into Sidebar + Cmd+K. | ✅ |
 
 ### PHASE B — Core agency features we're missing (4 weeks)
 Core features every agency CRM has that we don't.
 
 | # | Item | Effort |
 |---|---|---|
-| B1 | **Stripe integration for client invoicing** — invoice payment link, card on file, auto-collect | 4 days |
-| B2 | **Custom fields on contacts, companies, deals** — JSONB column + schema-defined field library | 4 days |
-| B3 | **Smart lists** — saved dynamic filters that auto-update (e.g. "Hot leads touched in last 7 days") | 3 days |
-| B4 | **Bulk operations** — bulk email, bulk tag, bulk reassign, bulk delete on CRM lists | 3 days |
+| B1 | ~~Stripe integration for client invoicing~~ — Checkout Session payment link + webhook, DONE. Card-on-file/auto-collect not built (Checkout is one-time payment per invoice, not a saved payment method) | 4 days |
+| B2 | ~~Custom fields on contacts, companies, deals~~ — field-definition library (`/admin/custom-fields`) + jsonb storage, wired into display and edit views for all three entities, DONE. Edit-only for v1 (not on the create panels) | 4 days |
+| B3 | ~~Smart lists~~ — saved filter criteria per list (contacts/companies/deals), re-applied against live data on click, DONE | 3 days |
+| B4 | ~~Bulk operations~~ — bulk tag, bulk reassign, bulk delete on CRM lists DONE (contacts/companies/deals). Bulk email still missing (needs a send-path decision) | 3 days |
 | B5 | **Email marketing builder** — drag-drop editor, templates, bulk send, A/B testing. Use Resend Broadcast API + template DB | 6 days |
 | B6 | **Forms builder** — embedded lead-capture forms, webhook to CRM | 4 days |
 | B7 | **Landing pages** — simple template-based landing page builder (not full Webflow) | 6 days |

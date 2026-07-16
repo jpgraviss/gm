@@ -2,6 +2,31 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getValidAccessToken, deleteGoogleEvent, createGoogleEvent, type CalendarSettings } from '@/lib/google-calendar'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function verifyCalendarOwnership(req: NextRequest, db: any, calendarSlug: string): Promise<NextResponse | null> {
+  const authHeader = req.headers.get('authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (!token) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  const { data: { user } } = await db.auth.getUser(token)
+  if (!user?.email) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
+  const { data: calSettings } = await db
+    .from('calendar_settings')
+    .select('slug')
+    .eq('user_email', user.email)
+    .single()
+
+  if (!calSettings || calSettings.slug !== calendarSlug) {
+    return NextResponse.json({ error: 'Not authorized to modify this booking' }, { status: 403 })
+  }
+  return null
+}
 
 // PATCH /api/bookings/[id] — cancel or update a booking
 export const PATCH = withErrorHandler('bookings/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
@@ -15,27 +40,8 @@ export const PATCH = withErrorHandler('bookings/[id] PATCH', async (req, { param
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
   }
 
-  // Verify caller owns this calendar (check auth header/cookie)
-  const authHeader = req.headers.get('authorization')
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-  if (!token) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
-  const { data: { user } } = await db.auth.getUser(token)
-  if (!user?.email) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
-
-  // Verify user owns the calendar this booking belongs to
-  const { data: calSettings } = await db
-    .from('calendar_settings')
-    .select('slug')
-    .eq('user_email', user.email)
-    .single()
-
-  if (!calSettings || calSettings.slug !== booking.calendar_slug) {
-    return NextResponse.json({ error: 'Not authorized to modify this booking' }, { status: 403 })
-  }
+  const ownershipDenied = await verifyCalendarOwnership(req, db, booking.calendar_slug)
+  if (ownershipDenied) return ownershipDenied
 
   if (body.status === 'cancelled') {
     // Delete Google Calendar event if present
@@ -181,9 +187,30 @@ export const PATCH = withErrorHandler('bookings/[id] PATCH', async (req, { param
   return NextResponse.json(data)
 })
 
-export const DELETE = withErrorHandler('bookings/[id] DELETE', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withErrorHandler('bookings/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const db = createServiceClient()
+
+  // Previously had zero auth at all — anyone who obtained/guessed a
+  // booking id could permanently delete any booking. A booking can live in
+  // either of two tables depending on which flow created it: legacy
+  // `bookings` rows belong to one staff member's personal calendar (same
+  // ownership model as PATCH above); `booking_type_bookings` rows belong to
+  // an org-wide, not-per-staff booking type, so any authenticated staff
+  // member managing the shared calendar is authorized — just require real
+  // staff auth for those, not a specific-owner match.
+  const { data: legacyBooking } = await db.from('bookings').select('calendar_slug').eq('id', id).maybeSingle()
+  if (legacyBooking) {
+    const ownershipDenied = await verifyCalendarOwnership(req, db, legacyBooking.calendar_slug)
+    if (ownershipDenied) return ownershipDenied
+  } else {
+    const { data: newBooking } = await db.from('booking_type_bookings').select('id').eq('id', id).maybeSingle()
+    if (!newBooking) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+    }
+    const denied = await requireRole(req, 'Team Member')
+    if (denied) return denied
+  }
 
   const { error: e1 } = await db.from('bookings').delete().eq('id', id)
   const { error: e2 } = await db.from('booking_type_bookings').delete().eq('id', id)

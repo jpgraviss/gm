@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 const PAGE_SIZE = 100
 
@@ -102,6 +103,9 @@ function mapEngagement(type: EngagementType, e: HubSpotEngagement) {
 
 // GET: Preview engagements from HubSpot
 export const GET = withErrorHandler('integrations/hubspot/engagements GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(
@@ -144,6 +148,9 @@ export const GET = withErrorHandler('integrations/hubspot/engagements GET', asyn
 
 // POST: Import engagements from HubSpot into crm_activities
 export const POST = withErrorHandler('integrations/hubspot/engagements POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(

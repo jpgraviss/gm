@@ -121,6 +121,7 @@ export const POST = withErrorHandler('portal-clients POST', async (req) => {
       email:         body.email ?? '',
       portal_role:   body.role ?? 'Viewer',
       portal_config: portalConfig,
+      services:      body.services ?? [],
     })
     .select()
     .single()

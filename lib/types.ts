@@ -105,6 +105,7 @@ export interface Deal {
   contactId?: string | null
   dealScore?: number
   dealScoreFactors?: { label: string; detail: string; positive: boolean }[]
+  customFields?: Record<string, string>
 }
 
 export interface ProposalLineItem {
@@ -477,6 +478,7 @@ export interface CRMContact {
   lifecycleStage?: ContactLifecycleStage
   leadStatus?: ContactLeadStatus
   hubspotData?: HubSpotData
+  customFields?: Record<string, string>
 }
 
 export interface CRMCompany {
@@ -498,6 +500,32 @@ export interface CRMCompany {
   lastActivity?: string
   totalDealValue: number
   notes?: string
+  customFields?: Record<string, string>
+}
+
+export type CustomFieldEntityType = 'contacts' | 'companies' | 'deals'
+export type CustomFieldType = 'text' | 'number' | 'date' | 'boolean' | 'select'
+
+export interface CustomFieldDefinition {
+  id: string
+  entityType: CustomFieldEntityType
+  fieldKey: string
+  label: string
+  fieldType: CustomFieldType
+  options: string[]
+  sortOrder: number
+  createdDate: string
+}
+
+export type SavedFilterEntityType = 'contacts' | 'companies' | 'deals'
+
+export interface SavedFilter {
+  id: string
+  name: string
+  entityType: SavedFilterEntityType
+  criteria: Record<string, string>
+  createdBy?: string
+  createdDate: string
 }
 
 export interface CRMActivity {

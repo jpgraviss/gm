@@ -1,23 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 
 export const GET = withErrorHandler('reputation/reviews GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
 
   const source = searchParams.get('source')
   const rating = searchParams.get('rating')
   const status = searchParams.get('status')
+  const pag = { ...parsePagination(req), orderBy: 'date' }
 
-  let query = db
-    .from('reviews')
-    .select('*')
-    .order('date', { ascending: false })
+  let query = db.from('reviews').select('*')
 
   if (source) query = query.eq('source', source)
   if (rating) query = query.eq('rating', parseInt(rating, 10))
   if (status) query = query.eq('status', status)
+  query = applyCursor(query, pag)
 
   const { data, error } = await query
 
@@ -26,10 +30,14 @@ export const GET = withErrorHandler('reputation/reviews GET', async (req) => {
     return NextResponse.json([], { status: 200 })
   }
 
-  return NextResponse.json(data ?? [])
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'date')
+  return paginatedJson(rows, nextCursor)
 })
 
 export const POST = withErrorHandler('reputation/reviews POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
   let body: Record<string, unknown>
   try {

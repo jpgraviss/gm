@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import NewTicketPanel, { type NewTicketFormData } from '@/components/crm/NewTicketPanel'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import { downloadCsv } from '@/lib/csv-export'
@@ -160,7 +162,7 @@ function TicketPanel({
           <div className="flex-shrink-0 mx-4 mt-3">
             <div className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
               <Zap size={13} className="text-amber-500 flex-shrink-0" />
-              <p className="text-xs text-amber-800 flex-1">Unassigned — assign this ticket to auto-create a project task</p>
+              <p className="text-xs text-amber-800 flex-1">Unassigned — mark as In Progress to start working this ticket</p>
               <button
                 onClick={() => onUpdateStatus(ticket.id, 'In Progress')}
                 className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 transition-colors flex-shrink-0"
@@ -265,6 +267,7 @@ function TicketPanel({
 
 export default function TicketsPage() {
   const { toast } = useToast()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [localTickets, setLocalTickets] = useState<Ticket[]>([])
   const [selected, setSelected] = useState<Ticket | null>(null)
@@ -276,12 +279,24 @@ export default function TicketsPage() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
 
   useEffect(() => {
-    fetch('/api/tickets')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalTickets(data) })
+    // /api/tickets is cursor-paginated (100/page) — fetchAllPages() follows
+    // X-Next-Cursor to completion instead of a raw fetch() that would
+    // silently show only the newest page as "the full ticket list."
+    fetchAllPages<Ticket>('/api/tickets')
+      .then(setLocalTickets)
       .catch(() => toast('Failed to load tickets', 'error'))
       .finally(() => setLoading(false))
   }, [])
+
+  // Deep-link support for global search (Cmd+K) results, which link here
+  // with ?open=<id>.
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (openId && localTickets.length > 0 && !selected) {
+      const match = localTickets.find(t => t.id === openId)
+      if (match) setSelected(match)
+    }
+  }, [searchParams, localTickets, selected])
 
   function sendReply(id: string, body: string, isInternal: boolean) {
     const now = new Date()
@@ -294,12 +309,20 @@ export default function TicketsPage() {
       timestamp,
     }
     const updatedDate = now.toISOString().split('T')[0]
-    setLocalTickets(prev => prev.map(t =>
-      t.id === id ? { ...t, messages: [...t.messages, newMsg], updatedDate } : t
-    ))
-    const updatedTicket = localTickets.find(t => t.id === id)
-    if (updatedTicket) {
-      const newMessages = [...updatedTicket.messages, newMsg]
+
+    // Derives newMessages from `prev`, the functional update's true latest
+    // state, not the `localTickets` closure — two replies sent in quick
+    // succession (before a re-render) previously both read the same stale
+    // base array, so whichever PATCH resolved last silently dropped the
+    // other server-side.
+    let newMessages: TicketMessage[] | null = null
+    setLocalTickets(prev => prev.map(t => {
+      if (t.id !== id) return t
+      newMessages = [...t.messages, newMsg]
+      return { ...t, messages: newMessages, updatedDate }
+    }))
+
+    if (newMessages) {
       fetch(`/api/tickets/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

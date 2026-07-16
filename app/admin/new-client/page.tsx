@@ -239,24 +239,54 @@ export default function NewClientPage() {
         }),
       })
 
-      const portalRes = await fetch('/api/portal-clients', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          company: data.companyName,
-          email: data.email,
-          contact: `${data.firstName} ${data.lastName}`,
-          service: data.services.join(', '),
-          services: data.services,
-          companyId,
-          portalConfig: {
-            showAgreement: data.showAgreement,
-            showInvoices: data.showInvoices,
-            showReports: data.showReports,
-          },
-        }),
-      })
-      if (!portalRes.ok) throw new Error('Failed to create portal client')
+      const portalConfig = {
+        showAgreement: data.showAgreement,
+        showInvoices: data.showInvoices,
+        showReports: data.showReports,
+      }
+
+      // /api/portal-clients/invite creates the portal_clients row AND the
+      // working login (magic-link token + invite email) in one call; it
+      // 409s if the row already exists. Calling plain /api/portal-clients
+      // POST first (which also creates the row) and then invite would
+      // always hit that 409 — the invite email would never send and the
+      // client would have no way to log in despite the "success" toast.
+      // Call exactly one of the two, matching the pattern already used by
+      // admin/portal-management's addCompany().
+      if (data.createPortalLogin) {
+        const inviteRes = await fetch('/api/portal-clients/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: `${data.firstName} ${data.lastName}`,
+            email: data.email,
+            company: data.companyName,
+            companyId,
+            role: 'Viewer',
+            services: data.services,
+            portalConfig,
+          }),
+        })
+        if (!inviteRes.ok) {
+          const err = await inviteRes.json().catch(() => ({}))
+          throw new Error(err.error || 'Failed to create portal login')
+        }
+      } else {
+        const portalRes = await fetch('/api/portal-clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            company: data.companyName,
+            email: data.email,
+            contact: `${data.firstName} ${data.lastName}`,
+            service: data.services.join(', '),
+            services: data.services,
+            companyId,
+            portalConfig,
+          }),
+        })
+        if (!portalRes.ok) throw new Error('Failed to create portal client')
+      }
 
       await fetch('/api/delivery/workflow', {
         method: 'POST',
@@ -267,19 +297,6 @@ export default function NewClientPage() {
           serviceType: data.services[0] || SERVICES[0],
         }),
       })
-
-      if (data.createPortalLogin) {
-        await fetch('/api/portal-clients/invite', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: `${data.firstName} ${data.lastName}`,
-            email: data.email,
-            company: data.companyName,
-            role: 'Viewer',
-          }),
-        }).catch(() => {})
-      }
 
       toast('Client created successfully', 'success')
       router.push(`/crm/pipeline`)

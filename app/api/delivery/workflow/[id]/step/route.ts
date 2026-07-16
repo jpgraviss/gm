@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
+import { requireRole } from '@/lib/rbac'
 
 const STEP_STATUSES = ['Pending', 'In Progress', 'Completed', 'Skipped']
 
@@ -45,6 +46,9 @@ function resolveMetaColumn(step: number, camelKey: string): string | null {
 }
 
 export const PATCH = withErrorHandler('delivery/workflow/[id]/step PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   if (!id) return NextResponse.json({ error: 'Missing workflow id' }, { status: 400 })
 

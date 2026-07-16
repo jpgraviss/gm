@@ -5,12 +5,16 @@ import {
   getGA4TrafficSources,
 } from '@/lib/google-analytics'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 /**
  * GET /api/integrations/ga4/report?propertyId=123456789&days=28
  * Returns a summary card + top pages + traffic sources for a GA4 property.
  */
 export const GET = withErrorHandler('integrations/ga4/report GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { searchParams } = new URL(req.url)
   const propertyId = searchParams.get('propertyId')
   const days = parseInt(searchParams.get('days') ?? '28', 10)

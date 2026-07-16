@@ -24,7 +24,10 @@ function mapBinding(row: any) {
   }
 }
 
-export const GET = withErrorHandler('client-integrations/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('client-integrations/[id] GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
   const { data } = await db.from('client_integrations').select('*').eq('id', id).single()

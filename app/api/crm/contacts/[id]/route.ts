@@ -31,6 +31,7 @@ function mapContact(row: any) {
     createdDate:    row.created_date ?? '',
     lastActivity:   row.last_activity ?? undefined,
     hubspotData:    row.hubspot_data ?? undefined,
+    customFields:   row.custom_fields ?? {},
   }
 }
 
@@ -75,6 +76,7 @@ export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) =>
       contact_notes:   body.contactNotes ?? [],
       contact_tasks:   body.contactTasks ?? [],
       last_activity:   body.lastActivity ?? null,
+      custom_fields:   body.customFields ?? {},
     })
     .eq('id', id)
     .select()
@@ -101,6 +103,7 @@ export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx
     tags: { type: 'array' },
     contactNotes: { type: 'array' },
     contactTasks: { type: 'array' },
+    owner: { type: 'string', maxLength: 200 },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -110,6 +113,9 @@ export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx
   if (body.lastActivity !== undefined) updates.last_activity = body.lastActivity
   if (body.contactNotes !== undefined) updates.contact_notes = body.contactNotes
   if (body.contactTasks !== undefined) updates.contact_tasks = body.contactTasks
+  if (body.owner !== undefined) updates.owner = body.owner
+  if (body.ownerId !== undefined) updates.owner_id = body.ownerId
+  if (body.customFields !== undefined) updates.custom_fields = body.customFields
   const { data, error } = await db
     .from('crm_contacts')
     .update(updates)
@@ -127,6 +133,14 @@ export const DELETE = withErrorHandler('crm/contacts/[id] DELETE', async (req, c
   const denied = await requireRole(req, 'Dept Manager')
   if (denied) return denied
   const db = createServiceClient()
+
+  // deals.contact_id is ON DELETE SET NULL, but deals.contact is a
+  // separate denormalized {id,name,email,phone,title} blob the deal card
+  // renders directly (with working mailto:/tel: links) — the FK nulling
+  // doesn't touch it, so a deal kept showing the deleted contact's full
+  // details indefinitely, indistinguishable from a live contact.
+  await db.from('deals').update({ contact: null }).eq('contact_id', id)
+
   const { error } = await db.from('crm_contacts').delete().eq('id', id)
   if (error) {
     throw new Error(error?.message || 'Failed to delete contact')

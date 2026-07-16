@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { fetchContracts, fetchCrmContacts, fetchProposals } from '@/lib/supabase'
 import { formatCurrency, renewalStatusColors, formatDate } from '@/lib/utils'
+import { contractMonthlyValue } from '@/lib/metrics'
 import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
@@ -75,7 +76,12 @@ function RenewalProposalSidebar({
   const [includeSetup, setIncludeSetup] = useState(false)
   const [setupFee, setSetupFee] = useState(0)
 
-  const baseMonthly = contract ? contract.value : renewal.renewalValue
+  // contract.value is billing-structure-relative, not always a monthly
+  // figure — using it directly showed "Current Monthly: $12,000" for a
+  // $12,000/yr Annual contract (12x too high), and computed the same
+  // wrong Total Contract Value for the generated renewal proposal a rep
+  // could actually quote to a client.
+  const baseMonthly = contract ? contractMonthlyValue(contract) : renewal.renewalValue
   const newMonthly = Math.round(baseMonthly * (1 + increasePercent / 100))
   const newContractTotal = newMonthly * months
   const totalWithSetup = newContractTotal + setupFee
@@ -743,15 +749,27 @@ export default function RenewalsPage() {
   }), [localRenewals])
 
   function startRenewal(id: string) {
+    const prevStatus = localRenewals.find(r => r.id === id)?.status
     setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: 'In Progress' as const } : r))
     fetch(`/api/renewals/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'In Progress' }),
-    }).catch(() => toast('Failed to start renewal', 'error'))
+    })
+      .then(res => {
+        if (!res.ok) {
+          setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: prevStatus ?? r.status } : r))
+          toast('Failed to start renewal', 'error')
+        }
+      })
+      .catch(() => {
+        setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: prevStatus ?? r.status } : r))
+        toast('Failed to start renewal', 'error')
+      })
   }
 
   function archiveRenewal(id: string) {
+    const prevStatus = localRenewals.find(r => r.id === id)?.status
     setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: 'Renewed' as const } : r))
     fetch(`/api/renewals/${id}`, {
       method: 'PATCH',
@@ -759,10 +777,17 @@ export default function RenewalsPage() {
       body: JSON.stringify({ status: 'Renewed' }),
     })
       .then(res => {
-        if (res.ok) toast('Renewal archived', 'success')
-        else toast('Failed to archive renewal', 'error')
+        if (res.ok) {
+          toast('Renewal archived', 'success')
+        } else {
+          setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: prevStatus ?? r.status } : r))
+          toast('Failed to archive renewal', 'error')
+        }
       })
-      .catch(() => toast('Failed to archive renewal', 'error'))
+      .catch(() => {
+        setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: prevStatus ?? r.status } : r))
+        toast('Failed to archive renewal', 'error')
+      })
   }
 
   async function logRenewal(data: LogRenewalPayload) {
@@ -776,10 +801,11 @@ export default function RenewalsPage() {
         const saved = await res.json()
         setLocalRenewals(prev => [saved, ...prev])
       } else {
-        setLocalRenewals(prev => [{ id: `ren-${Date.now()}`, ...data } as Renewal, ...prev])
+        const err = await res.json().catch(() => ({}))
+        toast(err.error || 'Failed to log renewal', 'error')
       }
     } catch {
-      setLocalRenewals(prev => [{ id: `ren-${Date.now()}`, ...data } as Renewal, ...prev])
+      toast('Failed to log renewal', 'error')
     }
   }
 
@@ -1096,6 +1122,7 @@ export default function RenewalsPage() {
           renewal={renewalProposalFor}
           onClose={() => setRenewalProposalFor(null)}
           onSave={(renewalId, proposalData) => {
+            const prevRenewal = localRenewals.find(r => r.id === renewalId)
             setLocalRenewals(prev => prev.map(r => r.id === renewalId ? { ...r, status: 'In Progress' as const, proposalData } : r))
             fetch(`/api/renewals/${renewalId}`, {
               method: 'PATCH',
@@ -1106,10 +1133,14 @@ export default function RenewalsPage() {
                 if (res.ok) {
                   toast('Renewal proposal saved', 'success')
                 } else {
+                  if (prevRenewal) setLocalRenewals(prev => prev.map(r => r.id === renewalId ? prevRenewal : r))
                   toast('Failed to save renewal proposal', 'error')
                 }
               })
-              .catch(() => toast('Failed to save renewal proposal', 'error'))
+              .catch(() => {
+                if (prevRenewal) setLocalRenewals(prev => prev.map(r => r.id === renewalId ? prevRenewal : r))
+                toast('Failed to save renewal proposal', 'error')
+              })
             setRenewalProposalFor(null)
           }}
           contracts={contracts}

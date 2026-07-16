@@ -14,6 +14,26 @@ export const POST = withErrorHandler('auth/profile POST', async (req) => {
   const db = createServiceClient()
   const emailLower = email.toLowerCase().trim()
 
+  // This route sits under proxy.ts's public /api/auth/ prefix (it runs
+  // right after a fresh magic-link/OAuth sign-in, before the app's own
+  // session cookie exists yet) — but it previously trusted the `email`
+  // body field with no verification at all, letting anyone POST an
+  // arbitrary address to enumerate the full staff/client roster (name,
+  // role, isAdmin) and silently re-provision an active team_members row
+  // for any @gravissmarketing.com address that still has a live Supabase
+  // Auth user, even one an admin had deliberately deleted from
+  // team_members. Require the caller to actually hold a valid Supabase
+  // session for the email they're asking about.
+  const authHeader = req.headers.get('authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (!token) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  const { data: { user: verifiedUser }, error: tokenErr } = await db.auth.getUser(token)
+  if (tokenErr || !verifiedUser?.email || verifiedUser.email.toLowerCase() !== emailLower) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   // Check team_members (staff) — case-insensitive
   const { data: teamRow } = await db
     .from('team_members')
@@ -22,6 +42,9 @@ export const POST = withErrorHandler('auth/profile POST', async (req) => {
     .single()
 
   if (teamRow) {
+    if (teamRow.status !== 'active') {
+      return NextResponse.json({ error: 'Your account is not active. Contact an administrator.' }, { status: 403 })
+    }
     return NextResponse.json({
       user: {
         id:       teamRow.id,

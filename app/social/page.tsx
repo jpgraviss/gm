@@ -137,7 +137,7 @@ export default function SocialMediaPage() {
   const startDay = startDayOfWeek(calYear, calMonth)
   const todayStr = now.toISOString().slice(0, 10)
 
-  async function createPost(data: { companyName: string; content: string; platforms: SocialPlatform[]; scheduledAt?: string; hashtags?: string[]; linkUrl?: string }) {
+  async function createPost(data: { companyName: string; content: string; platforms: SocialPlatform[]; scheduledAt?: string; hashtags?: string[]; linkUrl?: string; status?: PostStatus }) {
     try {
       const res = await fetch('/api/social-posts', {
         method: 'POST',
@@ -452,7 +452,7 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
   post: SocialPost | null
   clients: string[]
   onClose: () => void
-  onCreate: (data: { companyName: string; content: string; platforms: SocialPlatform[]; scheduledAt?: string; hashtags?: string[]; linkUrl?: string }) => void
+  onCreate: (data: { companyName: string; content: string; platforms: SocialPlatform[]; scheduledAt?: string; hashtags?: string[]; linkUrl?: string; status?: PostStatus }) => void
   onUpdate: (id: string, patch: Partial<SocialPost>) => void
   onDelete: (id: string) => void
   onPublish: (id: string) => void
@@ -477,7 +477,7 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
     if (isEditing) {
       onUpdate(post.id, { content, platforms, scheduledAt: scheduledAt || undefined, hashtags: tags, linkUrl: linkUrl || undefined, status })
     } else {
-      onCreate({ companyName: company, content, platforms, scheduledAt: scheduledAt || undefined, hashtags: tags, linkUrl: linkUrl || undefined })
+      onCreate({ companyName: company, content, platforms, scheduledAt: scheduledAt || undefined, hashtags: tags, linkUrl: linkUrl || undefined, status })
     }
   }
 

@@ -16,6 +16,14 @@ import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 // their own contract to an arbitrary different company.
 const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['status', 'clientSigned'])
 
+// VALID_TRANSITIONS below governs which transitions are legal at all, for
+// any caller — it does NOT distinguish who is allowed to make a given
+// legal one. 'Countersign Needed' -> 'Fully Executed' is a real staff-only
+// transition (it means the internal side has now also signed), but
+// without this a portal client could PATCH straight to it, skipping the
+// actual internal countersignature process entirely.
+const PORTAL_CLIENT_ALLOWED_STATUSES = new Set(['Signed by Client', 'Expired', 'Draft'])
+
 // Valid status transitions — keys are current status, values are allowed next statuses
 const VALID_TRANSITIONS: Record<string, string[]> = {
   'Draft':              ['Sent', 'Expired', 'Terminated'],
@@ -103,10 +111,14 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
   // company/companyId to a different company's, silently reassigning
   // their own contract (with fully attacker-controlled value/billing/
   // dates) into another client's portal view.
-  if (!(await isStaffCaller(req))) {
+  const staffCaller = await isStaffCaller(req)
+  if (!staffCaller) {
     const disallowed = Object.keys(body).filter(k => !PORTAL_CLIENT_EDITABLE_FIELDS.has(k))
     if (disallowed.length > 0) {
       return NextResponse.json({ error: `Not permitted to update: ${disallowed.join(', ')}` }, { status: 403 })
+    }
+    if (body.status !== undefined && !PORTAL_CLIENT_ALLOWED_STATUSES.has(body.status)) {
+      return NextResponse.json({ error: `Not permitted to set status to: ${body.status}` }, { status: 403 })
     }
   }
 

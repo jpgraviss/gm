@@ -24,10 +24,12 @@ import {
   FileText, ScrollText, User, ChevronRight, ChevronLeft, Plus,
   CheckCircle2, Circle, AlertCircle, Settings, Upload,
   GripVertical, Pencil, Trash2, Check, Download, Search, Link2,
-  LayoutGrid, List, ArrowUpDown,
+  LayoutGrid, List, ArrowUpDown, UserCog,
 } from 'lucide-react'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import SmartListBar from '@/components/crm/SmartListBar'
+import CustomFieldsSection from '@/components/crm/CustomFieldsSection'
 
 // ─── Pipeline Config Types ────────────────────────────────────────────────────
 
@@ -103,7 +105,7 @@ function DealCard({
             )}
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-gray-900 truncate" title={deal.company}>{deal.company}</p>
-              <p className="text-xs text-gray-400 mt-0.5 truncate" title={deal.contact.name}>{deal.contact.name}</p>
+              <p className="text-xs text-gray-400 mt-0.5 truncate" title={deal.contact?.name}>{deal.contact?.name || 'No contact linked'}</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-1 mb-2">
@@ -294,6 +296,7 @@ function DealPanel({
     stage: deal.stage,
     serviceTypes: dealServiceTypes as string[],
   })
+  const [customFields, setCustomFields] = useState<Record<string, string>>(deal.customFields ?? {})
   const dealAny = deal as LocalDeal & { companyId?: string; contactId?: string }
   const company = dealAny.companyId
     ? crmCompanies.find(c => c.id === dealAny.companyId)
@@ -327,6 +330,7 @@ function DealPanel({
       stage: editForm.stage,
       serviceType: selectedTypes[0] as LocalDeal['serviceType'],
       serviceTypes: selectedTypes as LocalDeal['serviceTypes'],
+      customFields,
     }
     onUpdateDeal(deal.id, updates)
     setEditing(false)
@@ -373,15 +377,21 @@ function DealPanel({
     setLocalActivities(prev => [entry, ...prev])
     setLoggingActivity(false)
     setTab('activity')
-    // Previously never persisted — logging an activity from the deal panel
-    // only ever updated local state, so it silently vanished on refresh.
+    // Previously never checked res.ok — a failed persist (validation
+    // error, transient failure) looked identical to success and silently
+    // never made it to the server, vanishing on next reload. Matches
+    // handleUpdateActivity's revert-and-toast pattern right below.
     try {
-      await fetch('/api/crm/activities', {
+      const res = await fetch('/api/crm/activities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(entry),
       })
-    } catch { console.warn('Failed to persist activity to server') }
+      if (!res.ok) throw new Error()
+    } catch {
+      setLocalActivities(prev => prev.filter(a => a.id !== entry.id))
+      toast('Failed to save activity', 'error')
+    }
   }
 
   async function handleUpdateActivity(id: string, updates: { title: string; body: string }) {
@@ -431,7 +441,7 @@ function DealPanel({
             <div className="flex items-center gap-1">
               {onUpdateDeal && (
                 <button
-                  onClick={() => { setEditing(e => !e); setEditForm({ value: String(deal.value), probability: String(deal.probability), closeDate: deal.closeDate, stage: deal.stage, serviceTypes: (deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]) as string[] }) }}
+                  onClick={() => { setEditing(e => !e); setEditForm({ value: String(deal.value), probability: String(deal.probability), closeDate: deal.closeDate, stage: deal.stage, serviceTypes: (deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]) as string[] }); setCustomFields(deal.customFields ?? {}) }}
                   className="p-2 rounded-lg hover:bg-gray-50"
                   title="Edit deal"
                 >
@@ -560,6 +570,14 @@ function DealPanel({
                 </div>
               </div>
 
+              <CustomFieldsSection
+                entityType="deals"
+                values={editing ? customFields : (deal.customFields ?? {})}
+                editing={editing}
+                onChange={(key, value) => setCustomFields(prev => ({ ...prev, [key]: value }))}
+                variant="card"
+              />
+
               {/* Advance Stage */}
               {nextStage && (
                 <button
@@ -663,17 +681,17 @@ function DealPanel({
                   <>
                     <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-100">
                       <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
-                        {deal.contact.name.split(' ').map((n: string) => n[0]).join('')}
+                        {deal.contact?.name?.split(' ').map((n: string) => n[0]).join('') ?? '?'}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900">{deal.contact.name}</p>
-                        <p className="text-xs text-gray-400">{deal.contact.title}</p>
+                        <p className="text-sm font-semibold text-gray-900">{deal.contact?.name || 'No contact linked'}</p>
+                        <p className="text-xs text-gray-400">{deal.contact?.title}</p>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <a href={`mailto:${deal.contact.email}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                        <a href={`mailto:${deal.contact?.email}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                           <Mail size={13} />
                         </a>
-                        <a href={`tel:${deal.contact.phone}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                        <a href={`tel:${deal.contact?.phone}`} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                           <Phone size={13} />
                         </a>
                       </div>
@@ -824,6 +842,7 @@ function DealPanel({
               body: JSON.stringify({
                 dealId: deal.id,
                 company: data.company,
+                companyId: company?.id,
                 serviceType: data.serviceType,
                 assignedRep: data.assignedRep,
                 value: Number(data.value) || 0,
@@ -867,7 +886,7 @@ function DealPanel({
               <p className="text-xs text-gray-500 mt-0.5">
                 {confirmDelete === 'deal'
                   ? `Remove the deal for "${deal.company}" permanently.`
-                  : `Remove "${deal.company}" and all its data permanently.`}
+                  : `Remove "${deal.company}" permanently. Blocked if it still has contacts, deals, contracts, invoices, projects, or proposals attached.`}
               </p>
             </div>
           </div>
@@ -1253,6 +1272,8 @@ export default function PipelinePage() {
   const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  const [showBulkReassign, setShowBulkReassign] = useState(false)
+  const [bulkReassignValue, setBulkReassignValue] = useState('')
 
   useEffect(() => { setMounted(true) }, []) // eslint-disable-line react-hooks/set-state-in-effect
 
@@ -1314,9 +1335,26 @@ export default function PipelinePage() {
     if (!targetStage) return
     const updates: { stage: string; probability?: number } = { stage: targetStage.name }
     if (targetStage.probability !== undefined) updates.probability = targetStage.probability
+    const previousDeal = localDeals.find(d => d.id === draggableId)
     setLocalDeals(prev => prev.map(d => d.id === draggableId ? { ...d, ...updates } : d))
     setSelectedDeal(prev => prev?.id === draggableId ? { ...prev, ...updates } : prev)
-    fetch(`/api/deals/${draggableId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) }).catch(() => toast('Failed to update deal stage', 'error'))
+    // Previously only caught network-level failures — fetch doesn't reject
+    // on a non-2xx response, so a server-side rejection (e.g. a Team
+    // Member's card genuinely being dragged is fine, but any validation
+    // error) left the card showing the new stage while the server never
+    // actually moved it, silently reverting on next reload with no
+    // explanation. Revert immediately instead.
+    fetch(`/api/deals/${draggableId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+      .then(res => {
+        if (!res.ok) throw new Error()
+      })
+      .catch(() => {
+        if (previousDeal) {
+          setLocalDeals(prev => prev.map(d => d.id === draggableId ? previousDeal : d))
+          setSelectedDeal(prev => prev?.id === draggableId ? previousDeal : prev)
+        }
+        toast('Failed to update deal stage', 'error')
+      })
   }
 
   async function handleNewDeal(data: NewDealData) {
@@ -1325,6 +1363,7 @@ export default function PipelinePage() {
       : [data.serviceType]
     const payload = {
       company: data.company,
+      companyId: data.companyId,
       contact: { id: `contact-${Date.now()}`, name: data.contactName, email: data.contactEmail, phone: data.contactPhone, title: data.contactTitle },
       stage: data.stage,
       value: Number(data.value) || 0,
@@ -1338,10 +1377,24 @@ export default function PipelinePage() {
     }
     try {
       const res = await fetch('/api/deals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      const saved = await res.json()
-      setLocalDeals(prev => [saved as LocalDeal, ...prev])
+      // Previously called res.json() unconditionally and pushed the result
+      // straight into localDeals even on failure — the server's error body
+      // ({error: "..."}) has no id/company/stage, and `openDeals` filters
+      // on `!d.stage.startsWith('Closed')` on every render, so this threw
+      // "Cannot read properties of undefined" and crashed the whole page.
+      // Also never toasted at all, success or failure, unlike every other
+      // mutation in this file.
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        toast(body.error || 'Failed to create deal', 'error')
+      } else {
+        const saved = await res.json()
+        setLocalDeals(prev => [saved as LocalDeal, ...prev])
+        toast('Deal created', 'success')
+      }
     } catch {
       setLocalDeals(prev => [{ ...payload, id: `deal-${Date.now()}`, lastActivity: new Date().toISOString().split('T')[0] } as LocalDeal, ...prev])
+      toast('Network error — deal was not saved, please retry', 'error')
     }
     setCreatingDeal(false)
   }
@@ -1350,30 +1403,82 @@ export default function PipelinePage() {
     const targetStage = activeStages.find(s => s.name === newStage)
     const updates: { stage: string; probability?: number } = { stage: newStage }
     if (targetStage?.probability !== undefined) updates.probability = targetStage.probability
+    const previousDeal = localDeals.find(d => d.id === dealId)
     setLocalDeals(prev => prev.map(d => d.id === dealId ? { ...d, ...updates } : d))
     setSelectedDeal(prev => prev?.id === dealId ? { ...prev, ...updates } as LocalDeal : prev)
-    fetch(`/api/deals/${dealId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) }).catch(() => toast('Failed to advance deal stage', 'error'))
+    fetch(`/api/deals/${dealId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+      .then(res => {
+        if (!res.ok) throw new Error()
+      })
+      .catch(() => {
+        if (previousDeal) {
+          setLocalDeals(prev => prev.map(d => d.id === dealId ? previousDeal : d))
+          setSelectedDeal(prev => prev?.id === dealId ? previousDeal : prev)
+        }
+        toast('Failed to advance deal stage', 'error')
+      })
   }
 
   function handleUpdateDeal(id: string, updates: Partial<LocalDeal>) {
+    const previousDeal = localDeals.find(d => d.id === id)
     setLocalDeals(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d))
     setSelectedDeal(prev => prev?.id === id ? { ...prev, ...updates } as LocalDeal : prev)
     fetch(`/api/deals/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    }).catch(() => toast('Failed to update deal', 'error'))
+    })
+      .then(res => {
+        if (!res.ok) throw new Error()
+      })
+      .catch(() => {
+        if (previousDeal) {
+          setLocalDeals(prev => prev.map(d => d.id === id ? previousDeal : d))
+          setSelectedDeal(prev => prev?.id === id ? previousDeal : prev)
+        }
+        toast('Failed to update deal', 'error')
+      })
   }
 
   async function handleDeleteDeal(id: string) {
+    const removed = localDeals.find(d => d.id === id)
     setLocalDeals(prev => prev.filter(d => d.id !== id))
     setSelectedDeal(null)
-    fetch(`/api/deals/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete deal', 'error'))
+    try {
+      const res = await fetch(`/api/deals/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        // DELETE requires Dept Manager (a higher bar than the Team Member
+        // role needed to view/drag/edit deals) — a plain Team Member could
+        // previously click Delete, watch the card vanish, while the
+        // server 403'd and the deal was never actually removed, silently
+        // reappearing on the next reload with no explanation.
+        const body = await res.json().catch(() => ({}))
+        if (removed) setLocalDeals(prev => [removed, ...prev])
+        toast(body.error || 'Failed to delete deal', 'error')
+      }
+    } catch {
+      if (removed) setLocalDeals(prev => [removed, ...prev])
+      toast('Failed to delete deal', 'error')
+    }
   }
 
   async function handleDeleteCompany(companyId: string) {
+    const removed = crmCompanies.find(c => c.id === companyId)
     setCrmCompanies(prev => prev.filter(c => c.id !== companyId))
-    fetch(`/api/crm/companies/${companyId}`, { method: 'DELETE' }).catch(() => toast('Failed to delete company', 'error'))
+    try {
+      const res = await fetch(`/api/crm/companies/${companyId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        // Most commonly a 409 — company still has related records (AUDIT
+        // #96 blocks rather than cascade-deletes them). Revert the
+        // optimistic removal so the UI doesn't show it as gone when it isn't.
+        const body = await res.json().catch(() => ({}))
+        if (removed) setCrmCompanies(prev => [...prev, removed])
+        toast(body.error || 'Failed to delete company', 'error')
+      }
+    } catch {
+      if (removed) setCrmCompanies(prev => [...prev, removed])
+      toast('Failed to delete company', 'error')
+    }
   }
 
   const someSelected = selectedIds.size > 0
@@ -1389,19 +1494,42 @@ export default function PipelinePage() {
 
   async function handleBulkDeleteDeals() {
     const ids = Array.from(selectedIds)
+    const removed = localDeals.filter(d => selectedIds.has(d.id))
     setLocalDeals(prev => prev.filter(d => !selectedIds.has(d.id)))
     setSelectedIds(new Set())
     setShowBulkDeleteConfirm(false)
     try {
-      await fetch('/api/crm/bulk-delete', {
+      const res = await fetch('/api/crm/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'deals', ids }),
       })
+      if (!res.ok) throw new Error()
       toast(`${ids.length} deals deleted`, 'success')
     } catch {
+      // Previously never checked res.ok — a 403 (bulk-delete requires
+      // Dept Manager) always toasted success regardless.
+      if (removed.length > 0) setLocalDeals(prev => [...removed, ...prev])
       toast('Failed to delete deals', 'error')
     }
+  }
+
+  async function handleBulkReassign() {
+    const assignedRep = bulkReassignValue.trim()
+    if (!assignedRep) return
+    const ids = Array.from(selectedIds)
+    setLocalDeals(prev => prev.map(d => selectedIds.has(d.id) ? { ...d, assignedRep } : d))
+    setShowBulkReassign(false)
+    setBulkReassignValue('')
+    setSelectedIds(new Set())
+    for (const id of ids) {
+      fetch(`/api/deals/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedRep }),
+      }).catch(() => {})
+    }
+    toast(`${ids.length} deals reassigned to ${assignedRep}`, 'success')
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
@@ -1475,6 +1603,14 @@ export default function PipelinePage() {
                 <Settings size={13} />
               </button>
             </div>
+          </div>
+
+          <div className="mb-4">
+            <SmartListBar
+              entityType="deals"
+              currentCriteria={{ filterRep }}
+              onApply={criteria => setFilterRep(criteria.filterRep ?? 'All')}
+            />
           </div>
 
           <div className="grid grid-cols-3 gap-3">
@@ -1671,6 +1807,7 @@ export default function PipelinePage() {
                 { key: 'assignedRep', label: 'Assigned Rep' },
               ], 'deals-export.csv')
             } },
+            { label: 'Reassign', icon: <UserCog size={13} />, onClick: () => setShowBulkReassign(true) },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />
@@ -1682,6 +1819,30 @@ export default function PipelinePage() {
           onConfirm={handleBulkDeleteDeals}
           onCancel={() => setShowBulkDeleteConfirm(false)}
         />
+      )}
+      {showBulkReassign && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBulkReassign(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 flex flex-col gap-4">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Reassign {selectedIds.size} deals</p>
+              <p className="text-xs text-gray-500 mt-0.5">Set the assigned rep for all selected deals</p>
+            </div>
+            <select
+              value={bulkReassignValue}
+              onChange={e => setBulkReassignValue(e.target.value)}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              autoFocus
+            >
+              <option value="">Select rep...</option>
+              {ALL_REPS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <div className="flex gap-2">
+              <button onClick={handleBulkReassign} disabled={!bulkReassignValue.trim()} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>Reassign</button>
+              <button onClick={() => setShowBulkReassign(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

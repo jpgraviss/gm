@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapEntry(row: any) {
@@ -25,6 +26,9 @@ function mapEntry(row: any) {
 }
 
 export const GET = withErrorHandler('time-entries GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { searchParams } = new URL(req.url)
   const weekStart = searchParams.get('weekStart')
   const weekEnd   = searchParams.get('weekEnd')
@@ -49,6 +53,14 @@ export const GET = withErrorHandler('time-entries GET', async (req: NextRequest)
 })
 
 export const PATCH = withErrorHandler('time-entries PATCH', async (req: NextRequest) => {
+  // Bulk approve/reject — matches the UI's own gate (isAdmin || Dept
+  // Manager), which was previously client-side only. Uses 'Dept Manager'
+  // (not the 'Department Manager' alias one index higher in
+  // ROLE_HIERARCHY) to match the real stored role value — see the admin
+  // role dropdown in app/admin/page.tsx.
+  const denied = await requireRole(req, 'Dept Manager')
+  if (denied) return denied
+
   const body = await req.json()
   const { ids, approvalStatus, approvedBy, rejectionNote } = body as {
     ids: string[]
@@ -87,6 +99,9 @@ export const PATCH = withErrorHandler('time-entries PATCH', async (req: NextRequ
 })
 
 export const POST = withErrorHandler('time-entries POST', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const result = validate(body, {
     date: { required: true, type: 'string', maxLength: 20 },

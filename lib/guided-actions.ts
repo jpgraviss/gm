@@ -40,7 +40,12 @@ export async function getGuidedActions(repName: string, repEmail: string, ownerI
     .select('id, company, last_activity, close_date, stage')
     .eq('assigned_rep', repName)
 
-  const openDeals = (allRepDeals ?? []).filter(d => d.stage !== 'Closed Won' && d.stage !== 'Closed Lost')
+  // Matches app/crm/pipeline/page.tsx / app/workspace/page.tsx's
+  // !stage.startsWith('Closed') check (AUDIT #53) — pipelines support
+  // custom stage names like "Closed - Duplicate" (AUDIT #42), which an
+  // exact match here would incorrectly still surface as a stale/
+  // closing-this-week deal needing follow-up.
+  const openDeals = (allRepDeals ?? []).filter(d => !d.stage.startsWith('Closed'))
 
   const staleDeals = openDeals.filter(d => !d.last_activity || new Date(d.last_activity) < sevenDaysAgo)
   if (staleDeals.length > 0) {

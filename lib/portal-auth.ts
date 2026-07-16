@@ -18,14 +18,16 @@ export async function requirePortalClient(
 
   const db = createServiceClient()
 
-  // Staff members can access any company's portal data
+  // Staff members can access any company's portal data — status is checked
+  // so a suspended/deleted staff member can't use this bypass to reach
+  // every company's portal data via a still-live session.
   const { data: staff } = await db
     .from('team_members')
-    .select('id')
+    .select('id, status')
     .ilike('email', email)
     .maybeSingle()
 
-  if (staff) return null
+  if (staff && staff.status === 'active') return null
 
   // Portal clients can only access their own company
   const { data: client } = await db
@@ -62,8 +64,8 @@ export async function isStaffCaller(req: NextRequest): Promise<boolean> {
   const db = createServiceClient()
   const { data: staff } = await db
     .from('team_members')
-    .select('id')
+    .select('id, status')
     .ilike('email', email)
     .maybeSingle()
-  return !!staff
+  return !!staff && staff.status === 'active'
 }

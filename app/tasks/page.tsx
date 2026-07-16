@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { fetchTeamMembers } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority, TeamMember, TeamServiceLine } from '@/lib/types'
 import {
   CheckSquare, Clock, AlertCircle, CheckCircle2, Plus, X, ChevronRight, ChevronLeft,
@@ -595,6 +597,7 @@ const categories: AppTaskCategory[] = ['Deal', 'Contract', 'Billing', 'Renewal',
 
 export default function TasksPage() {
   const { toast } = useToast()
+  const searchParams = useSearchParams()
   const [tasks, setTasks] = useState<AppTask[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [filterTab, setFilterTab] = useState<FilterTab>('All')
@@ -610,13 +613,25 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/tasks')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setTasks(data) })
+    // /api/tasks is cursor-paginated (100/page) — fetchAllPages() follows
+    // X-Next-Cursor to completion instead of a raw fetch() that would
+    // silently show only the newest page as "the full task list."
+    fetchAllPages<AppTask>('/api/tasks')
+      .then(setTasks)
       .catch(() => toast('Failed to load tasks', 'error'))
       .finally(() => setLoading(false))
     fetchTeamMembers().then(setTeamMembers)
   }, [])
+
+  // Deep-link support for global search (Cmd+K) results, which link here
+  // with ?open=<id>.
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (openId && tasks.length > 0 && !selectedTask) {
+      const match = tasks.find(t => t.id === openId)
+      if (match) setSelectedTask(match)
+    }
+  }, [searchParams, tasks, selectedTask])
 
   function updateStatus(id: string, status: AppTaskStatus) {
     const today = getToday()

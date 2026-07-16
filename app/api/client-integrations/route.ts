@@ -27,6 +27,9 @@ function mapBinding(row: any) {
 }
 
 export const GET = withErrorHandler('client-integrations GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   const db = createServiceClient()

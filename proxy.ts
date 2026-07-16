@@ -38,6 +38,7 @@ const PUBLIC_PREFIXES = [
   '/api/portal-clients/reset-password',
   '/api/portal-clients/check-approval',
   '/api/portal-clients/complete-setup',
+  '/api/team-members/check-approval',
   '/api/drive/callback',
   '/api/signatures/',
   '/api/proposals/view/',
@@ -53,6 +54,7 @@ const PUBLIC_PREFIXES = [
   '/api/intelligence/track',
   '/api/intelligence/script',
   '/api/reputation/review-request/',
+  '/api/stripe/webhook',
 ]
 
 function getClientIp(req: NextRequest): string {
@@ -98,6 +100,31 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
       if (memoryLimited(`booking:${ip}`, 20, 60 * 60 * 1000)) {
         return NextResponse.json(
           { error: 'Too many booking requests. Try again later.' },
+          { status: 429 }
+        )
+      }
+    }
+    // Unauthenticated widget endpoint that calls a real LLM per message —
+    // otherwise the only public route with zero request throttling,
+    // a real cost/DoS vector (unlimited scripted requests run up live
+    // AI-provider spend with no server-side limit at all).
+    if (/^\/api\/chatbots\/[^/]+\/chat$/.test(pathname) && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`chatbot-chat:${ip}`, 30, 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many messages. Please wait a moment and try again.' },
+          { status: 429 }
+        )
+      }
+    }
+    // Onboarding 6-digit codes (~900k possibilities, 24h validity) are
+    // otherwise unthrottled brute-force targets — success here feeds
+    // directly into setting a real account password.
+    if ((pathname === '/api/auth/verify-code' || pathname === '/api/auth/setup-account') && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`auth-code:${ip}`, 15, 60 * 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many attempts. Please wait a while and try again.' },
           { status: 429 }
         )
       }

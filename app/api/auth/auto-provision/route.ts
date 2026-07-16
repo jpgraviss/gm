@@ -14,6 +14,23 @@ export const POST = withErrorHandler('auth/auto-provision POST', async (req) => 
   const db = createServiceClient()
   const emailLower = email.toLowerCase()
 
+  // Sits under proxy.ts's public /api/auth/ prefix with no caller anywhere
+  // in the app (google-verify does its own inline, properly-verified
+  // provisioning instead) — but being unreachable from the UI doesn't make
+  // a live, unauthenticated endpoint safe: anyone could still POST here
+  // directly to re-provision an active team_members row for any
+  // @gravissmarketing.com address that still has a live Supabase Auth
+  // user, even one an admin had deliberately deleted from team_members.
+  const authHeader = req.headers.get('authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (!token) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  const { data: { user: verifiedUser }, error: tokenErr } = await db.auth.getUser(token)
+  if (tokenErr || !verifiedUser?.email || verifiedUser.email.toLowerCase() !== emailLower) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   // Check if a profile already exists
   const { data: existing } = await db
     .from('team_members')

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGSCSearchAnalytics, getGSCSummary } from '@/lib/google-search-console'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 /**
  * GET /api/integrations/gsc/report?site=https://example.com&days=28&dimension=query
  * Returns a summary card + top rows for a given dimension.
  */
 export const GET = withErrorHandler('integrations/gsc/report GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { searchParams } = new URL(req.url)
   const siteUrl = searchParams.get('site')
   const days = parseInt(searchParams.get('days') ?? '28', 10)

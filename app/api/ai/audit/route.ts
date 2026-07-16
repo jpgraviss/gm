@@ -160,6 +160,14 @@ function parseSection(text: string, label: string): AuditSectionResult {
 }
 
 export const POST = withErrorHandler('ai/audit POST', async (req) => {
+    // AUDIT.md #73 believed this was already fixed, but the shipped change
+    // only added the check to DELETE below — GET/POST never actually got
+    // one. Any authenticated caller, including a portal client from an
+    // unrelated company, could read every company's audit or trigger new
+    // costly LLM-driven audits tagged to an arbitrary companyId.
+    const denied = await requireRole(req, 'Team Member')
+    if (denied) return denied
+
     const body = await req.json()
     const { url, auditType = 'full', companyId, companyName } = body as {
       url: string
@@ -284,6 +292,9 @@ export const POST = withErrorHandler('ai/audit POST', async (req) => {
 })
 
 export const GET = withErrorHandler('ai/audit GET', async (req) => {
+    const denied = await requireRole(req, 'Team Member')
+    if (denied) return denied
+
     const supabase = createServiceClient()
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')

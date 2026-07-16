@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit'
 import { addTrackedKeyword, addTrackedKeywordsBulk, mapTracked } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
 import { validate, validationError } from '@/lib/validation'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 
 export const GET = withErrorHandler('rank-tracker/keywords GET', async (req) => {
   const denied = await requireRole(req, 'Team Member')
@@ -16,23 +17,23 @@ export const GET = withErrorHandler('rank-tracker/keywords GET', async (req) => 
   const posMin = searchParams.get('posMin')
   const posMax = searchParams.get('posMax')
   const clientId = searchParams.get('clientId')
+  const pag = parsePagination(req)
 
-  let query = db
-    .from('tracked_keywords')
-    .select('*')
-    .order('created_at', { ascending: false })
+  let query = db.from('tracked_keywords').select('*')
 
   if (company) query = query.eq('company_name', company)
   if (clientId) query = query.eq('company_id', clientId)
   if (tag) query = query.contains('tags', [tag])
   if (posMin) query = query.gte('current_position', parseFloat(posMin))
   if (posMax) query = query.lte('current_position', parseFloat(posMax))
+  query = applyCursor(query, pag)
 
   const { data, error } = await query
   if (error) {
     throw new Error(error?.message || 'Failed to fetch keywords')
   }
-  return NextResponse.json((data ?? []).map(mapTracked))
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
+  return paginatedJson(rows.map(mapTracked), nextCursor)
 })
 
 export const POST = withErrorHandler('rank-tracker/keywords POST', async (req) => {

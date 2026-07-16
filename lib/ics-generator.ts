@@ -1,3 +1,5 @@
+import { compactWallClock } from './timezone'
+
 export interface ICSEventInput {
   title: string
   startDateTime: string
@@ -9,30 +11,6 @@ export interface ICSEventInput {
   organizerEmail: string
   attendeeEmail: string
   uid?: string
-}
-
-function formatICSDate(dateStr: string, timezone: string): string {
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) {
-    const clean = dateStr.replace(/[-:]/g, '').replace('T', 'T')
-    return clean.length >= 15 ? clean.slice(0, 15) : clean
-  }
-  const formatted = d.toLocaleString('en-US', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
-  const match = formatted.match(/(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2}):(\d{2}):(\d{2})/)
-  if (!match) {
-    return dateStr.replace(/[-:]/g, '').slice(0, 15)
-  }
-  const [, mo, day, yr, hr, min, sec] = match
-  return `${yr}${mo}${day}T${hr}${min}${sec}`
 }
 
 function escapeICSText(text: string): string {
@@ -58,8 +36,12 @@ export function generateICS(event: ICSEventInput): string {
   const uid = event.uid ?? `${crypto.randomUUID()}@gravhub`
   const now = new Date()
   const dtstamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
-  const dtstart = formatICSDate(event.startDateTime, event.timezone)
-  const dtend = formatICSDate(event.endDateTime, event.timezone)
+  // startDateTime/endDateTime are wall-clock strings meaning "this time, in
+  // event.timezone" — DTSTART;TZID=<tz> wants exactly those digits, not a
+  // UTC conversion, so no timezone math happens here at all (the TZID
+  // parameter is what tells the calendar app which zone the digits mean).
+  const dtstart = compactWallClock(event.startDateTime)
+  const dtend = compactWallClock(event.endDateTime)
 
   const lines = [
     'BEGIN:VCALENDAR',

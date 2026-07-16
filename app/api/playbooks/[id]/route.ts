@@ -20,7 +20,10 @@ function mapPlaybook(row: any) {
   }
 }
 
-export const GET = withErrorHandler('playbooks/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('playbooks/[id] GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db.from('playbooks').select('*').eq('id', id).single()
@@ -31,6 +34,9 @@ export const GET = withErrorHandler('playbooks/[id] GET', async (_req, { params 
 })
 
 export const PATCH = withErrorHandler('playbooks/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()

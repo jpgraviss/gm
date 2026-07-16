@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
+import { requireRole } from '@/lib/rbac'
 
 const EVENT_TYPES = ['contract_signed', 'invoice_paid', 'project_launched', 'month_end']
 
@@ -31,6 +32,9 @@ const EVENT_STEP_MAP: Record<string, { step: number; statusCol: string; complete
 }
 
 export const POST = withErrorHandler('delivery/automation-hook POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const result = validate(body, {
     workflowId: { required: true, type: 'string', maxLength: 100 },

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
+import { requirePortalClient } from '@/lib/portal-auth'
 
 const BUCKET = 'client-files'
 const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
@@ -32,10 +34,14 @@ export const GET = withErrorHandler('files GET', async (req: NextRequest) => {
     return NextResponse.json({ error: 'company is required' }, { status: 400 })
   }
 
+  const denied = await requirePortalClient(req, company)
+  if (denied) return denied
+
   const db = createServiceClient()
   const folder = sanitizePath(company)
 
   const { data, error } = await db.storage.from(BUCKET).list(folder, {
+    limit: 1000,
     sortBy: { column: 'created_at', order: 'desc' },
   })
 
@@ -72,6 +78,9 @@ export const POST = withErrorHandler('files POST', async (req: NextRequest) => {
     return NextResponse.json({ error: 'file and company are required' }, { status: 400 })
   }
 
+  const denied = await requirePortalClient(req, company)
+  if (denied) return denied
+
   if (file.size > MAX_FILE_SIZE) {
     return NextResponse.json({ error: 'File too large. Maximum size is 100MB.' }, { status: 413 })
   }
@@ -103,6 +112,14 @@ export const POST = withErrorHandler('files POST', async (req: NextRequest) => {
 })
 
 export const DELETE = withErrorHandler('files DELETE', async (req: NextRequest) => {
+  // Every real caller of this DELETE (app/projects/page.tsx,
+  // app/projects/[id]/page.tsx) is staff-only — no portal page exposes a
+  // delete control — so this is a straight role gate rather than
+  // per-company scoping. Previously had zero auth at all: unauthenticated
+  // arbitrary-path deletion in the client-files bucket.
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const { path } = body
 

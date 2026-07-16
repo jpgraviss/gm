@@ -3,7 +3,10 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 
-export const GET = withErrorHandler('chatbots/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('chatbots/[id] GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db.from('chatbots').select('*').eq('id', id).single()

@@ -9,12 +9,12 @@ import {
   Clock, GitBranch, Bell, ListTodo, Activity, Trash2,
   X, Play, Pause, ZoomIn, ZoomOut, Maximize2,
   FileText, CheckCircle, ChevronRight, Check, AlertCircle, Loader2,
-  Edit3, Copy, MousePointer,
+  Edit3, Copy,
 } from 'lucide-react'
 
 type TriggerType =
   | 'contact_created' | 'deal_stage_changed' | 'invoice_overdue'
-  | 'contract_signed' | 'form_submitted' | 'manual_trigger'
+  | 'contract_signed' | 'form_submitted'
   | 'proposal_accepted' | 'proposal_declined' | 'invoice_paid'
 
 type ActionType =
@@ -40,7 +40,6 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string; icon: React.ReactNod
   { value: 'proposal_accepted',  label: 'Proposal Accepted',    icon: <CheckCircle size={18} />,description: 'When a proposal is accepted by client' },
   { value: 'proposal_declined',  label: 'Proposal Declined',    icon: <X size={18} />,          description: 'When a proposal is declined by client' },
   { value: 'invoice_paid',       label: 'Invoice Paid',         icon: <CheckCircle size={18} />,description: 'When a payment is received for an invoice' },
-  { value: 'manual_trigger',     label: 'Manual Trigger',       icon: <MousePointer size={18} />, description: 'Run this workflow manually on demand' },
 ]
 
 const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: string; icon: React.ReactNode; description: string }[] }[] = [
@@ -85,7 +84,6 @@ const TRIGGER_TO_DB: Record<TriggerType, string> = {
   proposal_accepted:  'Proposal Accepted',
   proposal_declined:  'Proposal Declined',
   invoice_paid:       'Invoice Paid',
-  manual_trigger:     'Manual Trigger',
 }
 
 const ACTION_TO_DB: Record<ActionType, string> = {
@@ -220,8 +218,20 @@ function NodeConfigPanel({ node, onChange, onClose }: {
           )
         case 'invoice_overdue':
           return (
-            <FieldLabel label="Overdue by (days)">
-              <input type="number" min={1} value={(config.overdueDays as number) ?? 1} onChange={e => update('overdueDays', parseInt(e.target.value) || 1)} className="cfg-input" />
+            <FieldLabel label="Overdue threshold">
+              {/* A dropdown, not a free number input — the cron job behind
+                  this trigger only ever checks two real checkpoints (the
+                  invoice just went overdue, or it's been 3+ days), so any
+                  other number here would silently never fire. */}
+              <select
+                value={config.overdueDays === undefined ? 'any' : String(config.overdueDays)}
+                onChange={e => update('overdueDays', e.target.value === 'any' ? undefined : parseInt(e.target.value))}
+                className="cfg-input"
+              >
+                <option value="any">Any (as soon as overdue, or 3+ days)</option>
+                <option value="0">As soon as overdue</option>
+                <option value="3">3+ days overdue</option>
+              </select>
             </FieldLabel>
           )
         default:
@@ -781,7 +791,7 @@ export default function AutomationBuilderPage() {
   useEffect(() => {
     if (!editId) return
     type LoadedAction = string | { type: string; config?: Record<string, unknown> }
-    fetch(`/api/automations`).then(r => r.ok ? r.json() : []).then((data: { id: string; name: string; trigger: string; actions: LoadedAction[]; status: string }[]) => {
+    fetch(`/api/automations`).then(r => r.ok ? r.json() : []).then((data: { id: string; name: string; trigger: string; actions: LoadedAction[]; status: string; config?: Record<string, unknown> }[]) => {
       const auto = data.find((a: { id: string }) => a.id === editId)
       if (!auto) return
       setWorkflowName(auto.name)
@@ -794,7 +804,11 @@ export default function AutomationBuilderPage() {
         id: uid(),
         type: 'trigger',
         subtype: triggerKey,
-        config: {},
+        // Trigger-level config (deal-stage filter, invoice-overdue-days
+        // threshold) previously always reset to {} here even though
+        // automations.config is a real, already-persisted column — the
+        // builder's own save path just never sent it (see handleSave).
+        config: auto.config ?? {},
         label: auto.trigger,
       })
 
@@ -892,6 +906,13 @@ export default function AutomationBuilderPage() {
 
     setSaving(true)
     try {
+      // Trigger-level config (deal-stage filter, invoice-overdue-days
+      // threshold) was collected in the UI but never sent — automations.config
+      // is a real, already-used column (the form_submitted trigger's
+      // formScope/formId already round-trip through it), so this was purely
+      // a save-path gap, not a schema gap.
+      const triggerConfig = triggerNode.config ?? {}
+
       if (editId) {
         const res = await fetch(`/api/automations/${editId}`, {
           method: 'PATCH',
@@ -899,6 +920,7 @@ export default function AutomationBuilderPage() {
           body: JSON.stringify({
             name: workflowName,
             trigger: triggerLabel,
+            config: triggerConfig,
             actions,
             status: status === 'Active' ? 'Active' : 'Paused',
           }),
@@ -913,6 +935,7 @@ export default function AutomationBuilderPage() {
             id: `auto-${Date.now()}`,
             name: workflowName,
             trigger: triggerLabel,
+            config: triggerConfig,
             actions,
             status: status === 'Active' ? 'Active' : 'Paused',
             runs: 0,

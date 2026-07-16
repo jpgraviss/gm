@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 const HUBSPOT_CONTACTS_URL = 'https://api.hubapi.com/crm/v3/objects/contacts'
 
@@ -199,6 +200,9 @@ function buildHubspotData(p: Record<string, string | null>): Record<string, stri
 // ─── GET: Fetch contacts from HubSpot (read-only preview) ───────────────────
 
 export const GET = withErrorHandler('integrations/hubspot/contacts GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(
@@ -240,6 +244,9 @@ export const GET = withErrorHandler('integrations/hubspot/contacts GET', async (
 // ─── POST: Import contacts HubSpot → GravHub (one-way sync) ────────────────
 
 export const POST = withErrorHandler('integrations/hubspot/contacts POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(

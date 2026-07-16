@@ -5,15 +5,37 @@ import {
   downloadFile, shareFile, shareFilePublic, deleteFile,
 } from '@/lib/google-drive'
 import { withErrorHandler } from '@/lib/api-handler'
+import { issueOAuthState } from '@/lib/oauth-state'
+import { requireRole } from '@/lib/rbac'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
 
-// GET /api/drive?action=status|list|auth-url|client-folder
+// GET /api/drive?action=status|list|auth-url|client-folder|download
+// Previously had zero auth on any action or method — any caller could
+// list/download/create/share/delete anything the shared Drive OAuth token
+// can reach. Drive has no per-file company-ownership record to check
+// against (files aren't tracked against a company_id anywhere), so this
+// can't scope `download` to "the caller's own company's files" the way
+// requirePortalClient does elsewhere — it requires any real authenticated
+// identity, staff or portal client. The management actions (list,
+// client-folder, create-folder, share, delete) have no current portal
+// caller and stay staff-only.
 export const GET = withErrorHandler('drive GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
   const action = searchParams.get('action') ?? 'status'
 
+  if (action === 'auth-url' || action === 'status' || action === 'list' || action === 'client-folder') {
+    const denied = await requireRole(req, 'Team Member')
+    if (denied) return denied
+  } else {
+    const email = await getAuthenticatedEmail(req)
+    if (!email) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+  }
+
   if (action === 'auth-url') {
-    const state = Buffer.from(JSON.stringify({ ts: Date.now() })).toString('base64url')
-    return NextResponse.json({ url: getDriveAuthUrl(state) })
+    const { state, setCookie } = issueOAuthState('drive')
+    return setCookie(NextResponse.json({ url: getDriveAuthUrl(state) }))
   }
 
   if (action === 'status') {
@@ -59,8 +81,11 @@ export const GET = withErrorHandler('drive GET', async (req: NextRequest) => {
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 })
 
-// POST /api/drive — create folder or share file
+// POST /api/drive — create folder or share file (staff-only; no portal caller)
 export const POST = withErrorHandler('drive POST', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const token = await getValidDriveToken()
   if (!token) return NextResponse.json({ error: 'Google Drive not connected' }, { status: 401 })
 
@@ -88,8 +113,11 @@ export const POST = withErrorHandler('drive POST', async (req: NextRequest) => {
   return NextResponse.json(folder, { status: 201 })
 })
 
-// DELETE /api/drive?fileId=...
+// DELETE /api/drive?fileId=... (staff-only, destructive; no portal caller)
 export const DELETE = withErrorHandler('drive DELETE', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
+
   const token = await getValidDriveToken()
   if (!token) return NextResponse.json({ error: 'Google Drive not connected' }, { status: 401 })
 

@@ -5,6 +5,7 @@ import {
   ChevronLeft, ChevronRight, Clock, Check, Video, Phone, MapPin,
   User, Mail, Building2, FileText, ArrowLeft, CalendarDays, Download,
 } from 'lucide-react'
+import { getGoogleCalendarLink, getOutlookCalendarLink, getOutlook365CalendarLink } from '@/lib/calendar-links'
 
 interface IntakeQuestion {
   id: string
@@ -148,6 +149,10 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [bookingId, setBookingId] = useState<string | null>(null)
+  // booking_types has no timezone of its own — the slots endpoint resolves
+  // the real one (connected staff Google Calendar's zone, or a fallback)
+  // and returns it here so calendar links match what actually gets booked.
+  const [bookingTimezone, setBookingTimezone] = useState('America/Chicago')
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -177,7 +182,11 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     setSelectedSlot(null)
     fetch(`/api/calendar/bookings?slug=${slug}&date=${selectedDate}`)
       .then(r => r.ok ? r.json() : { slots: [] })
-      .then(d => { setSlots(d.slots ?? []); setSlotsLoading(false) })
+      .then(d => {
+        setSlots(d.slots ?? [])
+        if (d.timezone) setBookingTimezone(d.timezone)
+        setSlotsLoading(false)
+      })
       .catch(() => setSlotsLoading(false))
   }, [slug, selectedDate, bt])
 
@@ -216,13 +225,18 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     }
   }
 
+  // Reuses the same fixed helpers the confirmation EMAIL already uses
+  // server-side (app/api/calendar/bookings/route.ts) — this used to
+  // reimplement link generation client-side with a hardcoded
+  // 'America/Chicago' and no real UTC conversion for the Outlook links,
+  // so the buttons on this page could disagree with the email.
   function getCalendarEvent() {
     if (!bt || !selectedDate || !selectedSlot) return null
     return {
       title: bt.name,
       startDateTime: `${selectedDate}T${selectedSlot.start}:00`,
       endDateTime: `${selectedDate}T${selectedSlot.end}:00`,
-      timezone: 'America/Chicago',
+      timezone: bookingTimezone,
       description: `Booked by ${name} (${email})${notes ? `\n\nNotes: ${notes}` : ''}`,
       location: '',
     }
@@ -230,52 +244,17 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
 
   function getGoogleCalLink() {
     const ev = getCalendarEvent()
-    if (!ev) return '#'
-    const [y, m, d] = selectedDate!.split('-')
-    const startDate = `${y}${m}${d}T${selectedSlot!.start.replace(':', '')}00`
-    const endDate = `${y}${m}${d}T${selectedSlot!.end.replace(':', '')}00`
-    const params = new URLSearchParams({
-      action: 'TEMPLATE',
-      text: ev.title,
-      dates: `${startDate}/${endDate}`,
-      details: ev.description,
-      ctz: ev.timezone,
-    })
-    return `https://calendar.google.com/calendar/render?${params}`
+    return ev ? getGoogleCalendarLink(ev) : '#'
   }
 
   function getOutlookLink() {
     const ev = getCalendarEvent()
-    if (!ev) return '#'
-    const [y, m, d] = selectedDate!.split('-')
-    const start = `${y}${m}${d}T${selectedSlot!.start.replace(':', '')}00`
-    const end = `${y}${m}${d}T${selectedSlot!.end.replace(':', '')}00`
-    const params = new URLSearchParams({
-      path: '/calendar/action/compose',
-      rru: 'addevent',
-      subject: ev.title,
-      startdt: start,
-      enddt: end,
-      body: ev.description,
-    })
-    return `https://outlook.live.com/calendar/0/deeplink/compose?${params}`
+    return ev ? getOutlookCalendarLink(ev) : '#'
   }
 
   function getOutlook365Link() {
     const ev = getCalendarEvent()
-    if (!ev) return '#'
-    const [y, m, d] = selectedDate!.split('-')
-    const start = `${y}${m}${d}T${selectedSlot!.start.replace(':', '')}00`
-    const end = `${y}${m}${d}T${selectedSlot!.end.replace(':', '')}00`
-    const params = new URLSearchParams({
-      path: '/calendar/action/compose',
-      rru: 'addevent',
-      subject: ev.title,
-      startdt: start,
-      enddt: end,
-      body: ev.description,
-    })
-    return `https://outlook.office.com/calendar/0/deeplink/compose?${params}`
+    return ev ? getOutlook365CalendarLink(ev) : '#'
   }
 
   function getICSUrl() {

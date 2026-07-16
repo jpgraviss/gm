@@ -120,7 +120,17 @@ function ContractPanel({
   const clientSig = contractSigs.find(s => s.type === 'client' && s.status === 'signed') || contractSigs.find(s => s.type === 'client')
   const internalSig = contractSigs.find(s => s.type === 'internal' && s.status === 'signed') || contractSigs.find(s => s.type === 'internal')
 
-  const linkedInvoices = invoices.filter(i => i.contractId === contract.id)
+  // POST /api/invoices has exactly one caller (billing/page.tsx's CSV bulk
+  // import), and it never sends a contractId — every invoice in the app is
+  // created with contract_id null, so a strict contractId match here always
+  // returns an empty array regardless of real data. Fall back to matching
+  // by company (id first, then denormalized name) so this section shows
+  // real invoices instead of always being empty; a contractId match still
+  // wins first in case that ever gets populated by a future flow.
+  const linkedInvoicesById = invoices.filter(i => i.contractId === contract.id)
+  const linkedInvoices = linkedInvoicesById.length > 0
+    ? linkedInvoicesById
+    : invoices.filter(i => contract.companyId ? i.companyId === contract.companyId : i.company === contract.company)
   const linkedProject = projects.find(p => p.contractId === contract.id)
   const linkedProposal = contract.proposalId ? proposals.find(p => p.id === contract.proposalId) : null
 
@@ -988,6 +998,14 @@ export default function ContractsPage() {
       ...(status === 'Fully Executed' ? { internalSigned: today } : {}),
     }
 
+    // Snapshot only the one contract being changed, not the whole list —
+    // reverting via setLocalContracts(prevContracts) (a full-array replace)
+    // would clobber any other optimistic update that completed in the
+    // meantime (e.g. a second status change or a bulk-delete), silently
+    // resurrecting/undoing unrelated rows until the next refetch.
+    const prevContract = localContracts.find(c => c.id === id)
+    const prevSelected = selected?.id === id ? selected : null
+
     setLocalContracts(prev => prev.map(c => {
       if (c.id !== id) return c
       return { ...c, ...patchData }
@@ -997,14 +1015,26 @@ export default function ContractsPage() {
       return { ...prev, ...patchData }
     })
 
+    function revert() {
+      if (prevContract) setLocalContracts(prev => prev.map(c => c.id === id ? prevContract : c))
+      if (prevSelected) setSelected(prev => prev?.id === id ? prevSelected : prev)
+    }
+
     try {
-      await fetch(`/api/contracts/${id}`, {
+      const res = await fetch(`/api/contracts/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patchData),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        revert()
+        toast(err.error || 'Failed to update contract status', 'error')
+      }
     } catch (err) {
       console.error('Failed to PATCH contract status:', err)
+      revert()
+      toast('Failed to update contract status', 'error')
     }
   }
 
@@ -1156,17 +1186,25 @@ export default function ContractsPage() {
 
   async function handleBulkDelete() {
     const ids = Array.from(selectedIds)
+    const removed = localContracts.filter(c => selectedIds.has(c.id))
     setLocalContracts(prev => prev.filter(c => !selectedIds.has(c.id)))
     setSelectedIds(new Set())
     setShowBulkDeleteConfirm(false)
     try {
-      await fetch('/api/crm/bulk-delete', {
+      const res = await fetch('/api/crm/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'contracts', ids }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setLocalContracts(prev => [...removed, ...prev])
+        toast(err.error || 'Failed to delete contracts', 'error')
+        return
+      }
       toast(`${ids.length} contracts deleted`, 'success')
     } catch {
+      setLocalContracts(prev => [...removed, ...prev])
       toast('Failed to delete contracts', 'error')
     }
   }

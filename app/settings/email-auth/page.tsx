@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
+import { useToast } from '@/components/ui/Toast'
 import {
   Shield, CheckCircle, Copy, ChevronRight, ChevronDown,
-  Circle, ExternalLink, Info,
+  Circle, ExternalLink, Info, RefreshCw,
 } from 'lucide-react'
 
 interface DnsRecord {
@@ -110,29 +111,58 @@ function AccordionSection({ step, title, description, configured, open, onToggle
   )
 }
 
-const checklistItems = [
-  'SPF record added',
-  'DKIM verified via Resend',
-  'DMARC record published',
-  'Verified sending domain',
-  'Test email sent successfully',
+const CONTENT_ID = 'email-deliverability'
+
+const checklistItems: Array<{ id: string; label: string }> = [
+  { id: 'spf',         label: 'SPF record added' },
+  { id: 'dkim',        label: 'DKIM verified via Resend' },
+  { id: 'dmarc',       label: 'DMARC record published' },
+  { id: 'domain',      label: 'Verified sending domain' },
+  { id: 'test-email',  label: 'Test email sent successfully' },
 ]
 
 export default function EmailAuthPage() {
+  const { toast } = useToast()
   const [openSection, setOpenSection] = useState<number | null>(1)
-  const [configured] = useState({ spf: false, dkim: false, dmarc: false })
-  const [checklist, setChecklist] = useState<boolean[]>(new Array(checklistItems.length).fill(false))
+  const [configured, setConfigured] = useState({ spf: false, dkim: false, dmarc: false })
+  const [checking, setChecking] = useState(true)
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({})
+
+  function runDnsCheck() {
+    setChecking(true)
+    fetch('/api/settings/email-auth/check')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setConfigured({ spf: !!data.spf, dkim: !!data.dkim, dmarc: !!data.dmarc }) })
+      .catch(() => {})
+      .finally(() => setChecking(false))
+  }
+
+  useEffect(() => {
+    runDnsCheck()
+    fetch('/api/training/progress')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.checklistState?.[CONTENT_ID]) setChecklist(data.checklistState[CONTENT_ID]) })
+      .catch(() => {})
+  }, [])
 
   function toggleSection(step: number) {
     setOpenSection(prev => (prev === step ? null : step))
   }
 
-  function toggleChecklist(index: number) {
-    setChecklist(prev => {
-      const next = [...prev]
-      next[index] = !next[index]
-      return next
+  function toggleChecklist(itemId: string) {
+    const prevValue = !!checklist[itemId]
+    const nextValue = !prevValue
+    setChecklist(prev => ({ ...prev, [itemId]: nextValue }))
+    fetch('/api/training/progress', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contentId: CONTENT_ID, checklistItemId: itemId, checklistValue: nextValue }),
     })
+      .then(r => { if (!r.ok) throw new Error('Failed to save') })
+      .catch(() => {
+        setChecklist(prev => ({ ...prev, [itemId]: prevValue }))
+        toast('Failed to save checklist progress', 'error')
+      })
   }
 
   return (
@@ -279,33 +309,46 @@ export default function EmailAuthPage() {
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Deliverability Checklist</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-900">Deliverability Checklist</h3>
+            <button
+              onClick={runDnsCheck}
+              disabled={checking}
+              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={checking ? 'animate-spin' : ''} />
+              {checking ? 'Checking DNS...' : 'Recheck DNS'}
+            </button>
+          </div>
           <div className="space-y-3">
-            {checklistItems.map((item, i) => (
-              <label key={i} className="flex items-center gap-3 cursor-pointer group">
-                <div
-                  className="w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors flex-shrink-0"
-                  style={{
-                    borderColor: checklist[i] ? '#015035' : '#d1d5db',
-                    background: checklist[i] ? '#015035' : 'transparent',
-                  }}
-                  onClick={() => toggleChecklist(i)}
-                >
-                  {checklist[i] && <CheckCircle size={12} className="text-white" />}
-                </div>
-                <span
-                  className="text-sm transition-colors"
-                  style={{ color: checklist[i] ? '#015035' : '#4b5563', textDecoration: checklist[i] ? 'line-through' : 'none' }}
-                  onClick={() => toggleChecklist(i)}
-                >
-                  {item}
-                </span>
-              </label>
-            ))}
+            {checklistItems.map(item => {
+              const checked = !!checklist[item.id]
+              return (
+                <label key={item.id} className="flex items-center gap-3 cursor-pointer group">
+                  <div
+                    className="w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors flex-shrink-0"
+                    style={{
+                      borderColor: checked ? '#015035' : '#d1d5db',
+                      background: checked ? '#015035' : 'transparent',
+                    }}
+                    onClick={() => toggleChecklist(item.id)}
+                  >
+                    {checked && <CheckCircle size={12} className="text-white" />}
+                  </div>
+                  <span
+                    className="text-sm transition-colors"
+                    style={{ color: checked ? '#015035' : '#4b5563', textDecoration: checked ? 'line-through' : 'none' }}
+                    onClick={() => toggleChecklist(item.id)}
+                  >
+                    {item.label}
+                  </span>
+                </label>
+              )
+            })}
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100">
             <p className="text-xs text-gray-400">
-              {checklist.filter(Boolean).length} of {checklistItems.length} completed
+              {Object.values(checklist).filter(Boolean).length} of {checklistItems.length} completed
             </p>
           </div>
         </div>

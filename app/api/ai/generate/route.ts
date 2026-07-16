@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chatCompletion } from '@/lib/ai-client'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 type GenerationType = 'email_draft' | 'proposal_summary' | 'report_summary' | 'social_post' | 'follow_up' | 'sequence_email'
 
@@ -14,6 +15,9 @@ const SYSTEM_PROMPTS: Record<GenerationType, string> = {
 }
 
 export const POST = withErrorHandler('ai/generate POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
     const { type, context } = await req.json() as { type: GenerationType; context: Record<string, string> }
 
     if (!type || !SYSTEM_PROMPTS[type]) {

@@ -862,11 +862,15 @@ export const POST = withErrorHandler('ai/chat POST', async (req) => {
     const staffDb = createServiceClient()
     const { data: staffRow } = await staffDb
       .from('team_members')
-      .select('id')
+      .select('id, status')
       .ilike('email', callerEmail)
       .maybeSingle()
 
-    if (!staffRow) {
+    // Existence alone isn't enough — getAuthenticatedEmail() never checks
+    // status, so a suspended staff member's still-valid session (suspending
+    // someone doesn't revoke it) could otherwise retain full internal
+    // AI-assistant access, including its CRM tool-calling.
+    if (!staffRow || staffRow.status !== 'active') {
       return NextResponse.json({ error: 'AI assistant is only available to staff members' }, { status: 403 })
     }
 

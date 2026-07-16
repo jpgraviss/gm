@@ -44,6 +44,7 @@ export const MERGE_FIELDS = [
   '{action_url}',
   '{details}',
   '{date}',
+  '{unsubscribe_url}',
 ] as const
 
 export const SAMPLE_DATA: Record<string, string> = {
@@ -52,6 +53,7 @@ export const SAMPLE_DATA: Record<string, string> = {
   '{action_url}': 'https://app.gravissmarketing.com',
   '{details}': 'Your task "Q4 Campaign Review" has been assigned to you.',
   '{date}': 'May 16, 2026',
+  '{unsubscribe_url}': 'https://app.gravissmarketing.com/api/sequences/unsubscribe?email=jane@example.com',
 }
 
 function uid(): string {
@@ -133,7 +135,11 @@ function renderBlockToHtml(block: TemplateBlock): string {
     case 'divider':
       return '<div style="padding:16px 24px;"><hr style="border:none;border-top:1px solid #e5e7eb;margin:0;" /></div>'
     case 'footer':
-      return `<div style="padding:16px 24px;text-align:center;font-size:12px;color:#9ca3af;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">${String(block.content.text ?? '')}<br/><a href="{action_url}/unsubscribe" style="color:#9ca3af;">Unsubscribe</a> · <a href="{action_url}/privacy" style="color:#9ca3af;">Privacy Policy</a><br/><span style="font-size:10px;">Graviss Marketing · 4235 Hillsboro Pike, Nashville, TN 37215</span></div>`
+      // {action_url}/unsubscribe was a bare path with no matching route —
+      // {unsubscribe_url} is a real merge field callers fill with the
+      // working /api/sequences/unsubscribe link (see generate-welcome.ts
+      // for the same fix on the other default footer).
+      return `<div style="padding:16px 24px;text-align:center;font-size:12px;color:#9ca3af;font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;">${String(block.content.text ?? '')}<br/><a href="{unsubscribe_url}" style="color:#9ca3af;">Unsubscribe</a> · <a href="{action_url}/privacy" style="color:#9ca3af;">Privacy Policy</a><br/><span style="font-size:10px;">Graviss Marketing · 4235 Hillsboro Pike, Nashville, TN 37215</span></div>`
     default:
       return ''
   }

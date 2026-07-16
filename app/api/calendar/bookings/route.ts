@@ -7,6 +7,7 @@ import { getResend } from '@/lib/resend'
 import { getSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { nowInZone } from '@/lib/timezone'
 
 export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
   const { searchParams } = new URL(req.url)
@@ -45,27 +46,37 @@ export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
       .eq('date', date)
       .eq('status', 'confirmed')
 
-    // Fetch imported calendar events (external subscriptions) for the same date
+    // Fetch imported calendar events (external subscriptions) for the same
+    // date — scoped to calendar_slug='imported' (the fixed bucket every
+    // ICS/subscription import writes to), not every booking org-wide.
+    // Previously had no calendar_slug filter at all, so any staff member's
+    // unrelated personal /book/[slug] meeting blocked every booking type's
+    // availability for that whole date.
     const { data: importedEvents } = await db
       .from('bookings')
       .select('start_time, end_time')
+      .eq('calendar_slug', 'imported')
       .eq('date', date)
       .eq('status', 'confirmed')
+
+    // Booking types have no timezone of their own — fall back to the
+    // connected staff Google Calendar's timezone (same source the busy-
+    // slot check below already uses), or America/Chicago if none connected.
+    let tz = 'America/Chicago'
+    const { data: allCals } = await db
+      .from('calendar_settings')
+      .select('*')
+      .not('google_refresh_token', 'is', null)
+      .limit(1)
+    const cal = allCals?.[0]
+    if (cal?.timezone) tz = cal.timezone
 
     // Fetch Google Calendar busy slots
     let googleBusyMinutes: { start: number; end: number }[] = []
     try {
-      const { data: allCals } = await db
-        .from('calendar_settings')
-        .select('*')
-        .not('google_refresh_token', 'is', null)
-        .limit(1)
-
-      const cal = allCals?.[0]
       if (cal) {
         const accessToken = await getValidAccessToken(cal as CalendarSettings)
         if (accessToken) {
-          const tz = cal.timezone || 'America/Chicago'
           const busySlots = await getGoogleBusySlots(accessToken, date, tz)
           googleBusyMinutes = busySlots.map(b => {
             const fmt = (iso: string) => {
@@ -90,9 +101,12 @@ export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
     const duration = bt.duration_minutes
     const buffer = bt.buffer_minutes
 
+    // "Now"/"today" must be read in the calendar's own timezone, not
+    // server-local (UTC on Vercel) — same bug class as AUDIT #97, missed
+    // there since this newer /go/book flow wasn't in that pass's scope.
     const slots: { start: string; end: string; label: string }[] = []
-    const todayStr = new Date().toISOString().split('T')[0]
-    const nowMinutes = date === todayStr ? new Date().getHours() * 60 + new Date().getMinutes() + 30 : 0
+    const { date: todayStr, minutes: nowMinutesInZone } = nowInZone(tz)
+    const nowMinutes = date === todayStr ? nowMinutesInZone + 30 : 0
 
     for (let min = startMinutes; min + duration <= endMinutes; min += duration + buffer) {
       if (min < nowMinutes) continue
@@ -127,7 +141,7 @@ export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
       }
     }
 
-    return NextResponse.json({ slots })
+    return NextResponse.json({ slots, timezone: tz })
   }
 
   // Below this point is the internal staff listing (no slug/date) — this

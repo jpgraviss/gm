@@ -9,6 +9,7 @@ import { SERVICE_NAMES } from '@/lib/services'
 
 export interface NewDealData {
   company: string
+  companyId?: string
   contactName: string
   contactTitle: string
   contactEmail: string
@@ -126,7 +127,7 @@ export default function NewDealPanel({ onSave, onClose, stages, pipelineId }: Pr
             <FieldLabel>Company</FieldLabel>
             <CompanySelect
               value={form.company}
-              onChange={(name) => set('company', name)}
+              onChange={(name, companyId) => setForm(prev => ({ ...prev, company: name, companyId }))}
               placeholder="Select a company..."
             />
           </div>

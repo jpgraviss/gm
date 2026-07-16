@@ -1,6 +1,7 @@
 // ─── Google Calendar API helpers (server-side only) ──────────────────────────
 
 import { encrypt, decrypt } from './encryption'
+import { zonedWallTimeToUtc, nowInZone } from './timezone'
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_CALENDAR  = 'https://www.googleapis.com/calendar/v3'
@@ -144,8 +145,11 @@ export async function getGoogleBusySlots(
   date: string,           // "YYYY-MM-DD"
   timezone: string,
 ): Promise<BusySlot[]> {
-  const dayStart = new Date(`${date}T00:00:00`)
-  const dayEnd   = new Date(`${date}T23:59:59`)
+  // date/timezone describe the booking calendar's own day boundary — must
+  // be converted from that zone's wall clock to a real UTC instant, not
+  // parsed as server-local (midnight Chicago time isn't midnight UTC).
+  const dayStart = zonedWallTimeToUtc(`${date}T00:00:00`, timezone)
+  const dayEnd   = zonedWallTimeToUtc(`${date}T23:59:59`, timezone)
 
   const res = await fetch(`${GOOGLE_CALENDAR}/freeBusy`, {
     method: 'POST',
@@ -357,12 +361,18 @@ export function computeAvailableSlots(
   googleBusySlots:   BusySlot[],
   existingBookings:  Pick<Booking, 'start_time' | 'end_time'>[],
 ): TimeSlot[] {
-  // Check day of week (JS getDay: 0=Sun, 1=Mon … 6=Sat)
-  const dayOfWeek = new Date(`${date}T12:00:00`).getDay()
+  // Check day of week (JS getUTCDay: 0=Sun, 1=Mon … 6=Sat) — `date` is
+  // already a calendar date (not derived from "now"), so parsing it as an
+  // explicit UTC noon avoids any server-timezone dependency entirely.
+  const dayOfWeek = new Date(`${date}T12:00:00Z`).getUTCDay()
   if (!settings.available_days.includes(dayOfWeek)) return []
 
-  // Don't return slots for dates in the past
-  const today = new Date().toISOString().split('T')[0]
+  // "Today" and "now" must be read in the booking calendar's own
+  // configured timezone, not the server's (UTC on Vercel) — otherwise
+  // "today" flips over at server midnight instead of local midnight, and
+  // the lead-time cutoff is off by the zone's UTC offset (e.g. blocking
+  // every slot after 7pm Chicago time when it's actually only 2pm).
+  const { date: today, minutes: nowMinutesInZone } = nowInZone(settings.timezone)
   if (date < today) return []
 
   const startMins  = timeToMinutes(settings.available_start)
@@ -370,7 +380,7 @@ export function computeAvailableSlots(
   const slotLen    = settings.duration
   const buffer     = settings.buffer
   const nowMins    = date === today
-    ? new Date().getHours() * 60 + new Date().getMinutes() + 30 // 30-min lead time
+    ? nowMinutesInZone + 30 // 30-min lead time
     : 0
 
   // Convert Google busy slots to local time ranges

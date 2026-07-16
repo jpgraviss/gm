@@ -3,11 +3,12 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { checkSite, recordCheck, computeUptime30d, type MonitoredSiteRow } from '@/lib/uptime'
-import { checkAllRanks } from '@/lib/rank-tracker'
+import { checkAllRanks, sendDueScheduledReports } from '@/lib/rank-tracker'
 import { publishSocialPost } from '@/lib/social-publish'
 import { processScheduledEmails } from '@/lib/email-scheduler'
 import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender'
 import { syncGranolaNotes, isGranolaConfigured } from '@/lib/granola'
+import { dispatchReviewCampaign } from '@/lib/review-campaigns'
 
 /**
  * Cron endpoint — called on a schedule (e.g. every 6 hours via Vercel Cron).
@@ -169,8 +170,72 @@ export const GET = withErrorHandler('cron GET', async (req) => {
     results.granola = { error: 'Failed' }
   }
 
+  // 10. Dispatch scheduled review campaigns whose scheduled_at has passed.
+  try {
+    results.reviewCampaigns = await dispatchScheduledReviewCampaigns()
+  } catch (err) {
+    console.error('[cron] Review campaign dispatch failed:', err)
+    results.reviewCampaigns = { error: 'Failed' }
+  }
+
+  // 11. Send scheduled rank-tracker ranking reports whose cadence is due.
+  try {
+    results.rankTrackerReports = await sendDueScheduledReports()
+  } catch (err) {
+    console.error('[cron] Rank tracker scheduled reports failed:', err)
+    results.rankTrackerReports = { error: 'Failed' }
+  }
+
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })
 })
+
+/**
+ * Send review campaigns whose scheduled_at has arrived. Each row is claimed
+ * atomically (status 'scheduled' -> 'active', only proceeding if the update
+ * actually returned a row) so two overlapping cron ticks can't both dispatch
+ * the same campaign twice.
+ */
+async function dispatchScheduledReviewCampaigns(): Promise<{ dispatched: number; sent: number; failed: number }> {
+  const db = createServiceClient()
+  const now = new Date().toISOString()
+
+  const { data: due } = await db
+    .from('review_campaigns')
+    .select('id')
+    .eq('status', 'scheduled')
+    .lte('scheduled_at', now)
+    .limit(20)
+
+  let dispatched = 0
+  let sent = 0
+  let failed = 0
+
+  for (const row of due ?? []) {
+    const { data: claimed } = await db
+      .from('review_campaigns')
+      .update({ status: 'active' })
+      .eq('id', row.id)
+      .eq('status', 'scheduled')
+      .select('*')
+      .maybeSingle()
+    if (!claimed) continue
+
+    dispatched++
+    try {
+      const result = await dispatchReviewCampaign(db, claimed)
+      sent += result.sent
+      failed += result.failed
+      await db.from('review_campaigns').update({ status: 'sent' }).eq('id', claimed.id)
+    } catch (err) {
+      console.error('[cron] Failed to dispatch review campaign', claimed.id, err)
+      // Leave it claimable again rather than stuck 'active' forever.
+      await db.from('review_campaigns').update({ status: 'scheduled' }).eq('id', claimed.id)
+      failed++
+    }
+  }
+
+  return { dispatched, sent, failed }
+}
 
 /**
  * Determine if we should run the daily rank-tracking job on this cron tick.
@@ -317,6 +382,7 @@ async function spawnRecurringTasks() {
     if (isNaN(baseDue.getTime())) continue
 
     const nextDue = new Date(baseDue)
+    const originalDay = nextDue.getDate()
     switch (rec.frequency) {
       case 'daily':
         nextDue.setDate(nextDue.getDate() + rec.interval)
@@ -326,6 +392,10 @@ async function spawnRecurringTasks() {
         break
       case 'monthly':
         nextDue.setMonth(nextDue.getMonth() + rec.interval)
+        // setMonth silently overflows for due-days 29-31 into whatever day
+        // the target month lands on (Jan 31 + 1mo -> Mar 3, skipping
+        // February entirely) — clamp back to the target month's last day.
+        if (nextDue.getDate() !== originalDay) nextDue.setDate(0)
         break
       default:
         continue
@@ -333,10 +403,25 @@ async function spawnRecurringTasks() {
 
     const nextDueStr = nextDue.toISOString().split('T')[0]
 
+    // Atomic claim — null recurrence first, conditioned on it still being
+    // set, so two overlapping cron ticks (GH Actions pings every 5 min,
+    // no execution-time guard) can't both read this same completed task
+    // and both spawn a duplicate next occurrence. Sibling jobs in this
+    // file (resumePendingAutomationSteps, dispatchScheduledReviewCampaigns)
+    // already use this claim-before-work pattern; this was the one job
+    // missing it.
+    const { data: claimed } = await db
+      .from('app_tasks')
+      .update({ recurrence: null })
+      .eq('id', task.id)
+      .not('recurrence', 'is', null)
+      .select('id')
+      .maybeSingle()
+    if (!claimed) continue
+
     // Respect endDate — don't spawn if next date is past endDate
+    // (recurrence is already cleared above, so it won't be re-checked)
     if (rec.endDate && nextDueStr > rec.endDate) {
-      // Clear recurrence on the completed task so we don't check it again
-      await db.from('app_tasks').update({ recurrence: null }).eq('id', task.id)
       continue
     }
 
@@ -357,9 +442,6 @@ async function spawnRecurringTasks() {
       recurrence:        task.recurrence,
       parent_task_id:    task.id,
     })
-
-    // Null out recurrence on the completed task so it doesn't spawn again
-    await db.from('app_tasks').update({ recurrence: null }).eq('id', task.id)
   }
 }
 

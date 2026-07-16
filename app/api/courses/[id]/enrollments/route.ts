@@ -3,6 +3,8 @@ import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapEnrollment(row: any) {
@@ -25,6 +27,19 @@ export const GET = withErrorHandler('courses/[id]/enrollments GET', async (
   req,
   { params }: { params: Promise<{ id: string }> },
 ) => {
+  // The real course viewer and the portal training page both call this to
+  // find the caller's own enrollment by filtering client-side for their
+  // email (app/courses/[id]/page.tsx, app/portal/services/sales-training/
+  // page.tsx) — requireRole('Team Member') blocked every portal client.
+  // Note: this still returns every student's enrollment for the course to
+  // any authenticated caller, which is broader than ideal (a residual
+  // architecture gap, not something this pass redesigns) — the narrower,
+  // per-enrollment routes below are the ones that enforce real ownership.
+  const email = await getAuthenticatedEmail(req)
+  if (!email) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const { id } = await params
   const pag = parsePagination(req)
   const db = createServiceClient()
@@ -47,6 +62,9 @@ export const POST = withErrorHandler('courses/[id]/enrollments POST', async (
   req,
   { params }: { params: Promise<{ id: string }> },
 ) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const body = await req.json()
 

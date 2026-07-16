@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { applyAudienceFilter, resolveEngagementFilters } from '@/lib/broadcasts'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 /**
  * Preview audience — returns count + sample emails for the current
  * broadcast's audience filter.
  */
-export const GET = withErrorHandler('broadcasts/[id]/audience GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('broadcasts/[id]/audience GET', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
 

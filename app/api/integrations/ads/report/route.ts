@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdsSummary, getAdsCampaigns } from '@/lib/google-ads'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 /**
  * GET /api/integrations/ads/report?customerId=1234567890&days=28
  * Returns a summary card + per-campaign rows for a given Google Ads customer.
  */
 export const GET = withErrorHandler('ads/report GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { searchParams } = new URL(req.url)
   const customerId = searchParams.get('customerId')
   const days = parseInt(searchParams.get('days') ?? '28', 10)

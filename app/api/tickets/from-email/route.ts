@@ -45,6 +45,10 @@ async function processInbox(
     const fromHeader = (headers as GmailHeader[]).find((h) => h.name === 'From')?.value ?? ''
     const subject = (headers as GmailHeader[]).find((h) => h.name === 'Subject')?.value ?? 'No Subject'
     const dateHeader = (headers as GmailHeader[]).find((h) => h.name === 'Date')?.value ?? ''
+    // RFC 5322 Message-ID — set by the originating mail server, identical
+    // across every mailbox that received a copy of the same physical
+    // email (unlike Gmail's own `id`, which is assigned per-account).
+    const rfcMessageId = (headers as GmailHeader[]).find((h) => h.name.toLowerCase() === 'message-id')?.value?.trim() || null
 
     const emailMatch = fromHeader.match(/<([^>]+)>/) || fromHeader.match(/([^\s<]+@[^\s>]+)/)
     const senderEmail = emailMatch ? emailMatch[1].toLowerCase() : ''
@@ -54,7 +58,31 @@ async function processInbox(
       await db.from('processed_emails').insert({
         id: `pe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         gmail_message_id: msgId,
+        rfc_message_id: rfcMessageId,
       })
+      skipped++
+      continue
+    }
+
+    // Atomic claim before creating a ticket. gmail_message_id is unique
+    // per Gmail account, so this closes the same-mailbox race (two
+    // overlapping polls of one account both passing the up-front
+    // processedIds check and both creating a ticket for the same
+    // message). rfc_message_id is unique across every account, so it also
+    // closes the cross-account race (the same physical email landing in
+    // two different staff members' inboxes — e.g. a shared alias
+    // forwarding to multiple people — no longer creates two tickets). The
+    // old code checked-then-created-then-recorded, leaving a window
+    // between the check and the ticket insert where two racing calls
+    // could both pass; claiming first via a unique-constrained insert
+    // makes the claim itself atomic.
+    const claimId = `pe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const { error: claimErr } = await db.from('processed_emails').insert({
+      id: claimId,
+      gmail_message_id: msgId,
+      rfc_message_id: rfcMessageId,
+    })
+    if (claimErr) {
       skipped++
       continue
     }
@@ -92,8 +120,15 @@ async function processInbox(
     }
     body = extractText(msg.payload) || subject
 
+    // A malformed/non-standard RFC 2822 Date header makes new Date(...)
+    // return Invalid Date, and .toISOString() on that throws RangeError —
+    // which previously escaped this loop entirely, aborting processing of
+    // every remaining unread message in the account for this poll.
+    const parsedDate = dateHeader ? new Date(dateHeader) : new Date()
+    const createdDate = (Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate).toISOString().split('T')[0]
+
     const ticketId = `tkt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    await db.from('tickets').insert({
+    const { error: ticketErr } = await db.from('tickets').insert({
       id: ticketId,
       subject,
       company: matchedCompany || 'Unknown',
@@ -101,23 +136,36 @@ async function processInbox(
       priority: 'Medium',
       source: 'Email',
       assigned_to: '',
-      created_date: dateHeader ? new Date(dateHeader).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      created_date: createdDate,
       tags: [],
+      // Field names must match what mapTicket()/the tickets UI actually
+      // read (body/timestamp/isInternal, see app/api/tickets/route.ts and
+      // app/tickets/page.tsx) — this previously wrote text/date/internal,
+      // so every email-created ticket rendered with a blank first message
+      // and no timestamp in the staff UI.
       messages: [{
         id: `msg-${Date.now()}`,
         author: senderName || senderEmail,
-        text: body.slice(0, 5000),
-        date: new Date().toISOString(),
-        internal: false,
+        body: body.slice(0, 5000),
+        timestamp: new Date().toISOString(),
+        isInternal: false,
       }],
       gmail_message_id: msgId,
     })
 
-    await db.from('processed_emails').insert({
-      id: `pe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      gmail_message_id: msgId,
-      ticket_id: ticketId,
-    })
+    if (ticketErr) {
+      // The processed_emails claim above already committed atomically —
+      // if ticket creation itself then fails, release that claim instead
+      // of leaving it permanently marked processed with no ticket ever
+      // created (which would silently drop the email forever). Deleting
+      // it lets the next poll re-fetch and retry this same message.
+      console.error(`[tickets/from-email] ticket insert failed for ${msgId}:`, ticketErr.message)
+      await db.from('processed_emails').delete().eq('id', claimId)
+      skipped++
+      continue
+    }
+
+    await db.from('processed_emails').update({ ticket_id: ticketId }).eq('id', claimId)
 
     created++
   }

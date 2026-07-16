@@ -22,7 +22,10 @@ function mapBrandKit(row: any) {
   }
 }
 
-export const GET = withErrorHandler('brand-kits/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('brand-kits/[id] GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
   const { data } = await db.from('brand_kits').select('*').eq('id', id).single()
@@ -31,6 +34,9 @@ export const GET = withErrorHandler('brand-kits/[id] GET', async (_req, { params
 })
 
 export const PATCH = withErrorHandler('brand-kits/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()

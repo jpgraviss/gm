@@ -34,12 +34,20 @@ export const POST = withErrorHandler('gmail/send POST', async (req) => {
     const db = createServiceClient()
     const { data: member, error: memberErr } = await db
       .from('team_members')
-      .select('gmail_access_token, gmail_email, gmail_token_expires_at')
+      .select('gmail_access_token, gmail_email, gmail_token_expires_at, status')
       .eq('email', userEmail)
       .single()
 
     if (memberErr || !member) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // getAuthenticatedEmail() only verifies the caller HOLDS a valid
+    // session — it never checks team_members.status, so a suspended
+    // employee's still-valid Supabase session (suspending someone doesn't
+    // revoke it) could otherwise keep sending real outbound email here.
+    if (member.status !== 'active') {
+      return NextResponse.json({ error: 'Account is not active' }, { status: 403 })
     }
 
     if (!member.gmail_access_token) {

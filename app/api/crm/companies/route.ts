@@ -26,6 +26,7 @@ function mapCompany(row: any) {
     createdDate:    row.created_date ?? '',
     lastActivity:   row.last_activity ?? undefined,
     notes:          row.notes ?? undefined,
+    customFields:   row.custom_fields ?? {},
   }
 }
 

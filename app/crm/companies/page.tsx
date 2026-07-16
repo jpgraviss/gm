@@ -26,10 +26,12 @@ import {
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
   ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload, BarChart3,
   Monitor, Loader2, Sparkles, Wand2, Share2, Brain, Download, GitMerge, ArrowUpDown,
-  CheckSquare, Circle, CheckCircle2,
+  CheckSquare, Circle, CheckCircle2, UserCog,
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
+import SmartListBar from '@/components/crm/SmartListBar'
+import CustomFieldsSection from '@/components/crm/CustomFieldsSection'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { useEnrichment } from '@/lib/useEnrichment'
@@ -148,21 +150,45 @@ function CompanyFilesTab({ companyId }: { companyId: string }) {
   }
 
   async function handleDelete(fileId: string) {
+    const removed = files.find(f => f.id === fileId)
+    const removedIndex = files.findIndex(f => f.id === fileId)
     setFiles(prev => prev.filter(f => f.id !== fileId))
     try {
-      await fetch(`/api/crm/companies/${companyId}/files`, {
+      const res = await fetch(`/api/crm/companies/${companyId}/files`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileId }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        if (removed) setFiles(prev => [...prev.slice(0, removedIndex), removed, ...prev.slice(removedIndex)])
+        toast(err.error || 'Failed to delete file', 'error')
+        return
+      }
       toast('File deleted', 'success')
     } catch {
+      if (removed) setFiles(prev => [...prev.slice(0, removedIndex), removed, ...prev.slice(removedIndex)])
       toast('Failed to delete file', 'error')
     }
   }
 
   async function handleCategoryChange(fileId: string, category: string) {
+    const prevCategory = files.find(f => f.id === fileId)?.category
     setFiles(prev => prev.map(f => f.id === fileId ? { ...f, category } : f))
+    try {
+      const res = await fetch(`/api/crm/companies/${companyId}/files`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId, category }),
+      })
+      if (!res.ok) {
+        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, category: prevCategory ?? f.category } : f))
+        toast('Failed to update file category', 'error')
+      }
+    } catch {
+      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, category: prevCategory ?? f.category } : f))
+      toast('Failed to update file category', 'error')
+    }
   }
 
   function formatSize(bytes: number) {
@@ -629,6 +655,8 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                   <p className="text-sm text-gray-700 leading-relaxed">{company.description}</p>
                 </div>
               )}
+
+              <CustomFieldsSection entityType="companies" values={company.customFields ?? {}} editing={false} variant="card" />
 
               {/* Primary contact quick view */}
               {companyContacts.filter(c => c.isPrimary).map(c => (
@@ -1317,6 +1345,7 @@ function EditCompanyPanel({
     description: company.description ?? '',
     status: company.status as CompanyStatus,
   })
+  const [customFields, setCustomFields] = useState<Record<string, string>>(company.customFields ?? {})
 
   const { enriching, enrichedFields, enrich, markEnriched, clearEnriched } = useEnrichment()
 
@@ -1358,6 +1387,7 @@ function EditCompanyPanel({
       owner: form.owner,
       description: form.description.trim() || undefined,
       status: form.status,
+      customFields,
     })
   }
 
@@ -1509,6 +1539,13 @@ function EditCompanyPanel({
               placeholder="About this company..."
               className={`w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none ${ec('description')}`} />
           </div>
+
+          <CustomFieldsSection
+            entityType="companies"
+            values={customFields}
+            editing
+            onChange={(key, value) => setCustomFields(prev => ({ ...prev, [key]: value }))}
+          />
         </div>
 
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
@@ -1533,6 +1570,7 @@ function EditCompanyPanel({
 
 export default function CompaniesPage() {
   const { toast } = useToast()
+  const REPS = useTeamMembers()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -1546,6 +1584,10 @@ export default function CompaniesPage() {
   const [showDuplicates, setShowDuplicates] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  const [showBulkTag, setShowBulkTag] = useState(false)
+  const [bulkTagValue, setBulkTagValue] = useState('')
+  const [showBulkReassign, setShowBulkReassign] = useState(false)
+  const [bulkReassignValue, setBulkReassignValue] = useState('')
 
   const [sortKey, setSortKey] = useState<string>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -1657,9 +1699,23 @@ export default function CompaniesPage() {
 
   async function handleDeleteCompany(id: string) {
     if (!confirm('Delete this company? This action cannot be undone.')) return
+    const removed = localCompanies.find(c => c.id === id)
     setLocalCompanies(prev => prev.filter(c => c.id !== id))
     if (selectedCompany?.id === id) setSelectedCompany(null)
-    await fetch(`/api/crm/companies/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete company', 'error'))
+    try {
+      const res = await fetch(`/api/crm/companies/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        // Most commonly a 409 — company still has related records (AUDIT
+        // #96 blocks rather than cascade-deletes them). Revert the
+        // optimistic removal so the UI doesn't show it as gone when it isn't.
+        const body = await res.json().catch(() => ({}))
+        if (removed) setLocalCompanies(prev => [removed, ...prev])
+        toast(body.error || 'Failed to delete company', 'error')
+      }
+    } catch {
+      if (removed) setLocalCompanies(prev => [removed, ...prev])
+      toast('Failed to delete company', 'error')
+    }
   }
 
   const filtered = localCompanies.filter(c => {
@@ -1691,19 +1747,77 @@ export default function CompaniesPage() {
 
   async function handleBulkDelete() {
     const ids = Array.from(selectedIds)
-    setLocalCompanies(prev => prev.filter(c => !selectedIds.has(c.id)))
     setSelectedIds(new Set())
     setShowBulkDeleteConfirm(false)
     try {
-      await fetch('/api/crm/bulk-delete', {
+      const res = await fetch('/api/crm/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'companies', ids }),
       })
-      toast(`${ids.length} companies deleted`, 'success')
+      if (!res.ok) {
+        toast('Failed to delete companies', 'error')
+        return
+      }
+      const body = await res.json() as { deleted: number; skipped: { id: string; name: string; reason: string }[] }
+      // AUDIT #96: blocks per-company rather than cascade-destroying real
+      // business records — only actually-deleted companies (never the
+      // skipped ones) get removed from the visible list, since they
+      // weren't removed server-side either.
+      const skippedIds = new Set(body.skipped.map(s => s.id))
+      setLocalCompanies(prev => prev.filter(c => !selectedIds.has(c.id) || skippedIds.has(c.id)))
+      if (body.skipped.length > 0) {
+        const detail = body.skipped.map(s => `${s.name} (${s.reason})`).join('; ')
+        toast(`${body.deleted} deleted, ${body.skipped.length} skipped — ${detail}`, body.deleted > 0 ? 'success' : 'error')
+      } else {
+        toast(`${body.deleted} companies deleted`, 'success')
+      }
     } catch {
       toast('Failed to delete companies', 'error')
     }
+  }
+
+  async function handleBulkTag() {
+    const tag = bulkTagValue.trim()
+    if (!tag) return
+    const ids = Array.from(selectedIds)
+    setLocalCompanies(prev => prev.map(c =>
+      selectedIds.has(c.id) && !c.tags.includes(tag)
+        ? { ...c, tags: [...c.tags, tag] }
+        : c
+    ))
+    setShowBulkTag(false)
+    setBulkTagValue('')
+    setSelectedIds(new Set())
+    for (const id of ids) {
+      const company = localCompanies.find(c => c.id === id)
+      if (company && !company.tags.includes(tag)) {
+        fetch(`/api/crm/companies/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tags: [...company.tags, tag] }),
+        }).catch(() => {})
+      }
+    }
+    toast(`Tag "${tag}" applied to ${ids.length} companies`, 'success')
+  }
+
+  async function handleBulkReassign() {
+    const owner = bulkReassignValue.trim()
+    if (!owner) return
+    const ids = Array.from(selectedIds)
+    setLocalCompanies(prev => prev.map(c => selectedIds.has(c.id) ? { ...c, owner } : c))
+    setShowBulkReassign(false)
+    setBulkReassignValue('')
+    setSelectedIds(new Set())
+    for (const id of ids) {
+      fetch(`/api/crm/companies/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner }),
+      }).catch(() => {})
+    }
+    toast(`${ids.length} companies reassigned to ${owner}`, 'success')
   }
 
   useEffect(() => { queueMicrotask(() => setCurrentPage(1)) }, [search, statusFilter])
@@ -1784,6 +1898,17 @@ export default function CompaniesPage() {
             <Upload size={13} /> Import CSV
           </button>
           <span className="ml-auto text-sm text-gray-400">{filtered.length} companies</span>
+        </div>
+
+        <div className="mb-4">
+          <SmartListBar
+            entityType="companies"
+            currentCriteria={{ search, statusFilter }}
+            onApply={criteria => {
+              setSearch(criteria.search ?? '')
+              setStatusFilter(criteria.statusFilter ?? 'All')
+            }}
+          />
         </div>
 
         {/* Table */}
@@ -2027,6 +2152,8 @@ export default function CompaniesPage() {
                 { key: 'owner', label: 'Owner' },
               ], 'companies-export.csv')
             } },
+            { label: 'Tag', icon: <Tag size={13} />, onClick: () => setShowBulkTag(true) },
+            { label: 'Reassign', icon: <UserCog size={13} />, onClick: () => setShowBulkReassign(true) },
             { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => setShowBulkDeleteConfirm(true), variant: 'danger' },
           ]}
         />
@@ -2034,10 +2161,57 @@ export default function CompaniesPage() {
       {showBulkDeleteConfirm && (
         <ConfirmModal
           title={`Delete ${selectedIds.size} companies?`}
-          description="This will also remove associated contacts, deals, and contracts."
+          description="Companies with existing contacts, deals, contracts, invoices, projects, or proposals will be skipped — reassign or remove those first."
           onConfirm={handleBulkDelete}
           onCancel={() => setShowBulkDeleteConfirm(false)}
         />
+      )}
+      {showBulkTag && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBulkTag(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 flex flex-col gap-4">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Tag {selectedIds.size} companies</p>
+              <p className="text-xs text-gray-500 mt-0.5">Apply a tag to all selected companies</p>
+            </div>
+            <input
+              value={bulkTagValue}
+              onChange={e => setBulkTagValue(e.target.value)}
+              placeholder="Tag name..."
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') handleBulkTag() }}
+            />
+            <div className="flex gap-2">
+              <button onClick={handleBulkTag} disabled={!bulkTagValue.trim()} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>Apply Tag</button>
+              <button onClick={() => setShowBulkTag(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showBulkReassign && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBulkReassign(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 flex flex-col gap-4">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Reassign {selectedIds.size} companies</p>
+              <p className="text-xs text-gray-500 mt-0.5">Set the owner for all selected companies</p>
+            </div>
+            <select
+              value={bulkReassignValue}
+              onChange={e => setBulkReassignValue(e.target.value)}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              autoFocus
+            >
+              <option value="">Select owner...</option>
+              {REPS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <div className="flex gap-2">
+              <button onClick={handleBulkReassign} disabled={!bulkReassignValue.trim()} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>Reassign</button>
+              <button onClick={() => setShowBulkReassign(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
       {showDuplicates && (
         <DuplicatesPanel

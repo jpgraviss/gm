@@ -7,6 +7,7 @@ import {
 } from '@/lib/google-calendar'
 import { getSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
+import { zonedWallTimeToUtc } from '@/lib/timezone'
 
 // GET /api/bookings?slug=jaycee-graviss&status=confirmed
 export const GET = withErrorHandler('bookings GET', async (req) => {
@@ -78,12 +79,6 @@ export const POST = withErrorHandler('bookings POST', async (req) => {
   if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) {
     return NextResponse.json({ error: 'Invalid time format' }, { status: 400 })
   }
-  // Prevent bookings in the past
-  const bookingDate = new Date(`${date}T${startTime}:00`)
-  if (bookingDate < new Date()) {
-    return NextResponse.json({ error: 'Cannot book a time in the past' }, { status: 400 })
-  }
-
   const db = createServiceClient()
 
   // Fetch calendar settings
@@ -95,6 +90,17 @@ export const POST = withErrorHandler('bookings POST', async (req) => {
 
   if (settingsErr || !settings) {
     return NextResponse.json({ error: 'Calendar not found' }, { status: 404 })
+  }
+
+  // Prevent bookings in the past — must use the calendar's own configured
+  // timezone, not server-local (UTC on Vercel), or a legitimate same-day
+  // afternoon booking in a US timezone gets wrongly rejected as "past"
+  // whenever the server's current UTC hour has already numerically passed
+  // the requested wall-clock hour (same bug class as AUDIT #97, missed
+  // there since this route wasn't in that pass's scope).
+  const bookingDate = zonedWallTimeToUtc(`${date}T${startTime}`, settings.timezone)
+  if (bookingDate < new Date()) {
+    return NextResponse.json({ error: 'Cannot book a time in the past' }, { status: 400 })
   }
 
   // Double-check slot is still available (prevent race conditions)

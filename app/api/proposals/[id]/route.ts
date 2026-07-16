@@ -16,6 +16,14 @@ import { withErrorHandler } from '@/lib/api-handler'
 // their own proposal to an arbitrary different company.
 const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['status', 'respondedDate', 'renewalNotes'])
 
+// Proposals have no transition-graph guard at all (unlike contracts) — any
+// value in PROPOSAL_STATUSES passes the general validate() check above.
+// A portal client should only ever move their own proposal to one of
+// these 3 (matching the real Approvals UI), not e.g. directly to
+// 'Approved', an internal-workflow status meant to represent staff
+// sign-off.
+const PORTAL_CLIENT_ALLOWED_STATUSES = new Set(['Accepted', 'Declined', 'Draft'])
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProposal(row: any) {
   return {
@@ -87,6 +95,9 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
     const disallowed = Object.keys(body).filter(k => !PORTAL_CLIENT_EDITABLE_FIELDS.has(k))
     if (disallowed.length > 0) {
       return NextResponse.json({ error: `Not permitted to update: ${disallowed.join(', ')}` }, { status: 403 })
+    }
+    if (body.status !== undefined && !PORTAL_CLIENT_ALLOWED_STATUSES.has(body.status)) {
+      return NextResponse.json({ error: `Not permitted to set status to: ${body.status}` }, { status: 403 })
     }
   }
 

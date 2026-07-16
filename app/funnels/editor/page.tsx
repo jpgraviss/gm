@@ -600,11 +600,15 @@ function EditorInner() {
     if (!funnelId || !pageId) return
     setPublishing(true)
     try {
-      await fetch(`/api/funnels/${funnelId}/pages`, {
+      const saveRes = await fetch(`/api/funnels/${funnelId}/pages`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId, blocks, name: pageName }),
       })
+      if (!saveRes.ok) {
+        toast('Failed to save latest edits — funnel not published', 'error')
+        return
+      }
       const res = await fetch(`/api/funnels/${funnelId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

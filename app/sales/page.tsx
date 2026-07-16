@@ -8,6 +8,7 @@ import {
   BookOpen, GraduationCap, DollarSign, Target, ArrowRight, RefreshCw,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 const CARDS = [
   { title: 'Pipeline',         href: '/crm/pipeline',     icon: <TrendingUp size={20} />,   color: '#015035', description: 'Manage deals across stages' },
@@ -21,8 +22,6 @@ const CARDS = [
   { title: 'Courses',          href: '/courses',          icon: <GraduationCap size={20} />, color: '#ec4899', description: 'Training and certifications' },
 ]
 
-const CLOSED_STAGES = ['Closed Won', 'Closed Lost']
-
 export default function SalesHub() {
   const [activeDeals, setActiveDeals] = useState<number | null>(null)
   const [pipelineValue, setPipelineValue] = useState<number | null>(null)
@@ -33,23 +32,26 @@ export default function SalesHub() {
   async function loadKPIs() {
     setRefreshing(true)
     try {
-      const [dealsRes, proposalsRes, contractsRes] = await Promise.all([
-        fetch('/api/deals').then(r => r.ok ? r.json() : { data: [] }),
-        fetch('/api/proposals').then(r => r.ok ? r.json() : { data: [] }),
-        fetch('/api/contracts').then(r => r.ok ? r.json() : { data: [] }),
+      // These endpoints are cursor-paginated at 100 rows — a raw fetch()
+      // silently truncated KPIs once an org passed that count (same bug
+      // class already fixed for Pipeline/Workspace, AUDIT #48).
+      const [deals, proposals, contracts] = await Promise.all([
+        fetchAllPages<{ stage: string; value: number }>('/api/deals'),
+        fetchAllPages<{ status: string }>('/api/proposals'),
+        fetchAllPages<{ status: string }>('/api/contracts'),
       ])
 
-      const deals = Array.isArray(dealsRes) ? dealsRes : (dealsRes.data ?? [])
-      const open = deals.filter((d: { stage: string }) => !CLOSED_STAGES.includes(d.stage))
+      // Matches app/crm/pipeline/page.tsx's !stage.startsWith('Closed')
+      // check (AUDIT #53) — an exact 'Closed Won'/'Closed Lost' match
+      // miscounts custom stage names like "Closed - Duplicate".
+      const open = deals.filter(d => !d.stage.startsWith('Closed'))
       setActiveDeals(open.length)
-      setPipelineValue(open.reduce((s: number, d: { value: number }) => s + (d.value ?? 0), 0))
+      setPipelineValue(open.reduce((s, d) => s + (d.value ?? 0), 0))
 
-      const proposals = Array.isArray(proposalsRes) ? proposalsRes : (proposalsRes.data ?? [])
-      const sent = proposals.filter((p: { status: string }) => p.status !== 'Draft')
+      const sent = proposals.filter(p => p.status !== 'Draft')
       setProposalsSent(sent.length)
 
-      const contracts = Array.isArray(contractsRes) ? contractsRes : (contractsRes.data ?? [])
-      const signed = contracts.filter((c: { status: string }) => c.status === 'Fully Executed')
+      const signed = contracts.filter(c => c.status === 'Fully Executed')
       setContractsSigned(signed.length)
     } catch { /* non-fatal */ }
     setRefreshing(false)

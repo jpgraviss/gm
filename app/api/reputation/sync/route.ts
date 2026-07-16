@@ -3,8 +3,12 @@ import { createServiceClient } from '@/lib/supabase'
 import { getGBPReviews, STAR_TO_NUMBER } from '@/lib/google-business-profile'
 import type { GBPStarRating } from '@/lib/google-business-profile'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
-export const POST = withErrorHandler('reputation/sync POST', async () => {
+export const POST = withErrorHandler('reputation/sync POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
 
   const { data: settings } = await db

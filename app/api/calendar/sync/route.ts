@@ -9,6 +9,7 @@ import {
 import { encrypt, decrypt } from '@/lib/encryption'
 import { requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
+import { dateAndTimeInZone } from '@/lib/timezone'
 
 export const POST = withErrorHandler('calendar/sync POST', async (req) => {
   const cronSecret = process.env.CRON_SECRET
@@ -82,11 +83,17 @@ export const POST = withErrorHandler('calendar/sync POST', async (req) => {
         const endTime = event.end?.dateTime || event.end?.date
         if (!startTime || !endTime) continue
 
+        // event.start.dateTime is a real RFC3339 instant (Google always
+        // includes an offset), so the Date itself is correct — but reading
+        // it back with getHours()/toISOString() extracts server-local
+        // (UTC) wall clock, not this calendar's configured timezone. Since
+        // computeAvailableSlots compares stored booking.start_time against
+        // slots as wall-clock in cal.timezone, a mismatch here silently
+        // corrupts availability blocking for any non-UTC calendar.
         const startDate = new Date(startTime)
         const endDate = new Date(endTime)
-        const date = startDate.toISOString().split('T')[0]
-        const startHHMM = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`
-        const endHHMM = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`
+        const { date, time: startHHMM } = dateAndTimeInZone(startDate, cal.timezone)
+        const { time: endHHMM } = dateAndTimeInZone(endDate, cal.timezone)
 
         if (existing) {
           if (existing.date !== date || existing.start_time !== startHHMM || existing.end_time !== endHHMM) {

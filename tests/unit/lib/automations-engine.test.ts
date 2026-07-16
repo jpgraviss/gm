@@ -67,9 +67,9 @@ describe('automations-engine', () => {
   })
 
   type RawAction = string | { type: string; config?: Record<string, unknown> }
-  function setupAutomations(trigger: string, actions: RawAction[], name = 'Test Auto') {
+  function setupAutomations(trigger: string, actions: RawAction[], name = 'Test Auto', config: Record<string, unknown> = {}) {
     automationsResult = {
-      data: [{ id: 'auto-1', name, trigger, actions, status: 'Active', runs: 0 }],
+      data: [{ id: 'auto-1', name, trigger, actions, status: 'Active', runs: 0, config }],
       error: null,
     }
   }
@@ -178,6 +178,41 @@ describe('automations-engine', () => {
         user_name: 'System',
       }),
     )
+  })
+
+  it('deal_stage_changed: fires when config.stage matches the triggered stage', async () => {
+    setupAutomations('Deal Stage Changed', ['Notify Sales Rep'], 'Test Auto', { stage: 'Closed Won' })
+    fireAutomations('deal_stage_changed', { company: 'Echo Ltd', stage: 'Closed Won' })
+    await flushPromises()
+    expect(insertCalls['crm_activities']).toBeDefined()
+  })
+
+  it('deal_stage_changed: skips when config.stage does not match the triggered stage', async () => {
+    setupAutomations('Deal Stage Changed', ['Notify Sales Rep'], 'Test Auto', { stage: 'Closed Won' })
+    fireAutomations('deal_stage_changed', { company: 'Echo Ltd', stage: 'Qualified' })
+    await flushPromises()
+    expect(insertCalls['crm_activities']).toBeUndefined()
+  })
+
+  it('deal_stage_changed: fires on any stage when config.stage is unset', async () => {
+    setupAutomations('Deal Stage Changed', ['Notify Sales Rep'])
+    fireAutomations('deal_stage_changed', { company: 'Echo Ltd', stage: 'Qualified' })
+    await flushPromises()
+    expect(insertCalls['crm_activities']).toBeDefined()
+  })
+
+  it('invoice_overdue: fires when config.overdueDays matches the real triggerData value', async () => {
+    setupAutomations('Invoice Overdue', ['Notify Sales Rep'], 'Test Auto', { overdueDays: 3 })
+    fireAutomations('invoice_overdue', { company: 'Foxtrot LLC', overdueDays: 3 })
+    await flushPromises()
+    expect(insertCalls['crm_activities']).toBeDefined()
+  })
+
+  it('invoice_overdue: skips when config.overdueDays does not match (e.g. day-0 fire against a 3-day-configured automation)', async () => {
+    setupAutomations('Invoice Overdue', ['Notify Sales Rep'], 'Test Auto', { overdueDays: 3 })
+    fireAutomations('invoice_overdue', { company: 'Foxtrot LLC' }) // no overdueDays = the initial day-0 fire
+    await flushPromises()
+    expect(insertCalls['crm_activities']).toBeUndefined()
   })
 
   it('fires "Log Activity" on contact_created', async () => {

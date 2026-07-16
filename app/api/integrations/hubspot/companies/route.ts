@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 const HUBSPOT_COMPANIES_URL = 'https://api.hubapi.com/crm/v3/objects/companies'
 
@@ -134,6 +135,9 @@ function mapCompanyToResponse(c: HubSpotCompany) {
 }
 
 export const GET = withErrorHandler('integrations/hubspot/companies GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(
@@ -173,6 +177,9 @@ export const GET = withErrorHandler('integrations/hubspot/companies GET', async 
 })
 
 export const POST = withErrorHandler('integrations/hubspot/companies POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const apiKey = await getApiKey()
   if (!apiKey) {
     return NextResponse.json(

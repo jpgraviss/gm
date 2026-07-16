@@ -71,10 +71,30 @@ function downloadReceipt(invoice: Invoice) {
 }
 
 function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: Invoice; onClose: () => void; contracts: Contract[]; allInvoices: Invoice[] }) {
+  const { toast } = useToast()
+  const [generatingLink, setGeneratingLink] = useState(false)
   const linkedContract = contracts.find(c => c.id === invoice.contractId)
   const relatedInvoices = allInvoices.filter(i => i.contractId === invoice.contractId && i.id !== invoice.id)
   const isOverdue = invoice.status === 'Overdue'
   const isPaid = invoice.status === 'Paid'
+
+  async function handleCopyPaymentLink() {
+    setGeneratingLink(true)
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/checkout`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to generate payment link', 'error')
+        return
+      }
+      await navigator.clipboard.writeText(data.url)
+      toast('Payment link copied to clipboard', 'success')
+    } catch {
+      toast('Failed to generate payment link', 'error')
+    } finally {
+      setGeneratingLink(false)
+    }
+  }
 
   return (
     <div className="pointer-events-none fixed inset-0 z-40 flex">
@@ -182,6 +202,16 @@ function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: I
                 Download Receipt
               </button>
             )}
+            {invoice.status !== 'Paid' && (
+              <button
+                onClick={handleCopyPaymentLink}
+                disabled={generatingLink}
+                className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={{ background: '#015035' }}
+              >
+                {generatingLink ? 'Generating...' : 'Copy Payment Link'}
+              </button>
+            )}
             <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors">
               Close
             </button>
@@ -192,7 +222,7 @@ function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: I
   )
 }
 
-function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImported: (count: number) => void }) {
+function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImported: (count: number, failed: number, skipped: number) => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [rows, setRows] = useState<string[][]>([])
   const [headers, setHeaders] = useState<string[]>([])
@@ -240,6 +270,8 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
     if (!rows.length) return
     setImporting(true)
     let imported = 0
+    let failed = 0
+    let skipped = 0
     for (const row of rows) {
       const getValue = (field: string) => {
         const header = mapping[field]
@@ -249,7 +281,7 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
       }
       const company = getValue('company')
       const amount = parseFloat(getValue('amount') || '0')
-      if (!company || !amount) continue
+      if (!company || !amount) { skipped++; continue }
 
       try {
         const res = await fetch('/api/invoices', {
@@ -266,9 +298,12 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
           }),
         })
         if (res.ok) imported++
-      } catch {}
+        else failed++
+      } catch {
+        failed++
+      }
     }
-    onImported(imported)
+    onImported(imported, failed, skipped)
   }
 
   return (
@@ -696,8 +731,14 @@ export default function BillingPage() {
       {showImportModal && (
         <CSVImportModal
           onClose={() => setShowImportModal(false)}
-          onImported={(count) => {
-            toast(`${count} invoice${count !== 1 ? 's' : ''} imported`, 'success')
+          onImported={(count, failed, skipped) => {
+            // Previously reported only the success count with a bare
+            // `catch {}` around each row — no indication which rows
+            // failed or why.
+            const parts = [`${count} invoice${count !== 1 ? 's' : ''} imported`]
+            if (failed > 0) parts.push(`${failed} failed`)
+            if (skipped > 0) parts.push(`${skipped} skipped (missing company/amount)`)
+            toast(parts.join(', '), failed > 0 ? 'error' : 'success')
             setShowImportModal(false)
             fetch('/api/invoices').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalInvoices(data) })
           }}

@@ -8,6 +8,7 @@ import { generateWelcomeEmail } from '@/lib/templates/generate-welcome'
 import { generateUsageGuideEmail } from '@/lib/templates/generate-usage-guide'
 import { generateMonthlyReportHtml } from '@/lib/templates/generate-monthly-report'
 import { generatePdf } from '@/lib/pdf-generator'
+import { requireRole } from '@/lib/rbac'
 
 const TEMPLATE_TYPES = ['welcome', 'usage_guide', 'monthly_report']
 const SUBJECT_MAP: Record<string, string> = {
@@ -16,7 +17,7 @@ const SUBJECT_MAP: Record<string, string> = {
   monthly_report: 'Your Monthly Report',
 }
 
-function generateHtml(templateType: string, customizationData: Record<string, unknown>): string {
+function generateHtml(templateType: string, customizationData: Record<string, unknown>, recipientEmail: string): string {
   switch (templateType) {
     case 'welcome': {
       const mgr = customizationData.accountManager as { name: string; email: string; phone: string } | undefined
@@ -24,6 +25,7 @@ function generateHtml(templateType: string, customizationData: Record<string, un
         firstName: String(customizationData.clientName ?? customizationData.firstName ?? ''),
         companyName: String(customizationData.companyName ?? 'Graviss Marketing'),
         portalUrl: String(customizationData.portalUrl ?? 'https://app.gravissmarketing.com'),
+        email: recipientEmail,
         accountManager: mgr,
         projectName: customizationData.projectName ? String(customizationData.projectName) : undefined,
         serviceType: customizationData.serviceType ? String(customizationData.serviceType) : undefined,
@@ -69,6 +71,9 @@ const STEP_SENT_COLUMN: Record<number, string> = {
 }
 
 export const POST = withErrorHandler('delivery/send-template POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const result = validate(body, {
     workflowId: { required: true, type: 'string', maxLength: 100 },
@@ -104,7 +109,7 @@ export const POST = withErrorHandler('delivery/send-template POST', async (req) 
 
   let html: string
   try {
-    html = generateHtml(templateType, customizationData)
+    html = generateHtml(templateType, customizationData, recipientEmail)
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Template generation failed' }, { status: 400 })
   }

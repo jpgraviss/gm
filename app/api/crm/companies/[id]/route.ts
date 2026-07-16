@@ -4,6 +4,7 @@ import { validate, validationError } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getCompanyRelatedCounts, hasBlockingRelatedRecords, describeRelatedCounts, deleteCompanyActivities } from '@/lib/crm-cascade'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCompany(row: any) {
@@ -26,6 +27,7 @@ function mapCompany(row: any) {
     createdDate:    row.created_date ?? '',
     lastActivity:   row.last_activity ?? undefined,
     notes:          row.notes ?? undefined,
+    customFields:   row.custom_fields ?? {},
   }
 }
 
@@ -69,6 +71,7 @@ export const PUT = withErrorHandler('crm/companies/[id] PUT', async (
       total_deal_value: body.totalDealValue ?? 0,
       last_activity:    body.lastActivity ?? null,
       notes:            body.notes ?? null,
+      custom_fields:    body.customFields ?? {},
     })
     .eq('id', id)
     .select()
@@ -93,6 +96,7 @@ export const PATCH = withErrorHandler('crm/companies/[id] PATCH', async (
     status: { type: 'string', enum: ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned'] },
     tags:   { type: 'array' },
     notes:  { type: 'string', maxLength: 20000 },
+    owner:  { type: 'string', maxLength: 200 },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -102,6 +106,8 @@ export const PATCH = withErrorHandler('crm/companies/[id] PATCH', async (
   if (body.status !== undefined) updates.status = body.status
   if (body.lastActivity !== undefined) updates.last_activity = body.lastActivity
   if (body.notes !== undefined) updates.notes = body.notes
+  if (body.owner !== undefined) updates.owner = body.owner
+  if (body.customFields !== undefined) updates.custom_fields = body.customFields
   const { data, error } = await db
     .from('crm_companies')
     .update(updates)
@@ -122,10 +128,34 @@ export const DELETE = withErrorHandler('crm/companies/[id] DELETE', async (
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
   const db = createServiceClient()
+
+  const { data: company } = await db.from('crm_companies').select('id, name').eq('id', id).single()
+  if (!company) return NextResponse.json({ error: 'Company not found' }, { status: 404 })
+
+  // AUDIT #96: block rather than cascade-destroy real business records —
+  // irreversible data loss outweighs the inconvenience of requiring
+  // reassignment first. The company's own activity log is the one
+  // exception (see deleteCompanyActivities) since it has no independent
+  // value once the company itself is gone.
+  const counts = await getCompanyRelatedCounts(db, company.id, company.name)
+  if (hasBlockingRelatedRecords(counts)) {
+    return NextResponse.json({
+      error: `Cannot delete "${company.name}" — it still has ${describeRelatedCounts(counts)}. Reassign or remove these first.`,
+      relatedCounts: counts,
+    }, { status: 409 })
+  }
+
+  // Delete the company row FIRST, activities second — if the company
+  // delete itself fails (DB blip, an unaccounted-for FK), the activity
+  // log is never touched, so the request can safely fail closed instead
+  // of silently destroying history for a company that's still there.
   const { error } = await db.from('crm_companies').delete().eq('id', id)
   if (error) {
     throw new Error(error?.message || 'Failed to delete company')
   }
-  logAudit({ userName: 'system', action: 'deleted_company', module: 'crm', type: 'warning', metadata: { companyId: id } })
+
+  await deleteCompanyActivities(db, company.id)
+
+  logAudit({ userName: 'system', action: 'deleted_company', module: 'crm', type: 'warning', metadata: { companyId: id, companyName: company.name } })
   return NextResponse.json({ success: true })
 })

@@ -3,6 +3,8 @@ import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCourse(row: any) {
@@ -24,6 +26,17 @@ function mapCourse(row: any) {
 }
 
 export const GET = withErrorHandler('courses GET', async (req) => {
+  // The course catalog is portal-visible ("Sales Training" service page),
+  // not staff-only — requireRole('Team Member') 403'd every portal client,
+  // so the real client-facing training page always rendered empty. Course
+  // metadata isn't company-scoped/sensitive, so any authenticated caller
+  // (staff or portal client) is enough; per-student enrollment data is
+  // separately scoped in the enrollments routes.
+  const email = await getAuthenticatedEmail(req)
+  if (!email) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const pag = parsePagination(req)
   const db = createServiceClient()
 
@@ -41,6 +54,9 @@ export const GET = withErrorHandler('courses GET', async (req) => {
 })
 
 export const POST = withErrorHandler('courses POST', async (req) => {
+  const denied = await requireRole(req, 'Leadership')
+  if (denied) return denied
+
   const body = await req.json()
 
   if (!body.title || typeof body.title !== 'string') {

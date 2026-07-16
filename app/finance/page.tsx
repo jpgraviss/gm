@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import Link from 'next/link'
 import { computeMRR } from '@/lib/metrics'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   CreditCard, BarChart3, DollarSign, FileBarChart, Plug,
   Activity, ArrowRight, Users, Landmark, RefreshCw,
@@ -51,9 +52,12 @@ export default function FinanceHub() {
       .then(d => { if (d?.metrics) setDashData(d.metrics) })
       .catch(() => {})
 
-    fetch('/api/contracts?limit=200')
-      .then(r => r.ok ? r.json() : [])
-      .then(d => { if (Array.isArray(d)) setContracts(d) })
+    // /api/contracts is cursor-paginated (500 max/page) — a fixed
+    // ?limit=200 with no cursor follow-up silently undercounted MRR/KPI
+    // math once an org passed 200 contracts. fetchAllPages() follows
+    // X-Next-Cursor to completion.
+    fetchAllPages<{ value: number; status: string; billingStructure: string }>('/api/contracts')
+      .then(setContracts)
       .catch(() => {})
 
     setMercuryLoading(true)

@@ -186,12 +186,37 @@ export default function FunnelsPage() {
   async function deleteFunnel(id: string) {
     if (!confirm('Delete this funnel and all its pages?')) return
     try {
-      await fetch(`/api/funnels/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/funnels/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        addToast(err.error || 'Failed to delete funnel', 'error')
+        return
+      }
       addToast('Funnel deleted', 'success')
       if (expandedId === id) { setExpandedId(null); setDetail(null) }
       loadFunnels()
     } catch {
       addToast('Failed to delete funnel', 'error')
+    }
+  }
+
+  // The editor requires both a funnel id AND a page id — the list only
+  // knows pageCount, not individual page ids, so this fetches the detail
+  // first (same endpoint toggleExpand uses) to find the first real page to
+  // open, rather than linking to a URL the editor can't ever resolve.
+  async function editFunnel(id: string) {
+    try {
+      const res = await fetch(`/api/funnels/${id}`)
+      if (!res.ok) throw new Error('Failed to load funnel')
+      const funnelDetail = await res.json() as FunnelDetail
+      const firstPage = [...(funnelDetail.pages ?? [])].sort((a, b) => a.sort_order - b.sort_order)[0]
+      if (!firstPage) {
+        addToast('This funnel has no pages yet — add one first', 'error')
+        return
+      }
+      router.push(`/funnels/editor?funnel=${id}&page=${firstPage.id}`)
+    } catch {
+      addToast('Failed to open funnel editor', 'error')
     }
   }
 
@@ -216,11 +241,16 @@ export default function FunnelsPage() {
   async function updateFunnelName(id: string) {
     if (!editName.trim()) return
     try {
-      await fetch(`/api/funnels/${id}`, {
+      const res = await fetch(`/api/funnels/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: editName.trim() }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        addToast(err.error || 'Failed to update funnel', 'error')
+        return
+      }
       setEditingName(null)
       addToast('Funnel updated', 'success')
       loadFunnels()
@@ -264,18 +294,25 @@ export default function FunnelsPage() {
     const orderA = pages[idx].sort_order
     const orderB = pages[swapIdx].sort_order
 
-    await Promise.all([
-      fetch(`/api/funnels/${funnelId}/pages`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: pages[idx].id, sort_order: orderB }),
-      }),
-      fetch(`/api/funnels/${funnelId}/pages`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: pages[swapIdx].id, sort_order: orderA }),
-      }),
-    ])
+    try {
+      const [resA, resB] = await Promise.all([
+        fetch(`/api/funnels/${funnelId}/pages`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId: pages[idx].id, sort_order: orderB }),
+        }),
+        fetch(`/api/funnels/${funnelId}/pages`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId: pages[swapIdx].id, sort_order: orderA }),
+        }),
+      ])
+      if (!resA.ok || !resB.ok) {
+        addToast('Failed to reorder page', 'error')
+      }
+    } catch {
+      addToast('Failed to reorder page', 'error')
+    }
 
     const refreshRes = await fetch(`/api/funnels/${funnelId}`)
     if (refreshRes.ok) setDetail(await refreshRes.json())
@@ -538,7 +575,7 @@ export default function FunnelsPage() {
                       {expandedId === f.id ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                     </button>
                     <button
-                      onClick={() => router.push(`/funnels/editor?id=${f.id}`)}
+                      onClick={() => editFunnel(f.id)}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-[#015035] dark:hover:text-emerald-400 hover:bg-[#015035]/5 dark:hover:bg-[#015035]/10 transition-colors"
                       title="Edit funnel"
                     >

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
+import { isStaffCaller } from '@/lib/portal-auth'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -22,9 +24,14 @@ function mapEnrollment(row: any) {
 }
 
 export const GET = withErrorHandler('courses/[id]/enrollments/[enrollmentId] GET', async (
-  _req,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; enrollmentId: string }> },
 ) => {
+  const email = await getAuthenticatedEmail(req)
+  if (!email) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const { id, enrollmentId } = await params
   const db = createServiceClient()
 
@@ -39,21 +46,56 @@ export const GET = withErrorHandler('courses/[id]/enrollments/[enrollmentId] GET
     return NextResponse.json({ error: 'Enrollment not found' }, { status: 404 })
   }
 
+  // Previously had zero auth — any authenticated caller could read (or, in
+  // PATCH below, forge completion/certificates on) any other student's
+  // enrollment. Staff can see any enrollment; everyone else only their own.
+  const staff = await isStaffCaller(req)
+  if (!staff && data.student_email?.toLowerCase() !== email.toLowerCase()) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   return NextResponse.json(mapEnrollment(data))
 })
 
 export const PATCH = withErrorHandler('courses/[id]/enrollments/[enrollmentId] PATCH', async (
-  req,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; enrollmentId: string }> },
 ) => {
+  const email = await getAuthenticatedEmail(req)
+  if (!email) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const { id, enrollmentId } = await params
   const body = await req.json()
   const db = createServiceClient()
 
+  const { data: existing, error: fetchErr } = await db
+    .from('course_enrollments')
+    .select('student_email')
+    .eq('id', enrollmentId)
+    .eq('course_id', id)
+    .single()
+
+  if (fetchErr || !existing) {
+    return NextResponse.json({ error: 'Enrollment not found' }, { status: 404 })
+  }
+
+  const staff = await isStaffCaller(req)
+  if (!staff && existing.student_email?.toLowerCase() !== email.toLowerCase()) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  if (body.progress !== undefined)      update.progress = body.progress
-  if (body.status !== undefined)        update.status = body.status
-  if (body.certificateId !== undefined) update.certificate_id = body.certificateId
+  // The real course viewer's self-service progress tracking
+  // (app/courses/[id]/page.tsx markModuleComplete) only ever sends
+  // {progress, completed} — status/certificateId are staff-only fields so
+  // a student can't forge their own completion certificate directly.
+  if (body.progress !== undefined) update.progress = body.progress
+  if (staff) {
+    if (body.status !== undefined)        update.status = body.status
+    if (body.certificateId !== undefined) update.certificate_id = body.certificateId
+  }
 
   if (body.completed === true) {
     update.completed_at = new Date().toISOString()
@@ -80,7 +122,7 @@ export const PATCH = withErrorHandler('courses/[id]/enrollments/[enrollmentId] P
 })
 
 export const DELETE = withErrorHandler('courses/[id]/enrollments/[enrollmentId] DELETE', async (
-  req,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; enrollmentId: string }> },
 ) => {
   const denied = await requireRole(req, 'Leadership')

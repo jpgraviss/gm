@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 const TYPE_META: Record<string, { color: string; href: string }> = {
   call:     { color: '#3b82f6', href: '/crm/contacts' },
@@ -14,7 +15,10 @@ const TYPE_META: Record<string, { color: string; href: string }> = {
   proposal: { color: '#8b5cf6', href: '/proposals' },
 }
 
-export const GET = withErrorHandler('notifications GET', async () => {
+export const GET = withErrorHandler('notifications GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('crm_activities')

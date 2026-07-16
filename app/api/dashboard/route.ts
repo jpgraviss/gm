@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
+import { getAuthUser } from '@/lib/rbac'
 import type { OccupationalUnit } from '@/lib/types'
 
 /** Units that must never receive financial data */
@@ -11,7 +12,16 @@ function isRestrictedUnit(unit: string | null): boolean {
 }
 
 export const GET = withErrorHandler('dashboard GET', async (req) => {
-  const unit = req.nextUrl.searchParams.get('unit') ?? req.nextUrl.searchParams.get('role')
+  // Previously had zero auth at all, and the financial-redaction check
+  // below trusted a client-supplied `unit`/`role` query param that no real
+  // caller ever sent — meaning the route was both fully public AND its one
+  // "protection" was dead code even for legitimate use. Derive the real
+  // unit from the caller's own team_members row instead.
+  const user = await getAuthUser(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  const unit = user.unit
   const db = createServiceClient()
 
   const [dealsRes, invoicesRes, contractsRes, renewalsRes, revenueRes, activityRes, automationsRes, activeClientsRes] = await Promise.all([

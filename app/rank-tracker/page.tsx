@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   TrendingUp, TrendingDown, Minus, X, Trash2, Search, RefreshCw,
   Target, ArrowUp, ArrowDown, ChevronDown, ChevronUp, Download,
@@ -160,10 +161,11 @@ export default function RankTrackerPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/rank-tracker/keywords')
-      if (!res.ok) { toast('Failed to load keywords', 'error'); return }
-      const data = await res.json()
-      if (Array.isArray(data)) setRows(data)
+      // /api/rank-tracker/keywords is cursor-paginated (100/page) — an
+      // agency tracking keywords across many clients over years easily
+      // exceeds that in one page, so this must follow X-Next-Cursor to
+      // completion instead of a raw fetch() showing only the newest page.
+      setRows(await fetchAllPages<TrackedKeyword>('/api/rank-tracker/keywords'))
     } catch {
       toast('Failed to load keywords', 'error')
     } finally {

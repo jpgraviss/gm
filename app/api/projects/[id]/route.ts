@@ -30,7 +30,26 @@ function mapProject(row: any) {
   }
 }
 
+export const GET = withErrorHandler('projects/[id] GET', async (req, ctx) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
+  const { id } = await ctx!.params
+  const db = createServiceClient()
+  const { data, error } = await db.from('projects').select('*').eq('id', id).maybeSingle()
+  if (error) {
+    throw new Error(error?.message || 'Failed to fetch project')
+  }
+  if (!data) {
+    return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+  }
+  return NextResponse.json(mapProject(data))
+})
+
 export const PATCH = withErrorHandler('projects/[id] PATCH', async (req, ctx) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await ctx!.params
   const body = await req.json()
   const result = validate(body, {

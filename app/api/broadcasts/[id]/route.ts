@@ -41,7 +41,10 @@ function mapBroadcast(row: any) {
   }
 }
 
-export const GET = withErrorHandler('broadcasts/[id] GET', async (_req, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('broadcasts/[id] GET', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
   const { data } = await db.from('broadcasts').select('*').eq('id', id).single()

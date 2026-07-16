@@ -97,6 +97,40 @@ export const POST = withErrorHandler('crm/companies/[id]/files POST', async (
   return NextResponse.json(data, { status: 201 })
 })
 
+export const PATCH = withErrorHandler('crm/companies/[id]/files PATCH', async (
+  req,
+  { params }: { params: Promise<{ id: string }> },
+) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+  const { id } = await params
+  const { fileId, category } = await req.json()
+  if (!fileId) {
+    return NextResponse.json({ error: 'fileId is required' }, { status: 400 })
+  }
+  if (!category) {
+    return NextResponse.json({ error: 'category is required' }, { status: 400 })
+  }
+
+  const db = createServiceClient()
+  const { data, error } = await db
+    .from('company_files')
+    .update({ category })
+    .eq('id', fileId)
+    .eq('company_id', id)
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+  if (!data) {
+    return NextResponse.json({ error: 'File not found' }, { status: 404 })
+  }
+
+  return NextResponse.json(data)
+})
+
 export const DELETE = withErrorHandler('crm/companies/[id]/files DELETE', async (
   req,
   { params }: { params: Promise<{ id: string }> },

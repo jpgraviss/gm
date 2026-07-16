@@ -4,8 +4,12 @@ import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const POST = withErrorHandler('reputation/send-request POST', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const body = await req.json()
   const { name, email, companyName: reqCompanyName } = body as {
     name?: string

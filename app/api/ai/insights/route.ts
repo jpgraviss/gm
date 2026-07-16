@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chatCompletion } from '@/lib/ai-client'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 export const POST = withErrorHandler('ai/insights POST', async (req) => {
+    const denied = await requireRole(req, 'Team Member')
+    if (denied) return denied
+
     const { type, name, context } = await req.json() as {
       type: 'company' | 'contact'
       name: string

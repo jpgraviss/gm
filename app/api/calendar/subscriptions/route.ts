@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parseICS } from '@/lib/ical-parser'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthUser } from '@/lib/rbac'
+
+function isOwnerOrAdmin(user: { email: string; isAdmin: boolean; role: string }, targetEmail: string): boolean {
+  return user.isAdmin || user.role === 'Leadership' || user.email.toLowerCase() === (targetEmail || '').toLowerCase()
+}
 
 export const GET = withErrorHandler('calendar/subscriptions GET', async (req) => {
+  const user = await getAuthUser(req)
+  if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+
   const { searchParams } = new URL(req.url)
   const userEmail = searchParams.get('email')
   const db = createServiceClient()
@@ -21,7 +29,13 @@ export const GET = withErrorHandler('calendar/subscriptions GET', async (req) =>
 })
 
 export const POST = withErrorHandler('calendar/subscriptions POST', async (req) => {
+  const user = await getAuthUser(req)
+  if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+
   const { url, name, userEmail, action } = await req.json()
+  if (userEmail && !isOwnerOrAdmin(user, userEmail)) {
+    return NextResponse.json({ error: 'Cannot manage another team member\'s calendar subscriptions' }, { status: 403 })
+  }
 
   if (action === 'sync-all') {
     return syncAllSubscriptions(userEmail)
@@ -95,10 +109,18 @@ export const POST = withErrorHandler('calendar/subscriptions POST', async (req) 
 })
 
 export const DELETE = withErrorHandler('calendar/subscriptions DELETE', async (req) => {
+  const user = await getAuthUser(req)
+  if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+
   const { id } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
   const db = createServiceClient()
+
+  const { data: sub } = await db.from('calendar_subscriptions').select('user_email').eq('id', id).single()
+  if (sub && !isOwnerOrAdmin(user, sub.user_email)) {
+    return NextResponse.json({ error: 'Cannot delete another team member\'s calendar subscription' }, { status: 403 })
+  }
 
   await db.from('bookings').delete().eq('subscription_id', id)
   const { error } = await db.from('calendar_subscriptions').delete().eq('id', id)
@@ -190,12 +212,18 @@ async function syncAllSubscriptions(userEmail?: string) {
 }
 
 export const PATCH = withErrorHandler('calendar/subscriptions PATCH', async (req) => {
+  const user = await getAuthUser(req)
+  if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+
   const { id } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
   const db = createServiceClient()
   const { data: sub } = await db.from('calendar_subscriptions').select('*').eq('id', id).single()
   if (!sub) return NextResponse.json({ error: 'Subscription not found' }, { status: 404 })
+  if (!isOwnerOrAdmin(user, sub.user_email)) {
+    return NextResponse.json({ error: 'Cannot sync another team member\'s calendar subscription' }, { status: 403 })
+  }
 
   try {
     const imported = await syncSubscription(db, sub)

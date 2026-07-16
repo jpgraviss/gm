@@ -44,7 +44,7 @@
   btn.onclick=send;input.onkeydown=function(e){if(e.key==='Enter')send()};
   bubble.onclick=function(){
     if(win.style.display==='none'){win.style.display='flex';if(!welcome){
-      fetch(base+'/api/chatbots/'+id).then(function(r){return r.json()}).then(function(d){
+      fetch(base+'/api/chatbots/'+id+'/public').then(function(r){return r.json()}).then(function(d){
         welcome=d.welcome_message||'Hi! How can I help you?';addMsg(welcome,false);
       }).catch(function(){welcome='Hi!';addMsg('Hi! How can I help you?',false)});welcome='loading';}
     }else{win.style.display='none'}

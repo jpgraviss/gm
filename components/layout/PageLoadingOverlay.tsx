@@ -87,15 +87,25 @@ export default function PageLoadingOverlay() {
     }, FADE_OUT_MS)
   }
 
-  // Navigation start: clicking any internal link.
+  // Navigation start: clicking any internal link. Stays on the capture
+  // phase so it still fires even if a deeper handler calls
+  // stopPropagation() — but the actual defaultPrevented check is deferred
+  // to a microtask, which runs after the full capture+bubble dispatch has
+  // finished. Checking it synchronously here (in capture phase) would
+  // always see e.defaultPrevented === false, since the clicked element's
+  // own bubble-phase onClick (which might call preventDefault() to cancel
+  // navigation for a non-navigation action) hasn't run yet.
   useEffect(() => {
     function onClick(e: MouseEvent) {
       const href = isInternalNavigationClick(e)
       if (!href) return
       const [hrefPath] = href.split('#')
       if (hrefPath === currentKeyRef.current || hrefPath === pathname) return
-      targetHrefRef.current = hrefPath
-      startLoading()
+      queueMicrotask(() => {
+        if (e.defaultPrevented) return
+        targetHrefRef.current = hrefPath
+        startLoading()
+      })
     }
     document.addEventListener('click', onClick, true)
     return () => document.removeEventListener('click', onClick, true)
@@ -119,10 +129,11 @@ export default function PageLoadingOverlay() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none transition-opacity"
+      className="fixed inset-0 z-[100] flex items-center justify-center transition-opacity"
       style={{
         background: 'rgba(255,255,255,0.85)',
         opacity: fading ? 0 : 1,
+        pointerEvents: fading ? 'none' : 'auto',
         transitionDuration: `${FADE_OUT_MS}ms`,
       }}
     >

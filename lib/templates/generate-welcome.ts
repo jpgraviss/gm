@@ -4,12 +4,24 @@ export interface WelcomeEmailData {
   firstName: string
   companyName: string
   portalUrl: string
+  email?: string
   accountManager?: { name: string; email: string; phone: string }
   projectName?: string
   serviceType?: string
 }
 
 export function generateWelcomeEmail(data: WelcomeEmailData): string {
+  // The default footer previously linked to {portal_url}/unsubscribe — a
+  // bare path with no matching route (only /unsubscribe/[token] exists,
+  // and nothing ever generates that token for this flow), so this was the
+  // one 404ing link real portal-welcome recipients got. Point at the
+  // mechanism actually checked elsewhere (sequence_suppression_list) —
+  // same one broadcasts/sequences already use — instead of building out
+  // the separate, currently-orphaned token-based unsubscribe page.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+  const unsubscribeUrl = data.email
+    ? `${appUrl}/api/sequences/unsubscribe?email=${encodeURIComponent(data.email)}`
+    : `${data.portalUrl}/unsubscribe`
   const managerSection = data.accountManager
     ? `<tr><td style="padding:0 32px 32px;">
         <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#015035;text-transform:uppercase;letter-spacing:0.05em;">Your Account Manager</p>
@@ -98,7 +110,7 @@ ${managerSection}
     <a href="https://instagram.com/gravissmarketing" style="color:#9ca3af;text-decoration:none;margin:0 6px;font-size:12px;">Instagram</a>
     <a href="https://linkedin.com/company/gravissmarketing" style="color:#9ca3af;text-decoration:none;margin:0 6px;font-size:12px;">LinkedIn</a>
   </p>
-  <p style="margin:0;font-size:11px;color:#d1d5db;">&copy; ${new Date().getFullYear()} Graviss Marketing &middot; <a href="{portal_url}/unsubscribe" style="color:#d1d5db;">Unsubscribe</a></p>
+  <p style="margin:0;font-size:11px;color:#d1d5db;">&copy; ${new Date().getFullYear()} Graviss Marketing &middot; <a href="{unsubscribe_url}" style="color:#d1d5db;">Unsubscribe</a></p>
 </td></tr>
 
 </table>
@@ -111,5 +123,6 @@ ${managerSection}
     first_name: data.firstName,
     company_name: data.companyName,
     portal_url: data.portalUrl,
+    unsubscribe_url: unsubscribeUrl,
   })
 }

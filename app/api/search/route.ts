@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
 
 const LIMIT_PER_TYPE = 5
 
@@ -13,6 +14,9 @@ interface SearchResult {
 }
 
 export const GET = withErrorHandler('search GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const q = req.nextUrl.searchParams.get('q')?.trim()
   if (!q || q.length < 2) {
     return NextResponse.json([])
@@ -73,7 +77,7 @@ export const GET = withErrorHandler('search GET', async (req) => {
       type: 'contact',
       name: `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim(),
       subtitle: row.company_name ?? row.title ?? '',
-      href: `/crm/contacts?id=${row.id}`,
+      href: `/crm/contacts?open=${row.id}`,
     })
   }
 
@@ -83,7 +87,7 @@ export const GET = withErrorHandler('search GET', async (req) => {
       type: 'company',
       name: row.name,
       subtitle: `${row.industry ?? ''} ${row.status ? `- ${row.status}` : ''}`.trim(),
-      href: `/crm/companies?id=${row.id}`,
+      href: `/crm/companies?open=${row.id}`,
     })
   }
 
@@ -93,7 +97,7 @@ export const GET = withErrorHandler('search GET', async (req) => {
       type: 'deal',
       name: row.company,
       subtitle: `${row.stage ?? ''} ${row.value ? `- $${Number(row.value).toLocaleString()}` : ''}`.trim(),
-      href: `/crm/pipeline?deal=${row.id}`,
+      href: `/crm/pipeline?open=${row.id}`,
     })
   }
 
@@ -103,7 +107,9 @@ export const GET = withErrorHandler('search GET', async (req) => {
       type: 'project',
       name: row.company,
       subtitle: `${row.service_type ?? ''} - ${row.status ?? ''}`,
-      href: `/projects?id=${row.id}`,
+      // Projects use a dedicated /projects/[id] detail route (AUDIT #117),
+      // not an inline ?open= panel like the other result types below.
+      href: `/projects/${row.id}`,
     })
   }
 
@@ -113,7 +119,7 @@ export const GET = withErrorHandler('search GET', async (req) => {
       type: 'ticket',
       name: row.subject ?? row.company,
       subtitle: `${row.company ?? ''} ${row.status ? `- ${row.status}` : ''}`.trim(),
-      href: `/tickets?id=${row.id}`,
+      href: `/tickets?open=${row.id}`,
     })
   }
 
@@ -123,7 +129,7 @@ export const GET = withErrorHandler('search GET', async (req) => {
       type: 'task',
       name: row.title,
       subtitle: `${row.assigned_to ?? ''} ${row.status ? `- ${row.status}` : ''}`.trim(),
-      href: `/tasks?id=${row.id}`,
+      href: `/tasks?open=${row.id}`,
     })
   }
 
@@ -133,7 +139,7 @@ export const GET = withErrorHandler('search GET', async (req) => {
       type: 'proposal',
       name: row.company,
       subtitle: `${row.status ?? ''} ${row.value ? `- $${Number(row.value).toLocaleString()}` : ''}`.trim(),
-      href: `/proposals?id=${row.id}`,
+      href: `/proposals?open=${row.id}`,
     })
   }
 
@@ -143,7 +149,7 @@ export const GET = withErrorHandler('search GET', async (req) => {
       type: 'contract',
       name: row.company,
       subtitle: `${row.status ?? ''} ${row.value ? `- $${Number(row.value).toLocaleString()}` : ''}`.trim(),
-      href: `/contracts?id=${row.id}`,
+      href: `/contracts?open=${row.id}`,
     })
   }
 

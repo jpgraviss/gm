@@ -8,7 +8,7 @@ import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 import {
   Globe, BarChart3, CheckCircle, Minus, Send, Eye, X,
   Loader2, Search, TrendingUp, MousePointerClick, Users,
-  ArrowUp, ArrowDown, Calendar, Mail, Building, ClipboardList, Printer,
+  ArrowUp, ArrowDown, Calendar, Mail, Building, ClipboardList, Printer, Pencil,
 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
@@ -24,7 +24,7 @@ interface Integration {
   gbp_location_name: string | null
   portal_enabled: boolean
   seo_reports_enabled: boolean
-  seo_report_recipients: string | null
+  seo_report_recipients: string[] | null
   last_seo_report_at: string | null
 }
 
@@ -304,6 +304,10 @@ export default function SeoReportsPage() {
   // Work log modal
   const [workLogTarget, setWorkLogTarget] = useState<{ companyName: string; companyId: string } | null>(null)
 
+  // Recipients inline editor
+  const [editingRecipientsId, setEditingRecipientsId] = useState<string | null>(null)
+  const [recipientsText, setRecipientsText] = useState('')
+
   // Add client flow: pick a company, then bind its integrations
   const [showCompanyPicker, setShowCompanyPicker] = useState(false)
   const [pickedCompanyName, setPickedCompanyName] = useState('')
@@ -357,6 +361,25 @@ export default function SeoReportsPage() {
         next.delete(id)
         return next
       })
+    }
+  }
+
+  /* ---- Edit recipients ---- */
+  async function handleSaveRecipients(integration: Integration, recipients: string[]) {
+    try {
+      const res = await fetch('/api/seo-reports', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: integration.id, seoReportRecipients: recipients }),
+      })
+      if (!res.ok) throw new Error()
+      setIntegrations(prev =>
+        prev.map(i => i.id === integration.id ? { ...i, seo_report_recipients: recipients.length > 0 ? recipients : null } : i)
+      )
+      toast('Recipients updated', 'success')
+      setEditingRecipientsId(null)
+    } catch {
+      toast('Failed to update recipients', 'error')
     }
   }
 
@@ -551,10 +574,49 @@ export default function SeoReportsPage() {
                         </td>
 
                         {/* Recipients */}
-                        <td className="px-4 py-3">
-                          <p className="text-sm text-gray-600 truncate max-w-[200px]">
-                            {integration.seo_report_recipients || 'Primary contact'}
-                          </p>
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                          {editingRecipientsId === integration.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                autoFocus
+                                value={recipientsText}
+                                onChange={e => setRecipientsText(e.target.value)}
+                                placeholder="email@client.com, another@client.com"
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') handleSaveRecipients(integration, recipientsText.split(',').map(s => s.trim()).filter(Boolean))
+                                  if (e.key === 'Escape') setEditingRecipientsId(null)
+                                }}
+                                className="text-sm border border-gray-200 rounded-lg px-2 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              />
+                              <button
+                                onClick={() => handleSaveRecipients(integration, recipientsText.split(',').map(s => s.trim()).filter(Boolean))}
+                                className="text-xs font-semibold text-white px-2 py-1 rounded-lg flex-shrink-0"
+                                style={{ background: '#015035' }}
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingRecipientsId(null)}
+                                className="text-xs text-gray-500 px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-100 flex-shrink-0"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setEditingRecipientsId(integration.id)
+                                setRecipientsText((integration.seo_report_recipients ?? []).join(', '))
+                              }}
+                              className="group flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 max-w-[220px]"
+                              title="Edit recipients"
+                            >
+                              <span className="truncate">
+                                {integration.seo_report_recipients?.length ? integration.seo_report_recipients.join(', ') : 'Primary contact'}
+                              </span>
+                              <Pencil size={11} className="text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
+                            </button>
+                          )}
                         </td>
 
                         {/* Last sent */}

@@ -3,6 +3,8 @@
 import { Fragment, useEffect, useState, useCallback } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import CompanySelect from '@/components/ui/CompanySelect'
+import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 import {
   Globe, BarChart3, CheckCircle, Minus, Send, Eye, X,
   Loader2, Search, TrendingUp, MousePointerClick, Users,
@@ -302,6 +304,12 @@ export default function SeoReportsPage() {
   // Work log modal
   const [workLogTarget, setWorkLogTarget] = useState<{ companyName: string; companyId: string } | null>(null)
 
+  // Add client flow: pick a company, then bind its integrations
+  const [showCompanyPicker, setShowCompanyPicker] = useState(false)
+  const [pickedCompanyName, setPickedCompanyName] = useState('')
+  const [pickedCompanyId, setPickedCompanyId] = useState<string | undefined>(undefined)
+  const [addClientTarget, setAddClientTarget] = useState<{ companyName: string; companyId?: string } | null>(null)
+
   // Report history
   const [expandedCompanyId, setExpandedCompanyId] = useState<string | null>(null)
   const [history, setHistory] = useState<ReportSnapshot[]>([])
@@ -441,7 +449,11 @@ export default function SeoReportsPage() {
 
   return (
     <>
-      <Header title="SEO Reports" subtitle="Automated monthly client reports" />
+      <Header
+        title="SEO Reports"
+        subtitle="Automated monthly client reports"
+        action={{ label: 'Add Client', onClick: () => { setPickedCompanyName(''); setPickedCompanyId(undefined); setShowCompanyPicker(true) } }}
+      />
 
       <div className="page-content">
         {/* ---- KPI cards ---- */}
@@ -720,6 +732,56 @@ export default function SeoReportsPage() {
           companyName={workLogTarget.companyName}
           companyId={workLogTarget.companyId}
           onClose={() => setWorkLogTarget(null)}
+        />
+      )}
+
+      {/* ---- Add client: step 1, pick a company ---- */}
+      {showCompanyPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-visible">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-bold text-gray-900">Add Client to SEO Reports</h3>
+              <button onClick={() => setShowCompanyPicker(false)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                <X size={16} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company</label>
+                <CompanySelect
+                  value={pickedCompanyName}
+                  onChange={(name, companyId) => { setPickedCompanyName(name); setPickedCompanyId(companyId) }}
+                  placeholder="Search or add a company..."
+                />
+                <p className="text-xs text-gray-400 mt-1.5">Pick an existing CRM company, or add a new one from this list.</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowCompanyPicker(false)
+                    setAddClientTarget({ companyName: pickedCompanyName, companyId: pickedCompanyId })
+                  }}
+                  disabled={!pickedCompanyName.trim()}
+                  className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
+                  style={{ background: '#015035' }}
+                >
+                  Continue
+                </button>
+                <button onClick={() => setShowCompanyPicker(false)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---- Add client: step 2, bind integrations ---- */}
+      {addClientTarget && (
+        <ClientIntegrationsPanel
+          companyName={addClientTarget.companyName}
+          companyId={addClientTarget.companyId}
+          onClose={() => { setAddClientTarget(null); fetchIntegrations() }}
         />
       )}
     </>

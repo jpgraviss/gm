@@ -241,7 +241,7 @@ class GravHub_Sitemap {
 		$query = new WP_Query( $args );
 
 		echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-		echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
+		echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">' . "\n";
 
 		if ( $query->have_posts() ) {
 			while ( $query->have_posts() ) {
@@ -269,6 +269,13 @@ class GravHub_Sitemap {
 				echo "\t\t<lastmod>" . esc_html( $lastmod ) . "</lastmod>\n";
 				echo "\t\t<changefreq>" . esc_html( $changefreq ) . "</changefreq>\n";
 				echo "\t\t<priority>" . esc_html( $priority ) . "</priority>\n";
+
+				foreach ( $this->get_post_images( $post_id ) as $image_url ) {
+					echo "\t\t<image:image>\n";
+					echo "\t\t\t<image:loc>" . esc_url( $image_url ) . "</image:loc>\n";
+					echo "\t\t</image:image>\n";
+				}
+
 				echo "\t</url>\n";
 			}
 
@@ -276,6 +283,41 @@ class GravHub_Sitemap {
 		}
 
 		echo '</urlset>' . "\n";
+	}
+
+	/**
+	 * Gather image URLs for a post: its featured image plus any <img> tags
+	 * literally present in post_content (covers both classic-editor HTML and
+	 * Gutenberg image blocks, which store a real <img> tag in post_content).
+	 * Does not run post_content through the `the_content` filter — this only
+	 * needs to find image URLs, not fully render the post.
+	 *
+	 * @param int $post_id The post ID.
+	 * @return string[] Deduplicated list of absolute image URLs.
+	 */
+	private function get_post_images( $post_id ) {
+		$images = array();
+
+		$featured_id = get_post_thumbnail_id( $post_id );
+		if ( $featured_id ) {
+			$featured_url = wp_get_attachment_image_url( $featured_id, 'full' );
+			if ( $featured_url ) {
+				$images[] = $featured_url;
+			}
+		}
+
+		$content = get_post_field( 'post_content', $post_id );
+		if ( ! empty( $content ) && preg_match_all( '/<img[^>]+src=["\']([^"\']+)["\']/i', $content, $matches ) ) {
+			foreach ( $matches[1] as $src ) {
+				if ( ! in_array( $src, $images, true ) ) {
+					$images[] = $src;
+				}
+			}
+		}
+
+		// The sitemap image extension caps at 1,000 images per URL — enforced
+		// defensively, though no realistic single page would approach it.
+		return array_slice( $images, 0, 1000 );
 	}
 
 	/**

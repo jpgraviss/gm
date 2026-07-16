@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GravHub SEO
  * Description: Enterprise SEO management plugin by Graviss Marketing. Full on-page SEO analysis, focus keywords, XML sitemaps, meta management, and centralized reporting via GravHub.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: Graviss Marketing
  * Author URI: https://gravissmarketing.com
  * License: Proprietary
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GRAVHUB_SEO_VERSION', '1.2.0' );
+define( 'GRAVHUB_SEO_VERSION', '1.3.0' );
 define( 'GRAVHUB_SEO_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_FILE', __FILE__ );
@@ -24,6 +24,8 @@ require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-meta-manager.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-health-reporter.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-seo-metabox.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-sitemap.php';
+require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-shortcodes.php';
+require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-redirect-manager.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'admin/class-admin-page.php';
 
 final class GravHub_SEO {
@@ -36,6 +38,8 @@ final class GravHub_SEO {
 	public $health_reporter;
 	public $seo_metabox;
 	public $sitemap;
+	public $shortcodes;
+	public $redirect_manager;
 	public $admin_page;
 
 	public static function get_instance() {
@@ -52,6 +56,8 @@ final class GravHub_SEO {
 		$this->health_reporter = new GravHub_Health_Reporter( $this->api_client );
 		$this->seo_metabox     = new GravHub_SEO_Metabox( $this->seo_analyzer );
 		$this->sitemap         = new GravHub_Sitemap();
+		$this->shortcodes      = new GravHub_Shortcodes();
+		$this->redirect_manager = new GravHub_Redirect_Manager();
 
 		if ( is_admin() ) {
 			$this->admin_page = new GravHub_Admin_Page( $this->api_client, $this->seo_analyzer );
@@ -91,6 +97,14 @@ final class GravHub_SEO {
 
 		if ( ! wp_next_scheduled( 'gravhub_daily_report' ) ) {
 			wp_schedule_event( time(), 'daily', 'gravhub_daily_report' );
+		}
+
+		// dbDelta() is safe to re-run idempotently, but it's not cheap —
+		// only run it when the installed table version doesn't match this
+		// plugin build, not on every single admin page load.
+		if ( get_option( 'gravhub_redirect_tables_version' ) !== GRAVHUB_SEO_VERSION ) {
+			GravHub_Redirect_Manager::create_tables();
+			update_option( 'gravhub_redirect_tables_version', GRAVHUB_SEO_VERSION );
 		}
 	}
 
@@ -298,6 +312,9 @@ final class GravHub_SEO {
 		if ( ! wp_next_scheduled( 'gravhub_daily_report' ) ) {
 			wp_schedule_event( time(), 'daily', 'gravhub_daily_report' );
 		}
+
+		GravHub_Redirect_Manager::create_tables();
+		update_option( 'gravhub_redirect_tables_version', GRAVHUB_SEO_VERSION );
 
 		GravHub_Sitemap::flush_rules();
 	}

@@ -148,6 +148,228 @@ class GravHub_Admin_Page {
 			'gravhub-seo',
 			'gravhub_connection'
 		);
+
+		$this->register_schema_settings();
+	}
+
+	/**
+	 * Organization + WebSite + LocalBusiness JSON-LD settings. Rendered on
+	 * the same 'gravhub-seo' settings page as Connection (so it saves
+	 * through the same existing <form>), under its own section — neither
+	 * schema type is fabricated: output stays off entirely
+	 * (see GravHub_Meta_Manager::has_site_schema_config()) until real values
+	 * are entered here.
+	 */
+	private function register_schema_settings() {
+		register_setting( 'gravhub_seo_settings', 'gravhub_org_name', array(
+			'type'              => 'string',
+			'sanitize_callback' => 'sanitize_text_field',
+			'default'           => '',
+		) );
+		register_setting( 'gravhub_seo_settings', 'gravhub_org_logo', array(
+			'type'              => 'string',
+			'sanitize_callback' => 'esc_url_raw',
+			'default'           => '',
+		) );
+		register_setting( 'gravhub_seo_settings', 'gravhub_org_same_as', array(
+			'type'              => 'string',
+			'sanitize_callback' => array( $this, 'sanitize_same_as' ),
+			'default'           => '',
+		) );
+		register_setting( 'gravhub_seo_settings', 'gravhub_local_business_enabled', array(
+			'type'              => 'boolean',
+			'sanitize_callback' => 'rest_sanitize_boolean',
+			'default'           => false,
+		) );
+		register_setting( 'gravhub_seo_settings', 'gravhub_local_business_type', array(
+			'type'              => 'string',
+			'sanitize_callback' => array( $this, 'sanitize_local_business_type' ),
+			'default'           => 'LocalBusiness',
+		) );
+		foreach ( array( 'name', 'address', 'city', 'state', 'zip', 'country', 'phone' ) as $field ) {
+			register_setting( 'gravhub_seo_settings', 'gravhub_local_business_' . $field, array(
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+				'default'           => '',
+			) );
+		}
+
+		add_settings_section(
+			'gravhub_schema',
+			__( 'Organization & Local Business Schema', 'gravhub-seo' ),
+			array( $this, 'render_schema_section_description' ),
+			'gravhub-seo'
+		);
+
+		add_settings_field(
+			'gravhub_org_identity',
+			__( 'Organization', 'gravhub-seo' ),
+			array( $this, 'render_org_identity_field' ),
+			'gravhub-seo',
+			'gravhub_schema'
+		);
+
+		add_settings_field(
+			'gravhub_org_same_as',
+			__( 'Same As (social profiles)', 'gravhub-seo' ),
+			array( $this, 'render_same_as_field' ),
+			'gravhub-seo',
+			'gravhub_schema'
+		);
+
+		add_settings_field(
+			'gravhub_local_business',
+			__( 'Local Business', 'gravhub-seo' ),
+			array( $this, 'render_local_business_field' ),
+			'gravhub-seo',
+			'gravhub_schema'
+		);
+	}
+
+	/**
+	 * Sanitize the Same As textarea: one URL per line, invalid lines dropped
+	 * rather than saved malformed.
+	 */
+	public function sanitize_same_as( $value ) {
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+		$lines = preg_split( '/[\r\n]+/', $value );
+		$clean = array();
+		foreach ( $lines as $line ) {
+			$line = trim( $line );
+			if ( '' === $line ) {
+				continue;
+			}
+			$escaped = esc_url_raw( $line );
+			if ( ! empty( $escaped ) ) {
+				$clean[] = $escaped;
+			}
+		}
+		return implode( "\n", $clean );
+	}
+
+	/**
+	 * Restrict LocalBusiness @type to a known-safe schema.org subset rather
+	 * than accepting an arbitrary string into JSON-LD output.
+	 */
+	public function sanitize_local_business_type( $value ) {
+		$allowed = array( 'LocalBusiness', 'ProfessionalService', 'MarketingAgency', 'Store', 'Restaurant', 'MedicalBusiness' );
+		return in_array( $value, $allowed, true ) ? $value : 'LocalBusiness';
+	}
+
+	/**
+	 * Render schema section description.
+	 */
+	public function render_schema_section_description() {
+		echo '<p>' . esc_html__( 'Powers Organization, WebSite, and LocalBusiness JSON-LD on the homepage. Nothing is output until real values are entered here — no data is guessed or fabricated.', 'gravhub-seo' ) . '</p>';
+	}
+
+	/**
+	 * Render Organization name + logo fields.
+	 */
+	public function render_org_identity_field() {
+		$name = get_option( 'gravhub_org_name', '' );
+		$logo = get_option( 'gravhub_org_logo', '' );
+		printf(
+			'<input type="text" name="gravhub_org_name" value="%s" class="regular-text" placeholder="%s" /><br /><br />',
+			esc_attr( $name ),
+			esc_attr__( 'Business or organization name', 'gravhub-seo' )
+		);
+		printf(
+			'<input type="url" name="gravhub_org_logo" value="%s" class="regular-text" placeholder="%s" />',
+			esc_attr( $logo ),
+			esc_attr__( 'https://example.com/logo.png', 'gravhub-seo' )
+		);
+		echo '<p class="description">' . esc_html__( 'Name and logo URL used for Organization + WebSite schema on the homepage.', 'gravhub-seo' ) . '</p>';
+	}
+
+	/**
+	 * Render the Same As textarea (one URL per line).
+	 */
+	public function render_same_as_field() {
+		$value = get_option( 'gravhub_org_same_as', '' );
+		printf(
+			'<textarea name="gravhub_org_same_as" rows="4" class="large-text" placeholder="%s">%s</textarea>',
+			esc_attr__( "https://www.linkedin.com/company/...\nhttps://www.facebook.com/...", 'gravhub-seo' ),
+			esc_textarea( $value )
+		);
+		echo '<p class="description">' . esc_html__( 'One URL per line — company (not personal) social profiles, e.g. LinkedIn company page, Facebook page, Instagram.', 'gravhub-seo' ) . '</p>';
+	}
+
+	/**
+	 * Render the LocalBusiness fieldset: enable checkbox, type, and address.
+	 */
+	public function render_local_business_field() {
+		$enabled = (bool) get_option( 'gravhub_local_business_enabled', false );
+		$type    = get_option( 'gravhub_local_business_type', 'LocalBusiness' );
+		$name    = get_option( 'gravhub_local_business_name', '' );
+		$address = get_option( 'gravhub_local_business_address', '' );
+		$city    = get_option( 'gravhub_local_business_city', '' );
+		$state   = get_option( 'gravhub_local_business_state', '' );
+		$zip     = get_option( 'gravhub_local_business_zip', '' );
+		$country = get_option( 'gravhub_local_business_country', '' );
+		$phone   = get_option( 'gravhub_local_business_phone', '' );
+
+		$types = array(
+			'LocalBusiness'       => __( 'Local Business (generic)', 'gravhub-seo' ),
+			'ProfessionalService' => __( 'Professional Service', 'gravhub-seo' ),
+			'MarketingAgency'     => __( 'Marketing Agency', 'gravhub-seo' ),
+			'Store'               => __( 'Store', 'gravhub-seo' ),
+			'Restaurant'          => __( 'Restaurant', 'gravhub-seo' ),
+			'MedicalBusiness'     => __( 'Medical Business', 'gravhub-seo' ),
+		);
+
+		printf(
+			'<label><input type="checkbox" name="gravhub_local_business_enabled" value="1" %s /> %s</label>',
+			checked( $enabled, true, false ),
+			esc_html__( 'This site has an addressable local presence worth marking up (mailing address, storefront, or office)', 'gravhub-seo' )
+		);
+		echo '<br /><br />';
+
+		echo '<select name="gravhub_local_business_type">';
+		foreach ( $types as $value => $label ) {
+			printf( '<option value="%s" %s>%s</option>', esc_attr( $value ), selected( $type, $value, false ), esc_html( $label ) );
+		}
+		echo '</select>';
+		echo '<p class="description">' . esc_html__( 'Business type for schema.org markup.', 'gravhub-seo' ) . '</p>';
+
+		printf(
+			'<input type="text" name="gravhub_local_business_name" value="%s" class="regular-text" placeholder="%s" /><br /><br />',
+			esc_attr( $name ),
+			esc_attr__( 'Business name (defaults to Organization name above if left blank)', 'gravhub-seo' )
+		);
+		printf(
+			'<input type="text" name="gravhub_local_business_address" value="%s" class="regular-text" placeholder="%s" /><br /><br />',
+			esc_attr( $address ),
+			esc_attr__( 'Street address', 'gravhub-seo' )
+		);
+		printf(
+			'<input type="text" name="gravhub_local_business_city" value="%s" placeholder="%s" style="width:23%%" /> ',
+			esc_attr( $city ),
+			esc_attr__( 'City', 'gravhub-seo' )
+		);
+		printf(
+			'<input type="text" name="gravhub_local_business_state" value="%s" placeholder="%s" style="width:23%%" /> ',
+			esc_attr( $state ),
+			esc_attr__( 'State/Region', 'gravhub-seo' )
+		);
+		printf(
+			'<input type="text" name="gravhub_local_business_zip" value="%s" placeholder="%s" style="width:23%%" /> ',
+			esc_attr( $zip ),
+			esc_attr__( 'Postal Code', 'gravhub-seo' )
+		);
+		printf(
+			'<input type="text" name="gravhub_local_business_country" value="%s" placeholder="%s" style="width:23%%" /><br /><br />',
+			esc_attr( $country ),
+			esc_attr__( 'Country', 'gravhub-seo' )
+		);
+		printf(
+			'<input type="text" name="gravhub_local_business_phone" value="%s" class="regular-text" placeholder="%s" />',
+			esc_attr( $phone ),
+			esc_attr__( 'Phone number', 'gravhub-seo' )
+		);
+		echo '<p class="description">' . esc_html__( 'LocalBusiness schema only prints once this box is checked AND a name + street address are both filled in.', 'gravhub-seo' ) . '</p>';
 	}
 
 	/**

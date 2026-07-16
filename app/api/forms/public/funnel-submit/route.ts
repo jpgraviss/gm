@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { fireTrigger } from '@/lib/automation-triggers'
+import { extractUtmFromBody } from '@/lib/attribution'
 
 interface FunnelFormField {
   name: string
@@ -41,7 +42,7 @@ export async function OPTIONS() {
 
 export const POST = withErrorHandler('forms/public/funnel-submit POST', async (req: NextRequest) => {
   const body = await req.json()
-  const { funnelSlug, pageId, data } = body
+  const { funnelSlug, pageId, data, utm } = body
 
   if (!funnelSlug || !data) {
     return NextResponse.json({ error: 'Missing funnelSlug or data' }, { status: 400, headers: corsHeaders })
@@ -99,6 +100,7 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
           tags: [],
           lifecycle_stage: 'Lead',
           created_date: new Date().toISOString().split('T')[0],
+          ...extractUtmFromBody(utm),
         })
         contactId = newContactId
       }

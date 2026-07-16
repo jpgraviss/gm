@@ -6,13 +6,14 @@ import Header from '@/components/layout/Header'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
-import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download, DollarSign as RevenueIcon, HeartPulse, Megaphone, Search, ArrowRight } from 'lucide-react'
+import { TrendingUp, DollarSign, CheckCircle, Users, BarChart3, RefreshCw, Download, DollarSign as RevenueIcon, HeartPulse, Megaphone, Search, ArrowRight, Target } from 'lucide-react'
 
 const DEEP_DIVE_REPORTS = [
   { href: '/reports/revenue',     label: 'Revenue',     icon: <RevenueIcon size={15} />, desc: 'Detailed revenue breakdown' },
   { href: '/reports/team',        label: 'Team',        icon: <Users size={15} />,       desc: 'Per-rep performance' },
   { href: '/reports/health',      label: 'Health',      icon: <HeartPulse size={15} />,  desc: 'Client health & churn risk' },
   { href: '/reports/marketing',   label: 'Marketing',   icon: <Megaphone size={15} />,   desc: 'Campaign & channel metrics' },
+  { href: '/reports/attribution', label: 'Attribution', icon: <Target size={15} />,      desc: 'Source → deal → revenue tracking' },
   { href: '/reports/seo-reports', label: 'SEO Reports', icon: <Search size={15} />,      desc: 'Automated monthly client SEO reports' },
 ]
 import type { Deal, Invoice, Project, Renewal, RevenueMonth, MaintenanceRecord, TeamMember, Contract } from '@/lib/types'

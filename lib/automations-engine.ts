@@ -445,6 +445,12 @@ async function executeAction(
       await db.from('deals').insert({
         id: `deal-auto-${uid()}`,
         company,
+        // Previously unset on every automation-created deal — a deal
+        // spawned from a form/funnel submission had no way back to the
+        // contact it came from, which silently broke any join meant to
+        // trace revenue back to how that contact was originally sourced.
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
+        contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
         stage,
         value: (context.value as number) ?? 0,
         service_type: (context.service_type as string) ?? 'General',

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
+import { utmFromLocation } from '@/lib/attribution'
 
 interface FieldCondition {
   field: string
@@ -345,10 +346,11 @@ export default function PublicFormPage() {
     setError('')
     setSubmitting(true)
     try {
+      const utm = utmFromLocation()
       const res = await fetch(`/api/forms/public/${slug}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify(utm ? { ...values, utm } : values),
       })
       const data = await res.json()
       if (!res.ok) {

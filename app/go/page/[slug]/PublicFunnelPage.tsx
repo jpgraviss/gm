@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { PlayCircle, ChevronDown } from 'lucide-react'
+import { utmFromLocation } from '@/lib/attribution'
 
 interface Block {
   id: string
@@ -41,10 +42,11 @@ function FormBlock({ data, funnelSlug, pageId }: { data: Record<string, unknown>
     setSubmitting(true)
     setError(false)
     try {
+      const utm = utmFromLocation()
       const res = await fetch('/api/forms/public/funnel-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ funnelSlug, pageId, data: formData }),
+        body: JSON.stringify({ funnelSlug, pageId, data: formData, ...(utm ? { utm } : {}) }),
       })
       if (!res.ok) {
         setError(true)

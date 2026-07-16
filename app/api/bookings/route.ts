@@ -168,6 +168,24 @@ export const POST = withErrorHandler('bookings POST', async (req) => {
     .single()
 
   if (insertErr) {
+    // 23505 = unique_violation from our bookings_slot_unique partial index.
+    // Two visitors passed the check-then-insert race at the same instant;
+    // the second one is caught here instead of quietly double-booking.
+    if ((insertErr as { code?: string }).code === '23505') {
+      // Best-effort rollback of the Google Calendar event we just created
+      if (googleEventId && accessToken) {
+        try {
+          await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${googleEventId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          })
+        } catch {}
+      }
+      return NextResponse.json(
+        { error: 'This time slot was just booked by someone else. Please choose another.' },
+        { status: 409 },
+      )
+    }
     throw new Error(insertErr?.message || 'Failed to create booking')
   }
 

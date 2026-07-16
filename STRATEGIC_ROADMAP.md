@@ -137,16 +137,16 @@ After we can sell, these close the gap with the big players.
 
 | # | Item | Effort |
 |---|---|---|
-| D1 | **Advanced workflow engine** — if/else branching, wait-until-condition, goal events, webhook triggers, custom code action | 5 days |
-| D2 | **AI lead scoring** — model on contact behavior, activity frequency, deal stage velocity | 4 days |
-| D3 | **Custom report builder** — user-defined dimensions/metrics, save, schedule, email | 6 days |
-| D4 | **Attribution reporting** — source → deal → revenue tracking, UTM capture | 3 days |
-| D5 | **Reputation management** — Google Business Profile integration, auto review request after invoice paid | 3 days |
-| D6 | **Social media scheduler** — schedule posts to FB, IG, LinkedIn, X, Google Business Profile | 5 days |
-| D7 | **Client portal 2.0** — approvals, comments, file upload, payment button, progress view | 5 days |
-| D8 | **Knowledge base** — public help articles for tickets | 3 days |
-| D9 | **Live chat widget** — embeddable widget, route to unified inbox | 4 days |
-| D10 | **Public API + webhooks** — REST API for external integrations, OAuth 2.0, rate limiting | 4 days |
+| D1 | **Advanced workflow engine** — if/else branching (done), wait-until-condition, goal events, generic webhook-trigger intake, custom code action. Partially done: `lib/automations-engine.ts` already has real Wait/Resume and a working If/Else with 5 operators; the remaining gap is a fixed-duration-only Wait (no condition-based wait), a hardcoded ~17-event `TRIGGER_MAP` (no generic webhook intake, no goal-event type), and no custom-code action | 5 days |
+| D2 | ~~AI lead scoring~~ — `lib/ai/lead-scoring.ts`'s `scoreContact()` (real LLM call + weighted engagement/deal/activity score), wired end-to-end from `app/crm/contacts/page.tsx`. DONE — this roadmap entry was stale, already built | 4 days |
+| D3 | **Custom report builder** — user-defined dimensions/metrics, save, schedule, email. Confirmed not built — only a dead `'custom_reports'` feature-flag string exists, no UI/API/schema | 6 days |
+| D4 | **Attribution reporting** — source → deal → revenue tracking, UTM capture. Confirmed not built — the only attribution-shaped code (`app/api/sequences/attribution/route.ts`) is the dead/broken route from AUDIT #160; GravIntel captures visitor events but never links source → deal → revenue | 3 days |
+| D5 | ~~Reputation management~~ — GBP integration, auto review request after invoice paid, public `/go/review/[token]` flow. DONE — this roadmap entry was stale, already built | 3 days |
+| D6 | ~~Social media scheduler~~ — 6 real platform integrations (FB/IG/LinkedIn/X/GBP), scheduled dispatch cron. DONE — this roadmap entry was stale, already built | 5 days |
+| D7 | **Client portal 2.0** — approvals, comments, file upload, payment button, progress view. Already fully built (`app/portal/**`: approvals, e-sign, billing, projects, SEO, services, tickets, delivery workflow timeline, help center — all correctly `requirePortalClient`-gated). The gap is reachability, not engineering: `AppShell.tsx` routes every real client session to a smaller single-page `/client` dashboard instead, so `/portal` is dead weight in practice (AUDIT #154). **Needs a product decision**: is `/client` the intentional replacement (trim/remove `/portal`), or should real clients be reconnected to the richer `/portal` build? | 5 days |
+| D8 | ~~Knowledge base~~ — CRUD + portal-scoped visibility. DONE — this roadmap entry was stale, already built | 3 days |
+| D9 | ~~Live chat widget~~ — embeddable widget (real LLM call, `public/chatbot.js` → `app/api/chatbots/[id]/chat`) was already built; DONE now that conversations with a captured visitor email also surface as a read-only source in the Unified Inbox (`app/api/inbox/unified/route.ts`) — there's no staff-reply path for chat, so this is visibility only, not a reply channel | 4 days |
+| D10 | **Public API + webhooks** — REST API for external integrations, OAuth 2.0, rate limiting. Confirmed not built — no outward-facing API/key issuance exists for third parties (the WordPress plugin's static `X-GravHub-Key` and this session's `lib/extension-auth.ts` Bearer-token pattern are the closest prior art but both are single-purpose, not general-purpose). If pursued, `extension-auth.ts`'s hashed-token pattern is the best existing scaffold to generalize | 4 days |
 | D11 | **Mobile apps** — React Native or Expo shell for iOS/Android (CRM, inbox, pipeline, notifications) | 10 days |
 
 ### PHASE E — AI & next-gen features (4 weeks)

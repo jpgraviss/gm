@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   Inbox as InboxIcon, Search, RefreshCw, MessageSquare, Mail, Zap,
-  Megaphone, Users, ChevronRight, Circle,
+  Megaphone, Users, ChevronRight, Circle, Bot,
 } from 'lucide-react'
 
 interface UnifiedThread {
@@ -17,7 +17,7 @@ interface UnifiedThread {
   contactName: string
   company?: string
   lastMessage: {
-    source: 'ticket' | 'sequence' | 'broadcast' | 'activity' | 'gmail'
+    source: 'ticket' | 'sequence' | 'broadcast' | 'activity' | 'gmail' | 'chatbot'
     title: string
     preview: string
     timestamp: string
@@ -34,6 +34,7 @@ const SOURCE_META: Record<string, { label: string; icon: React.ReactNode; color:
   broadcast: { label: 'Broadcast', icon: <Megaphone size={11} />,     color: '#f59e0b' },
   activity:  { label: 'Activity',  icon: <Mail size={11} />,          color: '#015035' },
   gmail:     { label: 'Gmail',     icon: <Mail size={11} />,          color: '#dc2626' },
+  chatbot:   { label: 'Chatbot',   icon: <Bot size={11} />,           color: '#0ea5e9' },
 }
 
 export default function UnifiedInboxPage() {
@@ -121,7 +122,7 @@ export default function UnifiedInboxPage() {
             />
           </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5">
-            {(['all', 'gmail', 'ticket', 'sequence', 'broadcast', 'activity'] as const).map(s => (
+            {(['all', 'gmail', 'ticket', 'sequence', 'broadcast', 'activity', 'chatbot'] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setSourceFilter(s)}
@@ -303,6 +304,15 @@ export default function UnifiedInboxPage() {
                           className="flex items-center justify-between p-3 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                         >
                           <span className="flex items-center gap-2"><Mail size={14} /> Open Gmail</span>
+                          <ChevronRight size={14} className="text-gray-400" />
+                        </Link>
+                      )}
+                      {selected.sources.includes('chatbot') && (
+                        <Link
+                          href="/chatbots"
+                          className="flex items-center justify-between p-3 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <span className="flex items-center gap-2"><Bot size={14} /> Open chatbots</span>
                           <ChevronRight size={14} className="text-gray-400" />
                         </Link>
                       )}

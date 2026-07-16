@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/Toast'
 import {
   Globe, BarChart3, CheckCircle, Minus, Send, Eye, X,
   Loader2, Search, TrendingUp, MousePointerClick, Users,
-  ArrowUp, ArrowDown, Calendar, Mail, Building,
+  ArrowUp, ArrowDown, Calendar, Mail, Building, ClipboardList, Printer,
 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
@@ -133,6 +133,151 @@ function ChangeBadge({ value }: { value?: number }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Work log — staff-entered "what we did" content for the growth      */
+/*  report. Real deliverable counts (backlinks built, GBP posts, etc.) */
+/*  aren't tracked anywhere in the app, so this is genuinely manual    */
+/*  input rather than an auto-fabricated number.                       */
+/* ------------------------------------------------------------------ */
+
+const DEFAULT_WORK_LOG_CATEGORIES = [
+  'On-Page SEO', 'Technical SEO', 'Content Production', 'Local SEO / GBP', 'Backlinks & Citations',
+]
+
+// Matches the server's lastMonthRange() in lib/seo-report-sender.ts — the
+// growth report always covers the prior calendar month.
+function lastMonthRangeClient(): { start: string; end: string; label: string } {
+  const now = new Date()
+  const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const lastOfPrevMonth = new Date(firstOfThisMonth.getTime() - 1)
+  const firstOfPrevMonth = new Date(lastOfPrevMonth.getFullYear(), lastOfPrevMonth.getMonth(), 1)
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  const monthName = firstOfPrevMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  return { start: fmt(firstOfPrevMonth), end: fmt(lastOfPrevMonth), label: monthName }
+}
+
+interface WorkLogCategoryForm {
+  title: string
+  bulletsText: string
+}
+
+function WorkLogModal({ companyName, companyId, onClose }: { companyName: string; companyId: string; onClose: () => void }) {
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [categories, setCategories] = useState<WorkLogCategoryForm[]>([])
+  const [nextMonthText, setNextMonthText] = useState('')
+  const period = lastMonthRangeClient()
+
+  useEffect(() => {
+    fetch(`/api/report-work-log?companyName=${encodeURIComponent(companyName)}&periodStart=${period.start}&periodEnd=${period.end}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { categories?: { title: string; bullets: string[] }[]; nextMonth?: { title: string; description: string }[] } | null) => {
+        const existing = data?.categories ?? []
+        const seeded = DEFAULT_WORK_LOG_CATEGORIES.map(title => {
+          const match = existing.find(c => c.title === title)
+          return { title, bulletsText: match ? match.bullets.join('\n') : '' }
+        })
+        // Preserve any custom category titles staff added beyond the defaults.
+        const extra = existing.filter(c => !DEFAULT_WORK_LOG_CATEGORIES.includes(c.title))
+          .map(c => ({ title: c.title, bulletsText: c.bullets.join('\n') }))
+        setCategories([...seeded, ...extra])
+        setNextMonthText((data?.nextMonth ?? []).map(item => item.description ? `${item.title}: ${item.description}` : item.title).join('\n'))
+      })
+      .catch(() => toast('Failed to load work log', 'error'))
+      .finally(() => setLoading(false))
+  }, [companyName]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const payloadCategories = categories
+        .map(c => ({ title: c.title, bullets: c.bulletsText.split('\n').map(b => b.trim()).filter(Boolean) }))
+        .filter(c => c.bullets.length > 0)
+      const nextMonth = nextMonthText.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
+        const idx = line.indexOf(':')
+        return idx > 0 ? { title: line.slice(0, idx).trim(), description: line.slice(idx + 1).trim() } : { title: line, description: '' }
+      })
+      const res = await fetch('/api/report-work-log', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName, companyId,
+          periodStart: period.start, periodEnd: period.end,
+          categories: payloadCategories, nextMonth,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      toast('Work log saved', 'success')
+      onClose()
+    } catch {
+      toast('Failed to save work log', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">Work Completed — {period.label}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{companyName} &middot; shown on the growth report, one bullet per line</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <X size={16} className="text-gray-400" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 size={20} className="animate-spin text-gray-400" /></div>
+          ) : (
+            <>
+              {categories.map((cat, i) => (
+                <div key={cat.title}>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{cat.title}</label>
+                  <textarea
+                    value={cat.bulletsText}
+                    onChange={e => setCategories(prev => prev.map((c, idx) => idx === i ? { ...c, bulletsText: e.target.value } : c))}
+                    rows={3}
+                    placeholder="One bullet per line..."
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Next Month Priorities</label>
+                <textarea
+                  value={nextMonthText}
+                  onChange={e => setNextMonthText(e.target.value)}
+                  rows={4}
+                  placeholder={'One per line, e.g.\nCTR Optimization: Sharpen titles and metas to convert impressions into clicks'}
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
+          <button
+            onClick={handleSave}
+            disabled={loading || saving}
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+            style={{ background: '#015035' }}
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : null}
+            Save Work Log
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main page                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -153,6 +298,9 @@ export default function SeoReportsPage() {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewCompany, setPreviewCompany] = useState<string>('')
   const [previewLoading, setPreviewLoading] = useState(false)
+
+  // Work log modal
+  const [workLogTarget, setWorkLogTarget] = useState<{ companyName: string; companyId: string } | null>(null)
 
   // Report history
   const [expandedCompanyId, setExpandedCompanyId] = useState<string | null>(null)
@@ -408,6 +556,14 @@ export default function SeoReportsPage() {
                         <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
                             <button
+                              onClick={() => setWorkLogTarget({ companyName: integration.company_name, companyId: integration.company_id })}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                              title="Edit what we did this month for the growth report"
+                            >
+                              <ClipboardList size={13} />
+                              Work Log
+                            </button>
+                            <button
                               onClick={() => handlePreview(integration.company_name)}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
                             >
@@ -507,19 +663,36 @@ export default function SeoReportsPage() {
       {/* ---- Preview modal ---- */}
       {(previewHtml !== null || previewLoading) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
               <div>
-                <h3 className="text-sm font-bold text-gray-900">Report Preview</h3>
+                <h3 className="text-sm font-bold text-gray-900">Growth Report Preview</h3>
                 <p className="text-xs text-gray-500 mt-0.5">{previewCompany}</p>
               </div>
-              <button
-                onClick={() => { setPreviewHtml(null); setPreviewCompany('') }}
-                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <X size={16} className="text-gray-400" />
-              </button>
+              <div className="flex items-center gap-1">
+                {previewHtml && (
+                  <button
+                    onClick={() => {
+                      const w = window.open('', '_blank')
+                      if (!w) return
+                      w.document.write(previewHtml)
+                      w.document.close()
+                      w.onload = () => w.print()
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors mr-1"
+                    title="Open in a new tab and print / save as PDF"
+                  >
+                    <Printer size={13} /> Print / PDF
+                  </button>
+                )}
+                <button
+                  onClick={() => { setPreviewHtml(null); setPreviewCompany('') }}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <X size={16} className="text-gray-400" />
+                </button>
+              </div>
             </div>
 
             {/* Modal body */}
@@ -532,13 +705,22 @@ export default function SeoReportsPage() {
               ) : (
                 <div
                   className="bg-white border border-gray-200 rounded-lg mx-auto shadow-sm"
-                  style={{ maxWidth: '640px' }}
+                  style={{ maxWidth: '700px' }}
                   dangerouslySetInnerHTML={{ __html: previewHtml || '' }}
                 />
               )}
             </div>
           </div>
         </div>
+      )}
+
+      {/* ---- Work log modal ---- */}
+      {workLogTarget && (
+        <WorkLogModal
+          companyName={workLogTarget.companyName}
+          companyId={workLogTarget.companyId}
+          onClose={() => setWorkLogTarget(null)}
+        />
       )}
     </>
   )

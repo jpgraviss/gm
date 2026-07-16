@@ -1,0 +1,32 @@
+.gravhub-track-badge {
+  position: absolute;
+  top: 8px;
+  right: 44px;
+  z-index: 9999;
+  font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.gravhub-track-badge.gravhub-track-on {
+  background: rgba(1, 80, 53, 0.1);
+  color: #015035;
+}
+
+.gravhub-track-badge.gravhub-track-on:hover {
+  background: rgba(1, 80, 53, 0.18);
+}
+
+.gravhub-track-badge.gravhub-track-off {
+  background: rgba(107, 114, 128, 0.1);
+  color: #6b7280;
+}
+
+.gravhub-track-badge.gravhub-track-off:hover {
+  background: rgba(107, 114, 128, 0.18);
+}

@@ -159,6 +159,14 @@ export default function FunnelsPage() {
     }
   }
 
+  // The API always creates a first page ("Landing Page") along with the
+  // funnel itself — previously this response was discarded and the user
+  // had to close the modal, expand the new funnel in the list, and click
+  // through to find that page's editor link. Since a blank funnel is
+  // already just "one page, no campaign steps" until more pages are added,
+  // jumping straight to that page's editor turns this into a real
+  // single-page "new landing page" quick-create flow with no schema
+  // change and no separate landing-page concept to maintain.
   async function createFunnel() {
     if (!newName.trim()) return
     setCreating(true)
@@ -169,10 +177,16 @@ export default function FunnelsPage() {
         body: JSON.stringify({ name: newName.trim() }),
       })
       if (res.ok) {
+        const created = await res.json() as FunnelDetail
         setNewName('')
         setShowCreateModal(false)
-        addToast('Funnel created', 'success')
-        loadFunnels()
+        addToast('Landing page created', 'success')
+        const firstPage = created.pages?.[0]
+        if (firstPage) {
+          router.push(`/funnels/editor?funnel=${created.id}&page=${firstPage.id}`)
+        } else {
+          loadFunnels()
+        }
       } else {
         addToast('Failed to create funnel', 'error')
       }

@@ -9,13 +9,14 @@ import {
   Clock, GitBranch, Bell, ListTodo, Activity, Trash2,
   X, Play, Pause, ZoomIn, ZoomOut, Maximize2,
   FileText, CheckCircle, ChevronRight, Check, AlertCircle, Loader2,
-  Edit3, Copy,
+  Edit3, Copy, Webhook, RefreshCw,
 } from 'lucide-react'
 
 type TriggerType =
   | 'contact_created' | 'deal_stage_changed' | 'invoice_overdue'
   | 'contract_signed' | 'form_submitted'
   | 'proposal_accepted' | 'proposal_declined' | 'invoice_paid'
+  | 'webhook_received'
 
 type ActionType =
   | 'send_email'
@@ -40,6 +41,7 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string; icon: React.ReactNod
   { value: 'proposal_accepted',  label: 'Proposal Accepted',    icon: <CheckCircle size={18} />,description: 'When a proposal is accepted by client' },
   { value: 'proposal_declined',  label: 'Proposal Declined',    icon: <X size={18} />,          description: 'When a proposal is declined by client' },
   { value: 'invoice_paid',       label: 'Invoice Paid',         icon: <CheckCircle size={18} />,description: 'When a payment is received for an invoice' },
+  { value: 'webhook_received',   label: 'Webhook Received',     icon: <Webhook size={18} />,    description: 'When an external system (Zapier, Stripe, ad platform) POSTs to a URL unique to this automation' },
 ]
 
 const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: string; icon: React.ReactNode; description: string }[] }[] = [
@@ -84,6 +86,17 @@ const TRIGGER_TO_DB: Record<TriggerType, string> = {
   proposal_accepted:  'Proposal Accepted',
   proposal_declined:  'Proposal Declined',
   invoice_paid:       'Invoice Paid',
+  webhook_received:   'Webhook Received',
+}
+
+function generateWebhookToken(): string {
+  const bytes = new Uint8Array(24)
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes)
+  } else {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256)
+  }
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 const ACTION_TO_DB: Record<ActionType, string> = {
@@ -190,6 +203,42 @@ function ActionPickerModal({ onSelect, onClose }: { onSelect: (a: ActionType) =>
   )
 }
 
+function WebhookTriggerConfig({ token, onRegenerate }: { token: string | undefined; onRegenerate: () => void }) {
+  const { toast } = useToast()
+  const [copied, setCopied] = useState(false)
+  const url = token && typeof window !== 'undefined' ? `${window.location.origin}/api/automations/webhook/${token}` : ''
+
+  function copyUrl() {
+    if (!url) return
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => toast('Failed to copy', 'error'))
+  }
+
+  return (
+    <>
+      <FieldLabel label="Webhook URL">
+        <div className="flex gap-2">
+          <input readOnly value={url} className="cfg-input flex-1 font-mono text-[11px]" onFocus={e => e.target.select()} />
+          <button onClick={copyUrl} className="px-2.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 flex-shrink-0" title="Copy URL">
+            {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+          </button>
+        </div>
+      </FieldLabel>
+      <p className="text-xs text-gray-500">
+        Any POST to this URL fires this automation. JSON body fields are available as merge fields in later steps.
+      </p>
+      <button
+        onClick={() => { if (confirm('Regenerate this URL? The old one will stop working immediately.')) onRegenerate() }}
+        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
+      >
+        <RefreshCw size={11} /> Regenerate URL
+      </button>
+    </>
+  )
+}
+
 // ─── Node Config Panel ───────────────────────────────────────────────────────
 
 function NodeConfigPanel({ node, onChange, onClose }: {
@@ -234,6 +283,8 @@ function NodeConfigPanel({ node, onChange, onClose }: {
               </select>
             </FieldLabel>
           )
+        case 'webhook_received':
+          return <WebhookTriggerConfig token={config.webhookToken as string | undefined} onRegenerate={() => update('webhookToken', generateWebhookToken())} />
         default:
           return <p className="text-xs text-gray-500 italic">No additional configuration needed.</p>
       }
@@ -840,7 +891,12 @@ export default function AutomationBuilderPage() {
 
   const handleSelectTrigger = useCallback((t: TriggerType) => {
     const meta = getTriggerMeta(t)
-    setNodes(prev => prev.map(n => n.type === 'trigger' ? { ...n, subtype: t, label: meta?.label ?? t, config: {} } : n))
+    // A webhook automation's URL doubles as its auth boundary — generate a
+    // real token immediately (not lazily on save) so switching away from
+    // this trigger and back, or an unsaved draft, doesn't silently swap the
+    // URL a user may have already copied somewhere external.
+    const config = t === 'webhook_received' ? { webhookToken: generateWebhookToken() } : {}
+    setNodes(prev => prev.map(n => n.type === 'trigger' ? { ...n, subtype: t, label: meta?.label ?? t, config } : n))
     setShowTriggerPicker(false)
     const triggerNode = nodes.find(n => n.type === 'trigger')
     if (triggerNode) setSelectedNodeId(triggerNode.id)

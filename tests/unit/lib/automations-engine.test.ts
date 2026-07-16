@@ -215,6 +215,27 @@ describe('automations-engine', () => {
     expect(insertCalls['crm_activities']).toBeUndefined()
   })
 
+  it('webhook_received: fires when triggerData.webhookToken matches config.webhookToken', async () => {
+    setupAutomations('Webhook Received', ['Notify Sales Rep'], 'Test Auto', { webhookToken: 'abc123' })
+    fireAutomations('webhook_received', { company: 'Golf Inc', webhookToken: 'abc123' })
+    await flushPromises()
+    expect(insertCalls['crm_activities']).toBeDefined()
+  })
+
+  it('webhook_received: skips when the token does not match (a different automation\'s webhook)', async () => {
+    setupAutomations('Webhook Received', ['Notify Sales Rep'], 'Test Auto', { webhookToken: 'abc123' })
+    fireAutomations('webhook_received', { company: 'Golf Inc', webhookToken: 'xyz789' })
+    await flushPromises()
+    expect(insertCalls['crm_activities']).toBeUndefined()
+  })
+
+  it('webhook_received: skips when the automation has no token configured at all, even if triggerData also has none', async () => {
+    setupAutomations('Webhook Received', ['Notify Sales Rep']) // no config.webhookToken
+    fireAutomations('webhook_received', { company: 'Golf Inc' }) // no webhookToken either
+    await flushPromises()
+    expect(insertCalls['crm_activities']).toBeUndefined()
+  })
+
   it('fires "Log Activity" on contact_created', async () => {
     setupAutomations('Contact Created', ['Log Activity'])
     fireAutomations('contact_created', {

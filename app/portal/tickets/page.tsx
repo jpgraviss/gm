@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import StatusBadge from '@/components/ui/StatusBadge'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { formatDate } from '@/lib/utils'
 import {
   ArrowLeft, MessageSquare, Plus, ChevronRight, Send, Upload,
@@ -181,13 +182,7 @@ export default function PortalTicketsPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
-      </div>
-    )
-  }
+  if (loading) return <LoadingScreen />
 
   if (selected) {
     return (

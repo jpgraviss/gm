@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   FileText, Plus, X, Trash2, Star, Copy, ChevronLeft, Loader2,
 } from 'lucide-react'
@@ -269,9 +270,7 @@ export default function DocumentTemplatesPage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
-          </div>
+          <LoadingScreen />
         ) : filtered.length === 0 ? (
           <div className="text-center py-20 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
             <FileText size={32} className="text-gray-300 mx-auto mb-3" />

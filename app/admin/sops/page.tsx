@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   Printer, Plus, Trash2, Pencil, GripVertical, Check, X,
   ChevronUp, ChevronDown, Search, Save, Loader2,
@@ -367,9 +368,7 @@ export default function SOPsPage() {
     return (
       <>
         <Header title="Standard Operating Procedures" subtitle="Internal team reference" />
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
-        </div>
+        <LoadingScreen />
       </>
     )
   }

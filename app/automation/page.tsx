@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight, GitBranch, FileText, Inbox, ArrowRightLeft, Trash2 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 type AutoStatus = 'Active' | 'Triggered' | 'Paused'
 
@@ -322,7 +323,7 @@ export default function AutomationPage() {
   const overallSuccessRate = totalRuns > 0 ? Math.round(((totalRuns - totalFailed) / totalRuns) * 100) : 100
   const paused = automations.filter(a => a.status === 'Paused').length
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

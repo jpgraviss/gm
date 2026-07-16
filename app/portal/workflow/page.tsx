@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   ArrowLeft, CheckCircle2, Clock, Circle, ChevronDown, ChevronUp,
   Download, FileText, Mail, ExternalLink, Calendar, BookOpen, BarChart3,
@@ -312,13 +313,7 @@ export default function PortalWorkflowPage() {
   const completedCount = workflow?.steps.filter(s => s.status === 'completed').length ?? 0
   const progressPct = workflow && workflow.steps.length > 0 ? Math.round((completedCount / workflow.steps.length) * 100) : 0
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
-      </div>
-    )
-  }
+  if (loading) return <LoadingScreen />
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireRole } from '@/lib/rbac'
+import { fetchGmailMessages, extractEmailAddress, extractFirstOtherAddress } from '@/lib/gmail-fetch'
 
 /**
  * Unified inbox — aggregates conversations across every channel the user
@@ -11,10 +13,20 @@ import { withErrorHandler } from '@/lib/api-handler'
  *  2. Sequence activities (opens/clicks/replies/bounces/sent)
  *  3. Broadcast recipients (engagement events)
  *  4. CRM activity log entries of type Email, Call, Meeting, Note
- *
- * Gmail is handled separately on the client because it streams live from
- * the Gmail API — we don't mirror Gmail messages into Postgres. The page
- * layer merges the Gmail thread list with the unified threads from here.
+ *  5. Gmail — only when the caller passes their own gmailToken/gmailEmail
+ *     as query params (the page does this from useAuth()'s already-loaded
+ *     token). GravHub never mirrors Gmail into Postgres, so this is a live
+ *     Gmail API call scoped to whichever staff member is asking, not a
+ *     table read like the other four sources. Omitted entirely (no error)
+ *     when the caller hasn't connected Gmail.
+ *  6. Chatbot conversations — only ones where the visitor gave an email
+ *     (chatbot_conversations.visitor_email), since that's the only field
+ *     this thread map can key on; anonymous chat sessions are invisible
+ *     here by construction, same as they are everywhere else in the app.
+ *     Read-only: there's no staff-reply path for chatbot conversations
+ *     (chat is 100% bot-driven), so this source exists purely so staff
+ *     see "this contact already talked to the bot" alongside their other
+ *     channels — not to reply from the inbox.
  *
  * Grouped by contact email (case-insensitive). Returns the most recent
  * message per contact, ordered by recency.
@@ -25,7 +37,7 @@ interface UnifiedThread {
   contactName: string
   company?: string
   lastMessage: {
-    source: 'ticket' | 'sequence' | 'broadcast' | 'activity'
+    source: 'ticket' | 'sequence' | 'broadcast' | 'activity' | 'gmail' | 'chatbot'
     title: string
     preview: string
     timestamp: string
@@ -37,9 +49,14 @@ interface UnifiedThread {
 }
 
 export const GET = withErrorHandler('inbox/unified GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const db = createServiceClient()
   const { searchParams } = new URL(req.url)
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '100', 10), 200)
+  const gmailToken = searchParams.get('gmailToken')
+  const gmailEmail = searchParams.get('gmailEmail')
 
   // 1. Tickets
   const { data: tickets } = await db
@@ -73,6 +90,14 @@ export const GET = withErrorHandler('inbox/unified GET', async (req) => {
     // matched any real logged activity.
     .in('type', ['email', 'call', 'meeting', 'note', 'call_note'])
     .order('timestamp', { ascending: false })
+    .limit(limit)
+
+  // 6. Chatbot conversations — only ones that captured a visitor email
+  const { data: chatConversations } = await db
+    .from('chatbot_conversations')
+    .select('id, chatbot_id, visitor_name, visitor_email, messages, flagged, updated_at, chatbots(name)')
+    .not('visitor_email', 'is', null)
+    .order('updated_at', { ascending: false })
     .limit(limit)
 
   // Build a contact email → thread map
@@ -197,6 +222,49 @@ export const GET = withErrorHandler('inbox/unified GET', async (req) => {
         a.timestamp,
         false,
       )
+    }
+  }
+
+  // 6. Chatbot conversations — read-only source (no staff-reply path exists
+  // for chat), so this just surfaces "this contact already talked to the
+  // bot" alongside their other channels.
+  for (const c of (chatConversations ?? [])) {
+    if (!c.visitor_email) continue
+    const messages = (c.messages as Array<{ role: string; content: string; timestamp: string }> | null) ?? []
+    const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null
+    const botRelation = c.chatbots as { name?: string } | { name?: string }[] | null
+    const botName = Array.isArray(botRelation) ? botRelation[0]?.name : botRelation?.name
+    upsertThread(
+      c.visitor_email,
+      c.visitor_name ?? '',
+      undefined,
+      'chatbot',
+      botName ? `${botName} chat` : 'Chatbot conversation',
+      (lastMsg?.content ?? '').slice(0, 200),
+      c.updated_at ?? new Date().toISOString(),
+      Boolean(c.flagged),
+    )
+  }
+
+  // 5. Gmail — live fetch, scoped to whichever staff member is calling.
+  // Never blocks the rest of the response: an expired/missing Gmail token
+  // just means this one source is silently skipped, same as any other
+  // source that returns no rows.
+  if (gmailToken && gmailEmail) {
+    try {
+      const { messages } = await fetchGmailMessages(gmailToken, { maxResults: 30, detailLimit: 20 })
+      const selfEmail = gmailEmail.toLowerCase()
+      for (const m of messages) {
+        const fromAddr = extractEmailAddress(m.from)
+        const isFromSelf = fromAddr === selfEmail
+        const counterparty = isFromSelf ? extractFirstOtherAddress(m.to, selfEmail) : fromAddr
+        if (!counterparty) continue
+        const isUnread = !isFromSelf && m.labelIds.includes('UNREAD')
+        const timestamp = m.internalDate ? new Date(Number(m.internalDate)).toISOString() : (m.date || new Date().toISOString())
+        upsertThread(counterparty, '', undefined, 'gmail', m.subject, m.snippet, timestamp, isUnread)
+      }
+    } catch (err) {
+      console.error('[inbox/unified] Gmail merge failed', err)
     }
   }
 

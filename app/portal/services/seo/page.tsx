@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   ArrowLeft, TrendingUp, TrendingDown, Minus, Search, Globe,
   Link2, BarChart3, Calendar, CheckCircle, Circle, MousePointer,
@@ -139,13 +140,7 @@ export default function PortalSeoServicePage() {
     return [...fromStrategy, ...fromTracker]
   }, [strategy.keywords, trackedKeywords])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
-      </div>
-    )
-  }
+  if (loading) return <LoadingScreen />
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>

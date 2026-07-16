@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   TrendingUp, TrendingDown, Minus, X, Trash2, Search, RefreshCw,
@@ -368,13 +369,7 @@ export default function RankTrackerPage() {
     } catch { toast('Export failed', 'error') }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#015035]" />
-      </div>
-    )
-  }
+  if (loading) return <LoadingScreen />
 
   return (
     <>

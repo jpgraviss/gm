@@ -17,6 +17,7 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import type { RevenueMonth } from '@/lib/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 // ─── Greeting ─────────────────────────────────────────────────────────────────
 
@@ -466,7 +467,7 @@ function ContractorDashboard({ userName }: { userName: string }) {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   const activeProjects = projects.filter(p => !['Completed', 'Cancelled'].includes(p.status))
   const pendingTasks = tasks.filter(t => t.status !== 'Done' && t.status !== 'Completed')
@@ -779,7 +780,7 @@ function OperationsView() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="flex items-center justify-center h-32"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   const activeProjects = projects.filter(p => !['Completed', 'Cancelled'].includes(p.status))
   const completedProjects = projects.filter(p => p.status === 'Completed')
@@ -987,7 +988,7 @@ function MarketingView() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="flex items-center justify-center h-32"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   const sent = broadcasts.filter(b => b.status === 'sent')
   const totalSent = broadcasts.reduce((s, b) => s + (b.totalSent || 0), 0)
@@ -1377,7 +1378,7 @@ export default function DashboardPage() {
   const viewLabel = DASHBOARD_VIEWS.find(v => v.id === view)?.label ?? 'Dashboard'
   const showSpinner = loading && !['contractor', 'operations', 'marketing'].includes(view)
 
-  if (showSpinner) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (showSpinner) return <LoadingScreen />
 
   return (
     <>

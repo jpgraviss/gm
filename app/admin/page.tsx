@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 // data loaded from API
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { formatCurrency } from '@/lib/utils'
 import { SERVICE_NAMES } from '@/lib/services'
 import { computeMRR } from '@/lib/metrics'
@@ -976,7 +977,7 @@ export default function AdminPage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   // Guard: only Super Admin
   if (!user?.isAdmin) {

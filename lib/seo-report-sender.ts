@@ -1,22 +1,53 @@
 import { createServiceClient } from '@/lib/supabase'
-import { buildClientReport, saveReportSnapshot, buildReportRecommendations, type ClientReportConfig, type ClientReportData } from '@/lib/client-reports'
-import { generateMonthlyReportHtml, type MonthlyReportData } from '@/lib/templates/generate-monthly-report'
+import { buildClientReport, saveReportSnapshot, getPreviousSnapshot, type ClientReportConfig, type ClientReportData } from '@/lib/client-reports'
+import { generateGrowthReportHtml, type WorkLogCategory, type NextMonthItem } from '@/lib/templates/generate-growth-report'
+import { generateGrowthNarrative } from '@/lib/report-narrative'
 import { sendEmail } from '@/lib/email'
-import { getSettings } from '@/lib/settings'
+import { getSettings, type AppSettings } from '@/lib/settings'
 
-// The template only needs a trimmed view of the full WordPressSeoReport
-// (email templates don't need siteUrl/generatedAt/etc.) — flattens
-// environment.pluginUpdates to the shape the template expects.
-function toReportSectionShape(wp: ClientReportData['wordpressSeo']): MonthlyReportData['metrics']['wordpressSeo'] {
-  if (!wp) return undefined
-  return {
-    averageScore: wp.averageScore,
-    totalPages: wp.totalPages,
-    scoreDistribution: wp.scoreDistribution,
-    pluginUpdates: wp.environment.pluginUpdates,
-    securityIssues: wp.securityIssues,
-    worstPages: wp.worstPages.map(p => ({ path: p.path, title: p.title, score: p.score })),
+/**
+ * Assembles and renders the full growth report — real GSC/GA4/rank-tracker
+ * data, month-over-month deltas pulled from the last saved snapshot, an
+ * AI-or-fallback narrative, and whatever staff entered in report_work_log
+ * for this exact period (falls back to empty sections if nothing was
+ * entered — never fabricated).
+ */
+async function buildGrowthReportHtml(
+  reportData: ClientReportData,
+  companyName: string,
+  period: { start: string; end: string; label: string },
+  settings: AppSettings,
+): Promise<string> {
+  const [prevSeo, prevTraffic] = await Promise.all([
+    getPreviousSnapshot(companyName, 'search_console', period.start),
+    getPreviousSnapshot(companyName, 'analytics', period.start),
+  ])
+  const previous = {
+    seo: prevSeo ? { clicks: prevSeo.clicks as number, impressions: prevSeo.impressions as number, avgPosition: prevSeo.avgPosition as number } : undefined,
+    traffic: prevTraffic ? { sessions: prevTraffic.sessions as number, users: prevTraffic.users as number } : undefined,
   }
+
+  const narrative = await generateGrowthNarrative(reportData, previous)
+
+  const db = createServiceClient()
+  const { data: workLogRow } = await db
+    .from('report_work_log')
+    .select('categories, next_month, updated_by')
+    .eq('company_name', companyName)
+    .eq('period_start', period.start)
+    .maybeSingle()
+
+  return generateGrowthReportHtml({
+    clientName: companyName,
+    preparedBy: (workLogRow?.updated_by as string) || `${settings?.company.name ?? 'Graviss Marketing'} Growth Team`,
+    engagement: 'SEO & Digital Growth',
+    period,
+    report: reportData,
+    narrative,
+    previous,
+    workLog: (workLogRow?.categories as WorkLogCategory[]) ?? [],
+    nextMonth: (workLogRow?.next_month as NextMonthItem[]) ?? [],
+  }, settings)
 }
 
 interface ClientIntegration {
@@ -126,37 +157,11 @@ export async function sendMonthlyClientReports(): Promise<{ sent: number; failed
         continue
       }
 
-      const monthlyData: MonthlyReportData = {
-        clientName: integration.company_name,
-        companyName: settings?.company.name ?? 'Graviss Marketing',
-        period: { start, end, label },
-        metrics: {
-          seo: reportData.seo ? {
-            clicks: reportData.seo.clicks,
-            impressions: reportData.seo.impressions,
-            avgPosition: reportData.seo.avgPosition,
-            ctr: reportData.seo.ctr,
-          } : undefined,
-          traffic: reportData.traffic ? {
-            sessions: reportData.traffic.sessions,
-            users: reportData.traffic.users,
-            pageviews: reportData.traffic.pageviews,
-            bounceRate: reportData.traffic.bounceRate,
-          } : undefined,
-          reputation: reportData.reputation,
-          ranking: reportData.ranking,
-          uptime: reportData.uptime,
-          wordpressSeo: toReportSectionShape(reportData.wordpressSeo),
-        },
-        recommendations: buildReportRecommendations({ ranking: reportData.ranking, reputation: reportData.reputation, uptime: reportData.uptime, wordpressSeo: reportData.wordpressSeo }),
-        changelog: [],
-      }
-
-      const html = generateMonthlyReportHtml(monthlyData, settings)
+      const html = await buildGrowthReportHtml(reportData, integration.company_name, { start, end, label }, settings)
 
       const emailResult = await sendEmail({
         to: recipientEmails,
-        subject: `Your Monthly SEO Report — ${label}`,
+        subject: `Your Growth Report — ${label}`,
         html,
       })
 
@@ -210,33 +215,7 @@ export async function sendSingleReport(companyName: string, options?: { recipien
     endDate: end,
   })
 
-  const monthlyData: MonthlyReportData = {
-    clientName: row.company_name,
-    companyName: settings?.company.name ?? 'Graviss Marketing',
-    period: { start, end, label },
-    metrics: {
-      seo: reportData.seo ? {
-        clicks: reportData.seo.clicks,
-        impressions: reportData.seo.impressions,
-        avgPosition: reportData.seo.avgPosition,
-        ctr: reportData.seo.ctr,
-      } : undefined,
-      traffic: reportData.traffic ? {
-        sessions: reportData.traffic.sessions,
-        users: reportData.traffic.users,
-        pageviews: reportData.traffic.pageviews,
-        bounceRate: reportData.traffic.bounceRate,
-      } : undefined,
-      reputation: reportData.reputation,
-      ranking: reportData.ranking,
-      uptime: reportData.uptime,
-      wordpressSeo: toReportSectionShape(reportData.wordpressSeo),
-    },
-    recommendations: buildReportRecommendations({ ranking: reportData.ranking, reputation: reportData.reputation, uptime: reportData.uptime, wordpressSeo: reportData.wordpressSeo }),
-    changelog: [],
-  }
-
-  const html = generateMonthlyReportHtml(monthlyData, settings)
+  const html = await buildGrowthReportHtml(reportData, row.company_name, { start, end, label }, settings)
 
   if (options?.preview) {
     return { html, sent: false }
@@ -268,7 +247,7 @@ export async function sendSingleReport(companyName: string, options?: { recipien
 
   const result = await sendEmail({
     to: recipientEmails,
-    subject: `Your Monthly SEO Report — ${label}`,
+    subject: `Your Growth Report — ${label}`,
     html,
   })
 

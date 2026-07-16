@@ -40,6 +40,8 @@ class GravHub_SEO_Metabox {
 		'_gravhub_robots_noindex',
 		'_gravhub_robots_nofollow',
 		'_gravhub_canonical_url',
+		'_gravhub_schema_type',
+		'_gravhub_faq_items',
 	);
 
 	/**
@@ -143,6 +145,9 @@ class GravHub_SEO_Metabox {
 				</button>
 				<button type="button" class="gravhub-tab-button" data-tab="advanced">
 					<?php esc_html_e( 'Advanced', 'gravhub-seo' ); ?>
+				</button>
+				<button type="button" class="gravhub-tab-button" data-tab="schema">
+					<?php esc_html_e( 'Schema', 'gravhub-seo' ); ?>
 				</button>
 				<button type="button" class="gravhub-tab-button" data-tab="analysis">
 					<?php esc_html_e( 'Analysis', 'gravhub-seo' ); ?>
@@ -524,6 +529,36 @@ class GravHub_SEO_Metabox {
 
 			</div>
 
+			<!-- Schema Tab -->
+			<div class="gravhub-tab-panel" data-panel="schema">
+
+				<div class="gravhub-field">
+					<label for="gravhub-schema-type">
+						<?php esc_html_e( 'Schema Type', 'gravhub-seo' ); ?>
+					</label>
+					<select id="gravhub-schema-type" name="_gravhub_schema_type" class="widefat">
+						<option value="" <?php selected( $meta['_gravhub_schema_type'], '' ); ?>><?php esc_html_e( 'None', 'gravhub-seo' ); ?></option>
+						<option value="Article" <?php selected( $meta['_gravhub_schema_type'], 'Article' ); ?>><?php esc_html_e( 'Article', 'gravhub-seo' ); ?></option>
+						<option value="Service" <?php selected( $meta['_gravhub_schema_type'], 'Service' ); ?>><?php esc_html_e( 'Service', 'gravhub-seo' ); ?></option>
+						<option value="FAQ" <?php selected( $meta['_gravhub_schema_type'], 'FAQ' ); ?>><?php esc_html_e( 'FAQ', 'gravhub-seo' ); ?></option>
+					</select>
+					<p class="gravhub-field-description">
+						<?php esc_html_e( 'Article uses the post title/excerpt/author/date. Service uses the title/excerpt as the service description. FAQ uses the questions below, and also powers the [gravhub_faq] shortcode\'s visible accordion — both read the same list, so the schema and what visitors see always match.', 'gravhub-seo' ); ?>
+					</p>
+				</div>
+
+				<div class="gravhub-field gravhub-faq-field" style="<?php echo ( 'FAQ' === $meta['_gravhub_schema_type'] ) ? '' : 'display:none;'; ?>">
+					<label><?php esc_html_e( 'FAQ Questions', 'gravhub-seo' ); ?></label>
+					<p class="gravhub-field-description">
+						<?php esc_html_e( 'Add the [gravhub_faq] shortcode to this post\'s content wherever you want the visible accordion to appear.', 'gravhub-seo' ); ?>
+					</p>
+					<div id="gravhub-faq-items"></div>
+					<button type="button" class="button" id="gravhub-faq-add"><?php esc_html_e( '+ Add Question', 'gravhub-seo' ); ?></button>
+					<input type="hidden" name="_gravhub_faq_items" id="gravhub-faq-items-input" value="<?php echo esc_attr( $meta['_gravhub_faq_items'] ); ?>" />
+				</div>
+
+			</div>
+
 		</div>
 
 		<script type="text/javascript">
@@ -540,6 +575,66 @@ class GravHub_SEO_Metabox {
 
 				$('.gravhub-tab-panel').removeClass('gravhub-tab-panel-active');
 				$('.gravhub-tab-panel[data-panel="' + tab + '"]').addClass('gravhub-tab-panel-active');
+			});
+
+			// Schema type: show/hide the FAQ repeater.
+			$('#gravhub-schema-type').on('change', function() {
+				if ($(this).val() === 'FAQ') {
+					$('.gravhub-faq-field').show();
+				} else {
+					$('.gravhub-faq-field').hide();
+				}
+			});
+
+			// FAQ repeater — single source of truth for both the FAQPage
+			// schema and the [gravhub_faq] shortcode's visible accordion,
+			// so the two can never drift out of sync with each other.
+			var gravhubFaqContainer = $('#gravhub-faq-items');
+			var gravhubFaqInput = $('#gravhub-faq-items-input');
+
+			function gravhubAddFaqRow(question, answer) {
+				var row = $('<div class="gravhub-faq-row" style="margin-bottom:12px;padding:12px;border:1px solid #dcdcde;border-radius:4px;"></div>');
+				var q = $('<input type="text" class="widefat gravhub-faq-question" placeholder="' + '<?php echo esc_js( __( 'Question', 'gravhub-seo' ) ); ?>' + '" />').val(question);
+				var a = $('<textarea class="widefat gravhub-faq-answer" rows="2" placeholder="' + '<?php echo esc_js( __( 'Answer', 'gravhub-seo' ) ); ?>' + '"></textarea>').val(answer);
+				var remove = $('<button type="button" class="button-link-delete" style="margin-top:6px;">' + '<?php echo esc_js( __( 'Remove', 'gravhub-seo' ) ); ?>' + '</button>');
+				remove.on('click', function() { row.remove(); });
+				row.append(q).append('<br/><br/>').append(a).append('<br/>').append(remove);
+				gravhubFaqContainer.append(row);
+			}
+
+			var gravhubExistingFaq = [];
+			try {
+				gravhubExistingFaq = JSON.parse(gravhubFaqInput.val() || '[]');
+				if (!Array.isArray(gravhubExistingFaq)) gravhubExistingFaq = [];
+			} catch (e) {
+				gravhubExistingFaq = [];
+			}
+			if (gravhubExistingFaq.length === 0) {
+				gravhubAddFaqRow('', '');
+			} else {
+				gravhubExistingFaq.forEach(function(item) {
+					gravhubAddFaqRow(item.question || '', item.answer || '');
+				});
+			}
+
+			$('#gravhub-faq-add').on('click', function() {
+				gravhubAddFaqRow('', '');
+			});
+
+			// Serialize the repeater into the hidden input right before the
+			// post form actually submits — keeps the fields themselves as
+			// plain inputs (easy to add/remove rows for) instead of trying
+			// to keep JSON in sync on every keystroke.
+			$('#post').on('submit', function() {
+				var items = [];
+				gravhubFaqContainer.find('.gravhub-faq-row').each(function() {
+					var q = $(this).find('.gravhub-faq-question').val().trim();
+					var a = $(this).find('.gravhub-faq-answer').val().trim();
+					if (q && a) {
+						items.push({ question: q, answer: a });
+					}
+				});
+				gravhubFaqInput.val(JSON.stringify(items));
 			});
 
 			// Character counter function.
@@ -1060,6 +1155,48 @@ class GravHub_SEO_Metabox {
 				update_post_meta( $post_id, $field, '1' );
 			} else {
 				delete_post_meta( $post_id, $field );
+			}
+		}
+
+		// Schema type — restricted to a known set rather than an arbitrary
+		// string that later ends up inside a JSON-LD @type.
+		if ( isset( $_POST['_gravhub_schema_type'] ) ) {
+			$allowed_types = array( '', 'Article', 'Service', 'FAQ' );
+			$schema_type   = sanitize_text_field( wp_unslash( $_POST['_gravhub_schema_type'] ) );
+			if ( ! in_array( $schema_type, $allowed_types, true ) ) {
+				$schema_type = '';
+			}
+			if ( '' === $schema_type ) {
+				delete_post_meta( $post_id, '_gravhub_schema_type' );
+			} else {
+				update_post_meta( $post_id, '_gravhub_schema_type', $schema_type );
+			}
+		}
+
+		// FAQ items — re-validated server-side rather than trusting the
+		// client-serialized JSON as-is; empty/malformed entries are dropped.
+		if ( isset( $_POST['_gravhub_faq_items'] ) ) {
+			$raw_items  = json_decode( wp_unslash( $_POST['_gravhub_faq_items'] ), true );
+			$faq_items  = array();
+			if ( is_array( $raw_items ) ) {
+				foreach ( $raw_items as $item ) {
+					if ( ! is_array( $item ) ) {
+						continue;
+					}
+					$question = isset( $item['question'] ) ? sanitize_text_field( $item['question'] ) : '';
+					$answer   = isset( $item['answer'] ) ? wp_kses_post( $item['answer'] ) : '';
+					if ( '' !== $question && '' !== $answer ) {
+						$faq_items[] = array(
+							'question' => $question,
+							'answer'   => $answer,
+						);
+					}
+				}
+			}
+			if ( empty( $faq_items ) ) {
+				delete_post_meta( $post_id, '_gravhub_faq_items' );
+			} else {
+				update_post_meta( $post_id, '_gravhub_faq_items', wp_json_encode( $faq_items ) );
 			}
 		}
 

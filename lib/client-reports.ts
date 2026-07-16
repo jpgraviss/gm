@@ -1,6 +1,6 @@
 import { createServiceClient } from '@/lib/supabase'
-import { getGSCSummary, getGSCSearchAnalytics } from '@/lib/google-search-console'
-import { getGA4Report, getGA4TopPages } from '@/lib/google-analytics'
+import { getGSCSummary, getGSCSearchAnalytics, getGSCIndexCoverage } from '@/lib/google-search-console'
+import { getGA4Report, getGA4TopPages, getGA4TrafficSources } from '@/lib/google-analytics'
 import { getGBPSummary } from '@/lib/google-business-profile'
 import { generateWordPressSeoReport, type WordPressSeoReport } from '@/lib/wordpress-seo-report'
 
@@ -32,6 +32,11 @@ export interface ClientReportData {
     avgPosition: number
     ctr: number
     topQueries: Array<{ keyword: string; clicks: number; impressions: number; position: number }>
+    // Pages that received at least one Search Console impression in the
+    // window — a real, honest number, but NOT the same thing as Google's
+    // "indexed pages" count (that requires the URL Inspection API called
+    // per-URL, which isn't wired up). Labeled accordingly wherever shown.
+    pagesInSearch: number
   }
   traffic?: {
     sessions: number
@@ -40,6 +45,7 @@ export interface ClientReportData {
     avgSessionDurationSec: number
     bounceRate: number
     topPages: Array<{ path: string; title: string; sessions: number }>
+    channels: Array<{ channel: string; sessions: number; users: number }>
   }
   reputation?: {
     newReviews: number
@@ -52,7 +58,7 @@ export interface ClientReportData {
     top10: number
     improved: number
     declined: number
-    keywords: Array<{ keyword: string; position: number; change: number }>
+    keywords: Array<{ keyword: string; position: number; change: number; targetUrl: string | null }>
   }
   uptime?: {
     sitesMonitored: number
@@ -92,7 +98,7 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
   // ── SEO via Search Console ─────────────────────────────────────────────
   if (config.gscSiteUrl) {
     try {
-      const [summary, topQueries] = await Promise.all([
+      const [summary, topQueries, indexCoverage] = await Promise.all([
         getGSCSummary(config.gscSiteUrl, days),
         getGSCSearchAnalytics({
           siteUrl: config.gscSiteUrl,
@@ -101,6 +107,7 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
           dimensions: ['query'],
           rowLimit: 20,
         }),
+        getGSCIndexCoverage(config.gscSiteUrl),
       ])
       result.seo = {
         clicks: summary.totalClicks,
@@ -113,6 +120,7 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
           impressions: r.impressions,
           position: r.position,
         })),
+        pagesInSearch: indexCoverage.valid,
       }
     } catch (err) {
       console.error('[client-report] GSC pull failed', err)
@@ -122,9 +130,10 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
   // ── Traffic via GA4 ────────────────────────────────────────────────────
   if (config.ga4PropertyId) {
     try {
-      const [ga4, topPages] = await Promise.all([
+      const [ga4, topPages, channels] = await Promise.all([
         getGA4Report(config.ga4PropertyId, days),
         getGA4TopPages(config.ga4PropertyId, days, 10),
+        getGA4TrafficSources(config.ga4PropertyId, days),
       ])
       result.traffic = {
         sessions:              ga4.sessions ?? 0,
@@ -137,6 +146,7 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
           title: p.title,
           sessions: p.sessions,
         })),
+        channels: channels.map((c) => ({ channel: c.channel, sessions: c.sessions, users: c.users })),
       }
     } catch (err) {
       console.error('[client-report] GA4 pull failed', err)
@@ -162,11 +172,11 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
     const db = createServiceClient()
     const { data: keywords } = await db
       .from('tracked_keywords')
-      .select('keyword, current_position, previous_position')
+      .select('keyword, current_position, previous_position, target_url')
       .eq('company_name', config.companyName)
 
     if (keywords && keywords.length > 0) {
-      const rows = keywords as Array<{ keyword: string; current_position: number | null; previous_position: number | null }>
+      const rows = keywords as Array<{ keyword: string; current_position: number | null; previous_position: number | null; target_url: string | null }>
       const top3 = rows.filter((k) => (k.current_position ?? 100) <= 3).length
       const top10 = rows.filter((k) => (k.current_position ?? 100) <= 10).length
       const improved = rows.filter((k) => (k.previous_position ?? 100) > (k.current_position ?? 100)).length
@@ -181,6 +191,7 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
           keyword: k.keyword,
           position: k.current_position ?? 0,
           change: (k.previous_position ?? k.current_position ?? 0) - (k.current_position ?? 0),
+          targetUrl: k.target_url,
         })),
       }
     }
@@ -319,6 +330,32 @@ export function buildReportRecommendations(metrics: {
   }
 
   return recs
+}
+
+/**
+ * Look up the most recent prior-period snapshot for a company+product,
+ * strictly before the given period start — the real month-over-month
+ * comparison data behind "clicks rose from X to Y" style narration.
+ * Returns null if no prior snapshot was ever saved (e.g. first report for
+ * a new client), which callers must handle by omitting the comparison
+ * rather than inventing one.
+ */
+export async function getPreviousSnapshot(
+  companyName: string,
+  product: 'search_console' | 'analytics' | 'rank_tracker',
+  beforePeriodStart: string,
+): Promise<Record<string, unknown> | null> {
+  const db = createServiceClient()
+  const { data } = await db
+    .from('client_data_snapshots')
+    .select('metrics, period_start')
+    .eq('company_name', companyName)
+    .eq('product', product)
+    .lt('period_start', beforePeriodStart)
+    .order('period_start', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return (data as { metrics: Record<string, unknown> } | null)?.metrics ?? null
 }
 
 /**

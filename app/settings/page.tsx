@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import {
@@ -705,7 +706,7 @@ export default function SettingsPage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>
@@ -1967,6 +1968,8 @@ export default function SettingsPage() {
 
             <StripeIntegrationSection />
 
+            <EmailTrackingSection />
+
             <GoogleReviewsIntegrationSection />
 
             <MaverickIntegrationSection />
@@ -3199,6 +3202,157 @@ function StripeIntegrationSection() {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+interface ExtensionToken {
+  id: string
+  label?: string
+  createdAt: string
+  lastUsedAt?: string
+  revoked: boolean
+}
+
+function EmailTrackingSection() {
+  const { toast } = useToast()
+  const [tokens, setTokens] = useState<ExtensionToken[]>([])
+  const [loading, setLoading] = useState(true)
+  const [newLabel, setNewLabel] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [justCreatedToken, setJustCreatedToken] = useState<string | null>(null)
+
+  const loadTokens = useCallback(() => {
+    fetch('/api/extension/tokens')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { if (Array.isArray(d)) setTokens(d) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { loadTokens() }, [loadTokens])
+
+  async function handleCreate() {
+    setCreating(true)
+    try {
+      const res = await fetch('/api/extension/tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: newLabel.trim() || undefined }),
+      })
+      if (!res.ok) {
+        toast('Failed to create token', 'error')
+        return
+      }
+      const data = await res.json()
+      setJustCreatedToken(data.token)
+      setNewLabel('')
+      loadTokens()
+    } catch {
+      toast('Failed to create token', 'error')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  async function handleRevoke(id: string) {
+    if (!confirm('Revoke this extension token? The Gmail extension using it will stop working until reconnected with a new one.')) return
+    try {
+      const res = await fetch(`/api/extension/tokens/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      toast('Token revoked', 'success')
+      loadTokens()
+    } catch {
+      toast('Failed to revoke token', 'error')
+    }
+  }
+
+  function copyToken() {
+    if (!justCreatedToken) return
+    navigator.clipboard.writeText(justCreatedToken).then(() => toast('Copied to clipboard', 'success'))
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+          <Mail size={18} className="text-red-600" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-800">Email Tracking (Gmail Extension)</p>
+          <p className="text-xs text-gray-500">Know when a prospect opens or clicks an email you sent from your real Gmail inbox</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5 mb-4">
+        <p className="text-xs text-gray-500 leading-relaxed">
+          Install the extension (find it in the <code className="bg-white px-1 rounded border border-gray-200">browser-extension</code> folder — load it unpacked via <code className="bg-white px-1 rounded border border-gray-200">chrome://extensions</code> → Developer mode → Load unpacked), then paste a token below into the extension&apos;s setup page along with this GravHub URL.
+        </p>
+      </div>
+
+      {justCreatedToken && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-3 mb-4">
+          <p className="text-xs font-semibold text-amber-800 mb-1.5">Copy this now — it won&apos;t be shown again</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs bg-white border border-amber-200 rounded-lg px-2.5 py-1.5 overflow-x-auto whitespace-nowrap">{justCreatedToken}</code>
+            <button
+              onClick={copyToken}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white rounded-lg flex-shrink-0"
+              style={{ background: '#015035' }}
+            >
+              <Copy size={12} /> Copy
+            </button>
+          </div>
+          <button onClick={() => setJustCreatedToken(null)} className="text-[11px] text-amber-700 hover:underline mt-1.5">Dismiss</button>
+        </div>
+      )}
+
+      <div className="flex gap-2 mb-4">
+        <input
+          value={newLabel}
+          onChange={e => setNewLabel(e.target.value)}
+          placeholder="Label (e.g. this laptop)"
+          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+        />
+        <button
+          onClick={handleCreate}
+          disabled={creating}
+          className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white rounded-lg disabled:opacity-40 flex-shrink-0"
+          style={{ background: '#015035' }}
+        >
+          <Plus size={13} /> {creating ? 'Creating...' : 'Generate Token'}
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-gray-400">Loading tokens...</p>
+      ) : tokens.length === 0 ? (
+        <p className="text-xs text-gray-400">No extension tokens yet.</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {tokens.map(t => (
+            <div key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-gray-700 truncate">{t.label || 'Unlabeled'}</p>
+                <p className="text-[11px] text-gray-400">
+                  Created {new Date(t.createdAt).toLocaleDateString()}
+                  {t.lastUsedAt ? ` · Last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : ' · Never used'}
+                  {t.revoked ? ' · Revoked' : ''}
+                </p>
+              </div>
+              {!t.revoked && (
+                <button
+                  onClick={() => handleRevoke(t.id)}
+                  className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+                  title="Revoke token"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

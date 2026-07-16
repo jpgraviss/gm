@@ -7,6 +7,7 @@ import { formatDate } from '@/lib/utils'
 import EmailBlockEditor from '@/components/email/EmailBlockEditor'
 import EmailPreview from '@/components/email/EmailPreview'
 import TemplatePicker from '@/components/email/TemplatePicker'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { type EmailBlock, renderEmailHTML } from '@/lib/email-builder'
 import {
   Mail, Send, Users, Trash2, Eye, Edit, X, Sparkles, CheckCircle,
@@ -157,7 +158,7 @@ export default function MarketingPage() {
   const avgOpenRate = totalSent > 0 ? Math.round((totalOpens / totalSent) * 100) : 0
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+    return <LoadingScreen />
   }
 
   return (

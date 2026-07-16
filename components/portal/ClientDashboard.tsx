@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import StatusBadge from '@/components/ui/StatusBadge'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { formatCurrency, formatDate, projectStatusColors, invoiceStatusColors } from '@/lib/utils'
 import {
   Globe, FolderKanban, FileText, MessageSquare, ChevronRight,
@@ -197,11 +198,7 @@ export default function ClientDashboard({ companyOverride }: { companyOverride?:
   }, [company])
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f8fafc' }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   if (!data || !data.company) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 // Next.js App Router client-side navigation has no built-in "% of page
 // loaded" signal to hook into — there's no equivalent of the old Pages
@@ -137,24 +138,7 @@ export default function PageLoadingOverlay() {
         transitionDuration: `${FADE_OUT_MS}ms`,
       }}
     >
-      <div className="flex flex-col items-center gap-4 w-56">
-        <div
-          className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-          style={{ borderColor: '#015035', borderTopColor: 'transparent' }}
-        />
-        <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(1,80,53,0.12)' }}>
-          <div
-            className="h-full rounded-full transition-[width] ease-out"
-            style={{ width: `${progress}%`, background: '#015035', transitionDuration: '120ms' }}
-          />
-        </div>
-        <p
-          className="text-xs font-semibold tracking-widest text-gray-400 tabular-nums"
-          style={{ fontFamily: 'var(--font-heading)' }}
-        >
-          LOADING&nbsp;&middot;&nbsp;{Math.round(progress)}%
-        </p>
-      </div>
+      <LoadingScreen progress={progress} label="Loading" />
     </div>
   )
 }

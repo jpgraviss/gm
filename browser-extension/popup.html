@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>GravHub Email Tracking</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="header">
+    <span class="brand">GravHub Tracking</span>
+    <button id="refresh" title="Refresh">&#8635;</button>
+  </div>
+  <div id="disconnected" class="disconnected" hidden>
+    <p>Not connected yet.</p>
+    <button id="openOptions">Set up</button>
+  </div>
+  <div id="feed" class="feed"></div>
+  <div id="empty" class="empty" hidden>
+    <p>No tracked emails yet.</p>
+    <p class="hint">Compose in Gmail with tracking on — activity will show up here once someone opens it.</p>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

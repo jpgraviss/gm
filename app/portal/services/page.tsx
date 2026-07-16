@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   ArrowLeft, Search, Target, Globe, Megaphone, Mail,
   PenTool, GraduationCap, Lightbulb, ChevronRight,
@@ -89,13 +90,7 @@ export default function ServicesHubPage() {
       .finally(() => setLoading(false))
   }, [company, toast])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--page-bg)' }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} />
-      </div>
-    )
-  }
+  if (loading) return <LoadingScreen />
 
   const config = data?.portalConfig
   const servicesFromConfig = config?.services_config

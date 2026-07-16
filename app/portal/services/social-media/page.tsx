@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   ArrowLeft, Megaphone, Calendar, Heart, MessageCircle,
   Share2, Eye,
@@ -72,13 +73,7 @@ export default function PortalSocialMediaPage() {
       .finally(() => setLoading(false))
   }, [company, toast])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#ec4899' }} />
-      </div>
-    )
-  }
+  if (loading) return <LoadingScreen />
 
   const published = data.posts.filter(p => p.status === 'Published' || p.status === 'posted')
   const scheduled = data.posts.filter(p => p.status === 'Scheduled' || p.status === 'scheduled')

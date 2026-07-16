@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 function generateId(prefix: string) {
   return `${prefix}-${Date.now()}`
@@ -796,7 +797,7 @@ export default function ProposalsPage() {
     { label: 'Pipeline Value', value: formatCurrency(pipelineValue), icon: <TrendingUp size={18} />, color: '#8b5cf6', sub: 'Open proposals' },
   ]
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

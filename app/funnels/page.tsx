@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import {
   Plus, Trash2, ArrowRight, Eye, Target, Pencil, ChevronDown,
   ChevronUp, ExternalLink, Layers, GripVertical, FileText,
-  Search, X, TrendingUp, BarChart3, ArrowDownRight,
+  Search, X, TrendingUp, BarChart3, ArrowDownRight, Check,
   Gift, ArrowDownCircle, Sparkles, BookOpen,
 } from 'lucide-react'
 
@@ -87,6 +88,8 @@ export default function FunnelsPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [editingName, setEditingName] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [editingPageId, setEditingPageId] = useState<string | null>(null)
+  const [editPageName, setEditPageName] = useState('')
   const [addingPage, setAddingPage] = useState(false)
   const [newPageName, setNewPageName] = useState('')
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
@@ -159,6 +162,14 @@ export default function FunnelsPage() {
     }
   }
 
+  // The API always creates a first page ("Landing Page") along with the
+  // funnel itself — previously this response was discarded and the user
+  // had to close the modal, expand the new funnel in the list, and click
+  // through to find that page's editor link. Since a blank funnel is
+  // already just "one page, no campaign steps" until more pages are added,
+  // jumping straight to that page's editor turns this into a real
+  // single-page "new landing page" quick-create flow with no schema
+  // change and no separate landing-page concept to maintain.
   async function createFunnel() {
     if (!newName.trim()) return
     setCreating(true)
@@ -169,10 +180,16 @@ export default function FunnelsPage() {
         body: JSON.stringify({ name: newName.trim() }),
       })
       if (res.ok) {
+        const created = await res.json() as FunnelDetail
         setNewName('')
         setShowCreateModal(false)
-        addToast('Funnel created', 'success')
-        loadFunnels()
+        addToast('Landing page created', 'success')
+        const firstPage = created.pages?.[0]
+        if (firstPage) {
+          router.push(`/funnels/editor?funnel=${created.id}&page=${firstPage.id}`)
+        } else {
+          loadFunnels()
+        }
       } else {
         addToast('Failed to create funnel', 'error')
       }
@@ -283,39 +300,60 @@ export default function FunnelsPage() {
     }
   }
 
-  async function reorderPage(funnelId: string, pageId: string, direction: 'up' | 'down') {
-    if (!detail) return
+  // Drag-and-drop reorder — replaces the old up/down-button swap. Reindexes
+  // every page to its new position (0..n-1) rather than trying to diff just
+  // the two swapped rows, so it self-heals any pre-existing sort_order gaps
+  // instead of just working around them.
+  async function reorderPages(funnelId: string, result: DropResult) {
+    if (!detail || !result.destination) return
     const pages = [...detail.pages].sort((a, b) => a.sort_order - b.sort_order)
-    const idx = pages.findIndex((p) => p.id === pageId)
-    if (idx < 0) return
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    if (swapIdx < 0 || swapIdx >= pages.length) return
-
-    const orderA = pages[idx].sort_order
-    const orderB = pages[swapIdx].sort_order
+    const [moved] = pages.splice(result.source.index, 1)
+    pages.splice(result.destination.index, 0, moved)
+    const reindexed = pages.map((p, i) => ({ ...p, sort_order: i }))
+    setDetail({ ...detail, pages: reindexed })
 
     try {
-      const [resA, resB] = await Promise.all([
-        fetch(`/api/funnels/${funnelId}/pages`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pageId: pages[idx].id, sort_order: orderB }),
-        }),
-        fetch(`/api/funnels/${funnelId}/pages`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pageId: pages[swapIdx].id, sort_order: orderA }),
-        }),
-      ])
-      if (!resA.ok || !resB.ok) {
-        addToast('Failed to reorder page', 'error')
+      const results = await Promise.all(
+        reindexed.map((p) =>
+          fetch(`/api/funnels/${funnelId}/pages`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pageId: p.id, sort_order: p.sort_order }),
+          }),
+        ),
+      )
+      if (results.some((r) => !r.ok)) {
+        addToast('Failed to save new page order', 'error')
+        const refreshRes = await fetch(`/api/funnels/${funnelId}`)
+        if (refreshRes.ok) setDetail(await refreshRes.json())
       }
     } catch {
-      addToast('Failed to reorder page', 'error')
+      addToast('Failed to save new page order', 'error')
+      const refreshRes = await fetch(`/api/funnels/${funnelId}`)
+      if (refreshRes.ok) setDetail(await refreshRes.json())
     }
+  }
 
-    const refreshRes = await fetch(`/api/funnels/${funnelId}`)
-    if (refreshRes.ok) setDetail(await refreshRes.json())
+  async function renamePage(funnelId: string, pageId: string) {
+    if (!editPageName.trim()) return
+    try {
+      const res = await fetch(`/api/funnels/${funnelId}/pages`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId, name: editPageName.trim() }),
+      })
+      if (!res.ok) {
+        addToast('Failed to rename page', 'error')
+        return
+      }
+      setEditingPageId(null)
+      addToast('Page renamed', 'success')
+      if (detail) {
+        setDetail({ ...detail, pages: detail.pages.map((p) => (p.id === pageId ? { ...p, name: editPageName.trim() } : p)) })
+      }
+    } catch {
+      addToast('Failed to rename page', 'error')
+    }
   }
 
   const tabs: { key: FilterTab; label: string }[] = [
@@ -543,7 +581,12 @@ export default function FunnelsPage() {
                     </div>
                   </div>
 
-                  {f.pageCount > 0 && (
+                  {f.pageCount === 1 ? (
+                    <div className="flex items-center gap-1.5 py-2 px-3 bg-gray-50 dark:bg-white/[0.03] rounded-lg">
+                      <FileText size={12} className="text-gray-400 dark:text-white/30 flex-shrink-0" />
+                      <span className="text-[11px] text-gray-500 dark:text-white/40 font-medium">Single landing page</span>
+                    </div>
+                  ) : f.pageCount > 0 ? (
                     <div className="flex items-center gap-1 py-2 px-3 bg-gray-50 dark:bg-white/[0.03] rounded-lg overflow-x-auto">
                       {Array.from({ length: Math.min(f.pageCount, 5) }).map((_, i) => (
                         <div key={i} className="flex items-center gap-1 flex-shrink-0">
@@ -559,7 +602,7 @@ export default function FunnelsPage() {
                         <span className="text-[10px] text-gray-400 dark:text-white/30 ml-1 flex-shrink-0">+{f.pageCount - 5}</span>
                       )}
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="border-t border-gray-100 dark:border-white/5 px-5 py-3 flex items-center justify-between">
@@ -610,65 +653,98 @@ export default function FunnelsPage() {
                       </div>
                     ) : detail ? (
                       <div className="space-y-4">
-                        <p className="text-xs font-semibold text-gray-500 dark:text-white/40 uppercase tracking-wider">Funnel Pipeline</p>
-                        <div className="space-y-0">
-                          {[...detail.pages].sort((a, b) => a.sort_order - b.sort_order).map((page, i, arr) => {
-                            const dropOff = i > 0 ? arr[i - 1].views - page.views : 0
-                            const dropOffPct = i > 0 && arr[i - 1].views > 0
-                              ? ((dropOff / arr[i - 1].views) * 100).toFixed(1)
-                              : null
-                            return (
-                              <div key={page.id}>
-                                {i > 0 && (
-                                  <div className="flex items-center gap-2 py-1 pl-4">
-                                    <ArrowDownRight size={14} className="text-gray-300 dark:text-white/20" />
-                                    {dropOffPct && (
-                                      <span className="text-[10px] text-red-400 font-medium">-{dropOffPct}% drop-off ({dropOff})</span>
-                                    )}
-                                  </div>
-                                )}
-                                <div className="border border-gray-200 dark:border-white/10 rounded-lg p-3.5 bg-white dark:bg-white/[0.04]">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <GripVertical size={12} className="text-gray-300 dark:text-white/20" />
-                                    <span className="text-[10px] font-bold text-[#015035]/60 dark:text-emerald-400/60 uppercase">Step {i + 1}</span>
-                                    <div className="ml-auto flex gap-0.5">
-                                      <button
-                                        onClick={() => reorderPage(detail.id, page.id, 'up')}
-                                        disabled={i === 0}
-                                        className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                                      >
-                                        <ChevronUp size={12} />
-                                      </button>
-                                      <button
-                                        onClick={() => reorderPage(detail.id, page.id, 'down')}
-                                        disabled={i === arr.length - 1}
-                                        className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                                      >
-                                        <ChevronDown size={12} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">{page.name}</p>
-                                  <div className="flex gap-4 text-xs text-gray-500 dark:text-white/40">
-                                    <span className="flex items-center gap-1"><Eye size={11} /> {page.views} views</span>
-                                    <span className="flex items-center gap-1"><Target size={11} /> {page.conversions} conv.</span>
-                                    {page.views > 0 && (
-                                      <span className="text-[#015035] dark:text-emerald-400 font-medium">
-                                        {((page.conversions / page.views) * 100).toFixed(1)}%
-                                      </span>
-                                    )}
-                                  </div>
-                                  <button
-                                    onClick={() => router.push(`/funnels/editor?funnel=${detail.id}&page=${page.id}`)}
-                                    className="mt-2.5 text-xs text-[#015035] dark:text-emerald-400 font-medium hover:underline flex items-center gap-1"
-                                  >
-                                    <Pencil size={10} /> Edit page
-                                  </button>
-                                </div>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-white/40 uppercase tracking-wider">
+                          {detail.pages.length === 1 ? 'Landing Page' : 'Funnel Pipeline'}
+                        </p>
+                        <DragDropContext onDragEnd={(result) => reorderPages(detail.id, result)}>
+                          <Droppable droppableId={`funnel-pages-${detail.id}`}>
+                            {(dropProvided) => (
+                              <div ref={dropProvided.innerRef} {...dropProvided.droppableProps} className="space-y-0">
+                                {[...detail.pages].sort((a, b) => a.sort_order - b.sort_order).map((page, i, arr) => {
+                                  const dropOff = i > 0 ? arr[i - 1].views - page.views : 0
+                                  const dropOffPct = i > 0 && arr[i - 1].views > 0
+                                    ? ((dropOff / arr[i - 1].views) * 100).toFixed(1)
+                                    : null
+                                  const standalone = arr.length === 1
+                                  return (
+                                    <Draggable key={page.id} draggableId={page.id} index={i} isDragDisabled={standalone}>
+                                      {(dragProvided, dragSnapshot) => (
+                                        <div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
+                                          {i > 0 && (
+                                            <div className="flex items-center gap-2 py-1 pl-4">
+                                              <ArrowDownRight size={14} className="text-gray-300 dark:text-white/20" />
+                                              {dropOffPct && (
+                                                <span className="text-[10px] text-red-400 font-medium">-{dropOffPct}% drop-off ({dropOff})</span>
+                                              )}
+                                            </div>
+                                          )}
+                                          <div className={`border rounded-lg p-3.5 bg-white dark:bg-white/[0.04] ${dragSnapshot.isDragging ? 'shadow-lg border-gray-300 dark:border-white/20' : 'border-gray-200 dark:border-white/10'}`}>
+                                            <div className="flex items-center gap-2 mb-2">
+                                              {!standalone && (
+                                                <div {...dragProvided.dragHandleProps} className="text-gray-300 dark:text-white/20 hover:text-gray-500 dark:hover:text-white/50 cursor-grab flex-shrink-0">
+                                                  <GripVertical size={12} />
+                                                </div>
+                                              )}
+                                              <span className="text-[10px] font-bold text-[#015035]/60 dark:text-emerald-400/60 uppercase">
+                                                {standalone ? 'Page' : `Step ${i + 1}`}
+                                              </span>
+                                            </div>
+                                            {editingPageId === page.id ? (
+                                              <div className="flex gap-1.5 mb-2">
+                                                <input
+                                                  value={editPageName}
+                                                  onChange={(e) => setEditPageName(e.target.value)}
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') renamePage(detail.id, page.id)
+                                                    if (e.key === 'Escape') setEditingPageId(null)
+                                                  }}
+                                                  className="flex-1 px-2 py-1 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-gray-900 dark:text-white"
+                                                  autoFocus
+                                                />
+                                                <button onClick={() => renamePage(detail.id, page.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded">
+                                                  <Check size={13} />
+                                                </button>
+                                                <button onClick={() => setEditingPageId(null)} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                                                  <X size={13} />
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <div className="flex items-center gap-1.5 mb-2">
+                                                <p className="text-sm font-medium text-gray-900 dark:text-white">{page.name}</p>
+                                                <button
+                                                  onClick={() => { setEditingPageId(page.id); setEditPageName(page.name) }}
+                                                  className="text-gray-400 hover:text-gray-600 dark:hover:text-white/60"
+                                                >
+                                                  <Pencil size={11} />
+                                                </button>
+                                              </div>
+                                            )}
+                                            <div className="flex gap-4 text-xs text-gray-500 dark:text-white/40">
+                                              <span className="flex items-center gap-1"><Eye size={11} /> {page.views} views</span>
+                                              <span className="flex items-center gap-1"><Target size={11} /> {page.conversions} conv.</span>
+                                              {page.views > 0 && (
+                                                <span className="text-[#015035] dark:text-emerald-400 font-medium">
+                                                  {((page.conversions / page.views) * 100).toFixed(1)}%
+                                                </span>
+                                              )}
+                                            </div>
+                                            <button
+                                              onClick={() => router.push(`/funnels/editor?funnel=${detail.id}&page=${page.id}`)}
+                                              className="mt-2.5 text-xs text-[#015035] dark:text-emerald-400 font-medium hover:underline flex items-center gap-1"
+                                            >
+                                              <Pencil size={10} /> Edit page
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </Draggable>
+                                  )
+                                })}
+                                {dropProvided.placeholder}
                               </div>
-                            )
-                          })}
-                        </div>
+                            )}
+                          </Droppable>
+                        </DragDropContext>
 
                         <div className="flex gap-2 items-center pt-1">
                           {addingPage ? (
@@ -692,7 +768,7 @@ export default function FunnelsPage() {
                               onClick={() => setAddingPage(true)}
                               className="text-xs text-[#015035] dark:text-emerald-400 font-medium flex items-center gap-1 hover:underline"
                             >
-                              <Plus size={12} /> Add step
+                              <Plus size={12} /> {detail.pages.length === 1 ? 'Add another page' : 'Add step'}
                             </button>
                           )}
 

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   ArrowLeft, Globe, Calendar, CheckCircle, Circle,
   FolderKanban, Flag, FileText, Clock,
@@ -55,13 +56,7 @@ export default function PortalWebDesignPage() {
       .finally(() => setLoading(false))
   }, [company, toast])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#7c3aed' }} />
-      </div>
-    )
-  }
+  if (loading) return <LoadingScreen />
 
   const milestones = project?.milestones ?? []
   const completedMilestones = milestones.filter(m => m.completed).length

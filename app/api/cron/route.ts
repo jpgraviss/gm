@@ -553,42 +553,57 @@ async function checkTimeBasedTriggers() {
   const today = new Date()
   const todayStr = today.toISOString().split('T')[0]
 
-  // Check for overdue invoices (due date has passed, status is still Sent)
+  // Check for overdue invoices (due date has passed, status is still Sent).
+  // Uses conditional UPDATE ... WHERE status='Sent' RETURNING so only the
+  // worker that wins the transition fires the automation — no duplicate
+  // notifications when two cron ticks overlap.
   const { data: overdueInvoices } = await db
     .from('invoices')
-    .select('*')
+    .select('id')
     .eq('status', 'Sent')
     .lt('due_date', todayStr)
 
-  for (const inv of overdueInvoices ?? []) {
-    // Update status to Overdue
-    await db.from('invoices').update({ status: 'Overdue' }).eq('id', inv.id)
-    fireAutomations('invoice_overdue', { invoiceId: inv.id, company: inv.company, ...inv })
+  for (const { id } of overdueInvoices ?? []) {
+    const { data: claimed } = await db
+      .from('invoices')
+      .update({ status: 'Overdue' })
+      .eq('id', id)
+      .eq('status', 'Sent')
+      .select('*')
+      .maybeSingle()
+    if (claimed) {
+      fireAutomations('invoice_overdue', { invoiceId: claimed.id, company: claimed.company, ...claimed })
+    }
   }
 
-  // Check for overdue invoices by 3+ days — fires once per invoice when it
-  // crosses the threshold (overdue_3d_notified), not on every cron tick for
-  // as long as it stays unpaid (AUDIT.md #16 follow-up).
+  // Check for overdue invoices by 3+ days — atomic claim on overdue_3d_notified
+  // to guarantee the notification fires exactly once per invoice.
   const threeDaysAgo = new Date(today.getTime() - 3 * 86400000).toISOString().split('T')[0]
   const { data: overdue3 } = await db
     .from('invoices')
-    .select('*')
+    .select('id')
     .eq('status', 'Overdue')
     .eq('overdue_3d_notified', false)
     .lt('due_date', threeDaysAgo)
 
-  for (const inv of overdue3 ?? []) {
-    await db.from('invoices').update({ overdue_3d_notified: true }).eq('id', inv.id)
-    fireAutomations('invoice_overdue', { invoiceId: inv.id, company: inv.company, overdueDays: 3, ...inv })
+  for (const { id } of overdue3 ?? []) {
+    const { data: claimed } = await db
+      .from('invoices')
+      .update({ overdue_3d_notified: true })
+      .eq('id', id)
+      .eq('overdue_3d_notified', false)
+      .select('*')
+      .maybeSingle()
+    if (claimed) {
+      fireAutomations('invoice_overdue', { invoiceId: claimed.id, company: claimed.company, overdueDays: 3, ...claimed })
+    }
   }
 
-  // Check renewals within 90 days — renewal_90 and renewal_30 each fire once
-  // per contract when it first crosses that window, not on every tick for
-  // the entire 60-90 day span (AUDIT.md #16 follow-up).
+  // Check renewals within 90 days — atomic claim on renewal_30/90_notified.
   const in90Days = new Date(today.getTime() + 90 * 86400000).toISOString().split('T')[0]
   const { data: renewals90 } = await db
     .from('contracts')
-    .select('*')
+    .select('id, renewal_date, renewal_90_notified, renewal_30_notified')
     .lte('renewal_date', in90Days)
     .gte('renewal_date', todayStr)
     .in('status', ['Fully Executed', 'Active'])
@@ -596,14 +611,28 @@ async function checkTimeBasedTriggers() {
 
   for (const c of renewals90 ?? []) {
     const daysUntil = Math.ceil((new Date(c.renewal_date).getTime() - today.getTime()) / 86400000)
-    if (daysUntil <= 30) {
-      if (c.renewal_30_notified) continue
-      await db.from('contracts').update({ renewal_30_notified: true }).eq('id', c.id)
-      fireAutomations('renewal_30', { contractId: c.id, company: c.company, daysUntil, ...c })
-    } else {
-      if (c.renewal_90_notified) continue
-      await db.from('contracts').update({ renewal_90_notified: true }).eq('id', c.id)
-      fireAutomations('renewal_90', { contractId: c.id, company: c.company, daysUntil, ...c })
+    if (daysUntil <= 30 && !c.renewal_30_notified) {
+      const { data: claimed } = await db
+        .from('contracts')
+        .update({ renewal_30_notified: true })
+        .eq('id', c.id)
+        .eq('renewal_30_notified', false)
+        .select('*')
+        .maybeSingle()
+      if (claimed) {
+        fireAutomations('renewal_30', { contractId: claimed.id, company: claimed.company, daysUntil, ...claimed })
+      }
+    } else if (daysUntil > 30 && !c.renewal_90_notified) {
+      const { data: claimed } = await db
+        .from('contracts')
+        .update({ renewal_90_notified: true })
+        .eq('id', c.id)
+        .eq('renewal_90_notified', false)
+        .select('*')
+        .maybeSingle()
+      if (claimed) {
+        fireAutomations('renewal_90', { contractId: claimed.id, company: claimed.company, daysUntil, ...claimed })
+      }
     }
   }
 }

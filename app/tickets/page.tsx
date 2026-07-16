@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import NewTicketPanel, { type NewTicketFormData } from '@/components/crm/NewTicketPanel'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatDate } from '@/lib/utils'
@@ -472,7 +473,7 @@ export default function TicketsPage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

@@ -24,6 +24,7 @@ const TRIGGER_MAP: Record<string, string> = {
   'sequence_bounce':      'Sequence Contact Bounced',
   'sequence_completed':   'Sequence Completed',
   'meeting_booked':       'Meeting Booked',
+  'webhook_received':     'Webhook Received',
 }
 
 // Post-migration every row stores objects; the bare-string variant is kept
@@ -198,6 +199,19 @@ export async function executeWorkflow(
     triggerType === 'invoice_overdue' &&
     automation.config?.overdueDays !== undefined &&
     automation.config.overdueDays !== (triggerData.overdueDays ?? 0)
+  ) {
+    return { runId: null, status: 'skipped' as const, steps: [] }
+  }
+
+  // Webhook-triggered automations are matched broadly by trigger label
+  // (any 'Webhook Received' automation), same as every other trigger — this
+  // is what actually narrows it to the ONE automation the incoming request
+  // was addressed to. Every webhook automation must have its own token
+  // (the builder generates one on save); an automation somehow saved
+  // without one can never fire, rather than firing on every webhook call.
+  if (
+    triggerType === 'webhook_received' &&
+    (!automation.config?.webhookToken || automation.config.webhookToken !== triggerData.webhookToken)
   ) {
     return { runId: null, status: 'skipped' as const, steps: [] }
   }
@@ -445,6 +459,12 @@ async function executeAction(
       await db.from('deals').insert({
         id: `deal-auto-${uid()}`,
         company,
+        // Previously unset on every automation-created deal — a deal
+        // spawned from a form/funnel submission had no way back to the
+        // contact it came from, which silently broke any join meant to
+        // trace revenue back to how that contact was originally sourced.
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
+        contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
         stage,
         value: (context.value as number) ?? 0,
         service_type: (context.service_type as string) ?? 'General',

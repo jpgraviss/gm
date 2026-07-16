@@ -17,6 +17,7 @@ import {
   PenTool, Mail, Search, Eye, Pencil, FileSignature, TrendingUp, Trash2, Download,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { downloadCsv } from '@/lib/csv-export'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
@@ -1222,7 +1223,7 @@ export default function ContractsPage() {
     { label: 'Pending Signatures', value: pendingSig.toString(), icon: <FileSignature size={18} />, color: '#f59e0b' },
   ]
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#015035' }} /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

@@ -4,6 +4,7 @@ import { validateSubmission, submissionToContact } from '@/lib/forms'
 import { getResend } from '@/lib/resend'
 import { fireTrigger } from '@/lib/automation-triggers'
 import { withErrorHandler } from '@/lib/api-handler'
+import { extractUtmFromBody } from '@/lib/attribution'
 
 // CORS — forms get embedded on external websites
 const corsHeaders = {
@@ -59,12 +60,17 @@ export const GET = withErrorHandler('forms/public/[slug] GET', async (_req: Next
 export const POST = withErrorHandler('forms/public/[slug] POST', async (req: NextRequest, { params }: { params: Promise<{ slug: string }> }) => {
   const { slug } = await params
 
-  let body: Record<string, unknown>
+  let rawBody: Record<string, unknown>
   try {
-    body = await req.json()
+    rawBody = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: corsHeaders })
   }
+  // `utm` rides alongside the flat field-value payload (there's no wrapper
+  // object to attach it to separately) — pulled off before `body` is used
+  // for schema validation/storage so it never leaks into form_submissions
+  // .data, the notify-email summary, or submissionToContact's field lookup.
+  const { utm, ...body } = rawBody as Record<string, unknown> & { utm?: unknown }
 
   const db = createServiceClient()
   const { data: form } = await db
@@ -122,6 +128,7 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
           lifecycle_stage: 'Lead',
           created_date: new Date().toISOString().split('T')[0],
           created_at:   new Date().toISOString(),
+          ...extractUtmFromBody(utm),
         })
         contactId = newContactId
       }

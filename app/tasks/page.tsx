@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Header from '@/components/layout/Header'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { fetchTeamMembers } from '@/lib/supabase'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import type { AppTask, AppTaskCategory, AppTaskStatus, TaskPriority, TeamMember, TeamServiceLine } from '@/lib/types'
@@ -726,7 +727,7 @@ export default function TasksPage() {
     return a.dueDate.localeCompare(b.dueDate)
   })
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#015035]" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

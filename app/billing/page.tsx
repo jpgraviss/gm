@@ -14,6 +14,7 @@ import {
   Search, FileText, Upload,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 const statuses: InvoiceStatus[] = ['Pending', 'Sent', 'Overdue', 'Paid', 'Cancelled']
 
@@ -458,7 +459,7 @@ export default function BillingPage() {
     .sort((a, b) => b.amount - a.amount)
   const maxService = Math.max(1, ...serviceBreakdown.map(s => s.amount || 0))
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+  if (loading) return <LoadingScreen />
 
   return (
     <>

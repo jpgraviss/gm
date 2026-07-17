@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GravHub SEO
  * Description: Enterprise SEO management plugin by Graviss Marketing. Full on-page SEO analysis, focus keywords, XML sitemaps, meta management, and centralized reporting via GravHub.
- * Version: 1.3.2
+ * Version: 1.3.3
  * Author: Graviss Marketing
  * Author URI: https://gravissmarketing.com
  * License: Proprietary
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GRAVHUB_SEO_VERSION', '1.3.2' );
+define( 'GRAVHUB_SEO_VERSION', '1.3.3' );
 define( 'GRAVHUB_SEO_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_FILE', __FILE__ );
@@ -71,6 +71,29 @@ final class GravHub_SEO {
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
 		add_action( 'gravhub_daily_report', array( $this->health_reporter, 'send_report' ) );
 		add_action( 'admin_init', array( $this, 'self_heal_activation' ) );
+		add_filter( 'map_meta_cap', array( $this, 'allow_site_admins_to_manage' ), 10, 4 );
+	}
+
+	/**
+	 * self_heal_activation() only grants manage_gravhub_seo to a role
+	 * literally named 'administrator' — on installs where that's not how
+	 * the logged-in admin's role is set up (multisite, a role-editor
+	 * plugin, a renamed/custom admin role), the grant misses them even
+	 * though they're unambiguously a site admin, and every capability
+	 * check in the plugin (including WordPress core's own menu-access
+	 * check on add_menu_page/add_submenu_page — the source of the generic
+	 * "Sorry, you are not allowed to access this page" screen) then locks
+	 * them out. Returning an empty array from map_meta_cap is the standard
+	 * WordPress idiom for "grant unconditionally" — this makes
+	 * manage_options (WP's built-in "is a site admin" capability) always
+	 * sufficient, on top of manage_gravhub_seo if a user happens to have
+	 * that directly.
+	 */
+	public function allow_site_admins_to_manage( $caps, $cap, $user_id, $args ) {
+		if ( 'manage_gravhub_seo' === $cap && user_can( $user_id, 'manage_options' ) ) {
+			return array();
+		}
+		return $caps;
 	}
 
 	/**

@@ -21,6 +21,12 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 
 const FADE_OUT_MS = 250
 const MAX_STUCK_MS = 6000 // safety net if a click never actually navigates (e.g. opens a modal instead)
+// LoadingScreen's ring has its own 200ms stroke-dashoffset transition when
+// progress jumps to 100. Hold here, fully opaque, until that's had time to
+// finish before the opacity fade starts — otherwise (previously) both ran
+// concurrently and the ring was already mostly transparent by the time it
+// visually closed, so on a fast navigation it never read as "done" at all.
+const HOLD_AT_100_MS = 220
 
 function isInternalNavigationClick(e: MouseEvent): string | null {
   if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return null
@@ -80,12 +86,14 @@ export default function PageLoadingOverlay() {
   function finishLoading() {
     clearTimers()
     setProgress(100)
-    setFading(true)
     fadeTimeoutRef.current = setTimeout(() => {
-      setVisible(false)
-      setFading(false)
-      setProgress(0)
-    }, FADE_OUT_MS)
+      setFading(true)
+      fadeTimeoutRef.current = setTimeout(() => {
+        setVisible(false)
+        setFading(false)
+        setProgress(0)
+      }, FADE_OUT_MS)
+    }, HOLD_AT_100_MS)
   }
 
   // Navigation start: clicking any internal link. Stays on the capture

@@ -38,7 +38,8 @@ export default function AttributionReportPage() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { loadData() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadData() }, [])
 
   const totals = useMemo(() => {
     if (!data) return { attributedRevenue: 0, attributedPipeline: 0, coveragePct: 0 }

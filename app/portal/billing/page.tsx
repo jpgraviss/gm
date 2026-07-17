@@ -66,6 +66,9 @@ export default function PortalBillingPage() {
         setPayingId(null)
         return
       }
+      // Standard client-side redirect to the Stripe Checkout URL from a
+      // click handler, not a render-time mutation.
+      // eslint-disable-next-line react-hooks/immutability
       window.location.href = data.url
     } catch {
       toast('Failed to start payment', 'error')

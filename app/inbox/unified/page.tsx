@@ -61,6 +61,9 @@ export default function UnifiedInboxPage() {
   }, [toast, gmailToken, gmailEmail])
 
   useEffect(() => {
+    // load() re-runs whenever gmailToken/gmailEmail resolve after mount, and
+    // its own setLoading(true) needs to fire again on that refetch too.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
   }, [load])
 

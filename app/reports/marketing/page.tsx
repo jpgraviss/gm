@@ -167,7 +167,13 @@ export default function MarketingAnalyticsPage() {
     loadAdsData(adsDays)
   }
 
+  // loadData() is also wired to the refresh button below, so its own
+  // setLoading(true) must stay.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadData() }, [])
+  // Re-runs whenever the user changes the ads date range, and its own
+  // setAdsLoading(true) needs to fire again on that refetch too.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadAdsData(adsDays) }, [adsDays, loadAdsData])
 
   const sentBroadcasts = useMemo(() => {

@@ -17,6 +17,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stored = localStorage.getItem('gravhub-theme') as Theme | null
     const preferred = stored ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(preferred)
     document.documentElement.classList.toggle('dark', preferred === 'dark')
   }, [])

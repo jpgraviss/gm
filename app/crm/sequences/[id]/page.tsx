@@ -1139,7 +1139,7 @@ export default function SequenceDetailPage() {
                     onChange={e => setSettingsForm(f => f ? { ...f, sendVia: e.target.value as 'gmail' | 'resend' } : f)}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    <option value="gmail">Gmail (rep's own inbox)</option>
+                    <option value="gmail">Gmail (rep&apos;s own inbox)</option>
                     <option value="resend">Resend</option>
                   </select>
                 </div>
@@ -1150,7 +1150,7 @@ export default function SequenceDetailPage() {
                     onChange={e => setSettingsForm(f => f ? { ...f, assignedRepId: e.target.value || null } : f)}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    <option value="">Sequence's fromEmail only</option>
+                    <option value="">Sequence&apos;s fromEmail only</option>
                     {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
                 </div>
@@ -1172,7 +1172,7 @@ export default function SequenceDetailPage() {
                 </div>
               </div>
               <p className="text-[11px] text-gray-400 mt-3">
-                When a default rep is set, per-enrollment sending still prefers that enrollment's own assigned rep first — this is only the fallback.
+                When a default rep is set, per-enrollment sending still prefers that enrollment&apos;s own assigned rep first — this is only the fallback.
               </p>
             </div>
 

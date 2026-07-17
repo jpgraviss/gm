@@ -60,7 +60,6 @@ export default function FinanceHub() {
       .then(setContracts)
       .catch(() => {})
 
-    setMercuryLoading(true)
     fetch('/api/mercury/accounts')
       .then(r => r.ok ? r.json() : null)
       .then(d => {

@@ -295,6 +295,9 @@ export default function TicketsPage() {
     const openId = searchParams.get('open')
     if (openId && localTickets.length > 0 && !selected) {
       const match = localTickets.find(t => t.id === openId)
+      // Deep-link sync, can't be computed during render since it depends on
+      // the async ticket list that isn't available yet on first render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (match) setSelected(match)
     }
   }, [searchParams, localTickets, selected])

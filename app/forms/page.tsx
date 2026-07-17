@@ -1014,6 +1014,9 @@ function SubmissionsTabContent({ formId, fields }: { formId: string; fields: For
 
   useEffect(() => {
     let cancelled = false
+    // Clears the previous form's submissions before the new formId's fetch
+    // resolves, so switching tabs doesn't briefly show stale data.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSubmissions(null)
     setLoadError(false)
     fetchAllPages<FormSubmission>(`/api/forms/${formId}/submissions`)

@@ -193,7 +193,7 @@ export const POST = withErrorHandler('integrations/hubspot/deals POST', async (r
 
   let inserted = 0
   let updated = 0
-  let skipped = 0
+  const skipped = 0
   const errors: string[] = []
   let after: string | undefined
   let totalFetched = 0

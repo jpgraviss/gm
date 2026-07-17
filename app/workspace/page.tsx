@@ -47,7 +47,6 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     if (!user?.name) return
-    setLoading(true)
     Promise.all([
       fetch(`/api/tasks?assignedTo=${encodeURIComponent(user.name)}&status=Pending`).then(r => r.ok ? r.json() : []),
       fetch('/api/workspace/guided-actions').then(r => r.ok ? r.json() : []),

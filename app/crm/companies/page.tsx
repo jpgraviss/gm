@@ -1637,6 +1637,10 @@ export default function CompaniesPage() {
     const openId = searchParams.get('open')
     if (openId && localCompanies.length > 0 && !selectedCompany) {
       const match = localCompanies.find(c => c.id === openId)
+      // Syncs a deep-link ?open= query param to the selected company once
+      // the async company list has loaded; can't be computed during render
+      // since it depends on data that isn't available yet on first render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (match) setSelectedCompany(match)
     }
   }, [searchParams, localCompanies, selectedCompany])

@@ -518,6 +518,9 @@ export default function ProposalsPage() {
     const openId = searchParams.get('open')
     if (openId && localProposals.length > 0 && !selected) {
       const match = localProposals.find(p => p.id === openId)
+      // Deep-link sync, can't be computed during render since it depends on
+      // the async proposal list that isn't available yet on first render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (match) setSelected(match)
     }
   }, [searchParams, localProposals, selected])

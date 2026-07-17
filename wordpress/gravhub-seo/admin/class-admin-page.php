@@ -62,7 +62,12 @@ class GravHub_Admin_Page {
 		$this->health_reporter  = $health_reporter;
 		$this->redirect_manager = $redirect_manager;
 
-		add_action( 'admin_menu', array( $this, 'register_menu' ) );
+		// Priority 5, not the default 10 — must run before
+		// GravHub_Redirect_Manager::register_menu() (also hooked at the
+		// default priority) so our self-referencing submenu below lands
+		// first in $submenu['gravhub-seo']. See register_menu()'s docblock
+		// for why that ordering matters.
+		add_action( 'admin_menu', array( $this, 'register_menu' ), 5 );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		// Unconditional (no hook_suffix check) — the sidebar menu this guards
@@ -72,6 +77,22 @@ class GravHub_Admin_Page {
 
 	/**
 	 * Register admin menu.
+	 *
+	 * WordPress core quirk: if a top-level menu's only registered submenu
+	 * has a different slug than the parent, core silently points the
+	 * top-level sidebar link at that submenu instead of the page
+	 * registered here via add_menu_page() — the "GravHub SEO" button would
+	 * open Redirects instead of the dashboard. add_menu_page() alone
+	 * doesn't populate $submenu['gravhub-seo'] at all; only
+	 * add_submenu_page() calls do, and GravHub_Redirect_Manager's
+	 * "Redirects" page (slug gravhub-seo-redirects) is the only other one
+	 * registered under this parent. The fix is the explicit
+	 * add_submenu_page() call below, self-referencing the same slug as the
+	 * parent — WordPress recognizes that as "the top-level page already has
+	 * its own entry" and stops redirecting. It has to run before Redirects'
+	 * registration (hence this method being hooked at priority 5, see
+	 * __construct()) since WordPress uses whichever submenu was added
+	 * first.
 	 */
 	public function register_menu() {
 		add_menu_page(
@@ -82,6 +103,15 @@ class GravHub_Admin_Page {
 			array( $this, 'render_page' ),
 			'dashicons-search',
 			80
+		);
+
+		add_submenu_page(
+			'gravhub-seo',
+			__( 'GravHub SEO', 'gravhub-seo' ),
+			__( 'Dashboard', 'gravhub-seo' ),
+			'manage_gravhub_seo',
+			'gravhub-seo',
+			array( $this, 'render_page' )
 		);
 	}
 

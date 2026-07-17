@@ -23,6 +23,19 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: Hit /api/cron
+        # /api/cron chains several sequential internal HTTP calls (sequence
+        # execution, calendar sync, uptime checks, etc.) plus DB work, so an
+        # occasional slow tick — a cold start, a busy moment — can run past a
+        # naive single-shot curl and get reported as a hard failure even
+        # though the next tick 5 minutes later picks up any missed work fine
+        # (the route is explicitly self-throttling, see the comment above).
+        # --max-time caps each attempt so a genuinely hung request doesn't
+        # eat the whole job budget; --retry absorbs transient slowness/
+        # network blips within the same run instead of alerting on them.
         run: |
           curl -fsS "${{ secrets.CRON_TARGET_URL }}/api/cron" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 30 \
+            --retry 3 \
+            --retry-delay 5 \
+            --retry-all-errors

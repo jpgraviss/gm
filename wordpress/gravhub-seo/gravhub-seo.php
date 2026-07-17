@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GravHub SEO
  * Description: Enterprise SEO management plugin by Graviss Marketing. Full on-page SEO analysis, focus keywords, XML sitemaps, meta management, and centralized reporting via GravHub.
- * Version: 1.3.5
+ * Version: 1.4.0
  * Author: Graviss Marketing
  * Author URI: https://gravissmarketing.com
  * License: Proprietary
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GRAVHUB_SEO_VERSION', '1.3.5' );
+define( 'GRAVHUB_SEO_VERSION', '1.4.0' );
 define( 'GRAVHUB_SEO_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_FILE', __FILE__ );
@@ -26,6 +26,7 @@ require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-seo-metabox.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-sitemap.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-shortcodes.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-redirect-manager.php';
+require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-broken-link-scanner.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'admin/class-admin-page.php';
 
 final class GravHub_SEO {
@@ -40,6 +41,7 @@ final class GravHub_SEO {
 	public $sitemap;
 	public $shortcodes;
 	public $redirect_manager;
+	public $broken_link_scanner;
 	public $admin_page;
 
 	public static function get_instance() {
@@ -58,6 +60,7 @@ final class GravHub_SEO {
 		$this->sitemap         = new GravHub_Sitemap();
 		$this->shortcodes      = new GravHub_Shortcodes();
 		$this->redirect_manager = new GravHub_Redirect_Manager();
+		$this->broken_link_scanner = new GravHub_Broken_Link_Scanner();
 
 		if ( is_admin() ) {
 			$this->admin_page = new GravHub_Admin_Page( $this->api_client, $this->seo_analyzer, $this->health_reporter, $this->redirect_manager );
@@ -72,6 +75,22 @@ final class GravHub_SEO {
 		add_action( 'gravhub_daily_report', array( $this->health_reporter, 'send_report' ) );
 		add_action( 'admin_init', array( $this, 'self_heal_activation' ) );
 		add_filter( 'map_meta_cap', array( $this, 'allow_site_admins_to_manage' ), 10, 4 );
+		add_filter( 'cron_schedules', array( $this, 'register_weekly_cron_schedule' ) ); // phpcs:ignore WordPress.WP.CronInterval.CronSchedulesInterval
+	}
+
+	/**
+	 * WordPress core only ships hourly/twicedaily/daily — the broken-link
+	 * scanner runs weekly (external links don't change often enough to
+	 * justify daily crawling every site's outbound links).
+	 */
+	public function register_weekly_cron_schedule( $schedules ) {
+		if ( ! isset( $schedules['weekly'] ) ) {
+			$schedules['weekly'] = array(
+				'interval' => 7 * DAY_IN_SECONDS,
+				'display'  => __( 'Once Weekly', 'gravhub-seo' ),
+			);
+		}
+		return $schedules;
 	}
 
 	/**
@@ -122,12 +141,21 @@ final class GravHub_SEO {
 			wp_schedule_event( time(), 'daily', 'gravhub_daily_report' );
 		}
 
+		if ( ! wp_next_scheduled( 'gravhub_broken_link_scan' ) ) {
+			wp_schedule_event( time(), 'weekly', 'gravhub_broken_link_scan' );
+		}
+
 		// dbDelta() is safe to re-run idempotently, but it's not cheap —
 		// only run it when the installed table version doesn't match this
 		// plugin build, not on every single admin page load.
 		if ( get_option( 'gravhub_redirect_tables_version' ) !== GRAVHUB_SEO_VERSION ) {
 			GravHub_Redirect_Manager::create_tables();
 			update_option( 'gravhub_redirect_tables_version', GRAVHUB_SEO_VERSION );
+		}
+
+		if ( get_option( 'gravhub_broken_link_tables_version' ) !== GRAVHUB_SEO_VERSION ) {
+			GravHub_Broken_Link_Scanner::create_tables();
+			update_option( 'gravhub_broken_link_tables_version', GRAVHUB_SEO_VERSION );
 		}
 	}
 
@@ -392,8 +420,20 @@ final class GravHub_SEO {
 			wp_schedule_event( time(), 'daily', 'gravhub_daily_report' );
 		}
 
+		// The weekly broken-link scan is deliberately NOT scheduled here —
+		// register_activation_hook() fires before this same request's
+		// plugins_loaded/init_hooks() has registered the custom 'weekly'
+		// cron_schedules entry, so wp_schedule_event() with 'weekly' at
+		// this exact point wouldn't reliably resolve to a real interval.
+		// self_heal_activation() (admin_init, which always runs after
+		// init_hooks() within the same request) schedules it instead —
+		// including on the very next page load right after activation.
+
 		GravHub_Redirect_Manager::create_tables();
 		update_option( 'gravhub_redirect_tables_version', GRAVHUB_SEO_VERSION );
+
+		GravHub_Broken_Link_Scanner::create_tables();
+		update_option( 'gravhub_broken_link_tables_version', GRAVHUB_SEO_VERSION );
 
 		GravHub_Sitemap::flush_rules();
 	}
@@ -407,6 +447,11 @@ final class GravHub_SEO {
 		$timestamp = wp_next_scheduled( 'gravhub_daily_report' );
 		if ( $timestamp ) {
 			wp_unschedule_event( $timestamp, 'gravhub_daily_report' );
+		}
+
+		$link_scan_timestamp = wp_next_scheduled( 'gravhub_broken_link_scan' );
+		if ( $link_scan_timestamp ) {
+			wp_unschedule_event( $link_scan_timestamp, 'gravhub_broken_link_scan' );
 		}
 	}
 }

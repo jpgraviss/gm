@@ -42,6 +42,7 @@ class GravHub_SEO_Metabox {
 		'_gravhub_canonical_url',
 		'_gravhub_schema_type',
 		'_gravhub_faq_items',
+		'_gravhub_hreflang_items',
 	);
 
 	/**
@@ -425,6 +426,17 @@ class GravHub_SEO_Metabox {
 					</div>
 				</div>
 
+				<!-- Hreflang -->
+				<div class="gravhub-field">
+					<label><?php esc_html_e( 'Hreflang (Alternate Language/Region Versions)', 'gravhub-seo' ); ?></label>
+					<p class="gravhub-field-description">
+						<?php esc_html_e( 'If this page has a version for another language or region, list it here. Use a language code like "es" or "es-MX", or "x-default" for the version to show when no other match applies.', 'gravhub-seo' ); ?>
+					</p>
+					<div id="gravhub-hreflang-items"></div>
+					<button type="button" class="button" id="gravhub-hreflang-add"><?php esc_html_e( '+ Add Alternate', 'gravhub-seo' ); ?></button>
+					<input type="hidden" name="_gravhub_hreflang_items" id="gravhub-hreflang-items-input" value="<?php echo esc_attr( $meta['_gravhub_hreflang_items'] ); ?>" />
+				</div>
+
 			</div>
 
 			<!-- Analysis Tab -->
@@ -621,6 +633,36 @@ class GravHub_SEO_Metabox {
 				gravhubAddFaqRow('', '');
 			});
 
+			// Hreflang repeater — same add/remove/serialize-on-submit pattern
+			// as the FAQ repeater above, just with lang-code + URL fields.
+			var gravhubHreflangContainer = $('#gravhub-hreflang-items');
+			var gravhubHreflangInput = $('#gravhub-hreflang-items-input');
+
+			function gravhubAddHreflangRow(lang, url) {
+				var row = $('<div class="gravhub-hreflang-row" style="margin-bottom:8px;display:flex;gap:8px;align-items:center;"></div>');
+				var l = $('<input type="text" class="gravhub-hreflang-lang" placeholder="' + '<?php echo esc_js( __( 'es, es-MX, x-default…', 'gravhub-seo' ) ); ?>' + '" style="width:140px;" />').val(lang);
+				var u = $('<input type="url" class="widefat gravhub-hreflang-url" placeholder="' + '<?php echo esc_js( __( 'https://example.com/es/pagina', 'gravhub-seo' ) ); ?>' + '" />').val(url);
+				var remove = $('<button type="button" class="button-link-delete">' + '<?php echo esc_js( __( 'Remove', 'gravhub-seo' ) ); ?>' + '</button>');
+				remove.on('click', function() { row.remove(); });
+				row.append(l).append(u).append(remove);
+				gravhubHreflangContainer.append(row);
+			}
+
+			var gravhubExistingHreflang = [];
+			try {
+				gravhubExistingHreflang = JSON.parse(gravhubHreflangInput.val() || '[]');
+				if (!Array.isArray(gravhubExistingHreflang)) gravhubExistingHreflang = [];
+			} catch (e) {
+				gravhubExistingHreflang = [];
+			}
+			gravhubExistingHreflang.forEach(function(item) {
+				gravhubAddHreflangRow(item.lang || '', item.url || '');
+			});
+
+			$('#gravhub-hreflang-add').on('click', function() {
+				gravhubAddHreflangRow('', '');
+			});
+
 			// Serialize the repeater into the hidden input right before the
 			// post form actually submits — keeps the fields themselves as
 			// plain inputs (easy to add/remove rows for) instead of trying
@@ -635,6 +677,16 @@ class GravHub_SEO_Metabox {
 					}
 				});
 				gravhubFaqInput.val(JSON.stringify(items));
+
+				var hreflangItems = [];
+				gravhubHreflangContainer.find('.gravhub-hreflang-row').each(function() {
+					var lang = $(this).find('.gravhub-hreflang-lang').val().trim();
+					var url = $(this).find('.gravhub-hreflang-url').val().trim();
+					if (lang && url) {
+						hreflangItems.push({ lang: lang, url: url });
+					}
+				});
+				gravhubHreflangInput.val(JSON.stringify(hreflangItems));
 			});
 
 			// Character counter function.
@@ -1197,6 +1249,36 @@ class GravHub_SEO_Metabox {
 				delete_post_meta( $post_id, '_gravhub_faq_items' );
 			} else {
 				update_post_meta( $post_id, '_gravhub_faq_items', wp_json_encode( $faq_items ) );
+			}
+		}
+
+		// Hreflang alternates — same re-validate-server-side pattern as FAQ
+		// items above. A lang code is free text (site owners may need
+		// region variants like "es-MX", or the literal "x-default"), so
+		// only whitespace-trim + length-cap it rather than restricting to a
+		// fixed locale list.
+		if ( isset( $_POST['_gravhub_hreflang_items'] ) ) {
+			$raw_items       = json_decode( wp_unslash( $_POST['_gravhub_hreflang_items'] ), true );
+			$hreflang_items  = array();
+			if ( is_array( $raw_items ) ) {
+				foreach ( $raw_items as $item ) {
+					if ( ! is_array( $item ) ) {
+						continue;
+					}
+					$lang = isset( $item['lang'] ) ? sanitize_text_field( $item['lang'] ) : '';
+					$url  = isset( $item['url'] ) ? esc_url_raw( $item['url'] ) : '';
+					if ( '' !== $lang && '' !== $url ) {
+						$hreflang_items[] = array(
+							'lang' => mb_substr( $lang, 0, 35 ),
+							'url'  => $url,
+						);
+					}
+				}
+			}
+			if ( empty( $hreflang_items ) ) {
+				delete_post_meta( $post_id, '_gravhub_hreflang_items' );
+			} else {
+				update_post_meta( $post_id, '_gravhub_hreflang_items', wp_json_encode( $hreflang_items ) );
 			}
 		}
 

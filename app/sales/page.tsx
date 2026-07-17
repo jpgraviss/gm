@@ -57,6 +57,9 @@ export default function SalesHub() {
     setRefreshing(false)
   }
 
+  // loadKPIs() is also wired to a manual refresh button below, so its own
+  // setRefreshing(true) must stay.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadKPIs() }, [])
 
   const kpiItems = [

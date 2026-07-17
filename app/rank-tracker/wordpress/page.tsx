@@ -780,7 +780,7 @@ export default function WordPressSeoPage() {
                   {schemaError ? (
                     <p className="text-[10px] text-red-500 mt-1">{schemaError}</p>
                   ) : (
-                    <p className="text-[10px] text-gray-300 mt-1">Raw JSON-LD structured data, rendered in the page's &lt;head&gt; by the plugin</p>
+                    <p className="text-[10px] text-gray-300 mt-1">Raw JSON-LD structured data, rendered in the page&apos;s &lt;head&gt; by the plugin</p>
                   )}
                 </div>
               </div>
@@ -1076,7 +1076,7 @@ function ReportsTab({ site, report, loading, onGenerate, onPrint, greenCount, ye
       {!report ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
           <BarChart3 size={40} className="mx-auto text-gray-200 mb-3" />
-          <p className="text-sm text-gray-400">Click "Generate Report" to create a detailed SEO report</p>
+          <p className="text-sm text-gray-400">Click &quot;Generate Report&quot; to create a detailed SEO report</p>
         </div>
       ) : (
         <div className="space-y-4 print:space-y-6" id="seo-report">

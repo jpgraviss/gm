@@ -212,6 +212,9 @@ function DataAuditPanel() {
     setLoading(false)
   }
 
+  // load() is also called from the fix-orphans/link-records handlers below to
+  // refresh after a mutation, so its own setLoading(true) must stay.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [])
 
   const fixOrphans = async () => {

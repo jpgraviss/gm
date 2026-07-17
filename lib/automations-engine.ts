@@ -333,14 +333,12 @@ export async function executeWorkflow(
   return { runId, status: runStatus, steps }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 // Contract/invoice/proposal triggers carry a `company` name but have no
 // contact FK (unlike deals), so contactId is never in context for them.
 // Falls back to the same "primary contact for this company" lookup Send
 // Email already does, instead of silently no-oping every contact-targeting
 // action for every trigger that isn't deal-based.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function resolveContactId(context: Record<string, unknown>, company: string, db: any): Promise<string | null> {
+async function resolveContactId(context: Record<string, unknown>, company: string, db: SupabaseClient): Promise<string | null> {
   const direct = (context.contactId as string) ?? (context.contact_id as string) ?? null
   if (direct) return direct
   if (!company) return null
@@ -356,7 +354,7 @@ async function resolveContactId(context: Record<string, unknown>, company: strin
 async function executeAction(
   action: string,
   context: Record<string, unknown>,
-  db: any,
+  db: SupabaseClient,
   automationId?: string,
   runId?: string,
   actionIndex = 0,

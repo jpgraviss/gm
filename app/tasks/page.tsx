@@ -630,6 +630,9 @@ export default function TasksPage() {
     const openId = searchParams.get('open')
     if (openId && tasks.length > 0 && !selectedTask) {
       const match = tasks.find(t => t.id === openId)
+      // Deep-link sync, can't be computed during render since it depends on
+      // the async task list that isn't available yet on first render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (match) setSelectedTask(match)
     }
   }, [searchParams, tasks, selectedTask])

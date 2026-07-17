@@ -54,6 +54,9 @@ export default function TeamProductivityPage() {
       .finally(() => setLoading(false))
   }
 
+  // loadData() is also wired to the refresh button below, so its own
+  // setLoading(true) must stay.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadData() }, [])
 
   const cutoffDate = useMemo(() => {

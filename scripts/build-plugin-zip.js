@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- standalone CommonJS
+   Node script (run directly via `node scripts/build-plugin-zip.js`, not
+   compiled), not part of the Next.js app's ESM module graph. */
 const { ZipArchive } = require('archiver')
 const fs = require('fs')
 const path = require('path')

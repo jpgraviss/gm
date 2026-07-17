@@ -2140,7 +2140,7 @@ export default function SettingsPage() {
                 removed, reordered, or renamed without a schema change. */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h3 className="text-sm font-bold text-gray-800 mb-1 uppercase tracking-wide" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Delivery Steps</h3>
-              <p className="text-xs text-gray-400 mb-4">The fixed stages of the client delivery pipeline, used by the Delivery Dashboard. Each stage maps to a dedicated database field, so this list can't be edited here.</p>
+              <p className="text-xs text-gray-400 mb-4">The fixed stages of the client delivery pipeline, used by the Delivery Dashboard. Each stage maps to a dedicated database field, so this list can&apos;t be edited here.</p>
               <div className="flex flex-col gap-1.5">
                 {DELIVERY_STEP_NAMES.map((step, i) => (
                   <div key={step} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
@@ -3175,7 +3175,7 @@ function StripeIntegrationSection() {
           <p className="text-[11px] text-gray-400 mt-1">
             In Stripe Dashboard → Developers → Webhooks, add an endpoint pointing at{' '}
             <code className="bg-gray-100 px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/api/stripe/webhook</code>
-            {' '}listening for <code className="bg-gray-100 px-1 rounded">checkout.session.completed</code> — Stripe shows the signing secret for that endpoint once it's created.
+            {' '}listening for <code className="bg-gray-100 px-1 rounded">checkout.session.completed</code> — Stripe shows the signing secret for that endpoint once it&apos;s created.
           </p>
         </div>
 

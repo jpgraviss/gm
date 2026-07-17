@@ -275,7 +275,7 @@ export default function DocumentTemplatesPage() {
           <div className="text-center py-20 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
             <FileText size={32} className="text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-gray-400 font-medium">No templates yet</p>
-            <p className="text-xs text-gray-400 mt-1">Create one to power the AI Assistant's document generation and the Apply Service Template automation action</p>
+            <p className="text-xs text-gray-400 mt-1">Create one to power the AI Assistant&apos;s document generation and the Apply Service Template automation action</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

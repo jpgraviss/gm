@@ -138,6 +138,9 @@ export default function EmailAuthPage() {
   }
 
   useEffect(() => {
+    // runDnsCheck() is also wired to a manual re-check button below, so its
+    // own setChecking(true) must stay.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     runDnsCheck()
     fetch('/api/training/progress')
       .then(r => r.ok ? r.json() : null)

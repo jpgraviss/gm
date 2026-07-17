@@ -4,6 +4,7 @@ import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRecord(row: any) {
   return {
     id:                 row.id,

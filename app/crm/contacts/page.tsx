@@ -1524,6 +1524,10 @@ export default function ContactsPage() {
     const openId = searchParams.get('open')
     if (openId && localContacts.length > 0 && !selectedContact) {
       const match = localContacts.find(c => c.id === openId)
+      // Syncs a deep-link ?open= query param to the selected contact once
+      // the async contact list has loaded; can't be computed during render
+      // since it depends on data that isn't available yet on first render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (match) setSelectedContact(match)
     }
   }, [searchParams, localContacts, selectedContact])

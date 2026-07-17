@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GravHub SEO
  * Description: Enterprise SEO management plugin by Graviss Marketing. Full on-page SEO analysis, focus keywords, XML sitemaps, meta management, and centralized reporting via GravHub.
- * Version: 1.3.0
+ * Version: 1.3.1
  * Author: Graviss Marketing
  * Author URI: https://gravissmarketing.com
  * License: Proprietary
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GRAVHUB_SEO_VERSION', '1.3.0' );
+define( 'GRAVHUB_SEO_VERSION', '1.3.1' );
 define( 'GRAVHUB_SEO_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_FILE', __FILE__ );
@@ -60,7 +60,7 @@ final class GravHub_SEO {
 		$this->redirect_manager = new GravHub_Redirect_Manager();
 
 		if ( is_admin() ) {
-			$this->admin_page = new GravHub_Admin_Page( $this->api_client, $this->seo_analyzer );
+			$this->admin_page = new GravHub_Admin_Page( $this->api_client, $this->seo_analyzer, $this->health_reporter, $this->redirect_manager );
 		}
 
 		$this->init_hooks();
@@ -171,6 +171,30 @@ final class GravHub_SEO {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( $this, 'rest_save_option' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_gravhub_seo' );
+				},
+			)
+		);
+
+		register_rest_route(
+			'gravhub-seo/v1',
+			'/dashboard-analytics',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'rest_dashboard_analytics' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_gravhub_seo' );
+				},
+			)
+		);
+
+		register_rest_route(
+			'gravhub-seo/v1',
+			'/dashboard-keywords',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'rest_dashboard_keywords' ),
 				'permission_callback' => function () {
 					return current_user_can( 'manage_gravhub_seo' );
 				},
@@ -301,6 +325,38 @@ final class GravHub_SEO {
 		update_option( $option, $value );
 
 		return new WP_REST_Response( array( 'success' => true ), 200 );
+	}
+
+	/**
+	 * Proxy for the dashboard's Site Analytics section — fetched client-side
+	 * (JS) rather than server-side in render_page(), since
+	 * get_dashboard_analytics() makes a cross-origin call to the GravHub app
+	 * that can take up to REQUEST_TIMEOUT seconds on a cache miss.
+	 */
+	public function rest_dashboard_analytics( $request ) {
+		$force   = 'true' === $request->get_param( 'force' );
+		$payload = $this->api_client->get_dashboard_analytics( $force );
+
+		if ( is_wp_error( $payload ) ) {
+			return new WP_REST_Response( array( 'error' => $payload->get_error_message() ), 200 );
+		}
+
+		return new WP_REST_Response( $payload, 200 );
+	}
+
+	/**
+	 * Proxy for the dashboard's Keywords section — same async-fetch reasoning
+	 * as rest_dashboard_analytics() above.
+	 */
+	public function rest_dashboard_keywords( $request ) {
+		$force   = 'true' === $request->get_param( 'force' );
+		$payload = $this->api_client->get_dashboard_keywords( $force );
+
+		if ( is_wp_error( $payload ) ) {
+			return new WP_REST_Response( array( 'error' => $payload->get_error_message() ), 200 );
+		}
+
+		return new WP_REST_Response( $payload, 200 );
 	}
 
 	public static function activate() {

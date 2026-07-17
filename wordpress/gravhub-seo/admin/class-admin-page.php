@@ -31,14 +31,36 @@ class GravHub_Admin_Page {
 	private $seo_analyzer;
 
 	/**
+	 * Health reporter instance — used to seed the dashboard notification
+	 * feed with cheap (no-live-HTTP-call) update signals and the last
+	 * cached security-check result, without ever calling
+	 * collect_health_data() fresh on a page render.
+	 *
+	 * @var GravHub_Health_Reporter
+	 */
+	private $health_reporter;
+
+	/**
+	 * Redirect manager instance — used to surface real redirect/404 counts
+	 * in the dashboard notification feed and module grid.
+	 *
+	 * @var GravHub_Redirect_Manager
+	 */
+	private $redirect_manager;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param GravHub_API_Client   $api_client   API client instance.
-	 * @param GravHub_SEO_Analyzer $seo_analyzer SEO analyzer instance.
+	 * @param GravHub_API_Client       $api_client       API client instance.
+	 * @param GravHub_SEO_Analyzer     $seo_analyzer     SEO analyzer instance.
+	 * @param GravHub_Health_Reporter  $health_reporter  Health reporter instance.
+	 * @param GravHub_Redirect_Manager $redirect_manager Redirect manager instance.
 	 */
-	public function __construct( GravHub_API_Client $api_client, GravHub_SEO_Analyzer $seo_analyzer ) {
-		$this->api_client   = $api_client;
-		$this->seo_analyzer = $seo_analyzer;
+	public function __construct( GravHub_API_Client $api_client, GravHub_SEO_Analyzer $seo_analyzer, GravHub_Health_Reporter $health_reporter, GravHub_Redirect_Manager $redirect_manager ) {
+		$this->api_client       = $api_client;
+		$this->seo_analyzer     = $seo_analyzer;
+		$this->health_reporter  = $health_reporter;
+		$this->redirect_manager = $redirect_manager;
 
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
@@ -505,6 +527,182 @@ class GravHub_Admin_Page {
 	}
 
 	/**
+	 * The plugin's full module catalog — the 5 original toggleable modules
+	 * plus the features shipped this session that had no card representation
+	 * at all. The new ones are purely navigational (link to their real page)
+	 * rather than toggleable, since they don't have a natural single on/off
+	 * state (e.g. Redirects has per-redirect entries, not a global switch).
+	 *
+	 * @return array
+	 */
+	private function get_module_catalog() {
+		return array(
+			'seo_analysis'    => array(
+				'name'    => __( 'SEO Analysis', 'gravhub-seo' ),
+				'desc'    => __( 'Analyze pages for SEO best practices.', 'gravhub-seo' ),
+				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+				'toggle'  => true,
+			),
+			'focus_keywords'  => array(
+				'name'    => __( 'Focus Keywords', 'gravhub-seo' ),
+				'desc'    => __( 'Set target keywords for each page.', 'gravhub-seo' ),
+				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+				'toggle'  => true,
+			),
+			'meta_management' => array(
+				'name'    => __( 'Meta Management', 'gravhub-seo' ),
+				'desc'    => __( 'Control title tags and meta descriptions.', 'gravhub-seo' ),
+				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+				'toggle'  => true,
+			),
+			'xml_sitemap'     => array(
+				'name'    => __( 'XML Sitemap', 'gravhub-seo' ),
+				'desc'    => __( 'Auto-generate XML sitemaps.', 'gravhub-seo' ),
+				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+				'toggle'  => true,
+			),
+			'social_previews' => array(
+				'name'    => __( 'Social Previews', 'gravhub-seo' ),
+				'desc'    => __( 'Open Graph and Twitter Card tags.', 'gravhub-seo' ),
+				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>',
+				'toggle'  => true,
+			),
+			'redirects'       => array(
+				'name'    => __( 'Redirections', 'gravhub-seo' ),
+				'desc'    => __( 'Create 301/302 redirects for moved or renamed URLs.', 'gravhub-seo' ),
+				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a4 4 0 0 1 4 4v2M17 3l-4 4M17 3l4 4"/><path d="M7 21a4 4 0 0 1-4-4v-2M7 21l4-4M7 21l-4-4"/></svg>',
+				'toggle'  => false,
+				'link'    => admin_url( 'admin.php?page=gravhub-seo-redirects' ),
+			),
+			'404_monitor'     => array(
+				'name'    => __( '404 Monitor', 'gravhub-seo' ),
+				'desc'    => __( 'Track broken links and suggest redirect fixes.', 'gravhub-seo' ),
+				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+				'toggle'  => false,
+				'link'    => admin_url( 'admin.php?page=gravhub-seo-redirects#404-log' ),
+			),
+			'schema'          => array(
+				'name'    => __( 'Schema Markup', 'gravhub-seo' ),
+				'desc'    => __( 'Article, Service, and FAQ structured data per page.', 'gravhub-seo' ),
+				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/></svg>',
+				'toggle'  => false,
+				'link'    => admin_url( 'edit.php' ),
+			),
+			'local_seo'       => array(
+				'name'    => __( 'Local SEO', 'gravhub-seo' ),
+				'desc'    => __( 'Organization and LocalBusiness schema for the homepage.', 'gravhub-seo' ),
+				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+				'toggle'  => false,
+				'link'    => admin_url( 'admin.php?page=gravhub-seo#gravhub_schema' ),
+			),
+		);
+	}
+
+	/**
+	 * Build the notification feed shown on the dashboard — compiled entirely
+	 * from data that already exists (analysis issues, cached health-check
+	 * results, cheap update signals, redirect/404 counts). No new storage,
+	 * and nothing computed here makes a live outbound HTTP request: the
+	 * security checks come from the option cached by
+	 * GravHub_Health_Reporter::send_report(), not a fresh collect_health_data()
+	 * call.
+	 *
+	 * @param int $total_issues Total issue count from the last analysis.
+	 * @return array List of notification items: type, message, link.
+	 */
+	private function build_notifications( $total_issues ) {
+		$notifications = array();
+
+		if ( $total_issues > 0 ) {
+			$notifications[] = array(
+				'type'    => 'warning',
+				'message' => sprintf(
+					/* translators: %d: number of issues */
+					_n( '%d SEO issue found across analyzed pages.', '%d SEO issues found across analyzed pages.', $total_issues, 'gravhub-seo' ),
+					$total_issues
+				),
+				'link'    => '#gravhub-scores-table',
+			);
+		}
+
+		$cheap_signals = $this->health_reporter->get_cheap_health_signals();
+		if ( ! empty( $cheap_signals['plugins_needing_update'] ) ) {
+			$notifications[] = array(
+				'type'    => 'info',
+				'message' => sprintf(
+					/* translators: %d: number of plugins */
+					_n( '%d plugin has an available update.', '%d plugins have available updates.', $cheap_signals['plugins_needing_update'], 'gravhub-seo' ),
+					$cheap_signals['plugins_needing_update']
+				),
+				'link'    => admin_url( 'plugins.php' ),
+			);
+		}
+		if ( ! empty( $cheap_signals['theme_needs_update'] ) ) {
+			$notifications[] = array(
+				'type'    => 'info',
+				'message' => __( 'Your active theme has an available update.', 'gravhub-seo' ),
+				'link'    => admin_url( 'themes.php' ),
+			);
+		}
+
+		$last_health = get_option( 'gravhub_last_health_data', array() );
+		if ( ! empty( $last_health['security'] ) ) {
+			$security = $last_health['security'];
+			if ( ! empty( $security['wp_login_exposed'] ) ) {
+				$notifications[] = array(
+					'type'    => 'warning',
+					'message' => __( 'Your login page is publicly reachable at the default URL.', 'gravhub-seo' ),
+					'link'    => '',
+				);
+			}
+			if ( ! empty( $security['xmlrpc_enabled'] ) ) {
+				$notifications[] = array(
+					'type'    => 'warning',
+					'message' => __( 'XML-RPC is enabled — a common brute-force target.', 'gravhub-seo' ),
+					'link'    => '',
+				);
+			}
+			if ( ! empty( $security['directory_listing_enabled'] ) ) {
+				$notifications[] = array(
+					'type'    => 'warning',
+					'message' => __( 'Directory listing is enabled on your uploads folder.', 'gravhub-seo' ),
+					'link'    => '',
+				);
+			}
+		}
+		if ( ! empty( $last_health['sitemap'] ) && empty( $last_health['sitemap']['has_sitemap'] ) ) {
+			$notifications[] = array(
+				'type'    => 'warning',
+				'message' => __( 'No XML sitemap could be reached at the last health check.', 'gravhub-seo' ),
+				'link'    => '',
+			);
+		}
+
+		$count_404 = $this->redirect_manager->get_404_count();
+		if ( $count_404 > 0 ) {
+			$notifications[] = array(
+				'type'    => 'info',
+				'message' => sprintf(
+					/* translators: %d: number of distinct 404 paths */
+					_n( '%d page is returning a 404.', '%d pages are returning a 404.', $count_404, 'gravhub-seo' ),
+					$count_404
+				),
+				'link'    => admin_url( 'admin.php?page=gravhub-seo-redirects#404-log' ),
+			);
+		}
+
+		if ( empty( $notifications ) ) {
+			$notifications[] = array(
+				'type'    => 'success',
+				'message' => __( 'No issues detected. Everything looks healthy.', 'gravhub-seo' ),
+				'link'    => '',
+			);
+		}
+
+		return $notifications;
+	}
+
+	/**
 	 * Render the admin settings page.
 	 */
 	public function render_page() {
@@ -541,6 +739,11 @@ class GravHub_Admin_Page {
 			(array) get_option( 'gravhub_module_states', array() ),
 			$default_modules
 		);
+
+		$modules       = $this->get_module_catalog();
+		$notifications = $this->build_notifications( $total_issues );
+		$redirect_count = $this->redirect_manager->get_redirect_count();
+		$count_404      = $this->redirect_manager->get_404_count();
 
 		include GRAVHUB_SEO_PLUGIN_DIR . 'admin/views/settings-page.php';
 	}

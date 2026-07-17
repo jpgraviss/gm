@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import {
   Globe, Shield, AlertTriangle, CheckCircle, RefreshCw, ChevronDown,
   Package, Palette, Lock, Search, X, Copy,
@@ -178,6 +179,8 @@ export default function WordPressSeoPage() {
   const [newKeyLabel, setNewKeyLabel] = useState('')
   const [companies, setCompanies] = useState<CompanyOption[]>([])
   const [assigningCompany, setAssigningCompany] = useState(false)
+  const [siteToDelete, setSiteToDelete] = useState<SiteHealth | null>(null)
+  const [deletingSite, setDeletingSite] = useState(false)
 
   useEffect(() => {
     fetch('/api/wordpress/seo/health')
@@ -388,6 +391,30 @@ export default function WordPressSeoPage() {
     }
   }
 
+  async function confirmDeleteSite() {
+    if (!siteToDelete || deletingSite) return
+    setDeletingSite(true)
+    try {
+      const res = await fetch(`/api/wordpress/seo/health?id=${encodeURIComponent(siteToDelete.id)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error('Failed')
+      setSites(prev => prev.filter(s => s.id !== siteToDelete.id))
+      if (selectedSite?.id === siteToDelete.id) {
+        setSelectedSite(null)
+        setScores([])
+        setSettings([])
+        setReport(null)
+      }
+      toast('Site disconnected and its SEO data removed', 'success')
+    } catch {
+      toast('Failed to delete site', 'error')
+    } finally {
+      setDeletingSite(false)
+      setSiteToDelete(null)
+    }
+  }
+
   function copyToClipboard(text: string) {
     navigator.clipboard.writeText(text)
     toast('Copied to clipboard', 'success')
@@ -486,16 +513,26 @@ export default function WordPressSeoPage() {
               </button>
 
               {sites.map(site => (
-                <button
+                <div
                   key={site.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => selectSite(site)}
-                  className="w-full text-left px-4 py-3 rounded-xl border transition-all"
+                  onKeyDown={e => { if (e.key === 'Enter') selectSite(site) }}
+                  className="group relative w-full text-left px-4 py-3 rounded-xl border transition-all cursor-pointer"
                   style={{
                     borderColor: selectedSite?.id === site.id ? '#015035' : '#e5e7eb',
                     background: selectedSite?.id === site.id ? '#f0faf5' : '#fff',
                   }}
                 >
-                  <div className="flex items-center gap-2 mb-1">
+                  <button
+                    onClick={e => { e.stopPropagation(); setSiteToDelete(site) }}
+                    className="absolute top-2 right-2 p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-300 hover:text-red-500 transition-opacity"
+                    title="Disconnect site"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                  <div className="flex items-center gap-2 mb-1 pr-5">
                     <Globe size={14} style={{ color: '#015035' }} />
                     <span className="text-sm font-semibold text-gray-900 truncate">{site.company_name}</span>
                   </div>
@@ -512,7 +549,7 @@ export default function WordPressSeoPage() {
                       Last report: {new Date(site.last_reported_at).toLocaleDateString()}
                     </p>
                   )}
-                </button>
+                </div>
               ))}
             </div>
 
@@ -801,6 +838,16 @@ export default function WordPressSeoPage() {
           </div>
         )}
       </div>
+
+      {siteToDelete && (
+        <ConfirmModal
+          title="Disconnect this site?"
+          description={`This permanently removes "${siteToDelete.site_url}" and all of its SEO scores and managed meta settings. The plugin can re-register the site later, but history will not come back.`}
+          confirmLabel={deletingSite ? 'Disconnecting...' : 'Disconnect'}
+          onConfirm={confirmDeleteSite}
+          onCancel={() => setSiteToDelete(null)}
+        />
+      )}
     </>
   )
 }

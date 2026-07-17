@@ -112,3 +112,41 @@ export const PATCH = withErrorHandler('wordpress/seo/health PATCH', async (req) 
 
   return NextResponse.json(data)
 })
+
+// Staff-only: disconnect a site and purge its SEO data. Deliberately NOT
+// gated by requireWordPressAuth for the same reason as PATCH above — the
+// plugin's own API key must not be able to delete its own site record.
+export const DELETE = withErrorHandler('wordpress/seo/health DELETE', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
+  const id = req.nextUrl.searchParams.get('id')
+  if (!id) {
+    return NextResponse.json({ error: 'id query param is required' }, { status: 400 })
+  }
+
+  const db = createServiceClient()
+  const { data: site, error: fetchError } = await db
+    .from('wordpress_site_health')
+    .select('site_url')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (fetchError) {
+    throw new Error(fetchError.message)
+  }
+  if (!site) {
+    return NextResponse.json({ error: 'Site not found' }, { status: 404 })
+  }
+
+  const { error: scoresError } = await db.from('wordpress_seo_scores').delete().eq('site_url', site.site_url)
+  if (scoresError) throw new Error(scoresError.message)
+
+  const { error: settingsError } = await db.from('wordpress_seo_settings').delete().eq('site_url', site.site_url)
+  if (settingsError) throw new Error(settingsError.message)
+
+  const { error: healthError } = await db.from('wordpress_site_health').delete().eq('id', id)
+  if (healthError) throw new Error(healthError.message)
+
+  return NextResponse.json({ ok: true })
+})

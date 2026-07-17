@@ -596,8 +596,20 @@ class GravHub_SEO_Analyzer {
 	 * @return array Array of readability check results.
 	 */
 	public function analyze_readability( $post ) {
+		return $this->analyze_readability_content( $post->post_content );
+	}
+
+	/**
+	 * Same checks as analyze_readability(), but against a raw content
+	 * string instead of a saved WP_Post — lets the metabox's live
+	 * readability tab score whatever's currently in the editor, including
+	 * unsaved changes, without needing a round-trip through post save.
+	 *
+	 * @param string $content Raw post content (same shape as post_content).
+	 * @return array Array of readability check results.
+	 */
+	public function analyze_readability_content( $content ) {
 		$checks          = array();
-		$content         = $post->post_content;
 		$rendered        = apply_filters( 'the_content', $content );
 		$stripped        = wp_strip_all_tags( $rendered );
 		$stripped        = trim( $stripped );

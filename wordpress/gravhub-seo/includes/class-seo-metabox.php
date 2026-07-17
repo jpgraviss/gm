@@ -147,6 +147,13 @@ class GravHub_SEO_Metabox {
 				<button type="button" class="gravhub-tab-button" data-tab="advanced">
 					<?php esc_html_e( 'Advanced', 'gravhub-seo' ); ?>
 				</button>
+				<button type="button" class="gravhub-tab-button" data-tab="links">
+					<?php esc_html_e( 'Links', 'gravhub-seo' ); ?>
+				</button>
+				<button type="button" class="gravhub-tab-button" data-tab="readability">
+					<?php esc_html_e( 'Readability', 'gravhub-seo' ); ?>
+					<span id="gravhub-readability-tab-badge" class="gravhub-tab-score" style="display:none;"></span>
+				</button>
 				<button type="button" class="gravhub-tab-button" data-tab="schema">
 					<?php esc_html_e( 'Schema', 'gravhub-seo' ); ?>
 				</button>
@@ -439,6 +446,32 @@ class GravHub_SEO_Metabox {
 
 			</div>
 
+			<!-- Links Tab -->
+			<div class="gravhub-tab-panel" data-panel="links">
+				<div class="gravhub-field">
+					<label><?php esc_html_e( 'Internal Link Suggestions', 'gravhub-seo' ); ?></label>
+					<p class="gravhub-field-description">
+						<?php esc_html_e( 'Other published pages on this site worth linking to from here, based on shared title words and your focus keyword. Save this post at least once first so its title/content is available to compare against.', 'gravhub-seo' ); ?>
+					</p>
+					<button type="button" class="button" id="gravhub-link-suggestions-refresh"><?php esc_html_e( 'Get Suggestions', 'gravhub-seo' ); ?></button>
+					<div id="gravhub-link-suggestions-list" style="margin-top:12px;"></div>
+				</div>
+			</div>
+
+			<!-- Readability Tab -->
+			<div class="gravhub-tab-panel" data-panel="readability">
+				<div class="gravhub-field">
+					<label><?php esc_html_e( 'Live Readability', 'gravhub-seo' ); ?></label>
+					<p class="gravhub-field-description">
+						<?php esc_html_e( 'Updates automatically a moment after you stop typing in the content editor below.', 'gravhub-seo' ); ?>
+					</p>
+					<div id="gravhub-readability-summary" style="margin:8px 0 12px;font-size:13px;color:#646970;">
+						<?php esc_html_e( 'Start typing to see live feedback.', 'gravhub-seo' ); ?>
+					</div>
+					<ul id="gravhub-readability-checks" class="gravhub-metabox-issues-list"></ul>
+				</div>
+			</div>
+
 			<!-- Analysis Tab -->
 			<div class="gravhub-tab-panel" data-panel="analysis">
 
@@ -576,6 +609,10 @@ class GravHub_SEO_Metabox {
 		<script type="text/javascript">
 		(function($) {
 			'use strict';
+
+			var gravhubRestUrl = <?php echo wp_json_encode( esc_url_raw( rest_url( 'gravhub-seo/v1/' ) ) ); ?>;
+			var gravhubNonce   = <?php echo wp_json_encode( wp_create_nonce( 'wp_rest' ) ); ?>;
+			var gravhubPostId  = <?php echo (int) $post->ID; ?>;
 
 			// Tab switching.
 			$('.gravhub-tab-button').on('click', function(e) {
@@ -783,6 +820,135 @@ class GravHub_SEO_Metabox {
 					$('#gravhub-social-preview-image').html('<div class="gravhub-social-preview-placeholder"><?php echo esc_js( __( 'No image selected', 'gravhub-seo' ) ); ?></div>');
 				}
 			});
+
+			// Internal link suggestions — fetched on demand (not on tab
+			// open) since it's a live comparison against every other
+			// published post/page, not something to run on every click
+			// into the tab.
+			function gravhubLoadLinkSuggestions() {
+				var $list = $('#gravhub-link-suggestions-list');
+				$list.html('<?php echo esc_js( __( 'Loading…', 'gravhub-seo' ) ); ?>');
+
+				$.ajax({
+					url: gravhubRestUrl + 'internal-link-suggestions/' + gravhubPostId,
+					method: 'GET',
+					headers: { 'X-WP-Nonce': gravhubNonce }
+				}).done(function(rows) {
+					if (!Array.isArray(rows) || rows.length === 0) {
+						$list.html('<p class="gravhub-field-description"><?php echo esc_js( __( 'No close matches found among your other published content.', 'gravhub-seo' ) ); ?></p>');
+						return;
+					}
+					var html = '<ul style="margin:0;padding:0;list-style:none;">';
+					rows.forEach(function(row) {
+						html += '<li style="padding:8px 0;border-bottom:1px solid #dcdcde;">' +
+							'<a href="' + row.url + '" target="_blank" rel="noopener noreferrer" style="font-weight:600;">' + $('<div/>').text(row.title).html() + '</a>' +
+							(row.reason ? '<div class="gravhub-field-description" style="margin:2px 0 0;">' + $('<div/>').text(row.reason).html() + '</div>' : '') +
+						'</li>';
+					});
+					html += '</ul>';
+					$list.html(html);
+				}).fail(function() {
+					$list.html('<p class="gravhub-field-description"><?php echo esc_js( __( 'Could not load suggestions.', 'gravhub-seo' ) ); ?></p>');
+				});
+			}
+
+			$('#gravhub-link-suggestions-refresh').on('click', gravhubLoadLinkSuggestions);
+
+			// Live readability — re-scores a moment after the user stops
+			// typing, reading from whichever editor is actually active
+			// (Classic Editor's #content textarea/TinyMCE, or the block
+			// editor's wp.data store when present) rather than the
+			// last-saved post_content.
+			var gravhubReadabilityTimer = null;
+			var gravhubLastReadabilityContent = null;
+
+			function gravhubGetEditorContent() {
+				if ( window.wp && wp.data && wp.data.select && wp.data.select( 'core/editor' ) ) {
+					return wp.data.select( 'core/editor' ).getEditedPostContent();
+				}
+				if ( window.tinymce && tinymce.get( 'content' ) && ! tinymce.get( 'content' ).isHidden() ) {
+					return tinymce.get( 'content' ).getContent();
+				}
+				var $classic = $( '#content' );
+				return $classic.length ? $classic.val() : null;
+			}
+
+			function gravhubSeverityBadge( severity, label ) {
+				return '<span class="gravhub-severity-badge gravhub-severity-' + severity + '">' + label + '</span>';
+			}
+
+			function gravhubRenderReadability( data ) {
+				var $summary = $( '#gravhub-readability-summary' );
+				var $checks  = $( '#gravhub-readability-checks' );
+				var $badge   = $( '#gravhub-readability-tab-badge' );
+
+				if ( ! data.checks || data.checks.length === 0 ) {
+					$summary.text( '<?php echo esc_js( __( 'Add some content to see live feedback.', 'gravhub-seo' ) ); ?>' );
+					$checks.empty();
+					$badge.hide();
+					return;
+				}
+
+				var color = data.score >= 60 && data.score <= 70 ? '#059669' : ( data.score > 70 ? '#2563eb' : ( data.score >= 30 ? '#d97706' : '#dc2626' ) );
+				$summary.html(
+					'<?php echo esc_js( __( 'Flesch Reading Ease: ', 'gravhub-seo' ) ); ?>' +
+					'<strong style="color:' + color + ';">' + data.score + '</strong>'
+				);
+				$badge.css( 'background', color ).text( Math.round( data.score ) ).show();
+
+				var html = '';
+				data.checks.forEach( function ( check ) {
+					var severity = check.passed ? 'ok' : check.severity;
+					var label    = check.passed ? '<?php echo esc_js( __( 'Good', 'gravhub-seo' ) ); ?>' : check.severity;
+					html += '<li class="gravhub-issue-item">' +
+						gravhubSeverityBadge( severity, label ) +
+						'<span>' + $( '<div/>' ).text( check.message ).html() + '</span>' +
+					'</li>';
+				} );
+				$checks.html( html );
+			}
+
+			function gravhubRunReadabilityCheck() {
+				var content = gravhubGetEditorContent();
+				if ( null === content || undefined === content ) {
+					return;
+				}
+				if ( content === gravhubLastReadabilityContent ) {
+					return; // Nothing actually changed since the last check.
+				}
+				gravhubLastReadabilityContent = content;
+
+				$.ajax({
+					url: gravhubRestUrl + 'live-readability',
+					method: 'POST',
+					headers: { 'X-WP-Nonce': gravhubNonce },
+					contentType: 'application/json',
+					data: JSON.stringify({ content: content })
+				}).done( gravhubRenderReadability );
+			}
+
+			function gravhubScheduleReadabilityCheck() {
+				clearTimeout( gravhubReadabilityTimer );
+				gravhubReadabilityTimer = setTimeout( gravhubRunReadabilityCheck, 1200 );
+			}
+
+			if ( window.wp && wp.data && wp.data.subscribe && wp.data.select( 'core/editor' ) ) {
+				wp.data.subscribe( gravhubScheduleReadabilityCheck );
+			} else {
+				$( document ).on( 'input', '#content', gravhubScheduleReadabilityCheck );
+				// TinyMCE's Visual mode doesn't sync #content on every
+				// keystroke — listen to its own change events too so
+				// switching back to Text mode isn't the only way to trigger
+				// a re-check.
+				$( document ).on( 'tinymce-editor-init', function ( event, editor ) {
+					if ( editor.id === 'content' ) {
+						editor.on( 'input keyup change', gravhubScheduleReadabilityCheck );
+					}
+				} );
+			}
+
+			// Run once on load so the tab isn't empty if content already exists.
+			gravhubScheduleReadabilityCheck();
 		})(jQuery);
 		</script>
 

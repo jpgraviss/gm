@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GravHub SEO
  * Description: Enterprise SEO management plugin by Graviss Marketing. Full on-page SEO analysis, focus keywords, XML sitemaps, meta management, and centralized reporting via GravHub.
- * Version: 1.4.0
+ * Version: 1.5.0
  * Author: Graviss Marketing
  * Author URI: https://gravissmarketing.com
  * License: Proprietary
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GRAVHUB_SEO_VERSION', '1.4.0' );
+define( 'GRAVHUB_SEO_VERSION', '1.5.0' );
 define( 'GRAVHUB_SEO_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_FILE', __FILE__ );
@@ -27,6 +27,7 @@ require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-sitemap.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-shortcodes.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-redirect-manager.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-broken-link-scanner.php';
+require_once GRAVHUB_SEO_PLUGIN_DIR . 'includes/class-internal-linking.php';
 require_once GRAVHUB_SEO_PLUGIN_DIR . 'admin/class-admin-page.php';
 
 final class GravHub_SEO {
@@ -42,6 +43,7 @@ final class GravHub_SEO {
 	public $shortcodes;
 	public $redirect_manager;
 	public $broken_link_scanner;
+	public $internal_linking;
 	public $admin_page;
 
 	public static function get_instance() {
@@ -61,6 +63,7 @@ final class GravHub_SEO {
 		$this->shortcodes      = new GravHub_Shortcodes();
 		$this->redirect_manager = new GravHub_Redirect_Manager();
 		$this->broken_link_scanner = new GravHub_Broken_Link_Scanner();
+		$this->internal_linking = new GravHub_Internal_Linking();
 
 		if ( is_admin() ) {
 			$this->admin_page = new GravHub_Admin_Page( $this->api_client, $this->seo_analyzer, $this->health_reporter, $this->redirect_manager );
@@ -180,6 +183,22 @@ final class GravHub_SEO {
 				'callback'            => array( $this, 'rest_run_analysis' ),
 				'permission_callback' => function () {
 					return current_user_can( 'manage_gravhub_seo' );
+				},
+			)
+		);
+
+		register_rest_route(
+			'gravhub-seo/v1',
+			'/live-readability',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'rest_live_readability' ),
+				'permission_callback' => function () {
+					// Anyone who can edit posts gets live feedback while
+					// writing — this is stateless text analysis on whatever
+					// content the request sends, not gated behind
+					// manage_gravhub_seo like the SEO-config routes.
+					return current_user_can( 'edit_posts' );
 				},
 			)
 		);
@@ -319,6 +338,32 @@ final class GravHub_SEO {
 			array(
 				'success' => true,
 				'message' => __( 'Connection successful.', 'gravhub-seo' ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * Live readability scoring for the metabox's Readability tab — runs
+	 * GravHub_SEO_Analyzer's same checks used at save-time, but against
+	 * whatever content the editor currently has (including unsaved
+	 * changes) instead of the last-saved post_content.
+	 */
+	public function rest_live_readability( $request ) {
+		$content = (string) $request->get_param( 'content' );
+		$checks  = $this->seo_analyzer->analyze_readability_content( $content );
+
+		$flesch_score = 0;
+		foreach ( $checks as $check ) {
+			if ( 'flesch_reading_ease' === $check['type'] && isset( $check['value'] ) ) {
+				$flesch_score = $check['value'];
+			}
+		}
+
+		return new WP_REST_Response(
+			array(
+				'score'  => $flesch_score,
+				'checks' => $checks,
 			),
 			200
 		);

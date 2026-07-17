@@ -170,6 +170,7 @@ export default function WordPressSeoPage() {
   const [metaDraft, setMetaDraft] = useState({ metaTitle: '', metaDescription: '', ogTitle: '', ogDescription: '', ogImage: '', schemaMarkup: '' })
   const [schemaError, setSchemaError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [bulkSaving, setBulkSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [report, setReport] = useState<SiteReport | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
@@ -300,6 +301,61 @@ export default function WordPressSeoPage() {
       toast('Failed to save settings', 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function saveBulkMeta(rows: SeoSetting[]) {
+    if (!selectedSite || rows.length === 0) return
+    setBulkSaving(true)
+    let failed = 0
+    try {
+      const updated = await Promise.all(
+        rows.map(async row => {
+          try {
+            const res = await fetch('/api/wordpress/seo/settings', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                siteUrl: selectedSite.site_url,
+                pagePath: row.page_path,
+                // Carry through every field this row already had — the
+                // PATCH route fully overwrites a row rather than merging,
+                // so a bulk title/description edit must not silently wipe
+                // out an OG image or schema markup someone already set for
+                // that page via the single-page editor.
+                metaTitle: row.meta_title || null,
+                metaDescription: row.meta_description || null,
+                ogTitle: row.og_title || null,
+                ogDescription: row.og_description || null,
+                ogImage: row.og_image || null,
+                schemaMarkup: row.schema_markup || null,
+              }),
+            })
+            if (!res.ok) throw new Error('Failed')
+            return (await res.json()) as SeoSetting
+          } catch {
+            failed++
+            return null
+          }
+        })
+      )
+
+      const saved = updated.filter((r): r is SeoSetting => r !== null)
+      if (saved.length > 0) {
+        setSettings(prev => {
+          const byPath = new Map(prev.map(s => [s.page_path, s]))
+          saved.forEach(s => byPath.set(s.page_path, s))
+          return Array.from(byPath.values())
+        })
+      }
+
+      if (failed > 0) {
+        toast(`Saved ${saved.length}, ${failed} failed`, 'error')
+      } else {
+        toast(`Saved ${saved.length} page(s)`, 'success')
+      }
+    } finally {
+      setBulkSaving(false)
     }
   }
 
@@ -717,7 +773,7 @@ export default function WordPressSeoPage() {
                   ) : tab === 'scores' ? (
                     <ScoresTab scores={scores} />
                   ) : tab === 'meta' ? (
-                    <MetaTab settings={settings} scores={scores} onEdit={startEditMeta} />
+                    <MetaTab settings={settings} scores={scores} onEdit={startEditMeta} onBulkSave={saveBulkMeta} bulkSaving={bulkSaving} />
                   ) : tab === 'reports' ? (
                     <ReportsTab
                       site={selectedSite}
@@ -1028,9 +1084,56 @@ function ScoresTab({ scores }: { scores: SeoScore[] }) {
 
 // ── Meta Tab ──────────────────────────────────────────────────────────────
 
-function MetaTab({ settings, scores, onEdit }: {
+function MetaTab({ settings, scores, onEdit, onBulkSave, bulkSaving }: {
   settings: SeoSetting[]; scores: SeoScore[]; onEdit: (s: SeoSetting) => void
+  onBulkSave: (rows: SeoSetting[]) => Promise<void>; bulkSaving: boolean
 }) {
+  const [bulkMode, setBulkMode] = useState(false)
+  const [drafts, setDrafts] = useState<Record<string, { metaTitle: string; metaDescription: string }>>({})
+
+  const rows = settings.length > 0 ? settings : scores.map(sc => ({
+    id: sc.id, site_url: sc.site_url, page_path: sc.page_path,
+    meta_title: null, meta_description: null, og_title: null,
+    og_description: null, og_image: null, schema_markup: null,
+  } as SeoSetting))
+
+  function startBulkEdit() {
+    const initial: Record<string, { metaTitle: string; metaDescription: string }> = {}
+    rows.forEach(r => {
+      initial[r.page_path] = { metaTitle: r.meta_title ?? '', metaDescription: r.meta_description ?? '' }
+    })
+    setDrafts(initial)
+    setBulkMode(true)
+  }
+
+  function cancelBulkEdit() {
+    setBulkMode(false)
+    setDrafts({})
+  }
+
+  async function saveAll() {
+    const dirtyRows = rows
+      .filter(r => {
+        const d = drafts[r.page_path]
+        if (!d) return false
+        return d.metaTitle !== (r.meta_title ?? '') || d.metaDescription !== (r.meta_description ?? '')
+      })
+      .map(r => ({
+        ...r,
+        meta_title: drafts[r.page_path].metaTitle || null,
+        meta_description: drafts[r.page_path].metaDescription || null,
+      }))
+
+    if (dirtyRows.length === 0) {
+      setBulkMode(false)
+      return
+    }
+
+    await onBulkSave(dirtyRows)
+    setBulkMode(false)
+    setDrafts({})
+  }
+
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
       {settings.length === 0 && scores.length === 0 ? (
@@ -1039,42 +1142,99 @@ function MetaTab({ settings, scores, onEdit }: {
           <p className="text-sm text-gray-400">No pages available for meta management</p>
         </div>
       ) : (
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Page</th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Meta Title</th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Meta Description</th>
-              <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {(settings.length > 0 ? settings : scores.map(sc => ({
-              id: sc.id, site_url: sc.site_url, page_path: sc.page_path,
-              meta_title: null, meta_description: null, og_title: null,
-              og_description: null, og_image: null, schema_markup: null,
-            } as SeoSetting))).map(s => (
-              <tr key={s.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-sm font-medium text-gray-900 truncate max-w-[150px]">{s.page_path}</td>
-                <td className="px-4 py-3 text-xs text-gray-500 truncate max-w-[180px]">
-                  {s.meta_title ?? <span className="text-gray-300">Not set</span>}
-                </td>
-                <td className="px-4 py-3 text-xs text-gray-500 truncate max-w-[180px]">
-                  {s.meta_description ?? <span className="text-gray-300">Not set</span>}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => onEdit(s)}
-                    className="text-xs font-semibold px-3 py-1 rounded-lg transition-colors hover:bg-gray-100"
-                    style={{ color: '#015035' }}
-                  >
-                    Edit
-                  </button>
-                </td>
+        <>
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50">
+            <p className="text-[11px] text-gray-400">
+              {bulkMode ? 'Editing titles and descriptions inline — other fields (OG image, schema) are preserved as-is.' : `${rows.length} page(s)`}
+            </p>
+            {bulkMode ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={cancelBulkEdit}
+                  disabled={bulkSaving}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveAll}
+                  disabled={bulkSaving}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-50"
+                  style={{ background: '#015035' }}
+                >
+                  {bulkSaving ? 'Saving...' : 'Save All Changes'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={startBulkEdit}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors hover:bg-gray-100"
+                style={{ color: '#015035' }}
+              >
+                Bulk Edit
+              </button>
+            )}
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Page</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Meta Title</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Meta Description</th>
+                <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map(s => (
+                <tr key={s.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900 truncate max-w-[150px]">{s.page_path}</td>
+                  {bulkMode ? (
+                    <>
+                      <td className="px-2 py-2">
+                        <input
+                          type="text"
+                          value={drafts[s.page_path]?.metaTitle ?? ''}
+                          onChange={e => setDrafts(prev => ({ ...prev, [s.page_path]: { ...prev[s.page_path], metaTitle: e.target.value } }))}
+                          className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 focus:outline-none focus:border-gray-400"
+                          placeholder="Not set"
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="text"
+                          value={drafts[s.page_path]?.metaDescription ?? ''}
+                          onChange={e => setDrafts(prev => ({ ...prev, [s.page_path]: { ...prev[s.page_path], metaDescription: e.target.value } }))}
+                          className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 focus:outline-none focus:border-gray-400"
+                          placeholder="Not set"
+                        />
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-4 py-3 text-xs text-gray-500 truncate max-w-[180px]">
+                        {s.meta_title ?? <span className="text-gray-300">Not set</span>}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 truncate max-w-[180px]">
+                        {s.meta_description ?? <span className="text-gray-300">Not set</span>}
+                      </td>
+                    </>
+                  )}
+                  <td className="px-4 py-3 text-right">
+                    {!bulkMode && (
+                      <button
+                        onClick={() => onEdit(s)}
+                        className="text-xs font-semibold px-3 py-1 rounded-lg transition-colors hover:bg-gray-100"
+                        style={{ color: '#015035' }}
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   )

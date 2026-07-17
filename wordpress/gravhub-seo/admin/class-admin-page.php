@@ -65,6 +65,9 @@ class GravHub_Admin_Page {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		// Unconditional (no hook_suffix check) — the sidebar menu this guards
+		// against renders on every wp-admin screen, not just our own pages.
+		add_action( 'admin_footer', array( $this, 'print_menu_guard_script' ) );
 	}
 
 	/**
@@ -430,7 +433,13 @@ class GravHub_Admin_Page {
 	 * @param string $hook_suffix The current admin page hook suffix.
 	 */
 	public function enqueue_assets( $hook_suffix ) {
-		if ( 'toplevel_page_gravhub-seo' !== $hook_suffix ) {
+		// Both our own pages: the main dashboard (a top-level menu page, hook
+		// suffix 'toplevel_page_{slug}') and the Redirects submenu (hook
+		// suffix '{parent_slug}_page_{slug}') — redirects-page.php uses the
+		// same .gravhub-* classes as the dashboard and was silently rendering
+		// unstyled because this only ever matched the top-level page.
+		$our_pages = array( 'toplevel_page_gravhub-seo', 'gravhub-seo_page_gravhub-seo-redirects' );
+		if ( ! in_array( $hook_suffix, $our_pages, true ) ) {
 			return;
 		}
 
@@ -441,7 +450,73 @@ class GravHub_Admin_Page {
 			GRAVHUB_SEO_VERSION
 		);
 
-		// JS is inlined in the settings-page.php template.
+		// JS is inlined in the settings-page.php / redirects-page.php templates.
+	}
+
+	/**
+	 * Defensive guard against third-party scripts rewriting our sidebar
+	 * menu links. Confirmed cause on one live site: a WPCode snippet meant
+	 * for the public site was scoped to also run in wp-admin, and rewrote
+	 * "admin.php?page=gravhub-seo-redirects" into a bare "/gravhub-seo-
+	 * redirects" path — WordPress has no route for that, so it fell through
+	 * to the front-end 404 page instead of opening the Redirects screen.
+	 *
+	 * Runs on every admin page (not just ours) because the sidebar menu it
+	 * protects is present everywhere. Re-asserts the correct, server-computed
+	 * href on any link whose href still contains one of our page slugs —
+	 * matching by slug substring rather than exact string means this keeps
+	 * working no matter what shape the mangling takes, as long as the slug
+	 * itself survives in the corrupted href.
+	 */
+	public function print_menu_guard_script() {
+		$canonical = array(
+			'gravhub-seo-redirects' => admin_url( 'admin.php?page=gravhub-seo-redirects' ),
+			'gravhub-seo'           => admin_url( 'admin.php?page=gravhub-seo' ),
+		);
+		?>
+		<script>
+		( function () {
+			var CANONICAL = <?php echo wp_json_encode( $canonical ); ?>;
+			// Longest slug first so "gravhub-seo-redirects" wins over the
+			// shorter "gravhub-seo" substring it contains.
+			var SLUGS = Object.keys( CANONICAL ).sort( function ( a, b ) { return b.length - a.length; } );
+
+			function fix() {
+				var links = document.querySelectorAll( 'a[href*="gravhub-seo"]' );
+				for ( var i = 0; i < links.length; i++ ) {
+					var a = links[ i ];
+					for ( var j = 0; j < SLUGS.length; j++ ) {
+						if ( a.href.indexOf( SLUGS[ j ] ) !== -1 ) {
+							if ( a.href !== CANONICAL[ SLUGS[ j ] ] ) {
+								a.href = CANONICAL[ SLUGS[ j ] ];
+							}
+							break;
+						}
+					}
+				}
+			}
+
+			if ( document.readyState === 'loading' ) {
+				document.addEventListener( 'DOMContentLoaded', fix );
+			} else {
+				fix();
+			}
+			// Re-apply right before the flyout submenu is shown and right
+			// before navigation, in case something rewrites hrefs lazily
+			// after our initial pass instead of at load time.
+			document.addEventListener( 'mouseover', function ( e ) {
+				if ( e.target.closest && e.target.closest( '#toplevel_page_gravhub-seo' ) ) {
+					fix();
+				}
+			}, true );
+			document.addEventListener( 'click', function ( e ) {
+				if ( e.target.closest && e.target.closest( 'a[href*="gravhub-seo"]' ) ) {
+					fix();
+				}
+			}, true );
+		} )();
+		</script>
+		<?php
 	}
 
 	/**

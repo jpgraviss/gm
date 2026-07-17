@@ -85,6 +85,32 @@ class GravHub_Redirect_Manager {
 	}
 
 	/**
+	 * Count of configured redirects — used by the dashboard notification
+	 * feed and module grid. A plain COUNT, cheap enough to call on every
+	 * dashboard page load (unlike anything in class-health-reporter.php's
+	 * security checks, which make live HTTP requests).
+	 *
+	 * @return int
+	 */
+	public function get_redirect_count() {
+		global $wpdb;
+		$table = $this->redirects_table();
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	}
+
+	/**
+	 * Count of distinct logged 404 paths — used by the dashboard
+	 * notification feed and module grid.
+	 *
+	 * @return int
+	 */
+	public function get_404_count() {
+		global $wpdb;
+		$table = $this->log_table();
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	}
+
+	/**
 	 * Normalize the current request into a bare path ("/foo/bar", no query
 	 * string, no trailing slash except for the homepage itself).
 	 */

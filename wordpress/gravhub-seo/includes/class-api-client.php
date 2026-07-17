@@ -45,6 +45,29 @@ class GravHub_API_Client {
 	const CACHE_DURATION = 21600;
 
 	/**
+	 * Transient name for cached dashboard traffic analytics.
+	 *
+	 * @var string
+	 */
+	const TRANSIENT_DASHBOARD_ANALYTICS = 'gravhub_dashboard_analytics_cache';
+
+	/**
+	 * Transient name for cached dashboard keyword summary.
+	 *
+	 * @var string
+	 */
+	const TRANSIENT_DASHBOARD_KEYWORDS = 'gravhub_dashboard_keywords_cache';
+
+	/**
+	 * Dashboard cache duration in seconds (15 minutes) — much shorter than
+	 * CACHE_DURATION since this is live traffic/keyword data meant to feel
+	 * current on the dashboard, not slow-changing meta configuration.
+	 *
+	 * @var int
+	 */
+	const DASHBOARD_CACHE_DURATION = 900;
+
+	/**
 	 * Request timeout in seconds.
 	 *
 	 * @var int
@@ -194,6 +217,126 @@ class GravHub_API_Client {
 		set_transient( self::TRANSIENT_SEO_SETTINGS, $settings, self::CACHE_DURATION );
 
 		return $settings;
+	}
+
+	/**
+	 * Get traffic analytics (GA4 + GSC) for this site's dashboard.
+	 *
+	 * Results are cached as a transient for 15 minutes.
+	 *
+	 * @param bool $force_refresh Whether to bypass the cache.
+	 * @return array|WP_Error Analytics payload or error.
+	 */
+	public function get_dashboard_analytics( $force_refresh = false ) {
+		if ( ! $this->is_configured() ) {
+			return new WP_Error( 'gravhub_not_configured', __( 'GravHub API is not configured.', 'gravhub-seo' ) );
+		}
+
+		if ( ! $force_refresh ) {
+			$cached = get_transient( self::TRANSIENT_DASHBOARD_ANALYTICS );
+			if ( false !== $cached ) {
+				return $cached;
+			}
+		}
+
+		$site_url = rawurlencode( get_site_url() );
+		$url      = $this->get_api_url() . '/api/wordpress/seo/analytics?site=' . $site_url;
+
+		$response = wp_remote_get(
+			$url,
+			array(
+				'headers' => $this->get_headers(),
+				'timeout' => self::REQUEST_TIMEOUT,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$code = wp_remote_retrieve_response_code( $response );
+
+		if ( $code < 200 || $code >= 300 ) {
+			return new WP_Error(
+				'gravhub_api_error',
+				sprintf(
+					/* translators: %d: HTTP status code */
+					__( 'GravHub API returned HTTP %d.', 'gravhub-seo' ),
+					$code
+				)
+			);
+		}
+
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( $body, true );
+
+		if ( null === $data ) {
+			return new WP_Error( 'gravhub_invalid_response', __( 'Invalid JSON response from GravHub.', 'gravhub-seo' ) );
+		}
+
+		set_transient( self::TRANSIENT_DASHBOARD_ANALYTICS, $data, self::DASHBOARD_CACHE_DURATION );
+
+		return $data;
+	}
+
+	/**
+	 * Get keyword position summary for this site's dashboard.
+	 *
+	 * Results are cached as a transient for 15 minutes.
+	 *
+	 * @param bool $force_refresh Whether to bypass the cache.
+	 * @return array|WP_Error Keyword payload or error.
+	 */
+	public function get_dashboard_keywords( $force_refresh = false ) {
+		if ( ! $this->is_configured() ) {
+			return new WP_Error( 'gravhub_not_configured', __( 'GravHub API is not configured.', 'gravhub-seo' ) );
+		}
+
+		if ( ! $force_refresh ) {
+			$cached = get_transient( self::TRANSIENT_DASHBOARD_KEYWORDS );
+			if ( false !== $cached ) {
+				return $cached;
+			}
+		}
+
+		$site_url = rawurlencode( get_site_url() );
+		$url      = $this->get_api_url() . '/api/wordpress/seo/keywords?site=' . $site_url;
+
+		$response = wp_remote_get(
+			$url,
+			array(
+				'headers' => $this->get_headers(),
+				'timeout' => self::REQUEST_TIMEOUT,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$code = wp_remote_retrieve_response_code( $response );
+
+		if ( $code < 200 || $code >= 300 ) {
+			return new WP_Error(
+				'gravhub_api_error',
+				sprintf(
+					/* translators: %d: HTTP status code */
+					__( 'GravHub API returned HTTP %d.', 'gravhub-seo' ),
+					$code
+				)
+			);
+		}
+
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( $body, true );
+
+		if ( null === $data ) {
+			return new WP_Error( 'gravhub_invalid_response', __( 'Invalid JSON response from GravHub.', 'gravhub-seo' ) );
+		}
+
+		set_transient( self::TRANSIENT_DASHBOARD_KEYWORDS, $data, self::DASHBOARD_CACHE_DURATION );
+
+		return $data;
 	}
 
 	/**

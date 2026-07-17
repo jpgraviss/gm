@@ -15,6 +15,10 @@
  * @var bool   $sitemap_enabled      Whether sitemap is enabled.
  * @var array  $sitemap_post_types   Enabled sitemap post types.
  * @var array  $module_states        Module toggle states.
+ * @var array  $modules              Full module catalog (toggleable + navigational).
+ * @var array  $notifications        Notification feed items (type, message, link).
+ * @var int    $redirect_count       Count of configured redirects.
+ * @var int    $count_404            Count of distinct logged 404 paths.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -131,6 +135,35 @@ if ( ! defined( 'ABSPATH' ) ) {
 					</div>
 				<?php endif; ?>
 			</div>
+		</div>
+	</div>
+
+	<!-- Notifications Feed -->
+	<div class="gravhub-card">
+		<div class="gravhub-card-header">
+			<div class="gravhub-card-icon">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+					<path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+				</svg>
+			</div>
+			<h2><?php esc_html_e( 'Notifications', 'gravhub-seo' ); ?></h2>
+		</div>
+		<div class="gravhub-card-body">
+			<ul class="gravhub-notification-list">
+				<?php foreach ( $notifications as $notification ) : ?>
+					<li class="gravhub-notification gravhub-notification--<?php echo esc_attr( $notification['type'] ); ?>">
+						<span class="gravhub-notification-dot"></span>
+						<span class="gravhub-notification-message">
+							<?php if ( ! empty( $notification['link'] ) ) : ?>
+								<a href="<?php echo esc_url( $notification['link'] ); ?>"><?php echo esc_html( $notification['message'] ); ?></a>
+							<?php else : ?>
+								<?php echo esc_html( $notification['message'] ); ?>
+							<?php endif; ?>
+						</span>
+					</li>
+				<?php endforeach; ?>
+			</ul>
 		</div>
 	</div>
 
@@ -463,35 +496,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<div class="gravhub-card-body">
 				<div class="gravhub-modules-grid">
 					<?php
-					$modules = array(
-						'seo_analysis'     => array(
-							'name' => __( 'SEO Analysis', 'gravhub-seo' ),
-							'desc' => __( 'Analyze pages for SEO best practices.', 'gravhub-seo' ),
-							'icon' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
-						),
-						'focus_keywords'   => array(
-							'name' => __( 'Focus Keywords', 'gravhub-seo' ),
-							'desc' => __( 'Set target keywords for each page.', 'gravhub-seo' ),
-							'icon' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
-						),
-						'meta_management'  => array(
-							'name' => __( 'Meta Management', 'gravhub-seo' ),
-							'desc' => __( 'Control title tags and meta descriptions.', 'gravhub-seo' ),
-							'icon' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-						),
-						'xml_sitemap'      => array(
-							'name' => __( 'XML Sitemap', 'gravhub-seo' ),
-							'desc' => __( 'Auto-generate XML sitemaps.', 'gravhub-seo' ),
-							'icon' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
-						),
-						'social_previews'  => array(
-							'name' => __( 'Social Previews', 'gravhub-seo' ),
-							'desc' => __( 'Open Graph and Twitter Card tags.', 'gravhub-seo' ),
-							'icon' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>',
-						),
-					);
 					foreach ( $modules as $module_key => $module ) :
-						$is_active = ! empty( $module_states[ $module_key ] );
+						$is_toggleable = ! empty( $module['toggle'] );
+						$is_active     = $is_toggleable && ! empty( $module_states[ $module_key ] );
 					?>
 						<div class="gravhub-module-card <?php echo $is_active ? 'gravhub-module-card--active' : ''; ?>">
 							<div class="gravhub-module-icon">
@@ -501,13 +508,100 @@ if ( ! defined( 'ABSPATH' ) ) {
 								<div class="gravhub-module-name"><?php echo esc_html( $module['name'] ); ?></div>
 								<div class="gravhub-module-desc"><?php echo esc_html( $module['desc'] ); ?></div>
 							</div>
-							<label class="gravhub-toggle">
-								<input type="checkbox" class="gravhub-module-toggle" data-module="<?php echo esc_attr( $module_key ); ?>" <?php checked( $is_active ); ?>>
-								<span class="gravhub-toggle-slider"></span>
-							</label>
+							<?php if ( $is_toggleable ) : ?>
+								<label class="gravhub-toggle">
+									<input type="checkbox" class="gravhub-module-toggle" data-module="<?php echo esc_attr( $module_key ); ?>" <?php checked( $is_active ); ?>>
+									<span class="gravhub-toggle-slider"></span>
+								</label>
+							<?php else : ?>
+								<a href="<?php echo esc_url( $module['link'] ); ?>" class="gravhub-btn gravhub-btn--sm gravhub-btn--secondary">
+									<?php esc_html_e( 'Manage', 'gravhub-seo' ); ?>
+								</a>
+							<?php endif; ?>
 						</div>
 					<?php endforeach; ?>
 				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Site Analytics (populated via JS — /dashboard-analytics proxies the
+	     GravHub app's GA4/GSC pull, which can take several seconds on a
+	     cache miss, so this can't block the initial page render) -->
+	<div class="gravhub-card">
+		<div class="gravhub-card-header">
+			<div class="gravhub-card-icon">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<line x1="18" y1="20" x2="18" y2="10"/>
+					<line x1="12" y1="20" x2="12" y2="4"/>
+					<line x1="6" y1="20" x2="6" y2="14"/>
+				</svg>
+			</div>
+			<h2><?php esc_html_e( 'Site Analytics', 'gravhub-seo' ); ?></h2>
+			<span id="gravhub-analytics-period" class="gravhub-section-desc" style="margin-left: auto; margin-bottom: 0;"></span>
+		</div>
+		<div class="gravhub-card-body">
+			<div id="gravhub-analytics-loading" class="gravhub-empty-state">
+				<span class="gravhub-spinner"></span>
+			</div>
+			<div id="gravhub-analytics-content" style="display: none;">
+				<div class="gravhub-stats-grid gravhub-stats-grid--analytics" id="gravhub-analytics-stats"></div>
+				<div class="gravhub-two-col" style="margin-top: 20px;">
+					<div>
+						<div class="gravhub-section-title"><?php esc_html_e( 'Traffic by Channel', 'gravhub-seo' ); ?></div>
+						<ul class="gravhub-channel-list" id="gravhub-analytics-channels"></ul>
+					</div>
+					<div>
+						<div class="gravhub-section-title"><?php esc_html_e( 'Top Pages', 'gravhub-seo' ); ?></div>
+						<ul class="gravhub-channel-list" id="gravhub-analytics-toppages"></ul>
+					</div>
+				</div>
+			</div>
+			<div id="gravhub-analytics-empty" class="gravhub-empty-state" style="display: none;">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+					<line x1="18" y1="20" x2="18" y2="10"/>
+					<line x1="12" y1="20" x2="12" y2="4"/>
+					<line x1="6" y1="20" x2="6" y2="14"/>
+				</svg>
+				<p id="gravhub-analytics-empty-text"></p>
+			</div>
+		</div>
+	</div>
+
+	<!-- Keywords (populated via JS, same async-fetch reasoning as Site Analytics) -->
+	<div class="gravhub-card">
+		<div class="gravhub-card-header">
+			<div class="gravhub-card-icon">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<circle cx="11" cy="11" r="8"/>
+					<line x1="21" y1="21" x2="16.65" y2="16.65"/>
+				</svg>
+			</div>
+			<h2><?php esc_html_e( 'Keywords', 'gravhub-seo' ); ?></h2>
+		</div>
+		<div class="gravhub-card-body">
+			<div id="gravhub-keywords-loading" class="gravhub-empty-state">
+				<span class="gravhub-spinner"></span>
+			</div>
+			<div id="gravhub-keywords-content" style="display: none;">
+				<div class="gravhub-stats-grid gravhub-stats-grid--buckets" id="gravhub-keywords-buckets"></div>
+				<div class="gravhub-two-col" style="margin-top: 20px;">
+					<div>
+						<div class="gravhub-section-title"><?php esc_html_e( 'Winning', 'gravhub-seo' ); ?></div>
+						<ul class="gravhub-channel-list" id="gravhub-keywords-winning"></ul>
+					</div>
+					<div>
+						<div class="gravhub-section-title"><?php esc_html_e( 'Losing', 'gravhub-seo' ); ?></div>
+						<ul class="gravhub-channel-list" id="gravhub-keywords-losing"></ul>
+					</div>
+				</div>
+			</div>
+			<div id="gravhub-keywords-empty" class="gravhub-empty-state" style="display: none;">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+					<circle cx="11" cy="11" r="8"/>
+					<line x1="21" y1="21" x2="16.65" y2="16.65"/>
+				</svg>
+				<p id="gravhub-keywords-empty-text"></p>
 			</div>
 		</div>
 	</div>
@@ -850,6 +944,166 @@ if ( ! defined( 'ABSPATH' ) ) {
 			saveOption('gravhub_module_states', states);
 			showToast(this.checked ? '<?php echo esc_js( __( 'Module enabled', 'gravhub-seo' ) ); ?>' : '<?php echo esc_js( __( 'Module disabled', 'gravhub-seo' ) ); ?>', 'success');
 		});
+	});
+
+	/* ----- Dashboard fetch helpers ----- */
+	function el(tag, className, text) {
+		var e = document.createElement(tag);
+		if (className) e.className = className;
+		if (text !== undefined && text !== null) e.textContent = text;
+		return e;
+	}
+
+	function fmtNum(n) {
+		return (n || 0).toLocaleString();
+	}
+
+	function fmtDuration(seconds) {
+		var s = Math.round(seconds || 0);
+		var m = Math.floor(s / 60);
+		var rem = s % 60;
+		return m + 'm ' + rem + 's';
+	}
+
+	function statTile(label, value) {
+		var card = el('div', 'gravhub-stat-card');
+		var content = el('div', 'gravhub-stat-content');
+		content.appendChild(el('div', 'gravhub-stat-label', label));
+		content.appendChild(el('div', 'gravhub-stat-value', value));
+		card.appendChild(content);
+		return card;
+	}
+
+	function channelRow(primary, secondary) {
+		var li = el('li', 'gravhub-channel-item');
+		li.appendChild(el('span', 'gravhub-channel-name', primary));
+		li.appendChild(el('span', 'gravhub-channel-value', secondary));
+		return li;
+	}
+
+	function fetchDashboard(endpoint, callback) {
+		fetch(restUrl + endpoint, {
+			method: 'GET',
+			headers: { 'X-WP-Nonce': nonce }
+		})
+		.then(function(response) { return response.json(); })
+		.then(callback)
+		.catch(function(err) {
+			console.error('GravHub SEO ' + endpoint + ':', err);
+			callback(null);
+		});
+	}
+
+	/* ----- Site Analytics ----- */
+	var analyticsLoading = document.getElementById('gravhub-analytics-loading');
+	var analyticsContent = document.getElementById('gravhub-analytics-content');
+	var analyticsEmpty   = document.getElementById('gravhub-analytics-empty');
+	var analyticsEmptyText = document.getElementById('gravhub-analytics-empty-text');
+
+	fetchDashboard('dashboard-analytics', function(data) {
+		analyticsLoading.style.display = 'none';
+
+		if (!data || data.error || !data.connected || !data.configured || (!data.ga4 && !data.gsc)) {
+			var msg = '<?php echo esc_js( __( 'This site is not yet linked to a GravHub client with GA4 or Search Console connected.', 'gravhub-seo' ) ); ?>';
+			if (data && data.connected && !data.configured) {
+				msg = '<?php echo esc_js( __( 'Linked to a GravHub client, but no GA4 or Search Console integration is configured yet.', 'gravhub-seo' ) ); ?>';
+			}
+			analyticsEmptyText.textContent = msg;
+			analyticsEmpty.style.display = 'block';
+			return;
+		}
+
+		document.getElementById('gravhub-analytics-period').textContent =
+			'<?php echo esc_js( __( 'Last', 'gravhub-seo' ) ); ?> ' + (data.days || 28) + ' <?php echo esc_js( __( 'days', 'gravhub-seo' ) ); ?>';
+
+		var statsEl = document.getElementById('gravhub-analytics-stats');
+		statsEl.innerHTML = '';
+
+		if (data.ga4 && data.ga4.summary) {
+			var s = data.ga4.summary;
+			statsEl.appendChild(statTile('<?php echo esc_js( __( 'Sessions', 'gravhub-seo' ) ); ?>', fmtNum(s.sessions)));
+			statsEl.appendChild(statTile('<?php echo esc_js( __( 'Users', 'gravhub-seo' ) ); ?>', fmtNum(s.users)));
+			statsEl.appendChild(statTile('<?php echo esc_js( __( 'Pageviews', 'gravhub-seo' ) ); ?>', fmtNum(s.pageviews)));
+			statsEl.appendChild(statTile('<?php echo esc_js( __( 'Avg Session', 'gravhub-seo' ) ); ?>', fmtDuration(s.avgSessionDurationSec)));
+			statsEl.appendChild(statTile('<?php echo esc_js( __( 'Bounce Rate', 'gravhub-seo' ) ); ?>', ((s.bounceRate || 0) * 100).toFixed(1) + '%'));
+		}
+		if (data.gsc) {
+			statsEl.appendChild(statTile('<?php echo esc_js( __( 'Search Clicks', 'gravhub-seo' ) ); ?>', fmtNum(data.gsc.totalClicks)));
+			statsEl.appendChild(statTile('<?php echo esc_js( __( 'Impressions', 'gravhub-seo' ) ); ?>', fmtNum(data.gsc.totalImpressions)));
+			statsEl.appendChild(statTile('<?php echo esc_js( __( 'Avg CTR', 'gravhub-seo' ) ); ?>', ((data.gsc.avgCtr || 0) * 100).toFixed(1) + '%'));
+			statsEl.appendChild(statTile('<?php echo esc_js( __( 'Avg Position', 'gravhub-seo' ) ); ?>', (data.gsc.avgPosition || 0).toFixed(1)));
+		}
+
+		var channelsEl = document.getElementById('gravhub-analytics-channels');
+		channelsEl.innerHTML = '';
+		if (data.ga4 && data.ga4.sources && data.ga4.sources.length) {
+			data.ga4.sources.slice(0, 8).forEach(function(source) {
+				channelsEl.appendChild(channelRow(source.channel, fmtNum(source.sessions)));
+			});
+		} else {
+			channelsEl.appendChild(el('li', 'gravhub-channel-item gravhub-channel-item--empty', '<?php echo esc_js( __( 'No channel data available.', 'gravhub-seo' ) ); ?>'));
+		}
+
+		var topPagesEl = document.getElementById('gravhub-analytics-toppages');
+		topPagesEl.innerHTML = '';
+		if (data.ga4 && data.ga4.topPages && data.ga4.topPages.length) {
+			data.ga4.topPages.slice(0, 8).forEach(function(page) {
+				topPagesEl.appendChild(channelRow(page.title || page.path, fmtNum(page.sessions)));
+			});
+		} else {
+			topPagesEl.appendChild(el('li', 'gravhub-channel-item gravhub-channel-item--empty', '<?php echo esc_js( __( 'No page data available.', 'gravhub-seo' ) ); ?>'));
+		}
+
+		analyticsContent.style.display = 'block';
+	});
+
+	/* ----- Keywords ----- */
+	var keywordsLoading = document.getElementById('gravhub-keywords-loading');
+	var keywordsContent = document.getElementById('gravhub-keywords-content');
+	var keywordsEmpty   = document.getElementById('gravhub-keywords-empty');
+	var keywordsEmptyText = document.getElementById('gravhub-keywords-empty-text');
+
+	fetchDashboard('dashboard-keywords', function(data) {
+		keywordsLoading.style.display = 'none';
+
+		if (!data || data.error || !data.connected || !data.total) {
+			var msg = '<?php echo esc_js( __( 'This site is not yet linked to a GravHub client with tracked keywords.', 'gravhub-seo' ) ); ?>';
+			if (data && data.connected && !data.total) {
+				msg = '<?php echo esc_js( __( 'Linked to a GravHub client, but no keywords are being tracked yet.', 'gravhub-seo' ) ); ?>';
+			}
+			keywordsEmptyText.textContent = msg;
+			keywordsEmpty.style.display = 'block';
+			return;
+		}
+
+		var bucketsEl = document.getElementById('gravhub-keywords-buckets');
+		bucketsEl.innerHTML = '';
+		var bucketLabels = { '1-3': '<?php echo esc_js( __( 'Top 3', 'gravhub-seo' ) ); ?>', '4-10': '4-10', '11-20': '11-20', '21-50': '21-50', '50+': '50+' };
+		['1-3', '4-10', '11-20', '21-50', '50+'].forEach(function(key) {
+			bucketsEl.appendChild(statTile(bucketLabels[key], fmtNum((data.buckets || {})[key])));
+		});
+
+		var winningEl = document.getElementById('gravhub-keywords-winning');
+		winningEl.innerHTML = '';
+		if (data.winning && data.winning.length) {
+			data.winning.forEach(function(kw) {
+				winningEl.appendChild(channelRow(kw.keyword, '+' + kw.delta + ' (#' + kw.current_position + ')'));
+			});
+		} else {
+			winningEl.appendChild(el('li', 'gravhub-channel-item gravhub-channel-item--empty', '<?php echo esc_js( __( 'No recent gains.', 'gravhub-seo' ) ); ?>'));
+		}
+
+		var losingEl = document.getElementById('gravhub-keywords-losing');
+		losingEl.innerHTML = '';
+		if (data.losing && data.losing.length) {
+			data.losing.forEach(function(kw) {
+				losingEl.appendChild(channelRow(kw.keyword, kw.delta + ' (#' + kw.current_position + ')'));
+			});
+		} else {
+			losingEl.appendChild(el('li', 'gravhub-channel-item gravhub-channel-item--empty', '<?php echo esc_js( __( 'No recent drops.', 'gravhub-seo' ) ); ?>'));
+		}
+
+		keywordsContent.style.display = 'block';
 	});
 })();
 </script>

@@ -57,7 +57,16 @@ class GravHub_Health_Reporter {
 	 * @return array|WP_Error API response or error.
 	 */
 	public function send_report() {
-		$data   = $this->collect_health_data();
+		$data = $this->collect_health_data();
+
+		// Cached locally regardless of whether the external send below
+		// succeeds — the dashboard notification feed reads this option
+		// directly rather than re-running collect_health_data() itself,
+		// since that makes several live HTTP requests (login/xmlrpc/
+		// uploads-dir/sitemap checks) and isn't safe to call on every
+		// single admin page load.
+		update_option( 'gravhub_last_health_data', $data );
+
 		$result = $this->api_client->send_health_report( $data );
 
 		if ( ! is_wp_error( $result ) ) {
@@ -92,6 +101,31 @@ class GravHub_Health_Reporter {
 			'version'      => phpversion(),
 			'memory_limit' => ini_get( 'memory_limit' ),
 			'max_execution_time' => ini_get( 'max_execution_time' ),
+		);
+	}
+
+	/**
+	 * Plugin/theme update-availability only — no live HTTP requests (unlike
+	 * collect_health_data(), which also runs the login/xmlrpc/uploads-dir/
+	 * sitemap security checks), so this is safe to call on every dashboard
+	 * page load for the notification feed.
+	 *
+	 * @return array{plugins_needing_update: int, theme_needs_update: bool}
+	 */
+	public function get_cheap_health_signals() {
+		$plugins             = $this->get_plugins_info();
+		$plugins_needing_update = 0;
+		foreach ( $plugins as $plugin ) {
+			if ( ! empty( $plugin['update_available'] ) ) {
+				++$plugins_needing_update;
+			}
+		}
+
+		$theme = $this->get_theme_info();
+
+		return array(
+			'plugins_needing_update' => $plugins_needing_update,
+			'theme_needs_update'     => ! empty( $theme['update_available'] ),
 		);
 	}
 

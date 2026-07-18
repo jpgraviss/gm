@@ -35,7 +35,6 @@ const PUBLIC_PREFIXES = [
   '/api/bookings',
   '/api/portal-clients/magic-link',
   '/api/portal-clients/verify-code',
-  '/api/portal-clients/reset-password',
   '/api/portal-clients/check-approval',
   '/api/portal-clients/complete-setup',
   '/api/team-members/check-approval',

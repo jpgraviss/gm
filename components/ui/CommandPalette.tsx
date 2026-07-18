@@ -111,8 +111,17 @@ export default function CommandPalette() {
       }
       if (e.key === 'Escape') setOpen(false)
     }
+    // Lets the Header's always-visible search bars open this same palette
+    // instead of being a second, decorative search implementation.
+    function onExternalOpen() {
+      setOpen(true)
+    }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('gravhub:open-command-palette', onExternalOpen)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('gravhub:open-command-palette', onExternalOpen)
+    }
   }, [])
 
   useEffect(() => {

@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import { useAuth } from '@/contexts/AuthContext'
 import { formatDate } from '@/lib/utils'
 import {
   Clock, Send, AlertCircle, Ban, Mail, RefreshCw,
@@ -45,10 +47,19 @@ const TYPE_LABELS: Record<string, string> = {
 
 export default function ScheduledEmailsPage() {
   const { toast } = useToast()
+  const { user, loading: authLoading } = useAuth()
+  const router = useRouter()
   const [emails, setEmails] = useState<ScheduledEmail[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<StatusTab>('pending')
   const [previewId, setPreviewId] = useState<string | null>(null)
+  const [retryingId, setRetryingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!authLoading && (!user || !user.isAdmin)) {
+      router.replace('/admin')
+    }
+  }, [user, authLoading, router])
 
   function load(status?: string) {
     setLoading(true)
@@ -85,6 +96,12 @@ export default function ScheduledEmailsPage() {
   }
 
   async function retryEmail(email: ScheduledEmail) {
+    // Guards against a duplicate real send from a rapid double-click —
+    // scheduleEmail() has no idempotency key, so two in-flight retries for
+    // the same row would otherwise both create a pending row and both
+    // genuinely get sent by the cron worker.
+    if (retryingId) return
+    setRetryingId(email.id)
     try {
       const res = await fetch('/api/email/scheduled', {
         method: 'POST',
@@ -105,6 +122,8 @@ export default function ScheduledEmailsPage() {
       load(activeTab)
     } catch {
       toast('Failed to retry', 'error')
+    } finally {
+      setRetryingId(null)
     }
   }
 
@@ -238,7 +257,7 @@ export default function ScheduledEmailsPage() {
                               <button onClick={() => cancelEmail(e.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-500" title="Cancel"><Ban size={13} /></button>
                             )}
                             {e.status === 'failed' && (
-                              <button onClick={() => retryEmail(e)} className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-600" title="Retry"><RotateCcw size={13} /></button>
+                              <button onClick={() => retryEmail(e)} disabled={retryingId === e.id} className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-600 disabled:opacity-50" title="Retry"><RotateCcw size={13} className={retryingId === e.id ? 'animate-spin' : ''} /></button>
                             )}
                           </div>
                         </td>

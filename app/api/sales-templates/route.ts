@@ -58,25 +58,24 @@ export const POST = withErrorHandler('sales-templates POST', async (req) => {
 
   const db = createServiceClient()
 
-  // If useTemplate flag is set, increment usage_count on an existing template
+  // If useTemplate flag is set, increment usage_count on an existing
+  // template. Uses increment_template_usage() (AUDIT #167) — the whole
+  // read-modify-write happens inside one atomic UPDATE, under the row's
+  // own lock, instead of a separate SELECT + write that two concurrent
+  // callers could race.
   if (body.useTemplate && body.id) {
-    const { data: existing, error: fetchErr } = await db
-      .from('sales_templates')
-      .select('usage_count')
-      .eq('id', body.id)
-      .single()
-    if (fetchErr || !existing) {
-      console.error('[sales-templates POST useTemplate]', fetchErr)
+    const { error: rpcErr } = await db.rpc('increment_template_usage', { p_id: body.id })
+    if (rpcErr) {
+      console.error('[sales-templates POST useTemplate]', rpcErr)
       return NextResponse.json({ error: 'Template not found' }, { status: 404 })
     }
     const { data, error } = await db
       .from('sales_templates')
-      .update({ usage_count: (existing.usage_count ?? 0) + 1, updated_at: new Date().toISOString() })
-      .eq('id', body.id)
       .select()
+      .eq('id', body.id)
       .single()
     if (error || !data) {
-      throw new Error(error?.message || 'Failed to increment usage')
+      throw new Error(error?.message || 'Failed to load updated template')
     }
     return NextResponse.json(mapTemplate(data))
   }

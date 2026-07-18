@@ -3,8 +3,12 @@ import { sendEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase'
 import { getSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireAdmin } from '@/lib/admin-auth'
 
 export const POST = withErrorHandler('email/portal-invite POST', async (req: NextRequest) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const settings = await getSettings()
   const { company, contactName, email, service, isResend: isResendInvite } = await req.json()
 

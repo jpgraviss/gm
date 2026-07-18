@@ -1114,10 +1114,15 @@ export default function SalesEnablementPage() {
   async function applyTemplate(tmpl: SalesTemplate) {
     try {
       await navigator.clipboard.writeText(tmpl.content)
-      const res = await fetch(`/api/sales-templates/${tmpl.id}`, {
-        method: 'PATCH',
+      // POST .../sales-templates with useTemplate+id (not a PATCH with a
+      // client-computed usageCount + 1) — the server increments atomically
+      // under the row's own lock, so two reps copying the same template at
+      // once can't lose an increment the way a client-supplied "current + 1"
+      // value would (AUDIT #167).
+      const res = await fetch('/api/sales-templates', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usageCount: tmpl.usageCount + 1 }),
+        body: JSON.stringify({ useTemplate: true, id: tmpl.id, title: tmpl.title }),
       })
       if (!res.ok) throw new Error('Failed to track template usage')
       const updated = await res.json()

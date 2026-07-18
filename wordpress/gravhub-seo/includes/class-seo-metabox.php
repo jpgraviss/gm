@@ -924,7 +924,15 @@ class GravHub_SEO_Metabox {
 					headers: { 'X-WP-Nonce': gravhubNonce },
 					contentType: 'application/json',
 					data: JSON.stringify({ content: content })
-				}).done( gravhubRenderReadability );
+				}).done( gravhubRenderReadability ).fail( function () {
+					// Reset the dedupe guard so the next content change (or
+					// the next scheduled tick) retries instead of the tab
+					// staying silently stuck on stale data after a transient
+					// failure (expired nonce on a long editing session, a
+					// 5xx, a network blip).
+					gravhubLastReadabilityContent = null;
+					$( '#gravhub-readability-summary' ).text( '<?php echo esc_js( __( 'Could not check readability — will retry on your next edit.', 'gravhub-seo' ) ); ?>' );
+				} );
 			}
 
 			function gravhubScheduleReadabilityCheck() {

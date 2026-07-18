@@ -716,7 +716,7 @@ export default function SettingsPage() {
         {/* Top tab bar */}
         <div className="bg-white rounded-xl border border-gray-200 mb-5 overflow-x-auto">
           <div className="flex min-w-max">
-            {tabs.filter(tab => tab !== 'Navigation' || user?.isAdmin).map(tab => (
+            {tabs.filter(tab => (tab !== 'Navigation' && tab !== 'Team') || user?.isAdmin).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}

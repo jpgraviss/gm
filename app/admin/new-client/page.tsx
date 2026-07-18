@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import CompanySelect from '@/components/ui/CompanySelect'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import { useToast } from '@/components/ui/Toast'
 import { useEnrichment } from '@/lib/useEnrichment'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   Building2, User, Briefcase, FileText, Globe, Users, CheckCircle,
   ChevronRight, ChevronLeft, Loader2, Mail, Phone, Tag, Calendar,
@@ -153,12 +154,19 @@ function Input({ value, onChange, placeholder, type = 'text', required, icon: Ic
 
 export default function NewClientPage() {
   const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
   const teamMembers = useTeamMembers()
   const { toast } = useToast()
   const [step, setStep] = useState(0)
   const [data, setData] = useState<WizardData>(INITIAL_DATA)
   const [submitting, setSubmitting] = useState(false)
   const { enriching, enrichedFields, enrich, markEnriched, clearEnriched } = useEnrichment()
+
+  useEffect(() => {
+    if (!authLoading && (!user || !user.isAdmin)) {
+      router.replace('/admin')
+    }
+  }, [user, authLoading, router])
 
   async function handleWebsiteBlur() {
     if (!data.website.trim() || enriching) return

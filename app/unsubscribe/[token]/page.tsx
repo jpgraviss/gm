@@ -4,8 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 
 type Reason = 'too_many' | 'not_relevant' | 'didnt_sign_up' | 'other'
-type Frequency = 'weekly' | 'biweekly' | 'monthly'
-type View = 'loading' | 'main' | 'done' | 'resubscribed' | 'preferences' | 'error'
+type View = 'loading' | 'main' | 'done' | 'resubscribed' | 'error'
 
 const REASONS: { value: Reason; label: string }[] = [
   { value: 'too_many', label: 'Too many emails' },
@@ -14,19 +13,12 @@ const REASONS: { value: Reason; label: string }[] = [
   { value: 'other', label: 'Other' },
 ]
 
-const FREQUENCIES: { value: Frequency; label: string; description: string }[] = [
-  { value: 'weekly', label: 'Weekly', description: 'Up to one email per week' },
-  { value: 'biweekly', label: 'Every 2 weeks', description: 'Up to two emails per month' },
-  { value: 'monthly', label: 'Monthly', description: 'No more than one email per month' },
-]
-
 export default function UnsubscribePage() {
   const params = useParams<{ token: string }>()
   const [view, setView] = useState<View>('loading')
   const [firstName, setFirstName] = useState('')
   const [email, setEmail] = useState('')
   const [reason, setReason] = useState<Reason>('too_many')
-  const [frequency, setFrequency] = useState<Frequency>('monthly')
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -47,22 +39,6 @@ export default function UnsubscribePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'unsubscribe', reason }),
-      })
-      setView('done')
-    } catch {
-      setView('error')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  async function handleReduceFrequency() {
-    setSubmitting(true)
-    try {
-      await fetch(`/api/unsubscribe/${params.token}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reduce_frequency', frequency }),
       })
       setView('done')
     } catch {
@@ -151,7 +127,7 @@ export default function UnsubscribePage() {
                   {firstName ? `${firstName}, we're sorry to see you go` : "We're sorry to see you go"}
                 </h2>
                 <p className="text-sm text-gray-500 mb-6">
-                  You can unsubscribe from all emails or adjust your preferences below.
+                  Let us know why, and we&apos;ll take you off our list.
                 </p>
 
                 <div className="mb-6">
@@ -199,92 +175,6 @@ export default function UnsubscribePage() {
                 >
                   {submitting ? 'Processing...' : 'Unsubscribe from all emails'}
                 </button>
-
-                <div className="relative my-6">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-200" />
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="bg-white px-3 text-gray-400 font-medium uppercase tracking-wider">or</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setView('preferences')}
-                  className="w-full py-3 rounded-xl font-semibold text-sm border-2 transition-all"
-                  style={{ borderColor: '#015035', color: '#015035', background: 'white' }}
-                  onMouseEnter={e => {
-                    (e.target as HTMLElement).style.background = '#e6f0ec'
-                  }}
-                  onMouseLeave={e => {
-                    (e.target as HTMLElement).style.background = 'white'
-                  }}
-                >
-                  Reduce email frequency instead
-                </button>
-              </>
-            )}
-
-            {view === 'preferences' && (
-              <>
-                <button
-                  onClick={() => setView('main')}
-                  className="flex items-center gap-1 text-sm text-gray-500 mb-4 hover:text-gray-700 transition-colors"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="15 18 9 12 15 6" />
-                  </svg>
-                  Back
-                </button>
-
-                <h2 className="text-xl font-bold text-gray-900 mb-1">Email Preferences</h2>
-                <p className="text-sm text-gray-500 mb-6">
-                  Choose how often you&apos;d like to hear from us.
-                </p>
-
-                <div className="flex flex-col gap-2 mb-6">
-                  {FREQUENCIES.map(f => (
-                    <label
-                      key={f.value}
-                      className="flex items-start gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all"
-                      style={{
-                        borderColor: frequency === f.value ? '#015035' : '#e5e7eb',
-                        background: frequency === f.value ? '#e6f0ec' : 'white',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="frequency"
-                        checked={frequency === f.value}
-                        onChange={() => setFrequency(f.value)}
-                        className="sr-only"
-                      />
-                      <div
-                        className="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5"
-                        style={{ borderColor: frequency === f.value ? '#015035' : '#d1d5db' }}
-                      >
-                        {frequency === f.value && (
-                          <div className="w-2 h-2 rounded-full" style={{ background: '#015035' }} />
-                        )}
-                      </div>
-                      <div>
-                        <span className="text-sm font-medium text-gray-900">{f.label}</span>
-                        <p className="text-xs text-gray-500 mt-0.5">{f.description}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-
-                <button
-                  onClick={handleReduceFrequency}
-                  disabled={submitting}
-                  className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-50"
-                  style={{ background: '#015035' }}
-                  onMouseEnter={e => { if (!submitting) (e.target as HTMLElement).style.background = '#01673f' }}
-                  onMouseLeave={e => (e.target as HTMLElement).style.background = '#015035'}
-                >
-                  {submitting ? 'Saving...' : 'Save preferences'}
-                </button>
               </>
             )}
 
@@ -298,9 +188,9 @@ export default function UnsubscribePage() {
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-2">Your preferences have been updated</h2>
+                <h2 className="text-lg font-semibold text-gray-900 mb-2">You&apos;ve been unsubscribed</h2>
                 <p className="text-sm text-gray-500 mb-6">
-                  {email && <>We&apos;ve updated the preferences for <strong>{email}</strong>.</>}
+                  {email && <>We won&apos;t send any more emails to <strong>{email}</strong>.</>}
                   {' '}You can close this page.
                 </p>
                 <button

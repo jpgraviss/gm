@@ -162,7 +162,21 @@ export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
   if (error) {
     throw new Error(error.message)
   }
-  return NextResponse.json(data)
+
+  // booking_types has no timezone of its own — same fallback resolution
+  // used everywhere else in this route (any connected staff Google
+  // Calendar's timezone, else America/Chicago). Stamped onto each row
+  // (rather than a separate response field) so the response stays a bare
+  // array — app/calendar/page.tsx's fetch expects Array.isArray(d).
+  let tz = 'America/Chicago'
+  const { data: allCals } = await db
+    .from('calendar_settings')
+    .select('timezone')
+    .not('google_refresh_token', 'is', null)
+    .limit(1)
+  if (allCals?.[0]?.timezone) tz = allCals[0].timezone
+
+  return NextResponse.json((data ?? []).map(row => ({ ...row, timezone: tz })))
 })
 
 export const POST = withErrorHandler('calendar/bookings POST', async (req) => {

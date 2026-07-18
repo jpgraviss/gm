@@ -58,7 +58,7 @@ export const POST = withErrorHandler('unsubscribe/[token] POST', async (req, { p
     return NextResponse.json({ error: 'Invalid or expired link' }, { status: 400 })
   }
 
-  let body: { action: string; reason?: string; frequency?: string }
+  let body: { action: string; reason?: string }
   try {
     body = await req.json()
   } catch {
@@ -92,21 +92,6 @@ export const POST = withErrorHandler('unsubscribe/[token] POST', async (req, { p
     )
 
     return NextResponse.json({ ok: true, status: 'unsubscribed' })
-  }
-
-  if (body.action === 'reduce_frequency') {
-    await db
-      .from('crm_contacts')
-      .update({
-        email_preferences: {
-          unsubscribed: false,
-          frequency: body.frequency || 'monthly',
-          updatedAt: new Date().toISOString(),
-        },
-      })
-      .eq('id', payload.contactId)
-
-    return NextResponse.json({ ok: true, status: 'frequency_updated' })
   }
 
   if (body.action === 'resubscribe') {

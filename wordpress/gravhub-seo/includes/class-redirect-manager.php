@@ -460,7 +460,14 @@ class GravHub_Redirect_Manager {
 		$out = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
 		fputcsv( $out, array( 'from_path', 'to_path', 'redirect_type' ) );
 		foreach ( $rows as $row ) {
-			fputcsv( $out, array( $row->from_path, $row->to_path, $row->redirect_type ) );
+			fputcsv(
+				$out,
+				array(
+					$this->csv_safe( $row->from_path ),
+					$this->csv_safe( $row->to_path ),
+					$row->redirect_type,
+				)
+			);
 		}
 		fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fclose
 		exit;
@@ -539,6 +546,21 @@ class GravHub_Redirect_Manager {
 			)
 		);
 		exit;
+	}
+
+	/**
+	 * Prefixes a leading =, +, -, or @ with a single quote — the standard
+	 * CSV/formula-injection guard. A redirect's to_path is settable via CSV
+	 * import as well as the admin UI, so a crafted value could otherwise be
+	 * interpreted as a live formula by Excel/Sheets when a staff member
+	 * later opens an exported file.
+	 */
+	private function csv_safe( $value ) {
+		$value = (string) $value;
+		if ( preg_match( '/^[=+\-@]/', $value ) ) {
+			return "'" . $value;
+		}
+		return $value;
 	}
 
 	private function sanitize_path( $path ) {

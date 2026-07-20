@@ -9,6 +9,7 @@ import { formatCurrency } from '@/lib/utils'
 import { RefreshCw } from 'lucide-react'
 import { computeMRR, contractMonthlyValue, RECURRING_STATUSES } from '@/lib/metrics'
 import type { TeamMember, AppTask, TimeEntry, Contract, Deal } from '@/lib/types'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 type DateRange = '7D' | '30D' | '90D' | 'Custom'
 
@@ -34,15 +35,19 @@ export default function TeamProductivityPage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
+  // AUDIT.md #206 — raw fetch()es against 100-row-cursor-paginated routes
+  // silently truncated the Team Productivity leaderboard/hours/MRR past
+  // that (same bug class as #48/#151); fetchAllPages() follows the cursor
+  // to completion instead.
   function loadData() {
     setLoading(true)
     Promise.all([
       fetchTeamMembers(),
-      fetch('/api/tasks').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
-      fetch('/api/time-entries').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
-      fetch('/api/tickets').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
-      fetch('/api/contracts').then(r => r.ok ? r.json() : []),
-      fetch('/api/deals').then(r => r.ok ? r.json() : []),
+      fetchAllPages<AppTask>('/api/tasks'),
+      fetchAllPages<TimeEntry>('/api/time-entries'),
+      fetchAllPages<TicketRow>('/api/tickets'),
+      fetchAllPages<Contract>('/api/contracts'),
+      fetchAllPages<Deal>('/api/deals'),
     ]).then(([tm, t, te, tk, con, dl]) => {
       if (Array.isArray(tm)) setTeamMembers(tm)
       if (Array.isArray(t)) setTasks(t)

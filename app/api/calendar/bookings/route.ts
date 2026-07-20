@@ -213,6 +213,65 @@ export const POST = withErrorHandler('calendar/bookings POST', async (req) => {
     return NextResponse.json({ error: 'Time slot is no longer available' }, { status: 409 })
   }
 
+  // AUDIT.md #196 — this previously only checked other `booking_type_bookings`
+  // rows for the SAME booking type, matching what GET's slot picker shows as
+  // available but never re-checking legacy/imported events or live Google
+  // Calendar busy time at write time — unlike GET, which checks both. A
+  // caller who bypasses the slot picker (or races a conflicting event
+  // created after the picker loaded) could still get a confirmed booking,
+  // real Google Calendar event, and confirmation email for an already-busy
+  // slot, and two different booking_types could double-book the same slot
+  // with no cross-type detection.
+  const { data: importedConflict } = await db
+    .from('bookings')
+    .select('id')
+    .eq('calendar_slug', 'imported')
+    .eq('date', date)
+    .eq('status', 'confirmed')
+    .lte('start_time', end_time)
+    .gte('end_time', start_time)
+
+  if (importedConflict && importedConflict.length > 0) {
+    return NextResponse.json({ error: 'Time slot is no longer available' }, { status: 409 })
+  }
+
+  try {
+    const { data: allCalsForConflict } = await db
+      .from('calendar_settings')
+      .select('*')
+      .not('google_refresh_token', 'is', null)
+      .limit(1)
+    const calForConflict = allCalsForConflict?.[0]
+    if (calForConflict) {
+      const conflictAccessToken = await getValidAccessToken(calForConflict as CalendarSettings)
+      if (conflictAccessToken) {
+        const conflictTz = calForConflict.timezone || 'America/Chicago'
+        const busySlots = await getGoogleBusySlots(conflictAccessToken, date, conflictTz)
+        const toMinutes = (iso: string) => {
+          const local = new Intl.DateTimeFormat('en-US', {
+            hour: '2-digit', minute: '2-digit', hour12: false, timeZone: conflictTz,
+          }).format(new Date(iso)).replace(/^24/, '00')
+          const [h, m] = local.split(':').map(Number)
+          return h * 60 + m
+        }
+        const [reqStartH, reqStartM] = start_time.split(':').map(Number)
+        const [reqEndH, reqEndM] = end_time.split(':').map(Number)
+        const reqStart = reqStartH * 60 + reqStartM
+        const reqEnd = reqEndH * 60 + reqEndM
+        const googleConflict = busySlots.some(b => reqStart < toMinutes(b.end) && reqEnd > toMinutes(b.start))
+        if (googleConflict) {
+          return NextResponse.json({ error: 'Time slot is no longer available' }, { status: 409 })
+        }
+      }
+    }
+  } catch (e) {
+    // Fail open, matching GET's own behavior — a Google API hiccup
+    // shouldn't block a legitimate booking; the booking_type_bookings
+    // unique constraint below still backstops against a same-type
+    // double-book regardless of this check's outcome.
+    console.error('[calendar/bookings POST] Google Calendar busy check failed:', e)
+  }
+
   const { data, error } = await db
     .from('booking_type_bookings')
     .insert({

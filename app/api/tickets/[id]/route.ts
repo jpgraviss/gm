@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
+import { mapTicket } from '@/lib/tickets'
 
 // Portal clients can only reply to their own ticket (Tickets page's Reply
 // box) — status/priority/assignedTo/tags/companyId are staff-only.
@@ -87,7 +88,12 @@ export const PATCH = withErrorHandler('tickets/[id] PATCH', async (req: NextRequ
   if (error) {
     throw new Error(error?.message || 'Failed to update ticket')
   }
-  return NextResponse.json(data)
+  // AUDIT.md #202 — this used to return the raw DB row, unlike GET/POST
+  // which both correctly filter isInternal messages via mapTicket(). A
+  // portal client replying to their own ticket got every internal-only
+  // staff note back in the response body, even though the UI never
+  // rendered it.
+  return NextResponse.json(mapTicket(data, staffCaller))
 })
 
 export const DELETE = withErrorHandler('tickets/[id] DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {

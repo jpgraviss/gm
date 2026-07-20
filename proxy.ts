@@ -128,6 +128,20 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
         )
       }
     }
+    // AUDIT.md #198 — the portal-client equivalent of the staff onboarding
+    // flow above (verify-code's ~900k-combination code, complete-setup's
+    // real password write via db.auth.admin.updateUserById) had no matching
+    // throttle at all, despite being the identical class of brute-forceable
+    // account-takeover surface.
+    if ((pathname === '/api/portal-clients/verify-code' || pathname === '/api/portal-clients/complete-setup') && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`portal-auth-code:${ip}`, 15, 60 * 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many attempts. Please wait a while and try again.' },
+          { status: 429 }
+        )
+      }
+    }
     return NextResponse.next()
   }
 

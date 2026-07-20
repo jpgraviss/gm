@@ -28,6 +28,7 @@ interface TicketMessage {
   isInternal: boolean
   body: string
   timestamp: string
+  attachments?: { name: string; url: string; path: string; type: string; size: number }[]
 }
 
 interface Ticket {
@@ -215,6 +216,21 @@ function TicketPanel({
                   <span className="text-[10px] text-gray-400 ml-auto">{msg.timestamp}</span>
                 </div>
                 <p className="text-xs text-gray-700 leading-relaxed">{msg.body}</p>
+                {msg.attachments && msg.attachments.length > 0 && (
+                  <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-black/5">
+                    {msg.attachments.map((att, i) => (
+                      <a
+                        key={i}
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-blue-600 hover:underline truncate"
+                      >
+                        📎 {att.name}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
         </div>
@@ -375,12 +391,18 @@ export default function TicketsPage() {
       serviceType: data.serviceType,
       assignedTo: data.assignedTo || null,
       tags: [],
-      messages: data.body ? [{
+      // AUDIT.md #205 — `data.attachments` (uploaded via the panel's
+      // FileUpload) was previously never forwarded here, so files staff
+      // uploaded when opening a ticket looked attached in the panel but
+      // were silently dropped on save — matches the portal client's own
+      // ticket-creation flow, which already includes attachments.
+      messages: (data.body || data.attachments.length > 0) ? [{
         id: `m-${Date.now()}`,
         author: data.contactName,
         isInternal: false,
         body: data.body,
         timestamp,
+        ...(data.attachments.length > 0 ? { attachments: data.attachments } : {}),
       }] : [],
     }
     try {

@@ -54,7 +54,11 @@ export const POST = withErrorHandler('invoices/[id]/checkout POST', async (req, 
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
   const isStaff = !!staffRow
-  const returnBase = isStaff ? `${appUrl}/billing` : `${appUrl}/portal/billing`
+  // AUDIT.md #201/#154 — /portal/billing is structurally unreachable by a
+  // real logged-in client (AppShell redirects every client session to
+  // /client instead), so a real client paying would land on a page they
+  // can never navigate back to. /client is what's actually reachable.
+  const returnBase = isStaff ? `${appUrl}/billing` : `${appUrl}/client`
 
   try {
     const { url, sessionId } = await createInvoiceCheckoutSession({

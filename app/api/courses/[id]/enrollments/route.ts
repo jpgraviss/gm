@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
+import { isStaffCaller } from '@/lib/portal-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapEnrollment(row: any) {
@@ -31,10 +32,6 @@ export const GET = withErrorHandler('courses/[id]/enrollments GET', async (
   // find the caller's own enrollment by filtering client-side for their
   // email (app/courses/[id]/page.tsx, app/portal/services/sales-training/
   // page.tsx) — requireRole('Team Member') blocked every portal client.
-  // Note: this still returns every student's enrollment for the course to
-  // any authenticated caller, which is broader than ideal (a residual
-  // architecture gap, not something this pass redesigns) — the narrower,
-  // per-enrollment routes below are the ones that enforce real ownership.
   const email = await getAuthenticatedEmail(req)
   if (!email) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
@@ -44,10 +41,23 @@ export const GET = withErrorHandler('courses/[id]/enrollments GET', async (
   const pag = parsePagination(req)
   const db = createServiceClient()
 
+  // AUDIT.md #203 — this used to return every student's enrollment for the
+  // course (name/email/progress) to any authenticated caller, relying on
+  // the two real consumers to filter client-side for their own email —
+  // meaning every other company's students' PII was sent to the browser
+  // first and filtered only in JS. Staff (course management, and the
+  // enrollmentId-based lookup of a specific student's progress) still get
+  // the full roster; a non-staff caller is now scoped server-side to only
+  // their own enrollment(s).
+  const staff = await isStaffCaller(req)
+
   let query = db
     .from('course_enrollments')
     .select('*')
     .eq('course_id', id)
+  if (!staff) {
+    query = query.ilike('student_email', email)
+  }
   query = applyCursor(query, pag)
 
   const { data, error } = await query

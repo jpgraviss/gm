@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase'
+import { decrypt } from '@/lib/encryption'
 
 const WP_TIMEOUT = 12_000
 
@@ -156,8 +157,11 @@ export async function runAndStoreWPCheck(siteId: string): Promise<WPCheckResult>
 
   if (!site) throw new Error('Site not found')
 
+  // AUDIT.md #210 — decrypt() transparently passes through any
+  // still-plaintext legacy value (no colons in the stored string), so this
+  // is safe for rows saved before the write side started encrypting.
   const creds = site.wp_username && site.wp_app_password
-    ? { username: site.wp_username, password: site.wp_app_password }
+    ? { username: site.wp_username, password: decrypt(site.wp_app_password) }
     : undefined
 
   const result = await checkWordPress(site.url, creds)

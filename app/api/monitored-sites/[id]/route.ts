@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { encrypt } from '@/lib/encryption'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSite(row: any) {
@@ -90,7 +91,12 @@ export const PATCH = withErrorHandler('monitored-sites/[id] PATCH', async (req, 
   }
   if (body.status !== undefined)                update.status = body.status
   if (body.wpUsername !== undefined)             update.wp_username = body.wpUsername
-  if (body.wpAppPassword !== undefined)          update.wp_app_password = body.wpAppPassword
+  // AUDIT.md #210 — a real client-site WordPress Application Password was
+  // previously written and read as plain text, unlike every other stored
+  // credential in this app (OAuth tokens all go through this same
+  // encrypt()/decrypt() pair). wp_username is left as-is — it's typically
+  // not secret (often visible in post author bylines on the site itself).
+  if (body.wpAppPassword !== undefined)          update.wp_app_password = encrypt(body.wpAppPassword)
 
   const { data, error } = await db
     .from('monitored_sites')

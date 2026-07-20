@@ -10,6 +10,35 @@ import {
   Search, BarChart3, Star, Activity, TrendingUp, Share2,
 } from 'lucide-react'
 
+// AUDIT.md #199 — matches the shape app/tickets/page.tsx's staff viewer
+// actually reads (`author`/`body`/`timestamp`, not `from`/`sender`/`text`).
+// This was previously written as `{from, body, date}`, which crashed the
+// staff ticket viewer (`msg.author.split(' ')`) on any real client-created
+// ticket that included an initial message.
+interface ClientTicketMessage {
+  id: string
+  author: string
+  isInternal: boolean
+  body: string
+  timestamp: string
+}
+
+interface ClientTicket {
+  id: string
+  subject: string
+  status: string
+  priority: string
+  createdDate: string
+  messages: ClientTicketMessage[]
+}
+
+const TICKET_STATUS_COLORS: Record<string, string> = {
+  Open: 'bg-blue-50 text-blue-700',
+  'In Progress': 'bg-amber-50 text-amber-700',
+  Resolved: 'bg-emerald-50 text-emerald-700',
+  Closed: 'bg-gray-100 text-gray-500',
+}
+
 interface PortalInsights {
   company: { name: string }
   period: { label: string }
@@ -54,11 +83,33 @@ export default function ClientPortalPage() {
   const [ticketMessage, setTicketMessage] = useState('')
   const [ticketSubmitting, setTicketSubmitting] = useState(false)
   const [ticketSuccess, setTicketSuccess] = useState(false)
-  const [existingTickets, setExistingTickets] = useState<{ id: string; subject: string; status: string; priority: string; createdAt: string; messages?: { from: string; body: string; date: string }[] }[]>([])
+  const [existingTickets, setExistingTickets] = useState<ClientTicket[]>([])
   const [ticketsLoading, setTicketsLoading] = useState(false)
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const [replySending, setReplySending] = useState(false)
   const [files, setFiles] = useState<{ name: string; size: number; createdAt: string; url: string | null }[]>([])
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null)
+
+  // AUDIT.md #201 — Stripe redirects back here after checkout; surface the
+  // result and land on the Billing tab instead of silently landing back on
+  // Overview with a stray query string.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.has('paid')) {
+      setActiveTab('billing')
+      toast('Payment received — thank you!', 'success')
+      window.history.replaceState({}, '', window.location.pathname)
+    } else if (params.get('checkout') === 'cancelled') {
+      setActiveTab('billing')
+      toast('Checkout cancelled', 'info')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!company) { setLoading(false); return }
@@ -162,6 +213,56 @@ export default function ClientPortalPage() {
       setRejectReason('')
       toast('Post rejected', 'success')
     } catch { toast('Failed to reject', 'error') }
+  }
+
+  const selectedTicket = existingTickets.find(t => t.id === selectedTicketId) ?? null
+
+  async function sendTicketReply() {
+    if (!selectedTicket || !replyText.trim()) return
+    setReplySending(true)
+    try {
+      const newMsg: ClientTicketMessage = {
+        id: `m-${Date.now()}`,
+        author: contactName,
+        isInternal: false,
+        body: replyText.trim(),
+        timestamp: new Date().toISOString(),
+      }
+      const updatedMessages = [...selectedTicket.messages, newMsg]
+      const res = await fetch(`/api/tickets/${selectedTicket.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: updatedMessages }),
+      })
+      if (!res.ok) throw new Error()
+      setExistingTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, messages: updatedMessages } : t))
+      setReplyText('')
+      toast('Reply sent', 'success')
+    } catch {
+      toast('Failed to send reply', 'error')
+    } finally {
+      setReplySending(false)
+    }
+  }
+
+  // AUDIT.md #201 — the Billing tab previously had no way to actually pay
+  // an invoice online despite POST /api/invoices/[id]/checkout being a
+  // real, working Stripe Checkout endpoint already wired up for staff.
+  async function handlePayInvoice(invoiceId: string) {
+    setPayingInvoiceId(invoiceId)
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/checkout`, { method: 'POST' })
+      const data = await res.json()
+      if (res.ok && data.url) {
+        window.location.href = data.url
+      } else {
+        toast(data.error || 'Failed to start checkout', 'error')
+        setPayingInvoiceId(null)
+      }
+    } catch {
+      toast('Failed to start checkout', 'error')
+      setPayingInvoiceId(null)
+    }
   }
 
   const unreadCount = notifications.filter(n => !n.read).length
@@ -534,6 +635,16 @@ export default function ClientPortalPage() {
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <p className="text-sm font-bold text-gray-900">{formatCurrency(inv.amount)}</p>
                         <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
+                        {inv.status !== 'Paid' && (
+                          <button
+                            onClick={() => handlePayInvoice(inv.id)}
+                            disabled={payingInvoiceId === inv.id}
+                            className="px-3 py-1.5 rounded-lg text-white text-xs font-semibold disabled:opacity-50 hover:opacity-90 transition-opacity"
+                            style={{ background: '#015035' }}
+                          >
+                            {payingInvoiceId === inv.id ? 'Redirecting…' : 'Pay Now'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -548,102 +659,172 @@ export default function ClientPortalPage() {
         {/* Support */}
         {activeTab === 'tickets' && (
           <div className="max-w-3xl mx-auto flex flex-col gap-5">
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-gray-800 mb-1">Submit a Request</h3>
-              <p className="text-xs text-gray-400 mb-4">Have a question or need a change? Send us a message.</p>
-              {ticketSuccess ? (
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
-                  <CheckCircle size={24} className="mx-auto mb-2 text-emerald-600" />
-                  <p className="text-sm font-semibold text-emerald-800">Request submitted!</p>
-                  <p className="text-xs text-emerald-600 mt-1">Our team will get back to you shortly.</p>
-                  <button onClick={() => { setTicketSuccess(false); setTicketSubject(''); setTicketMessage('') }} className="mt-3 text-xs text-emerald-700 underline">Submit another</button>
+            {selectedTicket ? (
+              // AUDIT.md #200 — the Support tab previously only listed
+              // subject/status/message-count with no click-through — real
+              // clients had no in-app way to see or respond to a staff
+              // reply on their own ticket, despite the backend fully
+              // supporting it. `messages` here is already server-filtered
+              // to non-internal entries (requirePortalClient + mapTicket),
+              // so it's safe to render as-is.
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-3">
+                  <button
+                    onClick={() => { setSelectedTicketId(null); setReplyText('') }}
+                    className="text-xs text-gray-500 hover:text-gray-700 font-medium flex-shrink-0"
+                  >
+                    ← Back
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{selectedTicket.subject}</p>
+                  </div>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${TICKET_STATUS_COLORS[selectedTicket.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                    {selectedTicket.status}
+                  </span>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  <input
-                    value={ticketSubject}
-                    onChange={e => setTicketSubject(e.target.value)}
-                    placeholder="Subject / brief description..."
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
-                  />
+                <div className="flex flex-col gap-3 p-5 max-h-96 overflow-y-auto">
+                  {selectedTicket.messages.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-4">No messages yet.</p>
+                  ) : (
+                    selectedTicket.messages.map(m => {
+                      const fromUs = m.author !== contactName
+                      return (
+                        <div key={m.id} className={`max-w-[85%] rounded-xl px-3.5 py-2.5 ${fromUs ? 'self-start bg-gray-50' : 'self-end text-white'}`} style={!fromUs ? { background: '#015035' } : {}}>
+                          <p className="text-[10px] font-semibold mb-1 opacity-70">{m.author}</p>
+                          <p className="text-sm whitespace-pre-wrap">{m.body}</p>
+                          <p className="text-[10px] mt-1 opacity-50">{formatDate(m.timestamp)}</p>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+                <div className="border-t border-gray-100 p-4 flex flex-col gap-2">
                   <textarea
-                    value={ticketMessage}
-                    onChange={e => setTicketMessage(e.target.value)}
-                    placeholder="Describe your request in detail..."
-                    rows={4}
+                    value={replyText}
+                    onChange={e => setReplyText(e.target.value)}
+                    placeholder="Write a reply..."
+                    rows={3}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
                   />
-                  <div className="flex items-center justify-end">
+                  <div className="flex justify-end">
                     <button
-                      disabled={ticketSubmitting || !ticketSubject.trim()}
-                      onClick={async () => {
-                        setTicketSubmitting(true)
-                        try {
-                          const res = await fetch('/api/tickets', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              subject: ticketSubject.trim(),
-                              company,
-                              contactName,
-                              contactEmail: user?.email ?? '',
-                              source: 'Portal',
-                              messages: ticketMessage.trim() ? [{ from: contactName, body: ticketMessage.trim(), date: new Date().toISOString() }] : [],
-                            }),
-                          })
-                          if (res.ok) {
-                            setTicketSuccess(true)
-                            fetch(`/api/tickets?company=${encodeURIComponent(company)}`)
-                              .then(r => r.ok ? r.json() : [])
-                              .then(data => { if (Array.isArray(data)) setExistingTickets(data) })
-                              .catch(() => {})
-                          }
-                        } finally {
-                          setTicketSubmitting(false)
-                        }
-                      }}
+                      disabled={replySending || !replyText.trim()}
+                      onClick={sendTicketReply}
                       className="px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
                       style={{ background: '#015035' }}
                     >
-                      {ticketSubmitting ? 'Submitting...' : 'Submit Request'}
+                      {replySending ? 'Sending...' : 'Send Reply'}
                     </button>
                   </div>
                 </div>
-              )}
-            </div>
-
-            {/* Existing tickets */}
-            {ticketsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
               </div>
-            ) : existingTickets.length > 0 && (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800">Your Requests</h3>
-                </div>
-                <div className="flex flex-col divide-y divide-gray-100">
-                  {existingTickets.map(t => {
-                    const statusColor: Record<string, string> = { Open: 'bg-blue-50 text-blue-700', 'In Progress': 'bg-amber-50 text-amber-700', Resolved: 'bg-emerald-50 text-emerald-700', Closed: 'bg-gray-100 text-gray-500' }
-                    return (
-                      <div key={t.id} className="px-5 py-3.5">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-800 truncate">{t.subject}</p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">
-                              {t.createdAt ? formatDate(t.createdAt) : ''}
-                              {t.messages && t.messages.length > 0 ? ` · ${t.messages.length} message${t.messages.length > 1 ? 's' : ''}` : ''}
-                            </p>
-                          </div>
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${statusColor[t.status] ?? 'bg-gray-100 text-gray-500'}`}>
-                            {t.status}
-                          </span>
-                        </div>
+            ) : (
+              <>
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-1">Submit a Request</h3>
+                  <p className="text-xs text-gray-400 mb-4">Have a question or need a change? Send us a message.</p>
+                  {ticketSuccess ? (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                      <CheckCircle size={24} className="mx-auto mb-2 text-emerald-600" />
+                      <p className="text-sm font-semibold text-emerald-800">Request submitted!</p>
+                      <p className="text-xs text-emerald-600 mt-1">Our team will get back to you shortly.</p>
+                      <button onClick={() => { setTicketSuccess(false); setTicketSubject(''); setTicketMessage('') }} className="mt-3 text-xs text-emerald-700 underline">Submit another</button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      <input
+                        value={ticketSubject}
+                        onChange={e => setTicketSubject(e.target.value)}
+                        placeholder="Subject / brief description..."
+                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400"
+                      />
+                      <textarea
+                        value={ticketMessage}
+                        onChange={e => setTicketMessage(e.target.value)}
+                        placeholder="Describe your request in detail..."
+                        rows={4}
+                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
+                      />
+                      <div className="flex items-center justify-end">
+                        <button
+                          disabled={ticketSubmitting || !ticketSubject.trim()}
+                          onClick={async () => {
+                            setTicketSubmitting(true)
+                            try {
+                              const res = await fetch('/api/tickets', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  subject: ticketSubject.trim(),
+                                  company,
+                                  contactName,
+                                  contactEmail: user?.email ?? '',
+                                  source: 'Portal',
+                                  messages: ticketMessage.trim() ? [{
+                                    id: `m-${Date.now()}`,
+                                    author: contactName,
+                                    isInternal: false,
+                                    body: ticketMessage.trim(),
+                                    timestamp: new Date().toISOString(),
+                                  }] : [],
+                                }),
+                              })
+                              if (res.ok) {
+                                setTicketSuccess(true)
+                                fetch(`/api/tickets?company=${encodeURIComponent(company)}`)
+                                  .then(r => r.ok ? r.json() : [])
+                                  .then(data => { if (Array.isArray(data)) setExistingTickets(data) })
+                                  .catch(() => {})
+                              }
+                            } finally {
+                              setTicketSubmitting(false)
+                            }
+                          }}
+                          className="px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                          style={{ background: '#015035' }}
+                        >
+                          {ticketSubmitting ? 'Submitting...' : 'Submit Request'}
+                        </button>
                       </div>
-                    )
-                  })}
+                    </div>
+                  )}
                 </div>
-              </div>
+
+                {/* Existing tickets */}
+                {ticketsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
+                  </div>
+                ) : existingTickets.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gray-100">
+                      <h3 className="text-sm font-semibold text-gray-800">Your Requests</h3>
+                    </div>
+                    <div className="flex flex-col divide-y divide-gray-100">
+                      {existingTickets.map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => setSelectedTicketId(t.id)}
+                          className="w-full text-left px-5 py-3.5 hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-gray-800 truncate">{t.subject}</p>
+                              <p className="text-[11px] text-gray-400 mt-0.5">
+                                {t.createdDate ? formatDate(t.createdDate) : ''}
+                                {t.messages && t.messages.length > 0 ? ` · ${t.messages.length} message${t.messages.length > 1 ? 's' : ''}` : ''}
+                              </p>
+                            </div>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${TICKET_STATUS_COLORS[t.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                              {t.status}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

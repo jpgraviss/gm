@@ -53,7 +53,7 @@ async function getCurrentUser(req: NextRequest): Promise<AuthenticatedUser | nul
 
   const { data: member } = await db
     .from('team_members')
-    .select('id, name, email, role, unit, is_admin, status')
+    .select('id, name, email, role, unit, is_admin, status, access_schedule')
     .eq('email', email)
     .maybeSingle()
 
@@ -62,6 +62,24 @@ async function getCurrentUser(req: NextRequest): Promise<AuthenticatedUser | nul
   // function, so an existing session (or a fresh sign-in) kept full access
   // for as long as it lived, regardless of admin action.
   if (!member || member.status !== 'active') return null
+
+  // AUDIT.md #208 — the "Schedule Access" admin modal explicitly claims
+  // "the system will automatically enforce these windows," but
+  // access_schedule was previously only ever read by AuthContext's
+  // client-side redirect — this is the real server-side gate behind every
+  // requireRole/requireAdmin call, and it never checked it at all. A user
+  // whose access was "scheduled for removal" kept full API access for as
+  // long as their existing cookie lived, enforced nowhere except a
+  // client-side redirect a user can simply avoid triggering.
+  const schedule = member.access_schedule as { removeAccessOn?: string; reinstateOn?: string } | null
+  if (schedule?.removeAccessOn) {
+    const now = Date.now()
+    const removeAt = new Date(schedule.removeAccessOn).getTime()
+    const reinstateAt = schedule.reinstateOn ? new Date(schedule.reinstateOn).getTime() : null
+    if (removeAt <= now && (!reinstateAt || reinstateAt > now)) {
+      return null
+    }
+  }
 
   return {
     userId: member.id,

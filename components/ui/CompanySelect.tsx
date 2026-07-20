@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Building2, ChevronDown, Loader2, Plus, Search, X } from 'lucide-react'
 import { useEnrichment } from '@/lib/useEnrichment'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 const INDUSTRIES = [
   'Technology', 'Healthcare', 'Finance', 'Retail', 'Manufacturing',
@@ -41,9 +42,13 @@ export default function CompanySelect({ value, onChange, placeholder = 'Select a
 
   useEffect(() => {
     setLoading(true)
-    fetch('/api/crm/companies')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setCompanies(data) })
+    // Was a raw fetch() against a route cursor-paginated at 100 rows
+    // server-side — any org with more than 100 companies silently only
+    // ever saw the first 100 in this search/dropdown, with real companies
+    // past that point invisible and unselectable everywhere this component
+    // is used (contacts, tickets, invoices, projects, ...).
+    fetchAllPages<Company>('/api/crm/companies')
+      .then(setCompanies)
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])

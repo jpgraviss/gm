@@ -5,6 +5,7 @@ import { X, ChevronLeft, Loader2 } from 'lucide-react'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import CompanySelect from '@/components/ui/CompanySelect'
 import { useEnrichment } from '@/lib/useEnrichment'
+import { PUBLIC_EMAIL_DOMAINS } from '@/lib/domain-utils'
 
 export interface NewContactFormData {
   firstName: string
@@ -75,7 +76,7 @@ export default function NewContactPanel({ onSave, onClose }: Props) {
     const email = form.email.trim()
     if (!email || !email.includes('@')) return
     const domain = email.split('@')[1]
-    if (!domain || ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com'].includes(domain)) return
+    if (!domain || PUBLIC_EMAIL_DOMAINS.has(domain.toLowerCase())) return
     if (enriching) return
     const data = await enrich(domain)
     if (!data) return

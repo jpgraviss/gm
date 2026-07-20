@@ -217,6 +217,15 @@ class GravHub_Broken_Link_Scanner {
 	 * fine) — matches the fallback pattern GravHub_Health_Reporter already
 	 * uses for its own live sitemap/security checks.
 	 *
+	 * AUDIT.md #190 — the URL being checked comes from post content, which
+	 * anyone with post-edit capability can write, so this uses the
+	 * wp_safe_remote_* variants (reject_unsafe_urls => true) rather than
+	 * plain wp_remote_*. That routes through WP core's
+	 * http_request_host_is_external check, which resolves the host and
+	 * blocks loopback/private/link-local ranges (including the
+	 * 169.254.169.254 cloud metadata address) — closing off using this
+	 * scanner as a blind SSRF probe against internal services.
+	 *
 	 * @return array{ok: bool, status_code: int|null, error: string|null}
 	 */
 	private function check_link( $url ) {
@@ -226,10 +235,10 @@ class GravHub_Broken_Link_Scanner {
 			'sslverify'   => false, // A site's own outbound link check shouldn't fail on the *target* site's cert config.
 		);
 
-		$response = wp_remote_head( $url, $args );
+		$response = wp_safe_remote_head( $url, $args );
 
 		if ( is_wp_error( $response ) || 405 === (int) wp_remote_retrieve_response_code( $response ) ) {
-			$response = wp_remote_get( $url, $args );
+			$response = wp_safe_remote_get( $url, $args );
 		}
 
 		if ( is_wp_error( $response ) ) {
@@ -275,7 +284,7 @@ class GravHub_Broken_Link_Scanner {
 			return;
 		}
 
-		$wpdb->insert(
+		$inserted = $wpdb->insert(
 			$table,
 			array(
 				'post_id'       => $post->ID,
@@ -288,6 +297,14 @@ class GravHub_Broken_Link_Scanner {
 			),
 			array( '%d', '%s', '%s', '%d', '%s', '%s', '%s' )
 		);
+
+		// AUDIT.md #191 — this insert's result was previously discarded, so
+		// a failure (e.g. the UNIQUE post_url key racing a concurrent cron
+		// run) silently vanished instead of surfacing anywhere.
+		if ( false === $inserted ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( 'GravHub broken link scanner: failed to record result for post %d, url %s: %s', $post->ID, $url, $wpdb->last_error ) );
+		}
 	}
 
 	/**

@@ -3,7 +3,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import crypto from 'crypto'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('signatures GET', async (req) => {
   const denied = await requireRole(req, 'Team Member')
@@ -46,6 +46,7 @@ export const GET = withErrorHandler('signatures GET', async (req) => {
 export const POST = withErrorHandler('signatures POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const { contractId, signerEmail, signerName, type } = await req.json()
 
   if (!contractId || !signerEmail) {
@@ -136,6 +137,6 @@ export const POST = withErrorHandler('signatures POST', async (req) => {
     expiresAt: data.expires_at,
   }
 
-  logAudit({ userName: 'system', action: 'signature_requested', module: 'contracts', type: 'action', metadata: { contractId, signerEmail } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'signature_requested', module: 'contracts', type: 'action', metadata: { contractId, signerEmail } })
   return NextResponse.json(mapped, { status: 201 })
 })

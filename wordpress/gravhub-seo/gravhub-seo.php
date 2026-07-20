@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GravHub SEO
  * Description: Enterprise SEO management plugin by Graviss Marketing. Full on-page SEO analysis, focus keywords, XML sitemaps, meta management, and centralized reporting via GravHub.
- * Version: 1.5.1
+ * Version: 1.5.2
  * Author: Graviss Marketing
  * Author URI: https://gravissmarketing.com
  * License: Proprietary
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GRAVHUB_SEO_VERSION', '1.5.1' );
+define( 'GRAVHUB_SEO_VERSION', '1.5.2' );
 define( 'GRAVHUB_SEO_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_FILE', __FILE__ );
@@ -66,7 +66,7 @@ final class GravHub_SEO {
 		$this->internal_linking = new GravHub_Internal_Linking();
 
 		if ( is_admin() ) {
-			$this->admin_page = new GravHub_Admin_Page( $this->api_client, $this->seo_analyzer, $this->health_reporter, $this->redirect_manager );
+			$this->admin_page = new GravHub_Admin_Page( $this->api_client, $this->seo_analyzer, $this->health_reporter, $this->redirect_manager, $this->broken_link_scanner );
 		}
 
 		$this->init_hooks();

@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { slugifyForm } from '@/lib/forms'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('funnels GET', async () => {
   const db = createServiceClient()
@@ -42,6 +42,7 @@ export const GET = withErrorHandler('funnels GET', async () => {
 export const POST = withErrorHandler('funnels POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const body = await req.json()
   if (!body.name || typeof body.name !== 'string') {
     return NextResponse.json({ error: 'name is required' }, { status: 400 })
@@ -83,6 +84,6 @@ export const POST = withErrorHandler('funnels POST', async (req) => {
     sort_order: 0,
   })
 
-  logAudit({ userName: 'system', action: 'created_funnel', module: 'funnels', type: 'action', metadata: { funnelId: data.id, name: data.name } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'created_funnel', module: 'funnels', type: 'action', metadata: { funnelId: data.id, name: data.name } })
   return NextResponse.json({ ...data, pages: [{ id: pageId, name: 'Landing Page', slug: 'landing', blocks: [], sort_order: 0, views: 0, conversions: 0 }] }, { status: 201 })
 })

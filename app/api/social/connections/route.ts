@@ -3,7 +3,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { listConnectionStatuses, saveConnection, removeConnection } from '@/lib/social-connections'
 import type { SocialPlatform } from '@/lib/social-media'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 
 const VALID: SocialPlatform[] = ['facebook', 'instagram', 'linkedin', 'google_business']
 
@@ -24,6 +24,7 @@ export const GET = withErrorHandler('social/connections GET', async (req: NextRe
 export const POST = withErrorHandler('social/connections POST', async (req) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   let body: { platform?: string; externalId?: string; accountLabel?: string; token?: string }
   try {
@@ -46,7 +47,7 @@ export const POST = withErrorHandler('social/connections POST', async (req) => {
     accountLabel: body.accountLabel,
     token: body.token,
   })
-  logAudit({ userName: 'admin', action: 'connected_social_account', module: 'social_media', type: 'action', metadata: { platform, account: body.accountLabel } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'connected_social_account', module: 'social_media', type: 'action', metadata: { platform, account: body.accountLabel } })
   return NextResponse.json({ ok: true })
 })
 
@@ -54,12 +55,13 @@ export const POST = withErrorHandler('social/connections POST', async (req) => {
 export const DELETE = withErrorHandler('social/connections DELETE', async (req) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const platform = new URL(req.url).searchParams.get('platform') as SocialPlatform | null
   if (!platform || !VALID.includes(platform)) {
     return NextResponse.json({ error: 'Invalid platform' }, { status: 400 })
   }
   await removeConnection(platform)
-  logAudit({ userName: 'admin', action: 'disconnected_social_account', module: 'social_media', type: 'action', metadata: { platform } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'disconnected_social_account', module: 'social_media', type: 'action', metadata: { platform } })
   return NextResponse.json({ ok: true })
 })

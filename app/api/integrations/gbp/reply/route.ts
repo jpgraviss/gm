@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { replyToGBPReview } from '@/lib/google-business-profile'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 
 /**
  * POST /api/integrations/gbp/reply
@@ -15,6 +15,7 @@ import { requireRole } from '@/lib/rbac'
 export const POST = withErrorHandler('integrations/gbp/reply POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   let body: { location?: string; reviewId?: string; comment?: string }
   try {
@@ -34,7 +35,7 @@ export const POST = withErrorHandler('integrations/gbp/reply POST', async (req) 
   const reply = await replyToGBPReview(location, reviewId, comment)
 
   await logAudit({
-    userName: 'system',
+    userName: actor?.name || actor?.email || 'system',
     action:   'gbp.review.reply',
     module:   'reputation',
     type:     'action',

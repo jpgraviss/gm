@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -90,6 +90,7 @@ export const PATCH = withErrorHandler('forms/[id] PATCH', async (req: NextReques
 export const DELETE = withErrorHandler('forms/[id] DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id } = await params
   const db = createServiceClient()
@@ -97,6 +98,6 @@ export const DELETE = withErrorHandler('forms/[id] DELETE', async (req: NextRequ
   if (error) {
     throw new Error(String(error))
   }
-  logAudit({ userName: 'system', action: 'deleted_form', module: 'forms', type: 'warning', metadata: { formId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_form', module: 'forms', type: 'warning', metadata: { formId: id } })
   return NextResponse.json({ deleted: id })
 })

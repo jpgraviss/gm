@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 
 export const POST = withErrorHandler('deals/reassign POST', async (req) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const { fromRep, toRep } = await req.json()
 
   if (!fromRep || !toRep) {
@@ -25,6 +26,6 @@ export const POST = withErrorHandler('deals/reassign POST', async (req) => {
     throw new Error(error.message)
   }
 
-  logAudit({ userName: 'system', action: 'deals_reassigned', module: 'crm', type: 'warning', metadata: { fromRep, toRep, count: data?.length ?? 0 } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deals_reassigned', module: 'crm', type: 'warning', metadata: { fromRep, toRep, count: data?.length ?? 0 } })
   return NextResponse.json({ reassigned: data?.length ?? 0 })
 })

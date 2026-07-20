@@ -49,18 +49,29 @@ class GravHub_Admin_Page {
 	private $redirect_manager;
 
 	/**
+	 * Broken link scanner instance — used to surface the current broken
+	 * outbound link count in the dashboard notification feed, the same way
+	 * get_redirect_count()/get_404_count() already do for redirects.
+	 *
+	 * @var GravHub_Broken_Link_Scanner
+	 */
+	private $broken_link_scanner;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param GravHub_API_Client       $api_client       API client instance.
-	 * @param GravHub_SEO_Analyzer     $seo_analyzer     SEO analyzer instance.
-	 * @param GravHub_Health_Reporter  $health_reporter  Health reporter instance.
-	 * @param GravHub_Redirect_Manager $redirect_manager Redirect manager instance.
+	 * @param GravHub_API_Client          $api_client           API client instance.
+	 * @param GravHub_SEO_Analyzer        $seo_analyzer         SEO analyzer instance.
+	 * @param GravHub_Health_Reporter     $health_reporter      Health reporter instance.
+	 * @param GravHub_Redirect_Manager    $redirect_manager     Redirect manager instance.
+	 * @param GravHub_Broken_Link_Scanner $broken_link_scanner  Broken link scanner instance.
 	 */
-	public function __construct( GravHub_API_Client $api_client, GravHub_SEO_Analyzer $seo_analyzer, GravHub_Health_Reporter $health_reporter, GravHub_Redirect_Manager $redirect_manager ) {
-		$this->api_client       = $api_client;
-		$this->seo_analyzer     = $seo_analyzer;
-		$this->health_reporter  = $health_reporter;
-		$this->redirect_manager = $redirect_manager;
+	public function __construct( GravHub_API_Client $api_client, GravHub_SEO_Analyzer $seo_analyzer, GravHub_Health_Reporter $health_reporter, GravHub_Redirect_Manager $redirect_manager, GravHub_Broken_Link_Scanner $broken_link_scanner ) {
+		$this->api_client          = $api_client;
+		$this->seo_analyzer        = $seo_analyzer;
+		$this->health_reporter     = $health_reporter;
+		$this->redirect_manager    = $redirect_manager;
+		$this->broken_link_scanner = $broken_link_scanner;
 
 		// Priority 5, not the default 10 — must run before
 		// GravHub_Redirect_Manager::register_menu() (also hooked at the
@@ -793,6 +804,23 @@ class GravHub_Admin_Page {
 					$count_404
 				),
 				'link'    => admin_url( 'admin.php?page=gravhub-seo-redirects#404-log' ),
+			);
+		}
+
+		// AUDIT.md #193 — get_broken_link_count() existed but nothing ever
+		// called it, so broken outbound links never surfaced anywhere
+		// short of manually opening the Redirects page's broken-links
+		// section.
+		$count_broken_links = $this->broken_link_scanner->get_broken_link_count();
+		if ( $count_broken_links > 0 ) {
+			$notifications[] = array(
+				'type'    => 'info',
+				'message' => sprintf(
+					/* translators: %d: number of broken outbound links */
+					_n( '%d outbound link is broken.', '%d outbound links are broken.', $count_broken_links, 'gravhub-seo' ),
+					$count_broken_links
+				),
+				'link'    => admin_url( 'admin.php?page=gravhub-seo-redirects#broken-links' ),
 			);
 		}
 

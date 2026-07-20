@@ -3,10 +3,12 @@ import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthUser } from '@/lib/rbac'
 
 export const POST = withErrorHandler('auth/approve-setup POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { userId, approved } = await req.json()
 
@@ -36,7 +38,7 @@ export const POST = withErrorHandler('auth/approve-setup POST', async (req) => {
       .eq('id', userId)
 
     logAudit({
-      userName: 'admin',
+      userName: actor?.name || actor?.email || 'system',
       action: `approved_setup for ${member.name} (${member.email})`,
       module: 'admin',
       type: 'action',
@@ -54,7 +56,7 @@ export const POST = withErrorHandler('auth/approve-setup POST', async (req) => {
       .eq('id', userId)
 
     logAudit({
-      userName: 'admin',
+      userName: actor?.name || actor?.email || 'system',
       action: `denied_setup for ${member.name} (${member.email})`,
       module: 'admin',
       type: 'action',

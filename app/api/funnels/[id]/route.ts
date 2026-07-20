@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('funnels/[id] GET', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
@@ -55,12 +55,13 @@ export const PATCH = withErrorHandler('funnels/[id] PATCH', async (req: NextRequ
 export const DELETE = withErrorHandler('funnels/[id] DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const { id } = await params
   const db = createServiceClient()
   const { error } = await db.from('funnels').delete().eq('id', id)
   if (error) {
     throw new Error(String(error))
   }
-  logAudit({ userName: 'system', action: 'deleted_funnel', module: 'funnels', type: 'warning', metadata: { funnelId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_funnel', module: 'funnels', type: 'warning', metadata: { funnelId: id } })
   return NextResponse.json({ deleted: id })
 })

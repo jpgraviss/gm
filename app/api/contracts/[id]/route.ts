@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 
 // Fields the real portal Approvals UI ever sends (app/portal/approvals/page.tsx:
@@ -104,6 +104,7 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
 
   const denied = await requirePortalClient(req, current.company)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   // requirePortalClient only confirms the caller may touch a contract
   // CURRENTLY belonging to their company — it says nothing about which
@@ -174,7 +175,7 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
   }
 
   if (body.status !== undefined) {
-    logAudit({ userName: 'system', action: 'contract_status_changed', module: 'contracts', type: 'action', metadata: { contractId: id, newStatus: body.status } })
+    logAudit({ userName: actor?.name || actor?.email || 'system', action: 'contract_status_changed', module: 'contracts', type: 'action', metadata: { contractId: id, newStatus: body.status } })
   }
 
   return NextResponse.json(mapContract(data))
@@ -184,6 +185,7 @@ export const DELETE = withErrorHandler('contracts/[id] DELETE', async (req, { pa
   const { id } = await params
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'Invalid contract id' }, { status: 400 })
   }
@@ -193,6 +195,6 @@ export const DELETE = withErrorHandler('contracts/[id] DELETE', async (req, { pa
   if (error) {
     throw new Error(error?.message || 'Failed to delete contract')
   }
-  logAudit({ userName: 'system', action: 'deleted_contract', module: 'contracts', type: 'warning', metadata: { contractId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_contract', module: 'contracts', type: 'warning', metadata: { contractId: id } })
   return NextResponse.json({ deleted: id })
 })

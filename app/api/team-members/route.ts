@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { requireRole, getAuthUser } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
+import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapMember(row: any) {
@@ -65,6 +66,19 @@ export const POST = withErrorHandler('team-members POST', async (req: NextReques
   if (error) {
     throw new Error(error?.message || 'Failed to create team member')
   }
+
+  // AUDIT.md #178 — this route sets role/is_admin directly on insert, the
+  // exact "plant a Super Admin" vector AUDIT #82 closed off elsewhere, but
+  // never left a trace in the audit trail before this.
+  const actor = await getAuthUser(req)
+  await logAudit({
+    userName: actor?.name || actor?.email || 'system',
+    action:   'team_member_created',
+    module:   'team',
+    type:     data.is_admin ? 'warning' : 'action',
+    metadata: { targetId: data.id, targetEmail: data.email, role: data.role, isAdmin: data.is_admin },
+  })
+
   return NextResponse.json(mapMember(data), { status: 201 })
 })
 
@@ -110,5 +124,17 @@ export const PATCH = withErrorHandler('team-members PATCH', async (req: NextRequ
   if (error) {
     throw new Error(error?.message || 'Failed to update user status')
   }
+
+  // AUDIT.md #178 — suspend/reinstate/delete/schedule_access previously
+  // left zero trace in the audit trail.
+  const actor = await getAuthUser(req)
+  await logAudit({
+    userName: actor?.name || actor?.email || 'system',
+    action:   `team_member_${action}`,
+    module:   'team',
+    type:     action === 'reinstate' ? 'success' : 'warning',
+    metadata: { targetId: id, targetEmail: data.email, reason: reason ?? null },
+  })
+
   return NextResponse.json(mapMember(data))
 })

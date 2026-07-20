@@ -5,10 +5,12 @@ import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthUser } from '@/lib/rbac'
 
 export const POST = withErrorHandler('portal-clients/approve POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { clientId, approved } = await req.json()
   if (!clientId || typeof approved !== 'boolean') {
@@ -99,7 +101,7 @@ export const POST = withErrorHandler('portal-clients/approve POST', async (req) 
     })
 
     logAudit({
-      userName: 'admin',
+      userName: actor?.name || actor?.email || 'system',
       action: `portal_client_approved: ${client.contact} (${client.company})`,
       module: 'portal',
       type: 'success',
@@ -158,7 +160,7 @@ export const POST = withErrorHandler('portal-clients/approve POST', async (req) 
     })
 
     logAudit({
-      userName: 'admin',
+      userName: actor?.name || actor?.email || 'system',
       action: `portal_client_denied: ${client.contact} (${client.company})`,
       module: 'portal',
       type: 'warning',

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
@@ -77,6 +77,7 @@ export const DELETE = withErrorHandler('courses/[id] DELETE', async (
 ) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id } = await params
   const db = createServiceClient()
@@ -84,6 +85,6 @@ export const DELETE = withErrorHandler('courses/[id] DELETE', async (
   if (error) {
     throw new Error(error.message)
   }
-  logAudit({ userName: 'system', action: 'deleted_course', module: 'courses', type: 'warning', metadata: { courseId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_course', module: 'courses', type: 'warning', metadata: { courseId: id } })
   return NextResponse.json({ deleted: id })
 })

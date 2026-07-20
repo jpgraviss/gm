@@ -4,7 +4,7 @@ import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pa
 import { slugifyForm } from '@/lib/forms'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapForm(row: any) {
@@ -60,6 +60,7 @@ export const GET = withErrorHandler('forms GET', async (req: NextRequest) => {
 export const POST = withErrorHandler('forms POST', async (req: NextRequest) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const body = await req.json()
 
   if (!body.name || typeof body.name !== 'string') {
@@ -112,6 +113,6 @@ export const POST = withErrorHandler('forms POST', async (req: NextRequest) => {
     throw new Error(String(error))
   }
 
-  logAudit({ userName: 'system', action: 'created_form', module: 'forms', type: 'action', metadata: { formId: data.id, name: data.name } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'created_form', module: 'forms', type: 'action', metadata: { formId: data.id, name: data.name } })
   return NextResponse.json(mapForm(data), { status: 201 })
 })

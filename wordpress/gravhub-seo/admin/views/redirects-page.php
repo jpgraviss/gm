@@ -25,6 +25,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 					);
 					?>
 				</p>
+				<?php if ( isset( $_GET['capped'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
+					<p>
+						<?php
+						printf(
+							/* translators: %d: max rows read from the uploaded file */
+							esc_html__( 'The file had more rows than the %d-row import limit — only the first %d were processed. Split the remainder into another file and import it separately.', 'gravhub-seo' ),
+							(int) $_GET['capped'], // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+							(int) $_GET['capped'] // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+						);
+						?>
+					</p>
+				<?php endif; ?>
 			</div>
 		<?php else : ?>
 			<div class="notice notice-error is-dismissible">

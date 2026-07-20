@@ -30,14 +30,22 @@ interface ReportEntry {
 }
 
 interface PortalConfig {
-  show_agreement?: boolean
-  show_renewal_info?: boolean
-  show_invoices?: boolean
-  show_seo?: boolean
-  show_reports?: boolean
+  // AUDIT.md #184 — the admin page (app/admin/portal-management/page.tsx)
+  // writes visibility toggles nested under `visibility.showX` (camelCase)
+  // and the welcome message as `welcomeMessage`, not the flat snake_case
+  // shape this interface previously declared — every toggle and the
+  // welcome message silently had zero effect. Matched to what's actually
+  // written, same shape /api/portal/seo/route.ts already correctly reads.
+  visibility?: {
+    showAgreement?: boolean
+    showRenewalInfo?: boolean
+    showInvoices?: boolean
+    showSeoStrategy?: boolean
+    showReports?: boolean
+  }
   visible_services?: string[]
-  custom_welcome_message?: string
-  seo_strategy?: Record<string, unknown>
+  welcomeMessage?: string
+  seoStrategy?: Record<string, unknown>
   client_logo_url?: string
   client_brand_color?: string
   services_config?: Record<string, ServiceConfig>
@@ -228,8 +236,8 @@ export default function ClientDashboard({ companyOverride }: { companyOverride?:
     .slice(0, 3)
 
   const welcomeName = user?.name?.split(' ')[0] ?? companyInfo.contact?.split(' ')[0] ?? 'there'
-  const welcomeMessage = config.custom_welcome_message
-    ? config.custom_welcome_message.replace('[name]', welcomeName)
+  const welcomeMessage = config.welcomeMessage
+    ? config.welcomeMessage.replace('[name]', welcomeName)
     : `Welcome back, ${welcomeName}!`
 
   const clientLogo = config.client_logo_url
@@ -238,10 +246,10 @@ export default function ClientDashboard({ companyOverride }: { companyOverride?:
   const navItems = [
     { href: '/portal', label: 'Dashboard', icon: Globe, visible: true },
     { href: '/portal/projects', label: 'Projects', icon: FolderKanban, visible: hasProjects },
-    { href: '/portal/seo', label: 'SEO Strategy', icon: Search, visible: config.show_seo === true },
-    { href: '/portal/reports', label: 'Reports', icon: BarChart3, visible: config.show_reports !== false },
-    { href: '/portal/billing', label: 'Invoices', icon: FileText, visible: config.show_invoices !== false },
-    { href: '/portal/agreement', label: 'Agreement', icon: FileText, visible: config.show_agreement === true },
+    { href: '/portal/seo', label: 'SEO Strategy', icon: Search, visible: config.visibility?.showSeoStrategy === true },
+    { href: '/portal/reports', label: 'Reports', icon: BarChart3, visible: config.visibility?.showReports !== false },
+    { href: '/portal/billing', label: 'Invoices', icon: FileText, visible: config.visibility?.showInvoices !== false },
+    { href: '/portal/agreement', label: 'Agreement', icon: FileText, visible: config.visibility?.showAgreement === true },
     { href: '/portal/tickets', label: 'Tickets', icon: Ticket, visible: true },
     { href: '/portal/help', label: 'Help Center', icon: HelpCircle, visible: true },
   ]
@@ -326,7 +334,7 @@ export default function ClientDashboard({ companyOverride }: { companyOverride?:
         </div>
 
         {/* Agreement Status Card */}
-        {config.show_agreement && activeContract && (
+        {config.visibility?.showAgreement && activeContract && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -480,7 +488,7 @@ export default function ClientDashboard({ companyOverride }: { companyOverride?:
                 >
                   <Plus size={14} style={{ color: '#015035' }} /> Submit Ticket
                 </Link>
-                {config.show_invoices !== false && (
+                {config.visibility?.showInvoices !== false && (
                   <Link
                     href="/portal/billing"
                     className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"

@@ -25,6 +25,15 @@ class GravHub_Redirect_Manager {
 	 */
 	const SUGGESTION_CANDIDATE_LIMIT = 300;
 
+	/**
+	 * Max rows read from an uploaded CSV import. AUDIT.md #192 — protects
+	 * against an oversized file turning one admin-post.php request into an
+	 * unbounded number of DB round trips.
+	 *
+	 * @var int
+	 */
+	const MAX_IMPORT_ROWS = 5000;
+
 	public function __construct() {
 		add_action( 'template_redirect', array( $this, 'maybe_redirect' ), 1 );
 		add_action( 'template_redirect', array( $this, 'maybe_log_404' ), 20 );
@@ -503,9 +512,21 @@ class GravHub_Redirect_Manager {
 		$imported = 0;
 		$skipped  = 0;
 		$row_num  = 0;
+		$capped   = false;
 
 		while ( ( $data = fgetcsv( $handle ) ) !== false ) {
 			$row_num++;
+
+			// AUDIT.md #192 — an unbounded loop here meant an oversized
+			// upload (accidental or otherwise) could tie up the request for
+			// as many rows as the file contained, each one a DB round trip
+			// via upsert_redirect(). Stop reading past the cap rather than
+			// processing the whole file.
+			if ( $row_num > self::MAX_IMPORT_ROWS ) {
+				$capped = true;
+				break;
+			}
+
 			// Skip a header row if present, matching the export's own
 			// column order — don't require it, so a hand-written CSV
 			// without one still imports.
@@ -535,16 +556,16 @@ class GravHub_Redirect_Manager {
 		}
 		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fclose
 
-		wp_safe_redirect(
-			add_query_arg(
-				array(
-					'gravhub_import' => 'success',
-					'imported'       => $imported,
-					'skipped'        => $skipped,
-				),
-				$redirect_url
-			)
+		$args = array(
+			'gravhub_import' => 'success',
+			'imported'       => $imported,
+			'skipped'        => $skipped,
 		);
+		if ( $capped ) {
+			$args['capped'] = self::MAX_IMPORT_ROWS;
+		}
+
+		wp_safe_redirect( add_query_arg( $args, $redirect_url ) );
 		exit;
 	}
 

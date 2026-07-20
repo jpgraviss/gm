@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { disconnectGoogleIntegration, type GoogleMarketingProduct } from '@/lib/google-marketing'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -9,6 +9,7 @@ const VALID_PRODUCTS: GoogleMarketingProduct[] = ['search_console', 'analytics',
 export const POST = withErrorHandler('integrations/google-marketing/disconnect POST', async (req) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const body = await req.json().catch(() => ({}))
   const product = body.product as GoogleMarketingProduct | undefined
@@ -18,6 +19,6 @@ export const POST = withErrorHandler('integrations/google-marketing/disconnect P
   }
 
   await disconnectGoogleIntegration(product)
-  logAudit({ userName: 'system', action: 'google_marketing_disconnected', module: 'integrations', type: 'warning', metadata: { product } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'google_marketing_disconnected', module: 'integrations', type: 'warning', metadata: { product } })
   return NextResponse.json({ disconnected: product })
 })

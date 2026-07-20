@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapLog(row: any) {
@@ -19,18 +20,24 @@ function mapLog(row: any) {
 export const GET = withErrorHandler('audit-logs GET', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
-  const { searchParams } = new URL(req.url)
-  const limit = parseInt(searchParams.get('limit') ?? '50', 10)
+  // AUDIT.md #176 — this previously did a single fetch(limit=5000) with no
+  // cursor, so the pager, filter dropdowns, search, and CSV export (which
+  // exports whatever's in the page's in-memory `entries`) all silently
+  // omitted anything past 5,000 rows. Cursor pagination matches every other
+  // growing-table route (lib/pagination.ts); the frontend now follows it
+  // via fetchAllPages() to load the complete log, same fix pattern already
+  // applied to deals/contacts/proposals/tasks/tickets/projects (#48/#151).
+  const pagination = parsePagination(req)
   const db = createServiceClient()
-  const { data, error } = await db
-    .from('audit_logs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit)
+  const { data, error } = await applyCursor(
+    db.from('audit_logs').select('*'),
+    pagination,
+  )
   if (error) {
     throw new Error(error?.message || 'Failed to fetch audit logs')
   }
-  return NextResponse.json((data ?? []).map(mapLog))
+  const { rows, nextCursor } = slicePage(data, pagination.limit, pagination.orderBy)
+  return paginatedJson(rows.map(mapLog), nextCursor)
 })
 
 export const POST = withErrorHandler('audit-logs POST', async (req) => {

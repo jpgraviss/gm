@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TASK_PRIORITIES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -94,11 +94,12 @@ export const DELETE = withErrorHandler('tickets/[id] DELETE', async (req: NextRe
   const { id } = await params
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const db = createServiceClient()
   const { error } = await db.from('tickets').delete().eq('id', id)
   if (error) {
     throw new Error(error?.message || 'Failed to delete ticket')
   }
-  logAudit({ userName: 'system', action: 'deleted_ticket', module: 'tickets', type: 'warning', metadata: { ticketId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_ticket', module: 'tickets', type: 'warning', metadata: { ticketId: id } })
   return NextResponse.json({ deleted: id })
 })

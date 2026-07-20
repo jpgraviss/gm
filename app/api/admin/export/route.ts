@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { requireAdmin } from '@/lib/admin-auth'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthUser } from '@/lib/rbac'
 
 const ENTITY_CONFIGS: Record<string, { table: string; columns: string }> = {
   contacts:    { table: 'crm_contacts',  columns: 'id, first_name, last_name, title, company_name, created_at' },
@@ -28,6 +29,7 @@ function toCsvRow(values: string[]): string {
 export const POST = withErrorHandler('admin/export POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   let body: { entities?: string[] }
   try {
@@ -78,7 +80,7 @@ export const POST = withErrorHandler('admin/export POST', async (req) => {
   }
 
   logAudit({
-    userName: 'admin',
+    userName: actor?.name || actor?.email || 'system',
     action: `exported_data: ${entities.join(', ')}`,
     module: 'admin',
     type: 'action',

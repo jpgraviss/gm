@@ -8,6 +8,7 @@ import {
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 import { verifyOAuthState } from '@/lib/oauth-state'
+import { getAuthUser } from '@/lib/rbac'
 
 /**
  * OAuth callback. Exchanges the authorization code for tokens, introspects
@@ -73,8 +74,14 @@ export const GET = withErrorHandler('integrations/google-marketing/callback GET'
       }
     }
 
+    // /connect requires a Leadership session before issuing the OAuth
+    // redirect, and the gravhub-auth cookie (sameSite lax) carries through
+    // the provider's top-level-navigation redirect back to this callback,
+    // so the initiating staff member's session is still resolvable here.
+    const actor = await getAuthUser(req)
+
     logAudit({
-      userName: 'system',
+      userName: actor?.name || actor?.email || 'system',
       action: 'google_marketing_connected',
       module: 'integrations',
       type: 'action',

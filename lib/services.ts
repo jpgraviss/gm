@@ -216,6 +216,32 @@ export const ALL_SERVICE_VALUES: readonly string[] = Array.from(
   ]),
 )
 
+/**
+ * AUDIT.md #181 — the new-client wizard and portal Services Hub use a
+ * shorter, client-facing taxonomy (SEO/PPC/Web Design/Social Media/Email
+ * Marketing/Content Creation/Sales Training/Marketing Strategy) that
+ * predates this catalog and doesn't fully overlap it — 3 of the 8 values
+ * aren't in ALL_SERVICE_VALUES at all, so handing one straight to a route
+ * that validates serviceType against this catalog (e.g.
+ * POST /api/delivery/workflow) silently 400s. Maps each portal-taxonomy
+ * value to its closest valid catalog value so those calls succeed instead
+ * of failing closed with no visible error.
+ */
+export const PORTAL_TO_CATALOG_SERVICE: Record<string, string> = {
+  'SEO':               'SEO',
+  'PPC':               'PPC',
+  'Web Design':        'Website Build',
+  'Social Media':      'Social Media',
+  'Email Marketing':   'Email Marketing',
+  'Content Creation':  'Content Marketing',
+  'Sales Training':    'Sales Training',
+  'Marketing Strategy': 'Marketing',
+}
+
+export function toCatalogServiceValue(portalService: string): string {
+  return PORTAL_TO_CATALOG_SERVICE[portalService] ?? portalService
+}
+
 /** Canonical + legacy color map. Replaces lib/utils.ts's serviceTypeColors
  * and the separate copy in app/time-tracking/page.tsx. Unrecognized values
  * fall back to gray at the call site, same as before. */

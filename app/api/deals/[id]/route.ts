@@ -3,7 +3,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { computeDealScore } from '@/lib/deal-score'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,11 +81,12 @@ export const DELETE = withErrorHandler('deals/[id] DELETE', async (req, ctx) => 
   const { id } = await ctx!.params
   const denied = await requireRole(req, 'Dept Manager')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const db = createServiceClient()
   const { error } = await db.from('deals').delete().eq('id', id)
   if (error) {
     throw new Error(error?.message || 'Failed to delete deal')
   }
-  logAudit({ userName: 'system', action: 'deleted_deal', module: 'crm', type: 'warning', metadata: { dealId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_deal', module: 'crm', type: 'warning', metadata: { dealId: id } })
   return NextResponse.json({ deleted: id })
 })

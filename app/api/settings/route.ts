@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { validationError } from '@/lib/validation'
 import { requireAdmin } from '@/lib/admin-auth'
+import { getAuthUser } from '@/lib/rbac'
 
 const SETTINGS_ID = 'global'
 
@@ -29,6 +30,7 @@ export const GET = withErrorHandler('settings GET', async (req) => {
 export const PATCH = withErrorHandler('settings PATCH', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   let body: Record<string, unknown>
   try {
@@ -79,6 +81,6 @@ export const PATCH = withErrorHandler('settings PATCH', async (req) => {
   if (error) {
     throw new Error(error?.message || 'Failed to update settings')
   }
-  logAudit({ userName: 'admin', action: 'updated_settings', module: 'settings', type: 'action' })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'updated_settings', module: 'settings', type: 'action' })
   return NextResponse.json(data)
 })

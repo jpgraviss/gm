@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,6 +56,7 @@ export const GET = withErrorHandler('courses GET', async (req) => {
 export const POST = withErrorHandler('courses POST', async (req) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const body = await req.json()
 
@@ -87,6 +88,6 @@ export const POST = withErrorHandler('courses POST', async (req) => {
     throw new Error(error.message)
   }
 
-  logAudit({ userName: 'system', action: 'created_course', module: 'courses', type: 'action', metadata: { courseId: data.id, title: data.title } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'created_course', module: 'courses', type: 'action', metadata: { courseId: data.id, title: data.title } })
   return NextResponse.json(mapCourse(data), { status: 201 })
 })

@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { getAuditSystemPrompt } from '@/lib/audit-template'
 import { getGSCCoreWebVitals } from '@/lib/google-search-console'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import type { AuditSectionResult, AuditType } from '@/lib/types'
 
@@ -318,6 +318,7 @@ export const GET = withErrorHandler('ai/audit GET', async (req) => {
 export const DELETE = withErrorHandler('ai/audit DELETE', async (req) => {
     const denied = await requireRole(req, 'Team Member')
     if (denied) return denied
+    const actor = await getAuthUser(req)
 
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
@@ -329,7 +330,7 @@ export const DELETE = withErrorHandler('ai/audit DELETE', async (req) => {
     const { error } = await supabase.from('audits').delete().eq('id', id)
     if (error) throw new Error(error?.message || 'Failed to delete audit')
 
-    logAudit({ userName: 'system', action: 'deleted_audit', module: 'audits', type: 'warning', metadata: { auditId: id } })
+    logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_audit', module: 'audits', type: 'warning', metadata: { auditId: id } })
 
     return NextResponse.json({ deleted: id })
 })

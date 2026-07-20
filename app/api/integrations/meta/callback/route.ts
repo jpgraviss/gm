@@ -3,6 +3,7 @@ import { exchangeMetaCode, upsertMetaIntegration } from '@/lib/meta-ads'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 import { verifyOAuthState } from '@/lib/oauth-state'
+import { getAuthUser } from '@/lib/rbac'
 
 /**
  * GET /api/integrations/meta/callback?code=...
@@ -36,8 +37,15 @@ export const GET = withErrorHandler('integrations/meta/callback GET', async (req
       accountEmail: result.accountEmail,
     })
 
+    // /connect requires a Leadership session before issuing the OAuth
+    // redirect, and the browser carries the gravhub-auth cookie (sameSite
+    // lax) back through the provider's top-level-navigation redirect to
+    // this callback — so the initiating staff member's session is still
+    // resolvable here, not just the OAuth code exchange itself.
+    const actor = await getAuthUser(req)
+
     logAudit({
-      userName: 'system',
+      userName: actor?.name || actor?.email || 'system',
       action: 'meta_ads_connected',
       module: 'integrations',
       type: 'action',

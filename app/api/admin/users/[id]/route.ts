@@ -4,10 +4,12 @@ import { requireAdmin } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthUser } from '@/lib/rbac'
 
 export const PUT = withErrorHandler('admin/users/[id] PUT', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id } = await params
   let body: Record<string, unknown>
@@ -41,13 +43,14 @@ export const PUT = withErrorHandler('admin/users/[id] PUT', async (req, { params
   if (error) {
     throw new Error(error?.message || 'Failed to update user')
   }
-  logAudit({ userName: 'admin', action: `updated_user_${body.status ?? 'info'}`, module: 'admin', type: 'action', metadata: { userId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: `updated_user_${body.status ?? 'info'}`, module: 'admin', type: 'action', metadata: { userId: id } })
   return NextResponse.json(data)
 })
 
 export const DELETE = withErrorHandler('admin/users/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id } = await params
   const db = createServiceClient()
@@ -60,6 +63,6 @@ export const DELETE = withErrorHandler('admin/users/[id] DELETE', async (req, { 
   if (error) {
     throw new Error(error?.message || 'Failed to deactivate user')
   }
-  logAudit({ userName: 'admin', action: 'deleted_user', module: 'admin', type: 'warning', metadata: { userId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_user', module: 'admin', type: 'warning', metadata: { userId: id } })
   return NextResponse.json(data)
 })

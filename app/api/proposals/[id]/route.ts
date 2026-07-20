@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROPOSAL_STATUSES } from '@/lib/validation'
 import { fireAutomations } from '@/lib/automations-engine'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -84,6 +84,7 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
 
   const denied = await requirePortalClient(req, currentProposal.company)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   // requirePortalClient only confirms the caller may touch a proposal
   // CURRENTLY belonging to their company — it says nothing about which
@@ -141,7 +142,7 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
   }
 
   if (body.status !== undefined) {
-    logAudit({ userName: 'system', action: 'proposal_status_changed', module: 'proposals', type: 'action', metadata: { proposalId: id, newStatus: body.status } })
+    logAudit({ userName: actor?.name || actor?.email || 'system', action: 'proposal_status_changed', module: 'proposals', type: 'action', metadata: { proposalId: id, newStatus: body.status } })
   }
 
   return NextResponse.json(mapProposal(data))
@@ -151,11 +152,12 @@ export const DELETE = withErrorHandler('proposals/[id] DELETE', async (req, ctx)
   const { id } = await ctx!.params
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const db = createServiceClient()
   const { error } = await db.from('proposals').delete().eq('id', id)
   if (error) {
     throw new Error(error?.message || 'Failed to delete proposal')
   }
-  logAudit({ userName: 'system', action: 'deleted_proposal', module: 'proposals', type: 'warning', metadata: { proposalId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_proposal', module: 'proposals', type: 'warning', metadata: { proposalId: id } })
   return NextResponse.json({ deleted: id })
 })

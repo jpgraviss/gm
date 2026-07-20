@@ -4,6 +4,7 @@ import { saveConnection } from '@/lib/social-connections'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 import { verifyOAuthState } from '@/lib/oauth-state'
+import { getAuthUser } from '@/lib/rbac'
 
 /**
  * GET /api/integrations/linkedin/callback?code=...
@@ -36,7 +37,12 @@ export const GET = withErrorHandler('integrations/linkedin/callback GET', async 
       accountLabel: result.displayName,
       token: result.accessToken,
     })
-    logAudit({ userName: 'system', action: 'linkedin_connected', module: 'integrations', type: 'action', metadata: { author: result.displayName } })
+    // /connect requires a Leadership session before issuing the OAuth
+    // redirect, and the gravhub-auth cookie (sameSite lax) carries through
+    // the provider's top-level-navigation redirect back to this callback,
+    // so the initiating staff member's session is still resolvable here.
+    const actor = await getAuthUser(req)
+    logAudit({ userName: actor?.name || actor?.email || 'system', action: 'linkedin_connected', module: 'integrations', type: 'action', metadata: { author: result.displayName } })
     return clearCookie(NextResponse.redirect(`${appUrl}/social?li_ok=1`))
   } catch (exchangeErr) {
     console.error('[linkedin callback]', exchangeErr)

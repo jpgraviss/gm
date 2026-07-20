@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 import { logAudit } from '@/lib/audit'
 import { mapPost } from '@/lib/social-media'
@@ -91,6 +91,7 @@ export const PATCH = withErrorHandler('social-posts/[id] PATCH', async (req, { p
 export const DELETE = withErrorHandler('social-posts/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id } = await params
   const db = createServiceClient()
@@ -99,7 +100,7 @@ export const DELETE = withErrorHandler('social-posts/[id] DELETE', async (req, {
     throw new Error(error?.message || 'Failed to delete social post')
   }
   logAudit({
-    userName: 'system',
+    userName: actor?.name || actor?.email || 'system',
     action: 'deleted_social_post',
     module: 'social_media',
     type: 'warning',

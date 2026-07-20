@@ -5,7 +5,7 @@ import { createMockDb } from '../helpers/mock-db'
 vi.mock('@/lib/supabase', () => ({
   createServiceClient: () => createMockDb({ deleteResult: { error: null } }),
 }))
-vi.mock('@/lib/rbac', () => ({ requireRole: vi.fn().mockResolvedValue(null) }))
+vi.mock('@/lib/rbac', () => ({ requireRole: vi.fn().mockResolvedValue(null), getAuthUser: vi.fn().mockResolvedValue(null) }))
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }))
 
 import { DELETE } from '@/app/api/ai/audit/route'

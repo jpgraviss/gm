@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,6 +64,7 @@ export const POST = withErrorHandler('courses/[id]/enrollments POST', async (
 ) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id } = await params
   const body = await req.json()
@@ -101,6 +102,6 @@ export const POST = withErrorHandler('courses/[id]/enrollments POST', async (
     await db.from('courses').update({ enrolled_count: (course.enrolled_count ?? 0) + 1 }).eq('id', id)
   }
 
-  logAudit({ userName: 'system', action: 'enrolled_student', module: 'courses', type: 'action', metadata: { courseId: id, enrollmentId: data.id, studentEmail: body.studentEmail } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'enrolled_student', module: 'courses', type: 'action', metadata: { courseId: id, enrollmentId: data.id, studentEmail: body.studentEmail } })
   return NextResponse.json(mapEnrollment(data), { status: 201 })
 })

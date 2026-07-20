@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthUser } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapUser(row: any) {
@@ -44,6 +45,7 @@ export const GET = withErrorHandler('admin/users GET', async (req) => {
 export const POST = withErrorHandler('admin/users POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   let body: Record<string, unknown>
   try {
@@ -93,6 +95,6 @@ export const POST = withErrorHandler('admin/users POST', async (req) => {
   if (error) {
     throw new Error(error?.message || 'Failed to create team member profile')
   }
-  logAudit({ userName: 'admin', action: 'created_user', module: 'admin', type: 'action', metadata: { email: body.email, role: body.role } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'created_user', module: 'admin', type: 'action', metadata: { email: body.email, role: body.role } })
   return NextResponse.json(mapUser(data), { status: 201 })
 })

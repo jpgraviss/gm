@@ -5,37 +5,7 @@ import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pa
 import { requireRole } from '@/lib/rbac'
 import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapTicket(row: any, includeInternal: boolean) {
-  // Staff mark replies isInternal in the same messages array as
-  // client-visible ones (app/tickets/page.tsx). Filtering only happened
-  // client-side in the staff UI — this route returned the raw array
-  // verbatim to portal-scoped callers too, so any internal note (client
-  // risk flags, pricing/margin discussion) was delivered straight to
-  // that client's portal.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const messages = (row.messages ?? []) as any[]
-  return {
-    id:            row.id,
-    subject:       row.subject,
-    company:       row.company,
-    companyId:     row.company_id || null,
-    contactName:   row.contact_name ?? '',
-    contactEmail:  row.contact_email ?? '',
-    status:        row.status,
-    priority:      row.priority,
-    source:        row.source,
-    serviceType:   row.service_type,
-    projectId:     row.project_id ?? undefined,
-    assignedTo:    row.assigned_to ?? undefined,
-    tags:          row.tags ?? [],
-    messages:      includeInternal ? messages : messages.filter(m => !m?.isInternal),
-    linkedTaskId:  row.linked_task_id ?? undefined,
-    createdDate:   row.created_date ?? '',
-    updatedDate:   row.updated_date ?? '',
-  }
-}
+import { mapTicket } from '@/lib/tickets'
 
 export const GET = withErrorHandler('tickets GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)

@@ -9,7 +9,7 @@ const TYPE_META: Record<string, { color: string; href: string }> = {
   meeting:  { color: '#8b5cf6', href: '/crm/contacts' },
   note:     { color: '#6b7280', href: '/crm/contacts' },
   task:     { color: '#f97316', href: '/tasks' },
-  deal:     { color: '#3b82f6', href: '/deals' },
+  deal:     { color: '#3b82f6', href: '/crm/pipeline' },
   contract: { color: '#015035', href: '/contracts' },
   invoice:  { color: '#22c55e', href: '/billing' },
   proposal: { color: '#8b5cf6', href: '/proposals' },

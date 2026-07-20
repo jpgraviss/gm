@@ -19,6 +19,7 @@ const DEEP_DIVE_REPORTS = [
 import type { Deal, Invoice, Project, Renewal, RevenueMonth, MaintenanceRecord, TeamMember, Contract } from '@/lib/types'
 import { fetchTeamMembers } from '@/lib/supabase'
 import { computeMRR, computeARR } from '@/lib/metrics'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 type DateRange = '3M' | '6M' | '12M' | 'Custom'
 type RepFilter = 'All' | string
@@ -60,17 +61,23 @@ export default function ReportsPage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
+  // AUDIT.md #206 — these all used to be raw fetch()es against routes
+  // cursor-paginated at 100 rows server-side, silently truncating past
+  // that (Revenue/KPI totals computed from a partial dataset) with zero
+  // indication anything was missing. fetchAllPages() is the same fix
+  // already applied elsewhere (Pipeline, Workspace, Finance, Sales) for
+  // this exact bug class (#48/#151).
   function loadData() {
     setLoading(true)
     Promise.all([
-      fetch('/api/deals').then(r => r.ok ? r.json() : []),
-      fetch('/api/invoices').then(r => r.ok ? r.json() : []),
-      fetch('/api/projects').then(r => r.ok ? r.json() : []),
-      fetch('/api/renewals').then(r => r.ok ? r.json() : []),
+      fetchAllPages<Deal>('/api/deals'),
+      fetchAllPages<Invoice>('/api/invoices'),
+      fetchAllPages<Project>('/api/projects'),
+      fetchAllPages<Renewal>('/api/renewals'),
       fetch('/api/dashboard').then(r => r.ok ? r.json() : null).then(d => d?.revenueByMonth ?? []),
-      fetch('/api/maintenance').then(r => r.ok ? r.json() : []),
+      fetchAllPages<MaintenanceRecord>('/api/maintenance'),
       fetchTeamMembers(),
-      fetch('/api/contracts').then(r => r.ok ? r.json() : []),
+      fetchAllPages<Contract>('/api/contracts'),
     ]).then(([d, i, p, r, rev, m, tm, con]) => {
       if (Array.isArray(d)) setDeals(d)
       if (Array.isArray(i)) setInvoices(i)

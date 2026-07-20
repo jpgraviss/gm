@@ -51,12 +51,20 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
 
   const { data: clientRow } = await db
     .from('portal_clients')
-    .select('id, email, access')
+    .select('id, email, access, pending_approval')
     .ilike('email', email)
     .maybeSingle()
 
   if (!clientRow || clientRow.access === 'Disabled') {
     return NextResponse.json({ error: 'No active account for this session' }, { status: 403 })
+  }
+
+  // AUDIT.md #195 — same pending-approval gap as google-verify: a client
+  // awaiting admin approval could still exchange a live Supabase token for
+  // a fresh gravhub-auth session here, since only `access === 'Disabled'`
+  // was ever checked.
+  if (clientRow.pending_approval) {
+    return NextResponse.json({ error: 'Your portal access is awaiting admin approval.' }, { status: 403 })
   }
 
   const res = NextResponse.json({ ok: true })

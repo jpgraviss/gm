@@ -1,12 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import CompanySelect from '@/components/ui/CompanySelect'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import { useToast } from '@/components/ui/Toast'
 import { useEnrichment } from '@/lib/useEnrichment'
+import { useAuth } from '@/contexts/AuthContext'
+import { toCatalogServiceValue } from '@/lib/services'
 import {
   Building2, User, Briefcase, FileText, Globe, Users, CheckCircle,
   ChevronRight, ChevronLeft, Loader2, Mail, Phone, Tag, Calendar,
@@ -153,12 +155,19 @@ function Input({ value, onChange, placeholder, type = 'text', required, icon: Ic
 
 export default function NewClientPage() {
   const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
   const teamMembers = useTeamMembers()
   const { toast } = useToast()
   const [step, setStep] = useState(0)
   const [data, setData] = useState<WizardData>(INITIAL_DATA)
   const [submitting, setSubmitting] = useState(false)
   const { enriching, enrichedFields, enrich, markEnriched, clearEnriched } = useEnrichment()
+
+  useEffect(() => {
+    if (!authLoading && (!user || !user.isAdmin)) {
+      router.replace('/admin')
+    }
+  }, [user, authLoading, router])
 
   async function handleWebsiteBlur() {
     if (!data.website.trim() || enriching) return
@@ -217,13 +226,19 @@ export default function NewClientPage() {
           industry: data.industry || undefined,
           website: data.website || undefined,
           hq: data.address || undefined,
+          // AUDIT.md #183 — Account Manager was only ever written onto the
+          // contact (as `owner`), never the company itself, even though
+          // Owner is a first-class, prominently-surfaced field on the
+          // Company record elsewhere in the app (sortable column, detail
+          // page, bulk-reassign tool).
+          owner: data.accountManager || undefined,
         }),
       })
       if (!companyRes.ok) throw new Error('Failed to save company')
       const company = await companyRes.json()
       const companyId = company.id ?? data.companyId
 
-      await fetch('/api/crm/contacts', {
+      const contactRes = await fetch('/api/crm/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -238,6 +253,57 @@ export default function NewClientPage() {
           owner: data.accountManager || '',
         }),
       })
+      // AUDIT.md #182 — this can legitimately 409 (duplicate email, or
+      // duplicate name+company) or 400, and previously failed silently
+      // while company/portal-login/delivery-workflow creation all
+      // proceeded and the wizard still reported full success.
+      if (!contactRes.ok) {
+        const err = await contactRes.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to create the primary contact')
+      }
+
+      // AUDIT.md #180 — Contract ID/Agreement Start/Agreement End/Monthly
+      // Value were collected and shown back in the Review step as if
+      // they'd be saved, but never sent anywhere — silently discarded on
+      // every submit. Monthly Value and the two dates all have a real home
+      // on a contracts row; only create one if the admin actually entered
+      // agreement terms (an admin who left this whole step blank isn't
+      // recording an agreement here at all — nothing to save, and nothing
+      // to warn about). Contract ID itself has no matching column on
+      // `contracts` (it reads as a free-text reference/label, not
+      // necessarily a real existing contract's id, so a blind PATCH-by-id
+      // could easily 404 against an unrelated typed value) — there's
+      // nowhere honest to put it without a schema change, so it's the one
+      // field of the four still not persisted.
+      if (data.agreementStart || data.agreementEnd || data.monthlyValue) {
+        let duration: number | undefined
+        if (data.agreementStart && data.agreementEnd) {
+          const start = new Date(data.agreementStart)
+          const end = new Date(data.agreementEnd)
+          const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
+          if (Number.isFinite(months) && months >= 1) duration = Math.min(months, 120)
+        }
+        const contractRes = await fetch('/api/contracts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            company: data.companyName,
+            companyId,
+            status: 'Draft',
+            value: data.monthlyValue ? Number(data.monthlyValue) : undefined,
+            billingStructure: 'Monthly',
+            startDate: data.agreementStart || undefined,
+            renewalDate: data.agreementEnd || undefined,
+            duration,
+            serviceType: data.services[0] ? toCatalogServiceValue(data.services[0]) : undefined,
+            assignedRep: data.accountManager || undefined,
+          }),
+        })
+        if (!contractRes.ok) {
+          const err = await contractRes.json().catch(() => ({}))
+          throw new Error(err.error || 'Failed to save the agreement')
+        }
+      }
 
       const portalConfig = {
         showAgreement: data.showAgreement,
@@ -288,15 +354,26 @@ export default function NewClientPage() {
         if (!portalRes.ok) throw new Error('Failed to create portal client')
       }
 
-      await fetch('/api/delivery/workflow', {
+      // AUDIT.md #181 — the wizard's Service dropdown uses the shorter
+      // portal-facing taxonomy (SERVICES below), not the billing/delivery
+      // catalog app/api/delivery/workflow validates serviceType against —
+      // 3 of the 8 options (Web Design, Content Creation, Marketing
+      // Strategy) aren't in that catalog at all and previously 400'd
+      // silently (result was never checked) with the wizard still
+      // reporting full success.
+      const workflowRes = await fetch('/api/delivery/workflow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           companyName: data.companyName,
           companyId,
-          serviceType: data.services[0] || SERVICES[0],
+          serviceType: toCatalogServiceValue(data.services[0] || SERVICES[0]),
         }),
       })
+      if (!workflowRes.ok) {
+        const err = await workflowRes.json().catch(() => ({}))
+        toast(err.error || 'Client created, but the delivery workflow could not be started', 'error')
+      }
 
       toast('Client created successfully', 'success')
       router.push(`/crm/pipeline`)

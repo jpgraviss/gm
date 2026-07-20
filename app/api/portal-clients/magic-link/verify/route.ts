@@ -32,7 +32,7 @@ export const POST = withErrorHandler('portal-clients/magic-link/verify POST', as
 
   const { data: client } = await db
     .from('portal_clients')
-    .select('id, email, company, contact, service, access, portal_role, portal_config')
+    .select('id, email, company, contact, service, access, portal_role, portal_config, pending_approval')
     .eq('id', tokenRow.portal_client_id)
     .single()
 
@@ -42,6 +42,18 @@ export const POST = withErrorHandler('portal-clients/magic-link/verify POST', as
 
   if (client.access === 'Disabled') {
     return NextResponse.json({ error: 'Your portal access has been disabled' }, { status: 403 })
+  }
+
+  // AUDIT.md #195 — this route previously always flipped `access` to
+  // 'Active' on any successful token redemption, regardless of
+  // pending_approval — a client who self-served through setup (pending
+  // admin sign-off) could get themselves fully activated via any magic
+  // link they held, bypassing the approval step entirely. Admin-issued
+  // invites (the normal way a magic link is created) never set
+  // pending_approval in the first place, so this only blocks the specific
+  // self-serve-pending case, not the regular invite flow.
+  if (client.pending_approval) {
+    return NextResponse.json({ error: 'Your portal access is awaiting admin approval. You will receive an email once approved.' }, { status: 403 })
   }
 
   const today = new Date().toISOString().split('T')[0]

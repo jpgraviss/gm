@@ -7,10 +7,12 @@ import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireAdmin } from '@/lib/admin-auth'
+import { getAuthUser } from '@/lib/rbac'
 
 export const POST = withErrorHandler('portal-clients/invite POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   let body: Record<string, unknown>
   try {
@@ -111,7 +113,7 @@ export const POST = withErrorHandler('portal-clients/invite POST', async (req) =
 
   const magicUrl = `${appUrl}/portal/auth/verify?token=${token}`
 
-  await sendEmail({
+  const emailResult = await sendEmail({
     to: email,
     subject: `You're invited to the ${company} client portal`,
     html: `<!DOCTYPE html>
@@ -165,7 +167,20 @@ export const POST = withErrorHandler('portal-clients/invite POST', async (req) =
 </html>`,
   })
 
-  logAudit({ userName: 'admin', action: 'portal_invite_sent', module: 'portal', type: 'action', metadata: { email, company, role } })
+  // AUDIT.md #186 — this result was previously discarded entirely. The
+  // portal account + magic-link token are already committed by this point
+  // (real, working), so a failed send shouldn't roll those back — but the
+  // caller needs to know the invitee has no working email in hand, instead
+  // of the admin UI unconditionally showing "Invite sent to {email}".
+  const emailSent = emailResult.success
+
+  logAudit({
+    userName: actor?.name || actor?.email || 'system',
+    action:   emailSent ? 'portal_invite_sent' : 'portal_invite_email_failed',
+    module:   'portal',
+    type:     emailSent ? 'action' : 'warning',
+    metadata: { email, company, role, emailError: emailSent ? undefined : emailResult.error },
+  })
 
   return NextResponse.json({
     id: newClient.id,
@@ -173,5 +188,6 @@ export const POST = withErrorHandler('portal-clients/invite POST', async (req) =
     contact: newClient.contact,
     email: newClient.email,
     role,
+    emailSent,
   }, { status: 201 })
 })

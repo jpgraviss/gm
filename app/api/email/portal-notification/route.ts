@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
+import { requireAdmin } from '@/lib/admin-auth'
 
 export const POST = withErrorHandler('email/portal-notification POST', async (req: NextRequest) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const settings = await getSettings()
   const { to, clientName, title, message, link } = await req.json()
 

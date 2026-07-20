@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bell, Search, Plus, Menu, X, LogOut, ShieldCheck, User, CheckCircle2, AlertCircle, FileText, DollarSign, RefreshCw, MessageSquare, Moon, Sun, Phone, StickyNote, CalendarDays } from 'lucide-react'
+import { Bell, Search, Plus, Menu, LogOut, ShieldCheck, User, CheckCircle2, AlertCircle, FileText, DollarSign, RefreshCw, MessageSquare, Moon, Sun, Phone, StickyNote, CalendarDays } from 'lucide-react'
 import { useUI } from '@/contexts/UIContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
@@ -44,7 +44,6 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
   const { user, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
 
@@ -59,6 +58,10 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
 
   function markAllRead() {
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })))
+  }
+
+  function openCommandPalette() {
+    window.dispatchEvent(new Event('gravhub:open-command-palette'))
   }
 
   return (
@@ -88,17 +91,22 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
 
       {/* Right: actions */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        {/* Search — expandable on mobile */}
+        {/* Search — expandable on mobile. Both inputs just open the real
+            search (CommandPalette, Cmd+K) rather than being a second,
+            parallel search implementation. */}
         <div className="hidden md:flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
           <Search size={13} className="text-gray-400" />
           <input
             type="text"
             placeholder="Search..."
-            className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-36"
+            readOnly
+            onFocus={e => { e.target.blur(); openCommandPalette() }}
+            onClick={openCommandPalette}
+            className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-36 cursor-pointer"
           />
         </div>
         <button
-          onClick={() => setSearchOpen(!searchOpen)}
+          onClick={openCommandPalette}
           className="md:hidden p-2 rounded-lg hover:bg-gray-50 transition-colors"
         >
           <Search size={16} className="text-gray-500" />
@@ -280,21 +288,6 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
         </div>
       </div>
 
-      {/* Mobile search bar — expands below */}
-      {searchOpen && (
-        <div className="absolute top-full left-0 right-0 bg-white border-b border-gray-200 px-4 py-3 md:hidden flex items-center gap-2 z-10">
-          <Search size={15} className="text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search GravHub..."
-            className="flex-1 bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none"
-            autoFocus
-          />
-          <button onClick={() => setSearchOpen(false)}>
-            <X size={16} className="text-gray-400" />
-          </button>
-        </div>
-      )}
     </header>
   )
 }

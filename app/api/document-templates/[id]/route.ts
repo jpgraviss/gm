@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { validate, validationError } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
@@ -84,6 +84,7 @@ export const PATCH = withErrorHandler('document-templates/[id] PATCH', async (re
 export const DELETE = withErrorHandler('document-templates/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id } = await params
   const db = createServiceClient()
@@ -92,7 +93,7 @@ export const DELETE = withErrorHandler('document-templates/[id] DELETE', async (
     throw new Error(error.message)
   }
   logAudit({
-    userName: 'system',
+    userName: actor?.name || actor?.email || 'system',
     action: 'deleted_document_template',
     module: 'contracts',
     type: 'warning',

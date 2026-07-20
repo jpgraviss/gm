@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { addTrackedKeyword, addTrackedKeywordsBulk, mapTracked } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
@@ -39,6 +39,7 @@ export const GET = withErrorHandler('rank-tracker/keywords GET', async (req) => 
 export const POST = withErrorHandler('rank-tracker/keywords POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const body = await req.json()
 
@@ -58,7 +59,7 @@ export const POST = withErrorHandler('rank-tracker/keywords POST', async (req) =
       location:     body.location,
     })
     logAudit({
-      userName: 'system',
+      userName: actor?.name || actor?.email || 'system',
       action:   'bulk_added_tracked_keywords',
       module:   'rank-tracker',
       type:     'action',
@@ -87,7 +88,7 @@ export const POST = withErrorHandler('rank-tracker/keywords POST', async (req) =
     location:     body.location,
   })
   logAudit({
-    userName: 'system',
+    userName: actor?.name || actor?.email || 'system',
     action:   'added_tracked_keyword',
     module:   'rank-tracker',
     type:     'action',

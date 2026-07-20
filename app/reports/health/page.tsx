@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { RefreshCw } from 'lucide-react'
 import type { Deal, Renewal, Invoice, CRMCompany } from '@/lib/types'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 type DateRange = '30D' | '90D' | '12M' | 'Custom'
 type HealthFilter = 'All' | 'Green' | 'Yellow' | 'Red'
@@ -112,14 +113,17 @@ export default function ClientHealthPage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
+  // AUDIT.md #206 — raw fetch()es against 100-row-cursor-paginated routes
+  // silently truncated Health scores/factors past that (same bug class as
+  // #48/#151); fetchAllPages() follows the cursor to completion instead.
   function loadData() {
     setLoading(true)
     Promise.all([
-      fetch('/api/crm/companies').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
-      fetch('/api/deals').then(r => r.ok ? r.json() : []),
-      fetch('/api/renewals').then(r => r.ok ? r.json() : []),
-      fetch('/api/invoices').then(r => r.ok ? r.json() : []),
-      fetch('/api/tickets').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
+      fetchAllPages<CRMCompany>('/api/crm/companies'),
+      fetchAllPages<Deal>('/api/deals'),
+      fetchAllPages<Renewal>('/api/renewals'),
+      fetchAllPages<Invoice>('/api/invoices'),
+      fetchAllPages<TicketRow>('/api/tickets'),
     ]).then(([c, d, r, i, t]) => {
       if (Array.isArray(c)) setCompanies(c)
       if (Array.isArray(d)) setDeals(d)

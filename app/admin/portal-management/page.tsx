@@ -263,7 +263,15 @@ export default function PortalManagementPage() {
         setInviting(false)
         return
       }
-      toast(`Invite sent to ${inviteForm.email}`, 'success')
+      // AUDIT.md #186 — the account/token are created regardless, but the
+      // invite email itself can fail (bad key, invalid recipient, rate
+      // limit) — surface that instead of a blanket success toast so the
+      // admin knows to resend rather than assuming the invitee got it.
+      if (data.emailSent === false) {
+        toast(`Account created for ${inviteForm.email}, but the invite email failed to send`, 'error')
+      } else {
+        toast(`Invite sent to ${inviteForm.email}`, 'success')
+      }
       setShowInviteModal(null)
       setInviteForm({ name: '', email: '', role: 'Viewer' })
       fetchClients()
@@ -347,6 +355,17 @@ export default function PortalManagementPage() {
             company: addCompanyForm.companyName.trim(),
             role: 'Admin',
             service: addCompanyForm.service,
+            // AUDIT.md #188 — only `service` (the legacy free-text column)
+            // was ever sent. The client portal's active-services list
+            // actually reads `services_config[key].enabled` (confirmed
+            // against toggleServiceConfig/ClientDashboard.tsx below), not
+            // the flat `services` array — sending only the array left a
+            // newly-added company showing 0 active services until an admin
+            // manually reopened the panel and toggled it on. Send both.
+            services: addCompanyForm.service ? [addCompanyForm.service] : [],
+            portalConfig: addCompanyForm.service
+              ? { services_config: { [addCompanyForm.service]: { enabled: true } } }
+              : undefined,
           }),
         })
         const data = await res.json()
@@ -355,7 +374,11 @@ export default function PortalManagementPage() {
           setAddingCompany(false)
           return
         }
-        toast(`Company "${addCompanyForm.companyName.trim()}" created with invite sent to ${addCompanyForm.contactEmail.trim()}`, 'success')
+        if (data.emailSent === false) {
+          toast(`Company "${addCompanyForm.companyName.trim()}" created, but the invite email failed to send`, 'error')
+        } else {
+          toast(`Company "${addCompanyForm.companyName.trim()}" created with invite sent to ${addCompanyForm.contactEmail.trim()}`, 'success')
+        }
       } else {
         // Create company-only record without a member
         const payload: Record<string, string> = {

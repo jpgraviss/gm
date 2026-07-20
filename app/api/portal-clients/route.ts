@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireAdmin } from '@/lib/admin-auth'
+import { getAuthUser } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapClient(row: any) {
@@ -66,6 +67,7 @@ export const GET = withErrorHandler('portal-clients GET', async (req) => {
 export const POST = withErrorHandler('portal-clients POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   let body: Record<string, unknown>
   try {
@@ -128,7 +130,7 @@ export const POST = withErrorHandler('portal-clients POST', async (req) => {
   if (error) {
     throw new Error(error?.message || 'Failed to create portal client')
   }
-  logAudit({ userName: 'admin', action: 'created_portal_client', module: 'portal', type: 'action', metadata: { email: body.email, company: body.company } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'created_portal_client', module: 'portal', type: 'action', metadata: { email: body.email, company: body.company } })
   return NextResponse.json({ ...mapClient(data), tempPassword }, { status: 201 })
 })
 
@@ -136,6 +138,7 @@ export const POST = withErrorHandler('portal-clients POST', async (req) => {
 export const DELETE = withErrorHandler('portal-clients DELETE', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const company = req.nextUrl.searchParams.get('company')
   if (!company) {
@@ -153,6 +156,6 @@ export const DELETE = withErrorHandler('portal-clients DELETE', async (req) => {
     throw new Error(error?.message || 'Failed to delete portal')
   }
 
-  logAudit({ userName: 'admin', action: 'deleted_portal_company', module: 'portal', type: 'action', metadata: { company, deletedCount: deleted?.length ?? 0 } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_portal_company', module: 'portal', type: 'action', metadata: { company, deletedCount: deleted?.length ?? 0 } })
   return NextResponse.json({ deleted: deleted?.length ?? 0, company })
 })

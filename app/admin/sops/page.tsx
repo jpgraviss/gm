@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   Printer, Plus, Trash2, Pencil, GripVertical, Check, X,
   ChevronUp, ChevronDown, Search, Save, Loader2,
@@ -166,6 +168,8 @@ function generateId() {
 
 export default function SOPsPage() {
   const { toast } = useToast()
+  const { user, loading: authLoading } = useAuth()
+  const router = useRouter()
   const [sections, setSections] = useState<SOPSection[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -182,6 +186,12 @@ export default function SOPsPage() {
   const [deletingSection, setDeletingSection] = useState<string | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
   const editTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (!authLoading && (!user || !user.isAdmin)) {
+      router.replace('/admin')
+    }
+  }, [user, authLoading, router])
 
   // Load SOPs from API (fall back to defaults)
   useEffect(() => {

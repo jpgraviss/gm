@@ -78,6 +78,7 @@ class GravHub_Meta_Manager {
 				$schema_markup    = get_post_meta( $post_id, '_gravhub_schema_markup', true );
 				$schema_type      = get_post_meta( $post_id, '_gravhub_schema_type', true );
 				$faq_items_raw    = get_post_meta( $post_id, '_gravhub_faq_items', true );
+				$hreflang_raw     = get_post_meta( $post_id, '_gravhub_hreflang_items', true );
 
 				if ( $meta_title )       $settings['meta_title']       = $meta_title;
 				if ( $meta_description ) $settings['meta_description'] = $meta_description;
@@ -94,6 +95,13 @@ class GravHub_Meta_Manager {
 					$decoded_faq = json_decode( $faq_items_raw, true );
 					if ( is_array( $decoded_faq ) && ! empty( $decoded_faq ) ) {
 						$settings['post_faq_items'] = $decoded_faq;
+					}
+				}
+
+				if ( $hreflang_raw ) {
+					$decoded_hreflang = json_decode( $hreflang_raw, true );
+					if ( is_array( $decoded_hreflang ) && ! empty( $decoded_hreflang ) ) {
+						$settings['hreflang_items'] = $decoded_hreflang;
 					}
 				}
 
@@ -174,6 +182,9 @@ class GravHub_Meta_Manager {
 			if ( ! empty( $robots ) ) {
 				printf( '<meta name="robots" content="%s" />' . "\n", esc_attr( implode( ', ', $robots ) ) );
 			}
+
+			// Hreflang alternates
+			$this->output_hreflang_tags( $page_settings );
 
 			// Open Graph tags
 			$this->output_og_tags( $page_settings );
@@ -311,6 +322,29 @@ class GravHub_Meta_Manager {
 		if ( ! empty( $logo ) )    $business['image']                     = $logo;
 
 		return $business;
+	}
+
+	/**
+	 * Alternate-language/region versions of this page, configured per-post
+	 * in the metabox's Advanced tab. Only prints what's actually
+	 * configured — no self-referencing or x-default entry is fabricated,
+	 * matching every other GravHub integration's inert-until-configured
+	 * pattern.
+	 */
+	private function output_hreflang_tags( $settings ) {
+		if ( empty( $settings['hreflang_items'] ) || ! is_array( $settings['hreflang_items'] ) ) {
+			return;
+		}
+		foreach ( $settings['hreflang_items'] as $item ) {
+			if ( empty( $item['lang'] ) || empty( $item['url'] ) ) {
+				continue;
+			}
+			printf(
+				'<link rel="alternate" hreflang="%s" href="%s" />' . "\n",
+				esc_attr( $item['lang'] ),
+				esc_url( $item['url'] )
+			);
+		}
 	}
 
 	private function output_og_tags( $settings ) {

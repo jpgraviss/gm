@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -66,6 +66,7 @@ export const PATCH = withErrorHandler('sales-templates/[id] PATCH', async (req: 
 export const DELETE = withErrorHandler('sales-templates/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id } = await params
   const db = createServiceClient()
@@ -73,6 +74,6 @@ export const DELETE = withErrorHandler('sales-templates/[id] DELETE', async (req
   if (error) {
     throw new Error(error.message || 'Failed to delete template')
   }
-  logAudit({ userName: 'system', action: 'deleted_sales_template', module: 'sales-templates', type: 'warning', metadata: { templateId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_sales_template', module: 'sales-templates', type: 'warning', metadata: { templateId: id } })
   return NextResponse.json({ deleted: id })
 })

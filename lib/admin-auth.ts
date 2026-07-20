@@ -30,7 +30,7 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
 
   const { data: member } = await db
     .from('team_members')
-    .select('is_admin, status')
+    .select('is_admin, status, access_schedule')
     .eq('email', email)
     .single()
 
@@ -40,6 +40,21 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
   // just is_admin.
   if (!member?.is_admin || member.status !== 'active') {
     return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
+  }
+
+  // AUDIT.md #208 — mirrors the same access_schedule enforcement added to
+  // lib/rbac.ts's getCurrentUser(); this is a separate identity-resolution
+  // path (requireAdmin), not layered on top of that one, so it needs its
+  // own check or a scheduled-removal admin could still pass every
+  // requireAdmin-gated route.
+  const schedule = member.access_schedule as { removeAccessOn?: string; reinstateOn?: string } | null
+  if (schedule?.removeAccessOn) {
+    const now = Date.now()
+    const removeAt = new Date(schedule.removeAccessOn).getTime()
+    const reinstateAt = schedule.reinstateOn ? new Date(schedule.reinstateOn).getTime() : null
+    if (removeAt <= now && (!reinstateAt || reinstateAt > now)) {
+      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
+    }
   }
 
   return null

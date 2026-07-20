@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,6 +47,7 @@ export const GET = withErrorHandler('client-integrations GET', async (req) => {
 export const POST = withErrorHandler('client-integrations POST', async (req) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const body = await req.json()
   if (!body.companyName) {
@@ -83,6 +84,6 @@ export const POST = withErrorHandler('client-integrations POST', async (req) => 
     throw new Error(error.message)
   }
 
-  logAudit({ userName: 'system', action: 'client_integration_bound', module: 'integrations', type: 'action', metadata: { companyName: body.companyName } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'client_integration_bound', module: 'integrations', type: 'action', metadata: { companyName: body.companyName } })
   return NextResponse.json(mapBinding(data), { status: 201 })
 })

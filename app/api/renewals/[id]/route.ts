@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
 
 export const PATCH = withErrorHandler('renewals/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
@@ -36,11 +36,12 @@ export const DELETE = withErrorHandler('renewals/[id] DELETE', async (req, { par
   const { id } = await params
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const db = createServiceClient()
   const { error } = await db.from('renewals').delete().eq('id', id)
   if (error) {
     throw new Error(error?.message || 'Failed to delete renewal')
   }
-  logAudit({ userName: 'system', action: 'deleted_renewal', module: 'renewals', type: 'warning', metadata: { renewalId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_renewal', module: 'renewals', type: 'warning', metadata: { renewalId: id } })
   return NextResponse.json({ deleted: id })
 })

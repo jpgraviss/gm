@@ -3,7 +3,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {
@@ -132,6 +132,7 @@ export const DELETE = withErrorHandler('crm/contacts/[id] DELETE', async (req, c
   const { id } = await ctx!.params
   const denied = await requireRole(req, 'Dept Manager')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const db = createServiceClient()
 
   // deals.contact_id is ON DELETE SET NULL, but deals.contact is a
@@ -145,6 +146,6 @@ export const DELETE = withErrorHandler('crm/contacts/[id] DELETE', async (req, c
   if (error) {
     throw new Error(error?.message || 'Failed to delete contact')
   }
-  logAudit({ userName: 'system', action: 'deleted_contact', module: 'crm', type: 'warning', metadata: { contactId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_contact', module: 'crm', type: 'warning', metadata: { contactId: id } })
   return NextResponse.json({ success: true })
 })

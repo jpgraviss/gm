@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { mapPost } from '@/lib/social-media'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { requirePortalClient } from '@/lib/portal-auth'
 
 export const GET = withErrorHandler('social-posts GET', async (req) => {
@@ -40,6 +40,7 @@ export const GET = withErrorHandler('social-posts GET', async (req) => {
 export const POST = withErrorHandler('social-posts POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const body = await req.json()
   if (!body.companyName || !body.content || !body.platforms?.length) {
     return NextResponse.json(
@@ -81,7 +82,7 @@ export const POST = withErrorHandler('social-posts POST', async (req) => {
     throw new Error(error?.message || 'Failed to create social post')
   }
   logAudit({
-    userName: 'system',
+    userName: actor?.name || actor?.email || 'system',
     action: 'created_social_post',
     module: 'social_media',
     type: 'action',

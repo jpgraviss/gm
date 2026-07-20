@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TASK_PRIORITIES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
+import { mapTicket } from '@/lib/tickets'
 
 // Portal clients can only reply to their own ticket (Tickets page's Reply
 // box) — status/priority/assignedTo/tags/companyId are staff-only.
@@ -87,18 +88,24 @@ export const PATCH = withErrorHandler('tickets/[id] PATCH', async (req: NextRequ
   if (error) {
     throw new Error(error?.message || 'Failed to update ticket')
   }
-  return NextResponse.json(data)
+  // AUDIT.md #202 — this used to return the raw DB row, unlike GET/POST
+  // which both correctly filter isInternal messages via mapTicket(). A
+  // portal client replying to their own ticket got every internal-only
+  // staff note back in the response body, even though the UI never
+  // rendered it.
+  return NextResponse.json(mapTicket(data, staffCaller))
 })
 
 export const DELETE = withErrorHandler('tickets/[id] DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const db = createServiceClient()
   const { error } = await db.from('tickets').delete().eq('id', id)
   if (error) {
     throw new Error(error?.message || 'Failed to delete ticket')
   }
-  logAudit({ userName: 'system', action: 'deleted_ticket', module: 'tickets', type: 'warning', metadata: { ticketId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_ticket', module: 'tickets', type: 'warning', metadata: { ticketId: id } })
   return NextResponse.json({ deleted: id })
 })

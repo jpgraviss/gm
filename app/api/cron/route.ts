@@ -425,7 +425,14 @@ async function spawnRecurringTasks() {
       continue
     }
 
-    // Create the new task with same fields but new ID, Pending status, updated due date
+    // Create the new task with same fields but new ID, Pending status, updated due date.
+    // AUDIT.md #197 — this previously dropped department/company_id/
+    // project_id/section/sort_order entirely. Since `department IS NULL` is
+    // treated as globally-visible/editable by both GET /api/tasks and
+    // canTouchTask, a recurring task that was deliberately department-scoped
+    // silently lost that scoping on every respawn; dropping project_id/
+    // section also made a recurring task disappear from its project's
+    // kanban board on every recurrence.
     await db.from('app_tasks').insert({
       id:                `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title:             task.title,
@@ -434,6 +441,7 @@ async function spawnRecurringTasks() {
       priority:          task.priority,
       status:            'Pending',
       company:           task.company ?? null,
+      company_id:        task.company_id ?? null,
       assigned_to:       task.assigned_to,
       due_date:          nextDueStr,
       created_date:      new Date().toISOString().split('T')[0],
@@ -441,6 +449,10 @@ async function spawnRecurringTasks() {
       team_service_line: task.team_service_line ?? null,
       recurrence:        task.recurrence,
       parent_task_id:    task.id,
+      department:        task.department ?? null,
+      project_id:        task.project_id ?? null,
+      section:           task.section ?? null,
+      sort_order:        task.sort_order ?? 0,
     })
   }
 }

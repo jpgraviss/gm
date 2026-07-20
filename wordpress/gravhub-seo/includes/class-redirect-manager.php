@@ -25,11 +25,26 @@ class GravHub_Redirect_Manager {
 	 */
 	const SUGGESTION_CANDIDATE_LIMIT = 300;
 
+	/**
+	 * Max rows read from an uploaded CSV import. AUDIT.md #192 — protects
+	 * against an oversized file turning one admin-post.php request into an
+	 * unbounded number of DB round trips.
+	 *
+	 * @var int
+	 */
+	const MAX_IMPORT_ROWS = 5000;
+
 	public function __construct() {
 		add_action( 'template_redirect', array( $this, 'maybe_redirect' ), 1 );
 		add_action( 'template_redirect', array( $this, 'maybe_log_404' ), 20 );
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
+		// admin-post.php, not REST — WP_REST_Server JSON-serializes every
+		// response by default, which fights a plain CSV file download.
+		// This is the standard WordPress pattern for admin-triggered
+		// downloads/uploads instead.
+		add_action( 'admin_post_gravhub_export_redirects', array( $this, 'handle_export_redirects' ) );
+		add_action( 'admin_post_gravhub_import_redirects', array( $this, 'handle_import_redirects' ) );
 	}
 
 	/**
@@ -310,18 +325,39 @@ class GravHub_Redirect_Manager {
 		}
 
 		// Accept either a full URL or a site-relative path for the
-		// destination; only validate/normalize the "from" side, which must
-		// always be a path on THIS site (that's what template_redirect
-		// matches incoming requests against).
+		// destination; from_path is already normalized by sanitize_path()
+		// above, and must always be a local path (that's what
+		// maybe_redirect() matches incoming requests against).
 		if ( ! preg_match( '#^https?://#i', $to_path ) ) {
 			$to_path = '/' . ltrim( $to_path, '/' );
 		}
 
+		if ( false === $this->upsert_redirect( $from_path, $to_path, $type ) ) {
+			return new WP_REST_Response( array( 'error' => __( 'Failed to save redirect.', 'gravhub-seo' ) ), 500 );
+		}
+
+		return new WP_REST_Response( array( 'success' => true ), 201 );
+	}
+
+	/**
+	 * Insert a redirect, or update it in place if from_path (the table's
+	 * unique key) already exists. Shared by the single-redirect REST route
+	 * and CSV import, so re-importing an already-imported file is
+	 * idempotent rather than erroring on duplicates.
+	 *
+	 * Callers are responsible for sanitizing from_path (sanitize_path()) and
+	 * normalizing to_path (a bare local path gets a leading slash; a full
+	 * URL is passed through as-is) before calling this.
+	 *
+	 * @return int|false Number of affected rows, or false on failure (same
+	 *                    contract as $wpdb->query()).
+	 */
+	private function upsert_redirect( $from_path, $to_path, $type ) {
 		global $wpdb;
 		$table = $this->redirects_table();
 		$now   = current_time( 'mysql' );
 
-		$result = $wpdb->query(
+		return $wpdb->query(
 			$wpdb->prepare(
 				"INSERT INTO {$table} (from_path, to_path, redirect_type, hit_count, created_at, updated_at) VALUES (%s, %s, %d, 0, %s, %s)
 				 ON DUPLICATE KEY UPDATE to_path = VALUES(to_path), redirect_type = VALUES(redirect_type), updated_at = VALUES(updated_at)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -332,12 +368,6 @@ class GravHub_Redirect_Manager {
 				$now
 			)
 		);
-
-		if ( false === $result ) {
-			return new WP_REST_Response( array( 'error' => __( 'Failed to save redirect.', 'gravhub-seo' ) ), 500 );
-		}
-
-		return new WP_REST_Response( array( 'success' => true ), 201 );
 	}
 
 	public function rest_delete_redirect( $request ) {
@@ -417,6 +447,141 @@ class GravHub_Redirect_Manager {
 		);
 
 		return new WP_REST_Response( array_slice( $scored, 0, 5 ), 200 );
+	}
+
+	/**
+	 * Streams all configured redirects as a downloadable CSV.
+	 */
+	public function handle_export_redirects() {
+		if ( ! current_user_can( 'manage_gravhub_seo' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'gravhub-seo' ) );
+		}
+		check_admin_referer( 'gravhub_export_redirects' );
+
+		global $wpdb;
+		$table = $this->redirects_table();
+		$rows  = $wpdb->get_results( "SELECT from_path, to_path, redirect_type FROM {$table} ORDER BY from_path ASC" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="gravhub-redirects-' . gmdate( 'Y-m-d' ) . '.csv"' );
+
+		$out = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+		fputcsv( $out, array( 'from_path', 'to_path', 'redirect_type' ) );
+		foreach ( $rows as $row ) {
+			fputcsv(
+				$out,
+				array(
+					$this->csv_safe( $row->from_path ),
+					$this->csv_safe( $row->to_path ),
+					$row->redirect_type,
+				)
+			);
+		}
+		fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fclose
+		exit;
+	}
+
+	/**
+	 * Bulk-creates/updates redirects from an uploaded CSV
+	 * (from_path,to_path,redirect_type, with or without a header row).
+	 * Uses the same upsert_redirect() insert-or-update-on-from_path
+	 * semantics as the single-redirect REST route, so re-importing an
+	 * already-imported file is idempotent rather than erroring on
+	 * duplicates.
+	 */
+	public function handle_import_redirects() {
+		if ( ! current_user_can( 'manage_gravhub_seo' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'gravhub-seo' ) );
+		}
+		check_admin_referer( 'gravhub_import_redirects' );
+
+		$redirect_url = admin_url( 'admin.php?page=gravhub-seo-redirects' );
+
+		if ( empty( $_FILES['csv_file']['tmp_name'] ) || ! is_uploaded_file( $_FILES['csv_file']['tmp_name'] ) ) {
+			wp_safe_redirect( add_query_arg( 'gravhub_import', 'error', $redirect_url ) );
+			exit;
+		}
+
+		$handle = fopen( $_FILES['csv_file']['tmp_name'], 'r' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+		if ( ! $handle ) {
+			wp_safe_redirect( add_query_arg( 'gravhub_import', 'error', $redirect_url ) );
+			exit;
+		}
+
+		$imported = 0;
+		$skipped  = 0;
+		$row_num  = 0;
+		$capped   = false;
+
+		while ( ( $data = fgetcsv( $handle ) ) !== false ) {
+			$row_num++;
+
+			// AUDIT.md #192 — an unbounded loop here meant an oversized
+			// upload (accidental or otherwise) could tie up the request for
+			// as many rows as the file contained, each one a DB round trip
+			// via upsert_redirect(). Stop reading past the cap rather than
+			// processing the whole file.
+			if ( $row_num > self::MAX_IMPORT_ROWS ) {
+				$capped = true;
+				break;
+			}
+
+			// Skip a header row if present, matching the export's own
+			// column order — don't require it, so a hand-written CSV
+			// without one still imports.
+			if ( 1 === $row_num && isset( $data[0] ) && 'from_path' === trim( strtolower( $data[0] ) ) ) {
+				continue;
+			}
+
+			$from_path = isset( $data[0] ) ? $this->sanitize_path( $data[0] ) : '';
+			$to_path   = isset( $data[1] ) ? trim( $data[1] ) : '';
+			$type      = isset( $data[2] ) ? (int) $data[2] : 301;
+			$type      = in_array( $type, array( 301, 302 ), true ) ? $type : 301;
+
+			if ( empty( $from_path ) || empty( $to_path ) ) {
+				$skipped++;
+				continue;
+			}
+
+			if ( ! preg_match( '#^https?://#i', $to_path ) ) {
+				$to_path = '/' . ltrim( $to_path, '/' );
+			}
+
+			if ( false === $this->upsert_redirect( $from_path, $to_path, $type ) ) {
+				$skipped++;
+			} else {
+				$imported++;
+			}
+		}
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fclose
+
+		$args = array(
+			'gravhub_import' => 'success',
+			'imported'       => $imported,
+			'skipped'        => $skipped,
+		);
+		if ( $capped ) {
+			$args['capped'] = self::MAX_IMPORT_ROWS;
+		}
+
+		wp_safe_redirect( add_query_arg( $args, $redirect_url ) );
+		exit;
+	}
+
+	/**
+	 * Prefixes a leading =, +, -, or @ with a single quote — the standard
+	 * CSV/formula-injection guard. A redirect's to_path is settable via CSV
+	 * import as well as the admin UI, so a crafted value could otherwise be
+	 * interpreted as a live formula by Excel/Sheets when a staff member
+	 * later opens an exported file.
+	 */
+	private function csv_safe( $value ) {
+		$value = (string) $value;
+		if ( preg_match( '/^[=+\-@]/', $value ) ) {
+			return "'" . $value;
+		}
+		return $value;
 	}
 
 	private function sanitize_path( $path ) {

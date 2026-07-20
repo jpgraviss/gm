@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Header from '@/components/layout/Header'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   ShieldCheck, Clock, Download, Search, ChevronLeft, ChevronRight,
   Filter,
@@ -48,13 +49,20 @@ export default function AuditLogPage() {
   const [allUsers, setAllUsers] = useState<string[]>([])
   const [allModules, setAllModules] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
+    setLoadFailed(false)
     try {
-      const res = await fetch('/api/audit-logs?limit=5000')
-      if (!res.ok) throw new Error('Failed')
-      const data: AuditEntry[] = await res.json()
+      // A cheap first-page probe so a genuine fetch/auth failure is
+      // distinguishable from "the log is really empty" — fetchAllPages()
+      // itself just returns whatever it accumulated before a failed
+      // request and doesn't surface that a page errored.
+      const probe = await fetch('/api/audit-logs?limit=1')
+      if (!probe.ok) throw new Error('Failed')
+
+      const data = await fetchAllPages<AuditEntry>('/api/audit-logs')
       setEntries(data)
       setTotalFetched(data.length)
 
@@ -64,6 +72,7 @@ export default function AuditLogPage() {
       setAllModules(modules)
     } catch {
       setEntries([])
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -244,6 +253,13 @@ export default function AuditLogPage() {
                 {loading ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-sm text-gray-400">Loading...</td>
+                  </tr>
+                ) : loadFailed ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-sm text-red-500">
+                      Failed to load the audit log — this is an error, not an empty log.{' '}
+                      <button onClick={fetchLogs} className="underline font-medium">Retry</button>
+                    </td>
                   </tr>
                 ) : paged.length === 0 ? (
                   <tr>

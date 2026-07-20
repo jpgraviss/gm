@@ -38,9 +38,19 @@ export const PATCH = withErrorHandler('portal-clients/[id] PATCH', async (req, {
   }
 
   if (!isStaff) {
-    const { data: ownRow } = await db.from('portal_clients').select('id, email').eq('id', id).maybeSingle()
+    const { data: ownRow } = await db.from('portal_clients').select('id, email, access').eq('id', id).maybeSingle()
     if (!ownRow || ownRow.email?.toLowerCase() !== email.toLowerCase()) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    // AUDIT.md #204 — `access` was in SELF_SERVICE_FIELDS with no
+    // value-level check, only a field-name check — a client whose access
+    // is currently 'Disabled' could self-PATCH it back to 'Active' (exactly
+    // what AuthContext's session-restore touch sends unconditionally on
+    // every page reload), silently reinstating themselves after an admin
+    // disabled the account. A disabled client's self-service touch is now
+    // rejected outright, not just filtered by field name.
+    if (ownRow.access === 'Disabled') {
+      return NextResponse.json({ error: 'Portal access disabled' }, { status: 403 })
     }
     const disallowed = Object.keys(body).filter(k => !SELF_SERVICE_FIELDS.has(k))
     if (disallowed.length > 0) {

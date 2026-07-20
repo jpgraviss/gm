@@ -42,6 +42,7 @@ class GravHub_SEO_Metabox {
 		'_gravhub_canonical_url',
 		'_gravhub_schema_type',
 		'_gravhub_faq_items',
+		'_gravhub_hreflang_items',
 	);
 
 	/**
@@ -145,6 +146,13 @@ class GravHub_SEO_Metabox {
 				</button>
 				<button type="button" class="gravhub-tab-button" data-tab="advanced">
 					<?php esc_html_e( 'Advanced', 'gravhub-seo' ); ?>
+				</button>
+				<button type="button" class="gravhub-tab-button" data-tab="links">
+					<?php esc_html_e( 'Links', 'gravhub-seo' ); ?>
+				</button>
+				<button type="button" class="gravhub-tab-button" data-tab="readability">
+					<?php esc_html_e( 'Readability', 'gravhub-seo' ); ?>
+					<span id="gravhub-readability-tab-badge" class="gravhub-tab-score" style="display:none;"></span>
 				</button>
 				<button type="button" class="gravhub-tab-button" data-tab="schema">
 					<?php esc_html_e( 'Schema', 'gravhub-seo' ); ?>
@@ -425,6 +433,43 @@ class GravHub_SEO_Metabox {
 					</div>
 				</div>
 
+				<!-- Hreflang -->
+				<div class="gravhub-field">
+					<label><?php esc_html_e( 'Hreflang (Alternate Language/Region Versions)', 'gravhub-seo' ); ?></label>
+					<p class="gravhub-field-description">
+						<?php esc_html_e( 'If this page has a version for another language or region, list it here. Use a language code like "es" or "es-MX", or "x-default" for the version to show when no other match applies.', 'gravhub-seo' ); ?>
+					</p>
+					<div id="gravhub-hreflang-items"></div>
+					<button type="button" class="button" id="gravhub-hreflang-add"><?php esc_html_e( '+ Add Alternate', 'gravhub-seo' ); ?></button>
+					<input type="hidden" name="_gravhub_hreflang_items" id="gravhub-hreflang-items-input" value="<?php echo esc_attr( $meta['_gravhub_hreflang_items'] ); ?>" />
+				</div>
+
+			</div>
+
+			<!-- Links Tab -->
+			<div class="gravhub-tab-panel" data-panel="links">
+				<div class="gravhub-field">
+					<label><?php esc_html_e( 'Internal Link Suggestions', 'gravhub-seo' ); ?></label>
+					<p class="gravhub-field-description">
+						<?php esc_html_e( 'Other published pages on this site worth linking to from here, based on shared title words and your focus keyword. Save this post at least once first so its title/content is available to compare against.', 'gravhub-seo' ); ?>
+					</p>
+					<button type="button" class="button" id="gravhub-link-suggestions-refresh"><?php esc_html_e( 'Get Suggestions', 'gravhub-seo' ); ?></button>
+					<div id="gravhub-link-suggestions-list" style="margin-top:12px;"></div>
+				</div>
+			</div>
+
+			<!-- Readability Tab -->
+			<div class="gravhub-tab-panel" data-panel="readability">
+				<div class="gravhub-field">
+					<label><?php esc_html_e( 'Live Readability', 'gravhub-seo' ); ?></label>
+					<p class="gravhub-field-description">
+						<?php esc_html_e( 'Updates automatically a moment after you stop typing in the content editor below.', 'gravhub-seo' ); ?>
+					</p>
+					<div id="gravhub-readability-summary" style="margin:8px 0 12px;font-size:13px;color:#646970;">
+						<?php esc_html_e( 'Start typing to see live feedback.', 'gravhub-seo' ); ?>
+					</div>
+					<ul id="gravhub-readability-checks" class="gravhub-metabox-issues-list"></ul>
+				</div>
 			</div>
 
 			<!-- Analysis Tab -->
@@ -565,6 +610,10 @@ class GravHub_SEO_Metabox {
 		(function($) {
 			'use strict';
 
+			var gravhubRestUrl = <?php echo wp_json_encode( esc_url_raw( rest_url( 'gravhub-seo/v1/' ) ) ); ?>;
+			var gravhubNonce   = <?php echo wp_json_encode( wp_create_nonce( 'wp_rest' ) ); ?>;
+			var gravhubPostId  = <?php echo (int) $post->ID; ?>;
+
 			// Tab switching.
 			$('.gravhub-tab-button').on('click', function(e) {
 				e.preventDefault();
@@ -621,6 +670,36 @@ class GravHub_SEO_Metabox {
 				gravhubAddFaqRow('', '');
 			});
 
+			// Hreflang repeater — same add/remove/serialize-on-submit pattern
+			// as the FAQ repeater above, just with lang-code + URL fields.
+			var gravhubHreflangContainer = $('#gravhub-hreflang-items');
+			var gravhubHreflangInput = $('#gravhub-hreflang-items-input');
+
+			function gravhubAddHreflangRow(lang, url) {
+				var row = $('<div class="gravhub-hreflang-row" style="margin-bottom:8px;display:flex;gap:8px;align-items:center;"></div>');
+				var l = $('<input type="text" class="gravhub-hreflang-lang" placeholder="' + '<?php echo esc_js( __( 'es, es-MX, x-default…', 'gravhub-seo' ) ); ?>' + '" style="width:140px;" />').val(lang);
+				var u = $('<input type="url" class="widefat gravhub-hreflang-url" placeholder="' + '<?php echo esc_js( __( 'https://example.com/es/pagina', 'gravhub-seo' ) ); ?>' + '" />').val(url);
+				var remove = $('<button type="button" class="button-link-delete">' + '<?php echo esc_js( __( 'Remove', 'gravhub-seo' ) ); ?>' + '</button>');
+				remove.on('click', function() { row.remove(); });
+				row.append(l).append(u).append(remove);
+				gravhubHreflangContainer.append(row);
+			}
+
+			var gravhubExistingHreflang = [];
+			try {
+				gravhubExistingHreflang = JSON.parse(gravhubHreflangInput.val() || '[]');
+				if (!Array.isArray(gravhubExistingHreflang)) gravhubExistingHreflang = [];
+			} catch (e) {
+				gravhubExistingHreflang = [];
+			}
+			gravhubExistingHreflang.forEach(function(item) {
+				gravhubAddHreflangRow(item.lang || '', item.url || '');
+			});
+
+			$('#gravhub-hreflang-add').on('click', function() {
+				gravhubAddHreflangRow('', '');
+			});
+
 			// Serialize the repeater into the hidden input right before the
 			// post form actually submits — keeps the fields themselves as
 			// plain inputs (easy to add/remove rows for) instead of trying
@@ -635,6 +714,16 @@ class GravHub_SEO_Metabox {
 					}
 				});
 				gravhubFaqInput.val(JSON.stringify(items));
+
+				var hreflangItems = [];
+				gravhubHreflangContainer.find('.gravhub-hreflang-row').each(function() {
+					var lang = $(this).find('.gravhub-hreflang-lang').val().trim();
+					var url = $(this).find('.gravhub-hreflang-url').val().trim();
+					if (lang && url) {
+						hreflangItems.push({ lang: lang, url: url });
+					}
+				});
+				gravhubHreflangInput.val(JSON.stringify(hreflangItems));
 			});
 
 			// Character counter function.
@@ -731,6 +820,143 @@ class GravHub_SEO_Metabox {
 					$('#gravhub-social-preview-image').html('<div class="gravhub-social-preview-placeholder"><?php echo esc_js( __( 'No image selected', 'gravhub-seo' ) ); ?></div>');
 				}
 			});
+
+			// Internal link suggestions — fetched on demand (not on tab
+			// open) since it's a live comparison against every other
+			// published post/page, not something to run on every click
+			// into the tab.
+			function gravhubLoadLinkSuggestions() {
+				var $list = $('#gravhub-link-suggestions-list');
+				$list.html('<?php echo esc_js( __( 'Loading…', 'gravhub-seo' ) ); ?>');
+
+				$.ajax({
+					url: gravhubRestUrl + 'internal-link-suggestions/' + gravhubPostId,
+					method: 'GET',
+					headers: { 'X-WP-Nonce': gravhubNonce }
+				}).done(function(rows) {
+					if (!Array.isArray(rows) || rows.length === 0) {
+						$list.html('<p class="gravhub-field-description"><?php echo esc_js( __( 'No close matches found among your other published content.', 'gravhub-seo' ) ); ?></p>');
+						return;
+					}
+					var html = '<ul style="margin:0;padding:0;list-style:none;">';
+					rows.forEach(function(row) {
+						html += '<li style="padding:8px 0;border-bottom:1px solid #dcdcde;">' +
+							'<a href="' + row.url + '" target="_blank" rel="noopener noreferrer" style="font-weight:600;">' + $('<div/>').text(row.title).html() + '</a>' +
+							(row.reason ? '<div class="gravhub-field-description" style="margin:2px 0 0;">' + $('<div/>').text(row.reason).html() + '</div>' : '') +
+						'</li>';
+					});
+					html += '</ul>';
+					$list.html(html);
+				}).fail(function() {
+					$list.html('<p class="gravhub-field-description"><?php echo esc_js( __( 'Could not load suggestions.', 'gravhub-seo' ) ); ?></p>');
+				});
+			}
+
+			$('#gravhub-link-suggestions-refresh').on('click', gravhubLoadLinkSuggestions);
+
+			// Live readability — re-scores a moment after the user stops
+			// typing, reading from whichever editor is actually active
+			// (Classic Editor's #content textarea/TinyMCE, or the block
+			// editor's wp.data store when present) rather than the
+			// last-saved post_content.
+			var gravhubReadabilityTimer = null;
+			var gravhubLastReadabilityContent = null;
+
+			function gravhubGetEditorContent() {
+				if ( window.wp && wp.data && wp.data.select && wp.data.select( 'core/editor' ) ) {
+					return wp.data.select( 'core/editor' ).getEditedPostContent();
+				}
+				if ( window.tinymce && tinymce.get( 'content' ) && ! tinymce.get( 'content' ).isHidden() ) {
+					return tinymce.get( 'content' ).getContent();
+				}
+				var $classic = $( '#content' );
+				return $classic.length ? $classic.val() : null;
+			}
+
+			function gravhubSeverityBadge( severity, label ) {
+				return '<span class="gravhub-severity-badge gravhub-severity-' + severity + '">' + label + '</span>';
+			}
+
+			function gravhubRenderReadability( data ) {
+				var $summary = $( '#gravhub-readability-summary' );
+				var $checks  = $( '#gravhub-readability-checks' );
+				var $badge   = $( '#gravhub-readability-tab-badge' );
+
+				if ( ! data.checks || data.checks.length === 0 ) {
+					$summary.text( '<?php echo esc_js( __( 'Add some content to see live feedback.', 'gravhub-seo' ) ); ?>' );
+					$checks.empty();
+					$badge.hide();
+					return;
+				}
+
+				var color = data.score >= 60 && data.score <= 70 ? '#059669' : ( data.score > 70 ? '#2563eb' : ( data.score >= 30 ? '#d97706' : '#dc2626' ) );
+				$summary.html(
+					'<?php echo esc_js( __( 'Flesch Reading Ease: ', 'gravhub-seo' ) ); ?>' +
+					'<strong style="color:' + color + ';">' + data.score + '</strong>'
+				);
+				$badge.css( 'background', color ).text( Math.round( data.score ) ).show();
+
+				var html = '';
+				data.checks.forEach( function ( check ) {
+					var severity = check.passed ? 'ok' : check.severity;
+					var label    = check.passed ? '<?php echo esc_js( __( 'Good', 'gravhub-seo' ) ); ?>' : check.severity;
+					html += '<li class="gravhub-issue-item">' +
+						gravhubSeverityBadge( severity, label ) +
+						'<span>' + $( '<div/>' ).text( check.message ).html() + '</span>' +
+					'</li>';
+				} );
+				$checks.html( html );
+			}
+
+			function gravhubRunReadabilityCheck() {
+				var content = gravhubGetEditorContent();
+				if ( null === content || undefined === content ) {
+					return;
+				}
+				if ( content === gravhubLastReadabilityContent ) {
+					return; // Nothing actually changed since the last check.
+				}
+				gravhubLastReadabilityContent = content;
+
+				$.ajax({
+					url: gravhubRestUrl + 'live-readability',
+					method: 'POST',
+					headers: { 'X-WP-Nonce': gravhubNonce },
+					contentType: 'application/json',
+					data: JSON.stringify({ content: content })
+				}).done( gravhubRenderReadability ).fail( function () {
+					// Reset the dedupe guard so the next content change (or
+					// the next scheduled tick) retries instead of the tab
+					// staying silently stuck on stale data after a transient
+					// failure (expired nonce on a long editing session, a
+					// 5xx, a network blip).
+					gravhubLastReadabilityContent = null;
+					$( '#gravhub-readability-summary' ).text( '<?php echo esc_js( __( 'Could not check readability — will retry on your next edit.', 'gravhub-seo' ) ); ?>' );
+				} );
+			}
+
+			function gravhubScheduleReadabilityCheck() {
+				clearTimeout( gravhubReadabilityTimer );
+				gravhubReadabilityTimer = setTimeout( gravhubRunReadabilityCheck, 1200 );
+			}
+
+			if ( window.wp && wp.data && wp.data.subscribe && wp.data.select( 'core/editor' ) ) {
+				wp.data.subscribe( gravhubScheduleReadabilityCheck );
+			} else {
+				$( document ).on( 'input', '#content', gravhubScheduleReadabilityCheck );
+				// TinyMCE's Visual mode doesn't sync #content on every
+				// keystroke — listen to its own change events too so
+				// switching back to Text mode isn't the only way to trigger
+				// a re-check.
+				$( document ).on( 'tinymce-editor-init', function ( event, editor ) {
+					if ( editor.id === 'content' ) {
+						editor.on( 'input keyup change', gravhubScheduleReadabilityCheck );
+					}
+				} );
+			}
+
+			// Run once on load so the tab isn't empty if content already exists.
+			gravhubScheduleReadabilityCheck();
 		})(jQuery);
 		</script>
 
@@ -1197,6 +1423,36 @@ class GravHub_SEO_Metabox {
 				delete_post_meta( $post_id, '_gravhub_faq_items' );
 			} else {
 				update_post_meta( $post_id, '_gravhub_faq_items', wp_json_encode( $faq_items ) );
+			}
+		}
+
+		// Hreflang alternates — same re-validate-server-side pattern as FAQ
+		// items above. A lang code is free text (site owners may need
+		// region variants like "es-MX", or the literal "x-default"), so
+		// only whitespace-trim + length-cap it rather than restricting to a
+		// fixed locale list.
+		if ( isset( $_POST['_gravhub_hreflang_items'] ) ) {
+			$raw_items       = json_decode( wp_unslash( $_POST['_gravhub_hreflang_items'] ), true );
+			$hreflang_items  = array();
+			if ( is_array( $raw_items ) ) {
+				foreach ( $raw_items as $item ) {
+					if ( ! is_array( $item ) ) {
+						continue;
+					}
+					$lang = isset( $item['lang'] ) ? sanitize_text_field( $item['lang'] ) : '';
+					$url  = isset( $item['url'] ) ? esc_url_raw( $item['url'] ) : '';
+					if ( '' !== $lang && '' !== $url ) {
+						$hreflang_items[] = array(
+							'lang' => mb_substr( $lang, 0, 35 ),
+							'url'  => $url,
+						);
+					}
+				}
+			}
+			if ( empty( $hreflang_items ) ) {
+				delete_post_meta( $post_id, '_gravhub_hreflang_items' );
+			} else {
+				update_post_meta( $post_id, '_gravhub_hreflang_items', wp_json_encode( $hreflang_items ) );
 			}
 		}
 

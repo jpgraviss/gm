@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,6 +72,7 @@ export const PATCH = withErrorHandler('client-integrations/[id] PATCH', async (r
 export const DELETE = withErrorHandler('client-integrations/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id } = await params
   const db = createServiceClient()
@@ -79,6 +80,6 @@ export const DELETE = withErrorHandler('client-integrations/[id] DELETE', async 
   if (error) {
     throw new Error(error.message)
   }
-  logAudit({ userName: 'system', action: 'client_integration_deleted', module: 'integrations', type: 'warning', metadata: { id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'client_integration_deleted', module: 'integrations', type: 'warning', metadata: { id } })
   return NextResponse.json({ deleted: id })
 })

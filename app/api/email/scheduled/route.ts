@@ -5,7 +5,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 
 export const GET = withErrorHandler('email/scheduled GET', async (req: NextRequest) => {
-  const denied = await requireRole(req, 'Team Member')
+  const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
   const status = req.nextUrl.searchParams.get('status') ?? undefined
   const type = req.nextUrl.searchParams.get('type') ?? undefined
@@ -17,7 +17,7 @@ export const GET = withErrorHandler('email/scheduled GET', async (req: NextReque
 })
 
 export const POST = withErrorHandler('email/scheduled POST', async (req: NextRequest) => {
-  const denied = await requireRole(req, 'Team Member')
+  const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
   const body = await req.json()
   const result = validate(body, {
@@ -45,7 +45,7 @@ export const POST = withErrorHandler('email/scheduled POST', async (req: NextReq
 })
 
 export const DELETE = withErrorHandler('email/scheduled DELETE', async (req: NextRequest) => {
-  const denied = await requireRole(req, 'Team Member')
+  const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Missing id parameter' }, { status: 400 })

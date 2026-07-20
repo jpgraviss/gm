@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import CompanySelect from '@/components/ui/CompanySelect'
 import { useToast } from '@/components/ui/Toast'
+import { toCatalogServiceValue } from '@/lib/services'
 import {
   X, Building2, User, Briefcase, ChevronRight, ChevronLeft,
   Loader2, CheckCircle, Mail,
@@ -75,7 +76,7 @@ export default function NewClientModal({ open, onClose }: Props) {
         resolvedCompanyId = company.id
       }
 
-      await fetch('/api/crm/contacts', {
+      const contactRes = await fetch('/api/crm/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -90,6 +91,14 @@ export default function NewClientModal({ open, onClose }: Props) {
           owner: '',
         }),
       })
+      // AUDIT.md #182 — can legitimately 409 (duplicate email, or duplicate
+      // name+company) or 400; previously failed silently while portal-
+      // login/delivery-workflow creation proceeded and the modal still
+      // reported full success.
+      if (!contactRes.ok) {
+        const err = await contactRes.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to create the primary contact')
+      }
 
       // /api/portal-clients/invite creates the portal_clients row AND the
       // working login (magic-link token + invite email) in one call; it
@@ -111,15 +120,22 @@ export default function NewClientModal({ open, onClose }: Props) {
       })
       if (!inviteRes.ok) throw new Error('Failed to create portal client')
 
-      await fetch('/api/delivery/workflow', {
+      // AUDIT.md #181 — SERVICES is the portal-facing taxonomy, not the
+      // billing/delivery catalog serviceType validates against; 3 of the 8
+      // options previously 400'd silently (result never checked).
+      const workflowRes = await fetch('/api/delivery/workflow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           companyName,
           companyId: resolvedCompanyId,
-          serviceType: services[0] || SERVICES[0],
+          serviceType: toCatalogServiceValue(services[0] || SERVICES[0]),
         }),
       })
+      if (!workflowRes.ok) {
+        const err = await workflowRes.json().catch(() => ({}))
+        toast(err.error || 'Client created, but the delivery workflow could not be started', 'error')
+      }
 
       toast('Client created successfully', 'success')
       handleClose()

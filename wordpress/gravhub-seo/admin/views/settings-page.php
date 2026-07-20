@@ -666,6 +666,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 		})
 		.then(function(response) { return response.json(); })
 		.then(function(data) {
+			// run-analysis's { success: true } only means the REST call itself
+			// completed — it always returns success even when send_scores()
+			// (the actual push to GravHub) failed, so a wrong API key/URL or
+			// an unreachable GravHub instance previously still showed a green
+			// "Analysis complete!" toast while GravHub silently got nothing.
+			// { sent: false } is the real signal for that case.
+			if ( data.success && false === data.sent ) {
+				var notSentMsg = '<?php echo esc_js( __( 'Analysis ran locally, but GravHub never received it — check your Connection settings above.', 'gravhub-seo' ) ); ?>';
+				if (resultEl) {
+					resultEl.textContent = notSentMsg;
+					resultEl.className = 'gravhub-result-error';
+				}
+				showToast(notSentMsg, 'error');
+				return;
+			}
 			if (data.success) {
 				if (resultEl) {
 					resultEl.textContent = successMsg || data.message || '<?php echo esc_js( __( 'Success!', 'gravhub-seo' ) ); ?>';
@@ -771,6 +786,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 					resultEl.className = 'gravhub-result-error';
 				}
 				showToast(msg, 'error');
+				return;
+			}
+			// { success: true } only means the analysis itself ran — it says
+			// nothing about whether the scores actually reached GravHub.
+			// Check { sent: false } explicitly rather than proceeding to send
+			// the health report and reporting "Synced with GravHub!" when the
+			// scores never arrived.
+			if ( false === data.sent ) {
+				var notSentMsg = '<?php echo esc_js( __( 'Analysis ran locally, but GravHub never received it — check your Connection settings above.', 'gravhub-seo' ) ); ?>';
+				if (resultEl) {
+					resultEl.textContent = notSentMsg;
+					resultEl.className = 'gravhub-result-error';
+				}
+				showToast(notSentMsg, 'error');
 				return;
 			}
 			// Analysis succeeded, now send health report.

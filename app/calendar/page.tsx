@@ -21,6 +21,7 @@ interface BookingTypeBooking {
   notes: string | null
   status: string
   created_at: string
+  timezone: string
   booking_types: {
     name: string
     slug: string
@@ -398,7 +399,7 @@ export default function CalendarPage() {
         date: tb.date,
         start_time: tb.start_time,
         end_time: tb.end_time,
-        timezone: 'America/Chicago',
+        timezone: tb.timezone,
         status: tb.status,
         meet_link: (tb as unknown as { meet_link?: string | null }).meet_link ?? null,
         subscription_id: null,

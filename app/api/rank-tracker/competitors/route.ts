@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { getCompetitors, addCompetitor } from '@/lib/rank-tracker'
 import { withErrorHandler } from '@/lib/api-handler'
@@ -15,6 +15,7 @@ export const GET = withErrorHandler('rank-tracker/competitors GET', async (req) 
 export const POST = withErrorHandler('rank-tracker/competitors POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const body = await req.json()
   const v = validate(body, {
@@ -25,7 +26,7 @@ export const POST = withErrorHandler('rank-tracker/competitors POST', async (req
 
   const competitor = await addCompetitor(body.domain, body.label)
   logAudit({
-    userName: 'system',
+    userName: actor?.name || actor?.email || 'system',
     action:   'added_competitor',
     module:   'rank-tracker',
     type:     'action',

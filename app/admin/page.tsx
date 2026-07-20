@@ -18,6 +18,7 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 import { formatCurrency } from '@/lib/utils'
 import { SERVICE_NAMES } from '@/lib/services'
 import { computeMRR } from '@/lib/metrics'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import NewClientModal from '@/components/admin/NewClientModal'
 
 type AdminTab = 'overview' | 'users' | 'integrations' | 'permissions' | 'config' | 'audit' | 'data-audit'
@@ -2480,23 +2481,25 @@ export default function AdminPage() {
               <button
                 onClick={async () => {
                   try {
-                    const [usersRes, contactsRes, proposalsRes, contractsRes, invoicesRes, projectsRes, dealsRes] = await Promise.all([
-                      fetch('/api/team-members?include_inactive=true'),
-                      fetch('/api/crm/contacts'),
-                      fetch('/api/proposals'),
-                      fetch('/api/contracts'),
-                      fetch('/api/invoices'),
-                      fetch('/api/projects'),
-                      fetch('/api/deals'),
-                    ])
+                    // AUDIT.md #209 — this modal explicitly promises "a full
+                    // JSON snapshot of all GravHub data," but 6 of these 7
+                    // raw fetch()es hit routes cursor-paginated at 100 rows
+                    // server-side — any org with more than 100 rows in any
+                    // entity got a silently incomplete "full" backup with no
+                    // indication anything was missing. fetchAllPages()
+                    // follows the cursor to completion instead, matching the
+                    // fix already applied elsewhere for this exact bug class
+                    // (#48/#151/#206). team-members isn't cursor-paginated
+                    // (no X-Next-Cursor), so it's left as a plain fetch.
+                    const usersRes = await fetch('/api/team-members?include_inactive=true')
                     const [usersData, contactsData, proposalsData, contractsData, invoicesData, projectsData, dealsData] = await Promise.all([
                       usersRes.ok ? usersRes.json() : [],
-                      contactsRes.ok ? contactsRes.json() : [],
-                      proposalsRes.ok ? proposalsRes.json() : [],
-                      contractsRes.ok ? contractsRes.json() : [],
-                      invoicesRes.ok ? invoicesRes.json() : [],
-                      projectsRes.ok ? projectsRes.json() : [],
-                      dealsRes.ok ? dealsRes.json() : [],
+                      fetchAllPages('/api/crm/contacts'),
+                      fetchAllPages('/api/proposals'),
+                      fetchAllPages('/api/contracts'),
+                      fetchAllPages('/api/invoices'),
+                      fetchAllPages('/api/projects'),
+                      fetchAllPages('/api/deals'),
                     ])
                     const backup = JSON.stringify({
                       exportedAt: new Date().toISOString(),

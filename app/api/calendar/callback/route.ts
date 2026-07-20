@@ -3,6 +3,8 @@ import { exchangeCodeForTokens } from '@/lib/google-calendar'
 import { createServiceClient } from '@/lib/supabase'
 import { encrypt } from '@/lib/encryption'
 import { withErrorHandler } from '@/lib/api-handler'
+import { verifyOAuthStateWithPayload } from '@/lib/oauth-state'
+import { getAuthUser } from '@/lib/rbac'
 
 // GET /api/calendar/callback?code=...&state=...
 // Handles the Google OAuth redirect, stores tokens, redirects to settings page
@@ -27,22 +29,45 @@ export const GET = withErrorHandler('calendar/callback GET', async (req) => {
     return NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('Missing authorization code. Please try connecting again.')}`)
   }
 
-  try {
-    const { userEmail, userName, slug } = JSON.parse(
-      Buffer.from(state, 'base64url').toString('utf-8'),
-    )
+  // AUDIT.md #194 — `state` used to be trusted as-is, carrying an unsigned,
+  // attacker-forgeable userEmail that decided whose calendar_settings row
+  // got overwritten. `verifyOAuthStateWithPayload` confirms this callback
+  // is a continuation of a flow this server itself issued in this same
+  // browser (the httpOnly cookie `/api/calendar/auth` set can't be forged
+  // by a third party who skips straight to building their own Google
+  // consent URL). Identity is re-derived from the caller's own verified
+  // session below, never from the state payload — the payload only ever
+  // carries the non-sensitive `slug`.
+  const { valid, payload, clearCookie } = verifyOAuthStateWithPayload<{ slug?: string }>(req, 'calendar', state)
+  if (!valid) {
+    return clearCookie(NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('Invalid or expired connection attempt. Please try connecting again.')}`))
+  }
 
+  const user = await getAuthUser(req)
+  if (!user) {
+    return clearCookie(NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('Your session expired during the connection attempt. Please sign in and try again.')}`))
+  }
+
+  const slug = payload?.slug
+  if (!slug) {
+    return clearCookie(NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('Missing calendar slug. Please try connecting again.')}`))
+  }
+
+  const userEmail = user.email
+  const userName  = user.name
+
+  try {
     let tokens
     try {
       tokens = await exchangeCodeForTokens(code)
     } catch (tokenErr) {
       console.error('[calendar/callback] token exchange failed:', tokenErr)
-      return NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('Token exchange failed. Check that GOOGLE_CLIENT_SECRET is correct and the redirect URI matches Google Cloud Console.')}`)
+      return clearCookie(NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('Token exchange failed. Check that GOOGLE_CLIENT_SECRET is correct and the redirect URI matches Google Cloud Console.')}`))
     }
 
     if (!tokens.refresh_token) {
       console.error('[calendar/callback] no refresh_token returned - user may need to revoke and reconnect')
-      return NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('No refresh token received. Go to myaccount.google.com/permissions, remove GravHub, then reconnect.')}`)
+      return clearCookie(NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('No refresh token received. Go to myaccount.google.com/permissions, remove GravHub, then reconnect.')}`))
     }
 
     const db = createServiceClient()
@@ -58,14 +83,14 @@ export const GET = withErrorHandler('calendar/callback GET', async (req) => {
 
     if (dbError) {
       console.error('[calendar/callback] db upsert failed:', dbError)
-      return NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('Failed to save calendar tokens. Database error - please try again.')}`)
+      return clearCookie(NextResponse.redirect(`${origin}/settings/calendar?error=${encodeURIComponent('Failed to save calendar tokens. Database error - please try again.')}`))
     }
 
-    return NextResponse.redirect(`${origin}/settings/calendar?connected=true`)
+    return clearCookie(NextResponse.redirect(`${origin}/settings/calendar?connected=true`))
   } catch (err) {
     console.error('[calendar/callback] unhandled error:', err)
-    return NextResponse.redirect(
+    return clearCookie(NextResponse.redirect(
       `${origin}/settings/calendar?error=${encodeURIComponent('Connection failed. Check server logs for details.')}`,
-    )
+    ))
   }
 })

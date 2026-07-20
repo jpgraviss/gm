@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { isStaffCaller } from '@/lib/portal-auth'
 import { logAudit } from '@/lib/audit'
@@ -115,7 +115,13 @@ export const PATCH = withErrorHandler('courses/[id]/enrollments/[enrollmentId] P
   }
 
   if (body.completed === true) {
-    logAudit({ userName: 'system', action: 'completed_enrollment', module: 'courses', type: 'success', metadata: { courseId: id, enrollmentId } })
+    // This handler is reachable by staff OR by the enrolled student
+    // completing their own course (real self-service progress tracking,
+    // see the comment above) — getAuthUser only resolves staff (team_members)
+    // identities and would incorrectly return null for a student, so use
+    // the already-verified `email` from getAuthenticatedEmail above, which
+    // correctly identifies either caller.
+    logAudit({ userName: email, action: 'completed_enrollment', module: 'courses', type: 'success', metadata: { courseId: id, enrollmentId } })
   }
 
   return NextResponse.json(mapEnrollment(data))
@@ -127,6 +133,7 @@ export const DELETE = withErrorHandler('courses/[id]/enrollments/[enrollmentId] 
 ) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id, enrollmentId } = await params
   const db = createServiceClient()
@@ -154,6 +161,6 @@ export const DELETE = withErrorHandler('courses/[id]/enrollments/[enrollmentId] 
       .eq('id', id)
   }
 
-  logAudit({ userName: 'system', action: 'unenrolled_student', module: 'courses', type: 'info', metadata: { courseId: id, enrollmentId } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'unenrolled_student', module: 'courses', type: 'info', metadata: { courseId: id, enrollmentId } })
   return NextResponse.json({ deleted: enrollmentId })
 })

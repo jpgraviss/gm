@@ -7,6 +7,7 @@ import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import { RefreshCw } from 'lucide-react'
 import type { Deal, Invoice, RevenueMonth } from '@/lib/types'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 type DateRange = '3M' | '6M' | '12M' | 'Custom'
 
@@ -29,11 +30,14 @@ export default function RevenueReportPage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
+  // AUDIT.md #206 — raw fetch()es against 100-row-cursor-paginated routes
+  // silently truncated Revenue report totals past that (same bug class as
+  // #48/#151); fetchAllPages() follows the cursor to completion instead.
   function loadData() {
     setLoading(true)
     Promise.all([
-      fetch('/api/deals').then(r => r.ok ? r.json() : []),
-      fetch('/api/invoices').then(r => r.ok ? r.json() : []),
+      fetchAllPages<Deal>('/api/deals'),
+      fetchAllPages<Invoice>('/api/invoices'),
       fetch('/api/dashboard').then(r => r.ok ? r.json() : null).then(d => d?.revenueByMonth ?? []),
     ]).then(([d, i, rev]) => {
       if (Array.isArray(d)) setDeals(d)

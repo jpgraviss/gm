@@ -26,10 +26,16 @@ interface ReportEntry {
 }
 
 interface PortalConfig {
-  show_agreement?: boolean
-  show_invoices?: boolean
-  show_seo?: boolean
-  show_reports?: boolean
+  // AUDIT.md #184 — matches what app/admin/portal-management/page.tsx
+  // actually writes (nested camelCase under `visibility`), not the flat
+  // snake_case shape previously declared here — see the longer comment on
+  // the same interface in components/portal/ClientDashboard.tsx.
+  visibility?: {
+    showAgreement?: boolean
+    showInvoices?: boolean
+    showSeoStrategy?: boolean
+    showReports?: boolean
+  }
   visible_services?: string[]
   client_logo_url?: string
   client_brand_color?: string
@@ -130,9 +136,9 @@ export default function ReportsPage() {
   const navItems = [
     { href: '/portal', label: 'Dashboard', icon: Globe, visible: true },
     { href: '/portal/projects', label: 'Projects', icon: FolderKanban, visible: hasProjects },
-    { href: '/portal/seo', label: 'SEO Strategy', icon: Search, visible: config.show_seo === true },
+    { href: '/portal/seo', label: 'SEO Strategy', icon: Search, visible: config.visibility?.showSeoStrategy === true },
     { href: '/portal/reports', label: 'Reports', icon: BarChart3, visible: true },
-    { href: '/portal/billing', label: 'Invoices', icon: FileText, visible: config.show_invoices !== false },
+    { href: '/portal/billing', label: 'Invoices', icon: FileText, visible: config.visibility?.showInvoices !== false },
     { href: '/portal/tickets', label: 'Tickets', icon: Ticket, visible: true },
     { href: '/portal/help', label: 'Help Center', icon: HelpCircle, visible: true },
   ]

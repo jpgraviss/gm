@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { getGSCSearchAnalytics } from '@/lib/google-search-console'
 import { DEFAULT_WORKSPACE_ID } from '@/lib/workspace'
 import { logAudit } from '@/lib/audit'
@@ -13,6 +13,7 @@ function newId(prefix: string): string {
 export const POST = withErrorHandler('rank-tracker/sync-gsc POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const body = await req.json().catch(() => ({}))
   const siteUrl = body.siteUrl as string | undefined
@@ -133,7 +134,7 @@ export const POST = withErrorHandler('rank-tracker/sync-gsc POST', async (req) =
     .single()
 
   logAudit({
-    userName: 'system',
+    userName: actor?.name || actor?.email || 'system',
     action: 'gsc_sync',
     module: 'rank-tracker',
     type: 'action',

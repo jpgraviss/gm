@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getCompanyRelatedCounts, hasBlockingRelatedRecords, describeRelatedCounts, deleteCompanyActivities } from '@/lib/crm-cascade'
 
@@ -127,6 +127,7 @@ export const DELETE = withErrorHandler('crm/companies/[id] DELETE', async (
   const { id } = await params
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   const db = createServiceClient()
 
   const { data: company } = await db.from('crm_companies').select('id, name').eq('id', id).single()
@@ -156,6 +157,6 @@ export const DELETE = withErrorHandler('crm/companies/[id] DELETE', async (
 
   await deleteCompanyActivities(db, company.id)
 
-  logAudit({ userName: 'system', action: 'deleted_company', module: 'crm', type: 'warning', metadata: { companyId: id, companyName: company.name } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_company', module: 'crm', type: 'warning', metadata: { companyId: id, companyName: company.name } })
   return NextResponse.json({ success: true })
 })

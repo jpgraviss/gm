@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -59,6 +59,7 @@ export const PATCH = withErrorHandler('playbooks/[id] PATCH', async (req, { para
 export const DELETE = withErrorHandler('playbooks/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id } = await params
   const db = createServiceClient()
@@ -66,6 +67,6 @@ export const DELETE = withErrorHandler('playbooks/[id] DELETE', async (req, { pa
   if (error) {
     throw new Error(error?.message || 'Failed to delete playbook')
   }
-  logAudit({ userName: 'system', action: 'deleted_playbook', module: 'playbooks', type: 'warning', metadata: { playbookId: id } })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_playbook', module: 'playbooks', type: 'warning', metadata: { playbookId: id } })
   return NextResponse.json({ deleted: id })
 })

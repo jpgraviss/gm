@@ -46,3 +46,67 @@ export function verifyOAuthState(
   }
   return { valid, clearCookie }
 }
+
+// Per-user OAuth flows (calendar) need to carry a small payload (which
+// booking-page slug this connection is for) through Google's redirect,
+// unlike the workspace-singleton integrations above which only need an
+// opaque anti-CSRF nonce. `state` here is `<nonce>.<base64url(payload)>` —
+// the nonce half is what's bound to the httpOnly cookie and verified
+// (proving this callback is a continuation of a flow this server itself
+// issued, in the same browser), the payload half is just along for the
+// ride and is NOT itself a trust boundary — callers must still re-derive
+// any identity-bearing fields (e.g. which user this connection belongs to)
+// from the caller's own verified session, never from the payload, since
+// nothing stops an attacker who reaches this far with a stolen/replayed
+// nonce from swapping out the payload undetected.
+export function issueOAuthStateWithPayload(
+  provider: string,
+  payload: Record<string, unknown>,
+): { state: string; setCookie: (res: NextResponse) => NextResponse } {
+  const nonce = crypto.randomBytes(24).toString('base64url')
+  const state = `${nonce}.${Buffer.from(JSON.stringify(payload)).toString('base64url')}`
+  const setCookie = (res: NextResponse): NextResponse => {
+    res.cookies.set(cookieName(provider), nonce, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: STATE_COOKIE_MAX_AGE,
+      path: '/',
+    })
+    return res
+  }
+  return { state, setCookie }
+}
+
+export function verifyOAuthStateWithPayload<T = Record<string, unknown>>(
+  req: NextRequest,
+  provider: string,
+  stateParam: string | null,
+): { valid: boolean; payload: T | null; clearCookie: (res: NextResponse) => NextResponse } {
+  const cookieValue = req.cookies.get(cookieName(provider))?.value ?? null
+  const clearCookie = (res: NextResponse): NextResponse => {
+    res.cookies.set(cookieName(provider), '', { maxAge: 0, path: '/' })
+    return res
+  }
+
+  if (!cookieValue || !stateParam) {
+    return { valid: false, payload: null, clearCookie }
+  }
+
+  const dotIndex = stateParam.indexOf('.')
+  if (dotIndex === -1) {
+    return { valid: false, payload: null, clearCookie }
+  }
+
+  const nonce = stateParam.slice(0, dotIndex)
+  if (nonce !== cookieValue) {
+    return { valid: false, payload: null, clearCookie }
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(stateParam.slice(dotIndex + 1), 'base64url').toString('utf-8')) as T
+    return { valid: true, payload, clearCookie }
+  } catch {
+    return { valid: false, payload: null, clearCookie }
+  }
+}

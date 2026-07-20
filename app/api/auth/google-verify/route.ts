@@ -215,7 +215,7 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   // ── 3. Check portal_clients (external clients) ──
   const { data: clientRow, error: clientErr } = await db
     .from('portal_clients')
-    .select('id, email, company, contact, service, access')
+    .select('id, email, company, contact, service, access, pending_approval')
     .ilike('email', email)
     .maybeSingle()
 
@@ -233,6 +233,19 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   if (clientRow.access === 'Disabled') {
     return NextResponse.json(
       { error: 'Your portal access has been disabled. Contact Graviss Marketing.' },
+      { status: 403 },
+    )
+  }
+
+  // AUDIT.md #195 — a client who completed self-serve setup gets
+  // pending_approval: true (their `access` stays whatever it already was,
+  // not 'Disabled'), and the admin dashboard's "Pending Portal Approvals"
+  // queue implies that's a real gate. This route previously never checked
+  // it, so a pending client could sign in with Google and get a fully
+  // working session before any admin ever approved them.
+  if (clientRow.pending_approval) {
+    return NextResponse.json(
+      { error: 'Your portal access is awaiting admin approval. You will receive an email once approved.' },
       { status: 403 },
     )
   }

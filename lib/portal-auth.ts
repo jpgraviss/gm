@@ -32,7 +32,7 @@ export async function requirePortalClient(
   // Portal clients can only access their own company
   const { data: client } = await db
     .from('portal_clients')
-    .select('id, company, access')
+    .select('id, company, access, pending_approval')
     .ilike('email', email)
     .maybeSingle()
 
@@ -42,6 +42,15 @@ export async function requirePortalClient(
 
   if (client.access === 'Disabled') {
     return NextResponse.json({ error: 'Portal access disabled' }, { status: 403 })
+  }
+
+  // AUDIT.md #195 — defense-in-depth: the 3 real session-issuing routes now
+  // reject a pending-approval client before ever minting a session, but a
+  // session issued before that fix (or any future path that forgets the
+  // check) shouldn't still be able to reach company-scoped data through
+  // this gate, which nearly every portal-scoped route calls.
+  if (client.pending_approval) {
+    return NextResponse.json({ error: 'Portal access is awaiting admin approval' }, { status: 403 })
   }
 
   if (client.company?.toLowerCase() !== company.toLowerCase()) {

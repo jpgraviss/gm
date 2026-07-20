@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
-import { getSettings } from '@/lib/settings'
+import { getSettings, getSecuritySettings, passwordPolicyMinLength } from '@/lib/settings'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -11,8 +11,13 @@ export const POST = withErrorHandler('portal-clients/complete-setup POST', async
     return NextResponse.json({ error: 'Email, verification code, and password are required' }, { status: 400 })
   }
 
-  if (password.length < 8) {
-    return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
+  // AUDIT.md #207 — Password Policy previously had zero enforcement; every
+  // password-setting route hardcoded 8 chars regardless of the configured
+  // tier (Basic/Strong/Very Strong).
+  const security = await getSecuritySettings()
+  const minLength = passwordPolicyMinLength(security.passwordPolicy)
+  if (password.length < minLength) {
+    return NextResponse.json({ error: `Password must be at least ${minLength} characters` }, { status: 400 })
   }
 
   const db = createServiceClient()

@@ -31,7 +31,8 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null
   loading: boolean
-  loginWithGoogle: (credential: string) => Promise<{ ok: boolean; error?: string }>
+  loginWithGoogle: (credential: string) => Promise<{ ok: boolean; error?: string; requires2FA?: boolean; email?: string }>
+  verify2FACode: (email: string, code: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
   addUser: (params: { name: string; email: string; role: AuthUser['role']; unit: AuthUser['unit'] }) => void
   // Super Admin impersonation
@@ -385,7 +386,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   }, [fetchMembers, loadProfileByEmail])
 
-  const loginWithGoogle = async (credential: string): Promise<{ ok: boolean; error?: string }> => {
+  // Shared by loginWithGoogle's direct-success path and verify2FACode's
+  // post-code-entry success path — both end with the same real {user}
+  // response and Set-Cookie session, just via different routes.
+  const finalizeLogin = (profile: AuthUser) => {
+    setUser(profile)
+    try { localStorage.setItem('gravhub_user', JSON.stringify(profile)) } catch {/* ignore */}
+    if (profile.userType === 'staff') fetchMembers()
+    try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
+  }
+
+  const loginWithGoogle = async (credential: string): Promise<{ ok: boolean; error?: string; requires2FA?: boolean; email?: string }> => {
     try {
       const res = await fetch('/api/auth/google-verify', {
         method: 'POST',
@@ -394,7 +405,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       // Parse JSON safely — server might return HTML on timeout/crash
-      let data: { user?: AuthUser; error?: string } = {}
+      let data: { user?: AuthUser; error?: string; requires2FA?: boolean; email?: string } = {}
       try {
         data = await res.json()
       } catch {
@@ -404,17 +415,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // AUDIT.md #207 — when Security Settings' Two-Factor Auth is
+      // Required, google-verify emails a code instead of a session; the
+      // caller (the login page) shows a code-entry step and finishes via
+      // verify2FACode() below.
+      if (res.ok && data.requires2FA) {
+        return { ok: false, requires2FA: true, email: data.email }
+      }
+
       if (!res.ok || !data.user) {
         return { ok: false, error: data.error ?? `Sign-in failed (HTTP ${res.status})` }
       }
 
-      const profile: AuthUser = data.user
-      setUser(profile)
       // Signed session cookie was already set server-side (Set-Cookie) by
       // /api/auth/google-verify — nothing to do client-side.
-      try { localStorage.setItem('gravhub_user', JSON.stringify(profile)) } catch {/* ignore */}
-      if (profile.userType === 'staff') fetchMembers()
-      try { sessionStorage.setItem('gravhub_login_at', Date.now().toString()) } catch {/* ignore */}
+      finalizeLogin(data.user)
+      return { ok: true }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? `Network error: ${err.message}` : 'Network error. Please try again.',
+      }
+    }
+  }
+
+  const verify2FACode = async (email: string, code: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const res = await fetch('/api/auth/2fa-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      })
+      let data: { user?: AuthUser; error?: string } = {}
+      try {
+        data = await res.json()
+      } catch {
+        return { ok: false, error: `Server error (HTTP ${res.status}). Please retry.` }
+      }
+      if (!res.ok || !data.user) {
+        return { ok: false, error: data.error ?? `Verification failed (HTTP ${res.status})` }
+      }
+      finalizeLogin(data.user)
       return { ok: true }
     } catch (err) {
       return {
@@ -544,7 +585,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, loading,
-      loginWithGoogle, logout,
+      loginWithGoogle, verify2FACode, logout,
       addUser,
       impersonatedBy, loginAs, exitImpersonation,
       gmailToken, gmailEmail, connectGmail, disconnectGmail,

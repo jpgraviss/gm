@@ -139,3 +139,59 @@ export async function getSettings(): Promise<AppSettings> {
 export function getDefaults(): AppSettings {
   return DEFAULTS
 }
+
+// AUDIT.md #207 — security settings live in app_settings.security, a
+// separate column from getSettings()'s deliberately curated public-safe
+// subset above. This is the real enforcement-side read: every gate that
+// needs to check Session Timeout/Password Policy/2FA/Login Attempts/Audit
+// Logging/IP Restriction goes through here rather than re-querying
+// individually, and shares one short-lived in-memory cache so a setting
+// read on nearly every request (this function is called from logAudit(),
+// the auth-resolution path, and login routes) doesn't add a DB round trip
+// per call. Matches the same "in-memory is fine for a small team" tradeoff
+// proxy.ts's rate limiter already documents — a change here can take up to
+// CACHE_TTL_MS to take effect across all server instances.
+export interface SecuritySettings {
+  sessionTimeout: '1h' | '4h' | '8h' | '24h' | 'never'
+  passwordPolicy: 'basic' | 'strong' | 'very-strong'
+  twoFactor: 'disabled' | 'optional' | 'required'
+  loginAttempts: number | 'unlimited'
+  auditLogging: boolean
+  ipRestriction: string
+}
+
+export const SECURITY_DEFAULTS: SecuritySettings = {
+  sessionTimeout: '8h',
+  passwordPolicy: 'strong',
+  twoFactor: 'optional',
+  loginAttempts: 5,
+  auditLogging: true,
+  ipRestriction: 'disabled',
+}
+
+const CACHE_TTL_MS = 30_000
+let cachedSecurity: { value: SecuritySettings; expiresAt: number } | null = null
+
+// AUDIT.md #207 — Password Policy's 3 tiers are described purely by
+// minimum length in their own UI labels ("Basic (6+ chars)", "Strong (8+
+// chars)", "Very Strong (12+ chars)") — enforcing exactly that, not
+// inventing complexity rules (uppercase/symbols/etc.) the UI never
+// promised.
+export function passwordPolicyMinLength(policy: SecuritySettings['passwordPolicy']): number {
+  if (policy === 'basic') return 6
+  if (policy === 'very-strong') return 12
+  return 8
+}
+
+export async function getSecuritySettings(): Promise<SecuritySettings> {
+  if (cachedSecurity && cachedSecurity.expiresAt > Date.now()) return cachedSecurity.value
+  try {
+    const db = createServiceClient()
+    const { data } = await db.from('app_settings').select('security').eq('id', 'global').maybeSingle()
+    const value: SecuritySettings = { ...SECURITY_DEFAULTS, ...(data?.security as Partial<SecuritySettings> ?? {}) }
+    cachedSecurity = { value, expiresAt: Date.now() + CACHE_TTL_MS }
+    return value
+  } catch {
+    return SECURITY_DEFAULTS
+  }
+}

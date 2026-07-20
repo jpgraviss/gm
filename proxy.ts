@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifySessionCookie } from '@/lib/session-cookie'
+import { getClientIp } from '@/lib/request-ip'
 
 // ── Rate limiters ────────────────────────────────────────────────────────────
 // In-memory only. Upstash Redis was removed because module-load failures
@@ -55,10 +56,6 @@ const PUBLIC_PREFIXES = [
   '/api/reputation/review-request/',
   '/api/stripe/webhook',
 ]
-
-function getClientIp(req: NextRequest): string {
-  return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
-}
 
 async function proxyImpl(req: NextRequest): Promise<NextResponse> {
   const { pathname } = req.nextUrl
@@ -136,6 +133,17 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
     if ((pathname === '/api/portal-clients/verify-code' || pathname === '/api/portal-clients/complete-setup') && req.method === 'POST') {
       const ip = getClientIp(req)
       if (memoryLimited(`portal-auth-code:${ip}`, 15, 60 * 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many attempts. Please wait a while and try again.' },
+          { status: 429 }
+        )
+      }
+    }
+    // AUDIT.md #207 — the 2FA sign-in code is the same brute-forceable
+    // 6-digit-code class of surface as the two above.
+    if (pathname === '/api/auth/2fa-verify' && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`2fa-code:${ip}`, 15, 60 * 60 * 1000)) {
         return NextResponse.json(
           { error: 'Too many attempts. Please wait a while and try again.' },
           { status: 429 }

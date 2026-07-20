@@ -42,16 +42,21 @@ declare global {
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''
 
 export default function TeamLoginPage() {
-  const { loginWithGoogle, user, loading } = useAuth()
+  const { loginWithGoogle, verify2FACode, user, loading } = useAuth()
   const router = useRouter()
 
-  const [mode, setMode] = useState<'login' | 'sent'>('login')
+  const [mode, setMode] = useState<'login' | 'sent' | '2fa'>('login')
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const gisInitialized = useRef(false)
   const googleBtnRef = useRef<HTMLDivElement>(null)
+
+  // AUDIT.md #207 — Two-Factor Auth "Required" flow
+  const [twoFAEmail, setTwoFAEmail] = useState('')
+  const [twoFACode, setTwoFACode] = useState('')
+  const [twoFASubmitting, setTwoFASubmitting] = useState(false)
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -71,12 +76,29 @@ export default function TeamLoginPage() {
     setGoogleLoading(false)
     if (result.ok) {
       router.push('/')
+    } else if (result.requires2FA && result.email) {
+      setTwoFAEmail(result.email)
+      setMode('2fa')
     } else {
       // eslint-disable-next-line no-console
       console.error('[team-login] google sign-in failed:', result)
       setError(result.error || 'Sign-in failed — check the browser console for details.')
     }
   }, [loginWithGoogle, router])
+
+  const handleVerify2FA = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!twoFACode.trim()) return
+    setError('')
+    setTwoFASubmitting(true)
+    const result = await verify2FACode(twoFAEmail, twoFACode.trim())
+    setTwoFASubmitting(false)
+    if (result.ok) {
+      router.push('/')
+    } else {
+      setError(result.error || 'Verification failed. Please try again.')
+    }
+  }
 
   // Initialize Google Identity Services and render the official button
   useEffect(() => {
@@ -230,6 +252,60 @@ export default function TeamLoginPage() {
                 >
                   Back to Sign In
                 </button>
+              </div>
+            )}
+
+            {/* ── 2FA code entry (AUDIT.md #207) ── */}
+            {mode === '2fa' && (
+              <div className="py-4">
+                <div className="text-center mb-6">
+                  <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: '#e6f0ec' }}>
+                    <Mail size={24} style={{ color: '#015035' }} />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-2"
+                    style={{ fontFamily: 'var(--font-heading)', letterSpacing: '0.06em' }}>
+                    ENTER YOUR CODE
+                  </h2>
+                  <p className="text-gray-500 text-sm">
+                    We sent a 6-digit code to <strong>{twoFAEmail}</strong>
+                  </p>
+                </div>
+                <form onSubmit={handleVerify2FA} className="flex flex-col gap-4">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={twoFACode}
+                    onChange={e => setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    className="w-full text-center text-2xl tracking-[0.5em] font-semibold py-3 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-300 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+                    autoComplete="one-time-code"
+                    autoFocus
+                    disabled={twoFASubmitting}
+                  />
+                  {error && (
+                    <div className="flex items-center gap-2.5 px-3 py-2.5 bg-red-50 border border-red-200 rounded-xl">
+                      <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
+                      <p className="text-sm text-red-700">{error}</p>
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={twoFASubmitting || twoFACode.length !== 6}
+                    className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-semibold transition-opacity disabled:opacity-50"
+                    style={{ background: '#015035' }}
+                  >
+                    {twoFASubmitting ? (
+                      <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Verifying...</>
+                    ) : 'Verify & Sign In'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMode('login'); setTwoFACode(''); setError('') }}
+                    className="text-xs text-gray-400 hover:text-gray-600 text-center"
+                  >
+                    &larr; Back to Sign In
+                  </button>
+                </form>
               </div>
             )}
 

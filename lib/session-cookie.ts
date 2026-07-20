@@ -59,9 +59,9 @@ function base64UrlDecode(str: string): Uint8Array {
   return arr
 }
 
-export async function signSessionCookie(payload: SessionPayload): Promise<string> {
+export async function signSessionCookie(payload: SessionPayload, maxAgeSeconds: number = MAX_AGE_SECONDS): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
-  const body: SignedBody = { ...payload, iat: now, exp: now + MAX_AGE_SECONDS }
+  const body: SignedBody = { ...payload, iat: now, exp: now + maxAgeSeconds }
   const encoder = new TextEncoder()
   const bodyB64 = base64UrlEncode(encoder.encode(JSON.stringify(body)))
   const key = await getHmacKey()
@@ -91,15 +91,35 @@ export async function verifySessionCookie(value: string | undefined | null): Pro
   }
 }
 
-/** Cookie options for setting the signed session cookie on a NextResponse. */
-export async function buildSessionCookie(payload: SessionPayload) {
+// AUDIT.md #207 — `maxAgeSeconds` lets callers apply the configured
+// Session Timeout security setting instead of always getting the fixed
+// 7-day default. Optional and defaulted so this stays edge-runtime-safe
+// (no DB dependency in this file itself) — callers that need the real
+// configured value fetch it themselves via getSecuritySettings() and pass
+// it in; callers that don't care keep the old fixed-lifetime behavior.
+export async function buildSessionCookie(payload: SessionPayload, maxAgeSeconds: number = MAX_AGE_SECONDS) {
   return {
     name: SESSION_COOKIE_NAME,
-    value: await signSessionCookie(payload),
+    value: await signSessionCookie(payload, maxAgeSeconds),
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax' as const,
     path: '/',
-    maxAge: MAX_AGE_SECONDS,
+    maxAge: maxAgeSeconds,
+  }
+}
+
+// AUDIT.md #207 — translates the Security Settings "Session Timeout"
+// dropdown value into seconds. 'never' maps to the same 7-day default this
+// cookie always used before this setting had any real effect, not a
+// literal infinite cookie.
+export function sessionTimeoutToSeconds(timeout: '1h' | '4h' | '8h' | '24h' | 'never'): number {
+  switch (timeout) {
+    case '1h': return 60 * 60
+    case '4h': return 60 * 60 * 4
+    case '8h': return 60 * 60 * 8
+    case '24h': return 60 * 60 * 24
+    case 'never':
+    default: return MAX_AGE_SECONDS
   }
 }

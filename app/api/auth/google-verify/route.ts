@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
-import { buildSessionCookie, type SessionPayload } from '@/lib/session-cookie'
+import { buildSessionCookie, sessionTimeoutToSeconds, type SessionPayload } from '@/lib/session-cookie'
+import { getSecuritySettings } from '@/lib/settings'
+import { isLockedOut, recordFailedAttempt, clearAttempts } from '@/lib/login-attempts'
+import { sendTwoFactorCode } from '@/lib/two-factor'
 
 async function respondWithUser(user: SessionPayload & { name: string; unit: string; initials: string; avatar?: string; company?: string }) {
   const res = NextResponse.json({ user })
+  // AUDIT.md #207 — Session Timeout previously had zero effect on the
+  // cookie's real lifetime.
+  const security = await getSecuritySettings()
   res.cookies.set(await buildSessionCookie({
     id: user.id,
     email: user.email,
     role: user.role,
     isAdmin: user.isAdmin,
     userType: user.userType,
-  }))
+  }, sessionTimeoutToSeconds(security.sessionTimeout)))
   return res
 }
 
@@ -114,6 +120,18 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
     return NextResponse.json({ error: 'No email found in Google credential' }, { status: 400 })
   }
 
+  // AUDIT.md #207 — "Login Attempts" had zero enforcement. Google Sign-In
+  // itself can't be brute-forced (Google owns the credential), but which
+  // emails resolve to a real account can be probed — lock out further
+  // attempts against one email after repeated "no account found" hits.
+  const security = await getSecuritySettings()
+  if (isLockedOut(email, security.loginAttempts)) {
+    return NextResponse.json(
+      { error: 'Too many failed attempts for this account. Please wait 30 minutes and try again.' },
+      { status: 429 },
+    )
+  }
+
   const db = createServiceClient()
 
   // ── 1. Check team_members (staff) — @gravissmarketing.com or direct match ──
@@ -138,6 +156,16 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
         { status: 403 },
       )
     }
+    clearAttempts(email)
+
+    // AUDIT.md #207 — "Two-Factor Auth: Required" previously had zero
+    // effect. When required, don't issue a session yet — email a code and
+    // have the client finish via /api/auth/2fa-verify.
+    if (security.twoFactor === 'required') {
+      await sendTwoFactorCode(teamRow.id, teamRow.email, teamRow.name)
+      return NextResponse.json({ requires2FA: true, email: teamRow.email })
+    }
+
     return respondWithUser({
       id:       teamRow.id,
       email:    teamRow.email,
@@ -224,11 +252,14 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   }
 
   if (!clientRow) {
+    recordFailedAttempt(email)
     return NextResponse.json(
       { error: `No account found for ${email}. Contact Graviss Marketing to get access.` },
       { status: 403 },
     )
   }
+
+  clearAttempts(email)
 
   if (clientRow.access === 'Disabled') {
     return NextResponse.json(

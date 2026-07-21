@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
-import { buildSessionCookie, SESSION_COOKIE_NAME } from '@/lib/session-cookie'
+import { buildSessionCookie, sessionTimeoutToSeconds, SESSION_COOKIE_NAME } from '@/lib/session-cookie'
+import { getSecuritySettings } from '@/lib/settings'
 
 /**
  * Exchanges a real Supabase access token (proven via db.auth.getUser) for a
@@ -37,6 +38,21 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
     return NextResponse.json({ error: 'Your account is not active. Contact an administrator.' }, { status: 403 })
   }
 
+  // AUDIT.md #207 — Session Timeout previously had zero effect.
+  const security = await getSecuritySettings()
+  const maxAgeSeconds = sessionTimeoutToSeconds(security.sessionTimeout)
+
+  // Two-Factor Auth ("Required") is deliberately NOT enforced here.
+  // This route's own doc comment above explains why it's a harder fit than
+  // google-verify: it's called for both a fresh magic-link/OTP login AND
+  // routine session-restore/token-refresh on every page load, and nothing
+  // in the request distinguishes the two — gating it here would force a
+  // fresh 2FA code on every token refresh, not just real new logins, which
+  // would break normal usage far worse than the gap it would close. 2FA is
+  // fully enforced on the Google Sign-In path (google-verify); a staff
+  // member using the "sign in with email" magic-link alternative instead
+  // currently bypasses it. Noted as a real, known gap rather than silently
+  // left half-covered.
   if (teamRow) {
     const res = NextResponse.json({ ok: true })
     res.cookies.set(await buildSessionCookie({
@@ -45,7 +61,7 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
       role: teamRow.role,
       isAdmin: teamRow.is_admin ?? false,
       userType: 'staff',
-    }))
+    }, maxAgeSeconds))
     return res
   }
 
@@ -74,7 +90,7 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
     role: 'Client',
     isAdmin: false,
     userType: 'client',
-  }))
+  }, maxAgeSeconds))
   return res
 })
 

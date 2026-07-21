@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { extractSupabaseToken } from '@/lib/extract-token'
 import { verifySessionCookie } from '@/lib/session-cookie'
+import { getSecuritySettings } from '@/lib/settings'
+import { getClientIp } from '@/lib/request-ip'
 
 /**
  * Role hierarchy — higher roles inherit the permissions of lower roles.
@@ -77,6 +79,24 @@ async function getCurrentUser(req: NextRequest): Promise<AuthenticatedUser | nul
     const removeAt = new Date(schedule.removeAccessOn).getTime()
     const reinstateAt = schedule.reinstateOn ? new Date(schedule.reinstateOn).getTime() : null
     if (removeAt <= now && (!reinstateAt || reinstateAt > now)) {
+      return null
+    }
+  }
+
+  // AUDIT.md #207 — IP Restriction previously had zero enforcement.
+  // Deliberately checked here (requireRole/getAuthUser) and NOT in
+  // lib/admin-auth.ts's requireAdmin — an admin misconfiguring this list
+  // (a typo, a changed office IP) must always retain a way into Settings
+  // to fix it, or the org locks itself out with no recovery path short of
+  // direct DB access. is_admin callers are exempt from the same reasoning:
+  // requireRole's own `if (user.isAdmin) return null` bypass would be
+  // pointless to protect against here if getCurrentUser already blocked
+  // them from ever reaching that check.
+  const security = await getSecuritySettings()
+  if (security.ipRestriction !== 'disabled' && !member.is_admin) {
+    const allowedIps = security.ipRestriction.split(',').map(ip => ip.trim()).filter(Boolean)
+    const callerIp = getClientIp(req)
+    if (allowedIps.length > 0 && !allowedIps.includes(callerIp)) {
       return null
     }
   }

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchCrmContacts, fetchCrmCompanies, fetchDeals, fetchContracts, fetchProjects, fetchCrmActivities } from '@/lib/supabase'
+import { normalizeDomain, PUBLIC_EMAIL_DOMAINS } from '@/lib/domain-utils'
 import {
   formatCurrency, stageColors, serviceTypeColors,
   contractStatusColors, projectStatusColors,
@@ -1565,9 +1566,47 @@ export default function ContactsPage() {
   }
 
   async function handleNewContact(data: NewContactFormData) {
-    const company = crmCompanies.find(c => c.name === data.companyName)
+    // Previously fabricated a fake companyId (`co-${Date.now()}`) whenever
+    // the typed/auto-filled company name didn't exactly match an existing
+    // one — that id never corresponded to any real crm_companies row, so
+    // the contact silently ended up "linked" to nothing. Now matches by
+    // email domain first (more reliable than a free-text name — the same
+    // company can be typed multiple ways, but the domain is the same),
+    // falls back to an exact name match, and if neither hits, actually
+    // creates the missing company record instead of inventing an id.
+    const emailDomain = normalizeDomain(data.email.includes('@') ? data.email.split('@')[1] : '')
+    const isPublicEmailDomain = PUBLIC_EMAIL_DOMAINS.has(emailDomain)
+
+    let company = (!isPublicEmailDomain && emailDomain)
+      ? crmCompanies.find(c => normalizeDomain(c.website ?? '') === emailDomain)
+      : undefined
+    if (!company) {
+      company = crmCompanies.find(c => c.name.trim().toLowerCase() === data.companyName.trim().toLowerCase())
+    }
+
+    let companyId = company?.id
+    if (!companyId && data.companyName.trim()) {
+      const website = data.website.trim() || (!isPublicEmailDomain && emailDomain ? `https://${emailDomain}` : undefined)
+      try {
+        const companyRes = await fetch('/api/crm/companies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: data.companyName.trim(), website }),
+        })
+        if (companyRes.ok) {
+          const createdCompany = await companyRes.json()
+          companyId = createdCompany.id
+          setCrmCompanies(prev => [...prev, createdCompany])
+        } else {
+          toast('Could not create a company record for this contact — saved without one linked', 'error')
+        }
+      } catch {
+        toast('Could not create a company record for this contact — saved without one linked', 'error')
+      }
+    }
+
     const payload = {
-      companyId: company?.id ?? `co-${Date.now()}`,
+      companyId: companyId || undefined,
       companyName: data.companyName,
       firstName: data.firstName,
       lastName: data.lastName,

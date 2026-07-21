@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
-import { buildSessionCookie } from '@/lib/session-cookie'
+import { buildSessionCookie, sessionTimeoutToSeconds } from '@/lib/session-cookie'
+import { getSecuritySettings } from '@/lib/settings'
 
 export const POST = withErrorHandler('portal-clients/magic-link/verify POST', async (req) => {
   const { token } = await req.json()
@@ -74,6 +75,9 @@ export const POST = withErrorHandler('portal-clients/magic-link/verify POST', as
     company:  client.company,
   }
 
+  // AUDIT.md #207 — Session Timeout previously had zero effect.
+  const security = await getSecuritySettings()
+
   const res = NextResponse.json({ user })
   res.cookies.set(await buildSessionCookie({
     id: user.id,
@@ -81,6 +85,6 @@ export const POST = withErrorHandler('portal-clients/magic-link/verify POST', as
     role: user.role,
     isAdmin: user.isAdmin,
     userType: user.userType,
-  }))
+  }, sessionTimeoutToSeconds(security.sessionTimeout)))
   return res
 })

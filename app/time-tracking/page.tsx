@@ -441,6 +441,7 @@ export default function TimeTrackingPage() {
           rejectionNote: status === 'rejected' ? rejectionNote : undefined,
         }),
       })
+      if (!res.ok) throw new Error('Failed')
       const updated = await res.json()
       if (Array.isArray(updated)) {
         setEntries(prev => prev.map(e => {
@@ -448,6 +449,8 @@ export default function TimeTrackingPage() {
           return match ?? e
         }))
         toast(`${updated.length} ${updated.length === 1 ? 'entry' : 'entries'} ${status}`, 'success')
+      } else {
+        toast(`Failed to ${status === 'approved' ? 'approve' : 'reject'} entries`, 'error')
       }
     } catch {
       toast(`Failed to ${status === 'approved' ? 'approve' : 'reject'} entries`, 'error')

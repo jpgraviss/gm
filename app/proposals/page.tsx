@@ -24,6 +24,7 @@ function generateId(prefix: string) {
 }
 import { useToast } from '@/components/ui/Toast'
 import { downloadCsv } from '@/lib/csv-export'
+import { useAuth } from '@/contexts/AuthContext'
 
 const statusOrder: ProposalStatus[] = ['Draft', 'Pending Approval', 'Approved', 'Sent', 'Viewed', 'Accepted', 'Declined']
 
@@ -487,6 +488,7 @@ function WinProbabilityIndicator({ status }: { status: ProposalStatus }) {
 
 export default function ProposalsPage() {
   const { toast } = useToast()
+  const { user } = useAuth()
   const searchParams = useSearchParams()
   const [localProposals, setLocalProposals] = useState<Proposal[]>([])
   const [selected, setSelected] = useState<Proposal | null>(null)
@@ -548,7 +550,10 @@ export default function ProposalsPage() {
 
     const datePatch = {
       ...(status === 'Pending Approval' ? { submittedForApprovalDate: today } : {}),
-      ...(status === 'Approved' ? { approvedDate: today, approvedBy: 'Jonathan Graviss' } : {}),
+      // AUDIT.md #211 — was hardcoded to one specific person regardless of
+      // who actually clicked Approve, fabricating attribution on a real
+      // business record.
+      ...(status === 'Approved' ? { approvedDate: today, approvedBy: user?.name || user?.email || 'Unknown' } : {}),
       ...(status === 'Sent' ? { sentDate: today } : {}),
       ...(status === 'Viewed' ? { viewedDate: today } : {}),
       ...(['Accepted', 'Declined'].includes(status) ? { respondedDate: today } : {}),

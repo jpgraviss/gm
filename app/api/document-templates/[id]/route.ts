@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuthUser, requireRole } from '@/lib/rbac'
+import { requireAdmin } from '@/lib/admin-auth'
 import { validate, validationError } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
@@ -33,7 +34,8 @@ export const GET = withErrorHandler('document-templates/[id] GET', async (req, {
 })
 
 export const PATCH = withErrorHandler('document-templates/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
-  const denied = await requireRole(req, 'Team Member')
+  // AUDIT #241 — same admin-only rationale as the POST route.
+  const denied = await requireAdmin(req)
   if (denied) return denied
 
   const { id } = await params

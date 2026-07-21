@@ -956,8 +956,9 @@ function WordPressTab({
       <div className="grid grid-cols-3 gap-3">
         <StatCard
           label="WP Version"
-          value={wpData.wpVersion ?? 'Hidden'}
-          icon={<Globe size={14} style={{ color: FOREST }} />}
+          value={wpData.wpVersion ? (wpData.coreUpdateAvailable ? `${wpData.wpVersion} (update available)` : wpData.wpVersion) : 'Hidden'}
+          valueClass={wpData.coreUpdateAvailable ? 'text-amber-600' : undefined}
+          icon={<Globe size={14} style={{ color: wpData.coreUpdateAvailable ? '#d97706' : FOREST }} />}
         />
         <StatCard
           label="Plugin Updates"

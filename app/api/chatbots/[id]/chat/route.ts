@@ -50,11 +50,17 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
   if (convoId) {
     const { data: convo } = await db
       .from('chatbot_conversations')
-      .select('messages')
+      .select('messages, visitor_id')
       .eq('id', convoId)
       .eq('chatbot_id', id)
       .single()
-    if (convo) {
+    // AUDIT #264 — this only checked id+chatbot_id, no visitor-ownership
+    // check, so anyone who obtained a conversationId could append to
+    // another visitor's thread. The widget (public/chatbot.js) always
+    // sends its localStorage-persisted visitorId alongside conversationId,
+    // so a mismatch means this isn't really the same visitor — start a
+    // fresh conversation instead of continuing theirs.
+    if (convo && (!convo.visitor_id || convo.visitor_id === visitorId)) {
       existingMessages = (convo.messages as ConversationMessage[]) || []
     } else {
       convoId = undefined

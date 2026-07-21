@@ -116,6 +116,7 @@ export const POST = withErrorHandler('portal-clients POST', async (req) => {
     .insert({
       id:            body.id ?? `pc-${Date.now()}`,
       company:       body.company,
+      company_id:    (body.companyId as string | undefined) ?? null,
       service:       body.service ?? '',
       access:        body.access ?? 'Not Setup',
       last_login:    body.lastLogin ?? 'Never',

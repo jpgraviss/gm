@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
+import { requireAdmin } from '@/lib/admin-auth'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -45,7 +46,11 @@ export const GET = withErrorHandler('document-templates GET', async (req: NextRe
 })
 
 export const POST = withErrorHandler('document-templates POST', async (req: NextRequest) => {
-  const denied = await requireRole(req, 'Team Member')
+  // AUDIT #241 — org-wide legal document templates (proposals/contracts/
+  // addendums, resolved by the AI generate_document tool and Apply Service
+  // Template automation action) should be admin-only to create, matching
+  // this page living under /admin/* and the Permissions reference table.
+  const denied = await requireAdmin(req)
   if (denied) return denied
 
   const body = await req.json()

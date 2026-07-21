@@ -174,7 +174,7 @@ describe('automations-engine', () => {
     expect(mockDb.from).toHaveBeenCalledWith('crm_activities')
     expect(insertCalls['crm_activities'][0]).toEqual(
       expect.objectContaining({
-        type: 'Notification',
+        type: 'note',
         user_name: 'System',
       }),
     )
@@ -248,7 +248,7 @@ describe('automations-engine', () => {
     expect(mockDb.from).toHaveBeenCalledWith('crm_activities')
     expect(insertCalls['crm_activities'][0]).toEqual(
       expect.objectContaining({
-        type: 'Note',
+        type: 'note',
         user_name: 'System',
       }),
     )

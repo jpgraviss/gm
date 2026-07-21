@@ -286,6 +286,7 @@ async function runUptimeChecks(): Promise<{ checked: number; skipped: number; er
   }
 
   const now = Date.now()
+  const nowIso = new Date(now).toISOString()
   let checked = 0
   let skipped = 0
   let errors = 0
@@ -298,6 +299,22 @@ async function runUptimeChecks(): Promise<{ checked: number; skipped: number; er
         skipped++
         continue
       }
+    }
+
+    // Atomic claim, conditioned on last_check_at still matching what we just
+    // read — matches the claim-before-work pattern already used elsewhere in
+    // this file (resumePendingAutomationSteps, dispatchScheduledReviewCampaigns).
+    // Without it, an overlapping cron tick (GH Actions pings every 5 min with
+    // its own retry, no execution-time guard) can read the same stale
+    // last_check_at and double-check the same site, sending a duplicate down
+    // alert and writing a duplicate uptime_checks row.
+    const claimQuery = db.from('monitored_sites').update({ last_check_at: nowIso }).eq('id', site.id)
+    const { data: claimed } = await (
+      site.last_check_at ? claimQuery.eq('last_check_at', site.last_check_at) : claimQuery.is('last_check_at', null)
+    ).select('id').maybeSingle()
+    if (!claimed) {
+      skipped++
+      continue
     }
 
     try {

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole, getAuthUser } from '@/lib/rbac'
-import { departmentForUnit } from '@/lib/task-department'
+import { departmentForUnit, TASK_DEPARTMENTS } from '@/lib/task-department'
+import { VALID_STATUSES, VALID_PRIORITIES, VALID_CATEGORIES } from '../route'
 
 // Mirrors the department-visibility rule in tasks GET (Operations should
 // never touch a Finance task by id just because they know/guessed its id) —
@@ -22,6 +23,24 @@ export const PATCH = withErrorHandler('tasks/[id] PATCH', async (req: NextReques
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()
+
+  // Matches the enum validation POST /api/tasks already has (AUDIT #222) —
+  // this route previously passed status/priority/category/department
+  // straight through, so an invalid value silently vanished the task from
+  // the Kanban board (its column/color lookups key off exact enum values)
+  // while it still counted in "Total Tasks".
+  if (body.status !== undefined && !VALID_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
+  }
+  if (body.priority !== undefined && !VALID_PRIORITIES.includes(body.priority)) {
+    return NextResponse.json({ error: 'Invalid priority' }, { status: 400 })
+  }
+  if (body.category !== undefined && !VALID_CATEGORIES.includes(body.category)) {
+    return NextResponse.json({ error: 'Invalid category' }, { status: 400 })
+  }
+  if (body.department !== undefined && body.department !== null && !(TASK_DEPARTMENTS as readonly string[]).includes(body.department)) {
+    return NextResponse.json({ error: 'Invalid department' }, { status: 400 })
+  }
 
   const user = await getAuthUser(req)
   const { data: existing } = await db.from('app_tasks').select('department, assigned_to').eq('id', id).maybeSingle()

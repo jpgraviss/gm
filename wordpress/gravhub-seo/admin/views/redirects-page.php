@@ -219,6 +219,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 					apiFetch( 'redirects/' + btn.dataset.id, { method: 'DELETE' } ).then( loadRedirects );
 				} );
 			} );
+		} ).catch( function () {
+			// AUDIT #270 — on a network failure/expired nonce/5xx, this
+			// table was previously stuck on "Loading…" forever with no
+			// error shown, unlike the "Scan Now" button's own .catch().
+			document.getElementById( 'gravhub-redirects-list' ).innerHTML =
+				'<tr><td colspan="5"><?php echo esc_js( __( 'Failed to load redirects.', 'gravhub-seo' ) ); ?></td></tr>';
 		} );
 	}
 
@@ -245,6 +251,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 			document.getElementById( 'gravhub-redirect-suggestions' ).style.display = 'none';
 			loadRedirects();
 			load404Log();
+		} ).catch( function () {
+			alert( '<?php echo esc_js( __( 'Failed to add redirect.', 'gravhub-seo' ) ); ?>' );
 		} );
 	} );
 
@@ -282,6 +290,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 					loadSuggestions( btn.dataset.id );
 				} );
 			} );
+		} ).catch( function () {
+			document.getElementById( 'gravhub-404-list' ).innerHTML =
+				'<tr><td colspan="4"><?php echo esc_js( __( 'Failed to load 404 log.', 'gravhub-seo' ) ); ?></td></tr>';
 		} );
 	}
 
@@ -342,6 +353,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 					apiFetch( 'broken-links/' + btn.dataset.id, { method: 'DELETE' } ).then( loadBrokenLinks );
 				} );
 			} );
+		} ).catch( function () {
+			document.getElementById( 'gravhub-broken-links-list' ).innerHTML =
+				'<tr><td colspan="5"><?php echo esc_js( __( 'Failed to load broken links.', 'gravhub-seo' ) ); ?></td></tr>';
 		} );
 	}
 

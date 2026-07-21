@@ -147,13 +147,31 @@ function TicketPanel({
         {ticket.projectId && (
           <div className="flex-shrink-0 mx-4 mt-3">
             <Link
-              href="/projects"
+              href={`/projects/${ticket.projectId}`}
               className="flex items-center gap-2 p-2.5 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors"
             >
               <FolderKanban size={14} style={{ color: '#015035' }} />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-gray-800 truncate">Linked Project</p>
                 <p className="text-[11px] text-gray-500">View in Projects</p>
+              </div>
+              <ExternalLink size={12} className="text-gray-400 flex-shrink-0" />
+            </Link>
+          </div>
+        )}
+
+        {/* AUDIT #263 — linkedTaskId was fetched but never displayed
+            anywhere on the page. */}
+        {ticket.linkedTaskId && (
+          <div className="flex-shrink-0 mx-4 mt-3">
+            <Link
+              href={`/tasks?open=${ticket.linkedTaskId}`}
+              className="flex items-center gap-2 p-2.5 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors"
+            >
+              <CheckCircle size={14} style={{ color: '#015035' }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-800 truncate">Linked Task</p>
+                <p className="text-[11px] text-gray-500">View in Tasks</p>
               </div>
               <ExternalLink size={12} className="text-gray-400 flex-shrink-0" />
             </Link>

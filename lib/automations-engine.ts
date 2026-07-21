@@ -478,7 +478,7 @@ async function executeAction(
       const note = (context.activityNote as string) ?? `[Auto] ${context.trigger ?? 'Automation'} for ${company}`
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'Note',
+        type: 'note',
         title: note,
         company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
@@ -494,7 +494,7 @@ async function executeAction(
 
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'Notification',
+        type: 'note',
         title: `[Auto] ${message}`,
         company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
@@ -519,7 +519,7 @@ async function executeAction(
             .from('team_members')
             .select('id')
             .eq('unit', unit)
-            .eq('status', 'Active')
+            .eq('status', 'active')
           for (const m of members ?? []) targetUserIds.push(m.id)
         }
       }
@@ -660,7 +660,7 @@ async function executeAction(
       const notifMessage = `${action}: ${context.trigger ?? 'Automation triggered'} for ${company}`
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'Notification',
+        type: 'note',
         title: `[Auto] ${notifMessage}`,
         company_id: (context.companyId as string) ?? null,
         contact_id: (context.contactId as string) ?? null,
@@ -680,7 +680,7 @@ async function executeAction(
           .from('team_members')
           .select('id')
           .eq('unit', targetUnit)
-          .eq('status', 'Active')
+          .eq('status', 'active')
         for (const m of members ?? []) {
           sendPushNotification({ userId: m.id, title: action, body: notifMessage, url: '/automation' }).catch(() => {})
         }
@@ -696,7 +696,7 @@ async function executeAction(
     case 'Log Touchpoint': {
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'Touchpoint',
+        type: 'note',
         title: `[Auto] ${context.trigger ?? 'Automation'} for ${company}`,
         company_id: (context.companyId as string) ?? null,
         contact_id: (context.contactId as string) ?? null,
@@ -709,7 +709,7 @@ async function executeAction(
     case 'Flag in Dashboard': {
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'FLAG',
+        type: 'note',
         title: `[Auto] Flagged for attention — ${context.trigger ?? action}`,
         company_id: (context.companyId as string) ?? null,
         timestamp: new Date().toISOString(),
@@ -755,7 +755,7 @@ async function executeAction(
       if (!template) break
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'Template',
+        type: 'note',
         title: `[Auto] Applied service template "${template.name}" to ${company}`,
         company_id: (context.companyId as string) ?? null,
         timestamp: new Date().toISOString(),
@@ -967,7 +967,7 @@ async function executeAction(
         .from('team_members')
         .select('id, name')
         .eq('unit', unit)
-        .eq('status', 'Active')
+        .eq('status', 'active')
         .order('id', { ascending: true })
       if (!members || members.length === 0) break
 

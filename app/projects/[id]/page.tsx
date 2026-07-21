@@ -17,7 +17,7 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   ArrowLeft, Plus, X, CheckCircle2, Clock, Circle, LayoutList, Columns3,
   MoreHorizontal, Pencil, Trash2, ChevronDown, ChevronRight, Calendar,
-  Users, Flag, GripVertical, AlertTriangle, CheckSquare, Settings,
+  Users, Flag, AlertTriangle, CheckSquare, Settings,
   Globe, BarChart2, Share2, Mail, Palette, Wrench, StickyNote,
   FolderKanban, Milestone as MilestoneIcon, FileText, Briefcase, TrendingUp,
 } from 'lucide-react'
@@ -92,9 +92,6 @@ function TaskRow({
       className={`group flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors ${overdue ? 'bg-red-50/30' : ''}`}
       onClick={onSelect}
     >
-      <div className="flex-shrink-0 text-gray-300 opacity-0 group-hover:opacity-100 cursor-grab">
-        <GripVertical size={14} />
-      </div>
       <button
         onClick={e => { e.stopPropagation(); onToggle() }}
         className={`w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
@@ -532,6 +529,7 @@ function ProjectSettingsModal({
 }) {
   const teamMembers = useTeamMembers()
   const [company, setCompany] = useState(project.company)
+  const [companyId, setCompanyId] = useState<string | null | undefined>(project.companyId)
   const [serviceType, setServiceType] = useState(project.serviceType)
   const [status, setStatus] = useState(project.status)
   const [startDate, setStartDate] = useState(project.startDate)
@@ -539,6 +537,7 @@ function ProjectSettingsModal({
   const [color, setColor] = useState(project.color ?? '#015035')
   const [selectedTeam, setSelectedTeam] = useState(project.assignedTeam)
   const [description, setDescription] = useState(project.description ?? '')
+  const [overview, setOverview] = useState(project.overview ?? '')
 
   const colors = ['#015035', '#3b82f6', '#8b5cf6', '#ef4444', '#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1']
 
@@ -553,11 +552,15 @@ function ProjectSettingsModal({
         <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company</label>
-            <CompanySelect value={company} onChange={setCompany} />
+            <CompanySelect value={company} onChange={(name, id) => { setCompany(name); setCompanyId(id ?? null) }} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Description</label>
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-600 resize-none" placeholder="Project description..." />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Overview</label>
+            <textarea value={overview} onChange={e => setOverview(e.target.value.slice(0, 5000))} rows={4} maxLength={5000} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-600 resize-y" placeholder="Longer-form project overview, shown on the Overview tab..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -611,7 +614,7 @@ function ProjectSettingsModal({
         <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
           <button
-            onClick={() => { onUpdate({ company, serviceType, status, startDate, launchDate, color, assignedTeam: selectedTeam, description }); onClose() }}
+            onClick={() => { onUpdate({ company, companyId, serviceType, status, startDate, launchDate, color, assignedTeam: selectedTeam, description, overview }); onClose() }}
             className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold"
             style={{ background: color }}
           >
@@ -707,20 +710,25 @@ export default function ProjectDetailPage() {
   const computedProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : project?.progress ?? 0
 
   const toggleTaskStatus = useCallback((taskId: string) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id !== taskId) return t
-      const newStatus: AppTaskStatus = t.status === 'Completed' ? 'Pending' : 'Completed'
-      const completedDate = newStatus === 'Completed' ? new Date().toISOString().split('T')[0] : undefined
-      fetch(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus, completedDate: completedDate ?? null }),
-      }).catch(() => {})
-      return { ...t, status: newStatus, completedDate }
-    }))
-  }, [])
+    const previous = tasks.find(t => t.id === taskId)
+    if (!previous) return
+    const newStatus: AppTaskStatus = previous.status === 'Completed' ? 'Pending' : 'Completed'
+    const completedDate = newStatus === 'Completed' ? new Date().toISOString().split('T')[0] : undefined
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus, completedDate } : t))
+    fetch(`/api/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus, completedDate: completedDate ?? null }),
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      setTasks(prev => prev.map(t => t.id === taskId ? previous : t))
+      toast('Failed to update task', 'error')
+    })
+  }, [tasks, toast])
 
   const updateTask = useCallback((taskId: string, updates: Partial<AppTask>) => {
+    const previous = tasks.find(t => t.id === taskId)
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t))
     setSelectedTask(prev => prev?.id === taskId ? { ...prev, ...updates } : prev)
     const apiBody: Record<string, unknown> = {}
@@ -736,13 +744,27 @@ export default function ProjectDetailPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(apiBody),
-    }).catch(() => toast('Failed to update task', 'error'))
-  }, [toast])
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      if (previous) {
+        setTasks(prev => prev.map(t => t.id === taskId ? previous : t))
+        setSelectedTask(prev => prev?.id === taskId ? previous : prev)
+      }
+      toast('Failed to update task', 'error')
+    })
+  }, [tasks, toast])
 
   const deleteTask = useCallback((taskId: string) => {
+    const previous = tasks.find(t => t.id === taskId)
     setTasks(prev => prev.filter(t => t.id !== taskId))
-    fetch(`/api/tasks/${taskId}`, { method: 'DELETE' }).catch(() => toast('Failed to delete task', 'error'))
-  }, [toast])
+    fetch(`/api/tasks/${taskId}`, { method: 'DELETE' }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      if (previous) setTasks(prev => [...prev, previous])
+      toast('Failed to delete task', 'error')
+    })
+  }, [tasks, toast])
 
   const addTask = useCallback((data: { title: string; section: string; assignedTo: string; dueDate: string; priority: TaskPriority }) => {
     const newTask: AppTask = {
@@ -764,16 +786,30 @@ export default function ProjectDetailPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newTask),
-    }).catch(() => toast('Failed to create task', 'error'))
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      setTasks(prev => prev.filter(t => t.id !== newTask.id))
+      toast('Failed to create task', 'error')
+    })
   }, [id, tasks.length, toast])
 
   const updateProject = useCallback((updates: Partial<Project>) => {
-    setProject(prev => prev ? { ...prev, ...updates } as Project : prev)
-    fetch(`/api/projects/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    }).catch(() => toast('Failed to update project', 'error'))
+    setProject(prev => {
+      if (!prev) return prev
+      const previous = prev
+      fetch(`/api/projects/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      }).then(res => {
+        if (!res.ok) throw new Error('Failed')
+      }).catch(() => {
+        setProject(p => p && p.id === previous.id ? previous : p)
+        toast('Failed to update project', 'error')
+      })
+      return { ...prev, ...updates } as Project
+    })
   }, [id, toast])
 
   const deleteProject = useCallback(async () => {
@@ -809,6 +845,13 @@ export default function ProjectDetailPage() {
     setShowAddMilestone(false)
   }, [project, newMilestoneName, newMilestoneDue, updateProject])
 
+  // AUDIT #225 — addMilestone/addNote had no corresponding delete path, so
+  // once created either was permanent short of a DB admin.
+  const deleteMilestone = useCallback((milestoneId: string) => {
+    if (!project) return
+    updateProject({ milestones: project.milestones.filter(m => m.id !== milestoneId) })
+  }, [project, updateProject])
+
   const addNote = useCallback(() => {
     if (!project || !noteText.trim()) return
     const newNote = {
@@ -821,6 +864,11 @@ export default function ProjectDetailPage() {
     setNoteText('')
     setShowNoteForm(false)
   }, [project, noteText, updateProject])
+
+  const deleteNote = useCallback((noteId: string) => {
+    if (!project) return
+    updateProject({ notes: (project.notes ?? []).filter(n => n.id !== noteId) })
+  }, [project, updateProject])
 
   const addSection = useCallback((name: string) => {
     if (!name.trim() || sections.includes(name.trim())) return
@@ -1071,6 +1119,16 @@ export default function ProjectDetailPage() {
 
         {viewMode === 'overview' && (
           <div className="max-w-2xl mx-auto flex flex-col gap-5">
+            {/* AUDIT #252 — project.overview round-tripped through the API
+                and client mapping but was never rendered anywhere, easy to
+                miss given this tab is also named "Overview". */}
+            {project.overview && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Overview</h3>
+                <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{project.overview}</p>
+              </div>
+            )}
+
             {/* Progress */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex justify-between mb-3">
@@ -1138,17 +1196,24 @@ export default function ProjectDetailPage() {
               {project.milestones.length > 0 && (
                 <div className="flex flex-col gap-2 mb-2">
                   {project.milestones.map((m, i) => (
-                    <button
+                    <div
                       key={m.id}
-                      onClick={() => toggleMilestone(m.id)}
-                      className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-colors ${m.completed ? 'bg-emerald-50 border-emerald-100 hover:bg-emerald-100/60' : 'bg-gray-50 border-gray-100 hover:bg-gray-100'}`}
+                      className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${m.completed ? 'bg-emerald-50 border-emerald-100 hover:bg-emerald-100/60' : 'bg-gray-50 border-gray-100 hover:bg-gray-100'}`}
                     >
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${m.completed ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                        {m.completed ? <CheckCircle2 size={12} /> : i + 1}
-                      </div>
-                      <span className={`text-sm flex-1 ${m.completed ? 'text-emerald-700' : 'text-gray-800'}`}>{m.name}</span>
-                      <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.dueDate)}</span>
-                    </button>
+                      <button onClick={() => toggleMilestone(m.id)} className="flex items-center gap-3 flex-1 text-left min-w-0">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${m.completed ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                          {m.completed ? <CheckCircle2 size={12} /> : i + 1}
+                        </div>
+                        <span className={`text-sm flex-1 truncate ${m.completed ? 'text-emerald-700' : 'text-gray-800'}`}>{m.name}</span>
+                        <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.dueDate)}</span>
+                      </button>
+                      <button
+                        onClick={() => deleteMilestone(m.id)}
+                        className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -1193,9 +1258,17 @@ export default function ProjectDetailPage() {
               {(project.notes ?? []).length > 0 && (
                 <div className="flex flex-col gap-2 mb-2">
                   {project.notes!.map(note => (
-                    <div key={note.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{note.text}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">{note.author} · {note.date}</p>
+                    <div key={note.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{note.text}</p>
+                        <p className="text-[10px] text-gray-400 mt-1">{note.author} · {note.date}</p>
+                      </div>
+                      <button
+                        onClick={() => deleteNote(note.id)}
+                        className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -1277,6 +1350,7 @@ export default function ProjectDetailPage() {
 }
 
 function ProjectFilesSection({ company }: { company: string }) {
+  const { toast } = useToast()
   const [files, setFiles] = useState<ProjectFile[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -1296,8 +1370,15 @@ function ProjectFilesSection({ company }: { company: string }) {
       files={files}
       onUpload={file => setFiles(prev => [file, ...prev])}
       onRemove={file => {
-        fetch('/api/files', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: file.path }) })
         setFiles(prev => prev.filter(f => f.path !== file.path))
+        fetch('/api/files', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: file.path }) })
+          .then(res => {
+            if (!res.ok) throw new Error('Failed')
+          })
+          .catch(() => {
+            setFiles(prev => [file, ...prev])
+            toast('Failed to remove file', 'error')
+          })
       }}
     />
   )

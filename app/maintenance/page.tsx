@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { fetchCrmContacts, fetchContracts, fetchInvoices } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, formatDate, getDaysUntil } from '@/lib/utils'
 import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import StatusBadge from '@/components/ui/StatusBadge'
@@ -625,9 +626,10 @@ export default function MaintenancePage() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
 
   useEffect(() => {
-    fetch('/api/maintenance')
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setRecords(data) })
+    // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+    // rows silently truncated "MRR from Maintenance" past that.
+    fetchAllPages<MaintenanceRecord>('/api/maintenance')
+      .then(setRecords)
       .catch(() => toast('Failed to load maintenance records', 'error'))
       .finally(() => setLoading(false))
     fetchCrmContacts().then(setCrmContacts)
@@ -678,56 +680,100 @@ export default function MaintenancePage() {
     setAddingRecord(false)
   }
 
-  function handleEditRecord(data: Omit<MaintenanceRecord, 'id'>) {
+  // AUDIT.md #213 — all 5 handlers below previously applied their optimistic
+  // update unconditionally and only caught network-level failures, never
+  // checking res.ok — a rejected write (e.g. a 403) showed a false success
+  // while the record was unchanged server-side. Each now reverts the
+  // optimistic state on a non-OK response, matching the pattern
+  // `handleDeleteRecord` already used correctly for its own catch branch.
+  async function handleEditRecord(data: Omit<MaintenanceRecord, 'id'>) {
     if (!editingRecord) return
+    const previous = editingRecord
     setRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...data } : r))
-    fetch(`/api/maintenance/${editingRecord.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).catch(() => toast('Failed to save maintenance record changes', 'error'))
     setEditingRecord(null)
     setSelected(null)
+    try {
+      const res = await fetch(`/api/maintenance/${previous.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      setRecords(prev => prev.map(r => r.id === previous.id ? previous : r))
+      toast('Failed to save maintenance record changes', 'error')
+    }
   }
 
-  function confirmCancellation(id: string) {
+  async function confirmCancellation(id: string) {
+    const previous = records.find(r => r.id === id)
     setRecords(prev => prev.map(r => r.id === id ? { ...r, status: 'Cancelled' } : r))
-    fetch(`/api/maintenance/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'Cancelled' }),
-    }).catch(() => toast('Failed to confirm cancellation', 'error'))
     setSelected(null)
+    try {
+      const res = await fetch(`/api/maintenance/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Cancelled' }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      if (previous) setRecords(prev => prev.map(r => r.id === id ? previous : r))
+      toast('Failed to confirm cancellation', 'error')
+    }
   }
 
-  function updateBilling(id: string, fee: number, nextDate: string) {
+  async function updateBilling(id: string, fee: number, nextDate: string) {
+    const previous = records.find(r => r.id === id)
     setRecords(prev => prev.map(r => r.id === id ? { ...r, monthlyFee: fee, nextBillingDate: nextDate } : r))
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, monthlyFee: fee, nextBillingDate: nextDate } : prev)
-    fetch(`/api/maintenance/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ monthlyFee: fee, nextBillingDate: nextDate }),
-    }).catch(() => toast('Failed to update billing details', 'error'))
+    try {
+      const res = await fetch(`/api/maintenance/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monthlyFee: fee, nextBillingDate: nextDate }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      if (previous) {
+        setRecords(prev => prev.map(r => r.id === id ? previous : r))
+        if (selected?.id === id) setSelected(previous)
+      }
+      toast('Failed to update billing details', 'error')
+    }
   }
 
-  function updateDocuments(id: string, documents: MaintenanceRecord['documents']) {
+  async function updateDocuments(id: string, documents: MaintenanceRecord['documents']) {
+    const previous = records.find(r => r.id === id)
     setRecords(prev => prev.map(r => r.id === id ? { ...r, documents } : r))
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, documents } : prev)
-    fetch(`/api/maintenance/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ documents }),
-    }).catch(() => toast('Failed to save document', 'error'))
+    try {
+      const res = await fetch(`/api/maintenance/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documents }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      if (previous) {
+        setRecords(prev => prev.map(r => r.id === id ? previous : r))
+        if (selected?.id === id) setSelected(previous)
+      }
+      toast('Failed to save document', 'error')
+    }
   }
 
   async function handleDeleteRecord(id: string) {
     if (!confirm('Are you sure you want to permanently delete this maintenance record?')) return
+    const previous = records.find(r => r.id === id)
+    const previousIndex = records.findIndex(r => r.id === id)
     setRecords(prev => prev.filter(r => r.id !== id))
     setSelected(null)
     try {
-      await fetch(`/api/maintenance/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/maintenance/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed')
       toast('Maintenance record deleted', 'success')
     } catch {
+      if (previous) setRecords(prev => [...prev.slice(0, previousIndex), previous, ...prev.slice(previousIndex)])
       toast('Failed to delete maintenance record', 'error')
     }
   }

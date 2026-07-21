@@ -36,16 +36,14 @@ export const GET = withErrorHandler('track/click/ext/[token] GET', async (
     .maybeSingle()
 
   if (tracked) {
+    // AUDIT #247 — atomic RPC instead of a read-then-write increment.
     await Promise.all([
       db.from('tracked_email_clicks').insert({
         id: `tec-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         tracked_email_id: tracked.id,
         url,
       }),
-      db.from('tracked_emails').update({
-        click_count: (tracked.click_count ?? 0) + 1,
-        last_clicked_at: new Date().toISOString(),
-      }).eq('id', tracked.id),
+      db.rpc('increment_tracked_email_counts', { p_id: tracked.id, p_clicks: 1 }),
     ])
     await mirrorTrackedEmailActivity(db, tracked, `Clicked link in email${tracked.subject ? ` (${tracked.subject})` : ''}`)
   }

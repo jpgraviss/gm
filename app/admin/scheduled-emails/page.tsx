@@ -61,24 +61,41 @@ export default function ScheduledEmailsPage() {
     }
   }, [user, authLoading, router])
 
+  // AUDIT #267 — GET /api/email/scheduled?limit=200 with no offset
+  // follow-up despite getScheduledEmails() supporting it, so the
+  // Pending/Sent Today/Failed counts and list silently undercounted past
+  // 200 entries in one status. Page through via offset until a page comes
+  // back short of the page size.
+  async function fetchAllScheduled(status?: string): Promise<ScheduledEmail[]> {
+    const pageSize = 200
+    const all: ScheduledEmail[] = []
+    let offset = 0
+    for (;;) {
+      const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) })
+      if (status) params.set('status', status)
+      const res = await fetch(`/api/email/scheduled?${params}`)
+      if (!res.ok) throw new Error('Failed to load scheduled emails')
+      const page: ScheduledEmail[] = await res.json()
+      all.push(...page)
+      if (page.length < pageSize) break
+      offset += pageSize
+    }
+    return all
+  }
+
   function load(status?: string) {
     setLoading(true)
-    const params = new URLSearchParams({ limit: '200' })
-    if (status) params.set('status', status)
-    fetch(`/api/email/scheduled?${params}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setEmails(data) })
+    fetchAllScheduled(status)
+      .then(setEmails)
       .catch(() => toast('Failed to load scheduled emails', 'error'))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => {
     let cancelled = false
-    const params = new URLSearchParams({ limit: '200' })
-    if (activeTab) params.set('status', activeTab)
-    fetch(`/api/email/scheduled?${params}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (!cancelled && Array.isArray(data)) setEmails(data) })
+    setLoading(true)
+    fetchAllScheduled(activeTab)
+      .then(data => { if (!cancelled) setEmails(data) })
       .catch(() => toast('Failed to load scheduled emails', 'error'))
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }

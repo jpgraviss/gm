@@ -124,6 +124,7 @@ export default function ReputationPage() {
     // follow X-Next-Cursor to completion.
     fetchAllPages<Review>('/api/reputation/reviews')
       .then(setReviews)
+      .catch(() => toast('Failed to load reviews', 'error'))
       .finally(() => setLoading(false))
 
     fetch('/api/settings')

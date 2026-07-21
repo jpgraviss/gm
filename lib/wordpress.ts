@@ -31,6 +31,16 @@ export interface WPTheme {
   active: boolean
 }
 
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
 async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), WP_TIMEOUT)
@@ -89,6 +99,21 @@ export async function checkWordPress(
     const match = html.match(/<meta name="generator" content="WordPress ([\d.]+)"/)
     if (match) result.wpVersion = match[1]
   } catch { /* non-fatal */ }
+
+  // 2b. AUDIT #258 — coreUpdateAvailable was initialized to false and never
+  // actually computed; persisted/exposed as if real. Compare the detected
+  // version against WordPress.org's own public version-check API (the same
+  // one wp-admin itself calls) to make this a real check.
+  if (result.wpVersion) {
+    try {
+      const res = await fetchWithTimeout('https://api.wordpress.org/core/version-check/1.7/?version=1.0')
+      if (res.ok) {
+        const data = await res.json()
+        const latest = data?.offers?.[0]?.version as string | undefined
+        if (latest) result.coreUpdateAvailable = compareVersions(latest, result.wpVersion) > 0
+      }
+    } catch { /* non-fatal */ }
+  }
 
   // 3. Login page exposure
   try {

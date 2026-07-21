@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   ArrowLeft, TrendingUp, TrendingDown, Minus, Search, Globe,
   Link2, BarChart3, Calendar, CheckCircle, Circle, MousePointer,
@@ -92,11 +93,13 @@ export default function PortalSeoServicePage() {
   useEffect(() => {
     if (!company) { requestAnimationFrame(() => setLoading(false)); return }
 
+    // AUDIT.md #212 — the keyword-ranking table was a raw fetch() against a
+    // route cursor-paginated at 100 rows, silently truncating this portal
+    // client's own live rankings past that.
     Promise.all([
       fetch(`/api/portal/seo?company=${encodeURIComponent(company)}`)
         .then(r => r.ok ? r.json() : null),
-      fetch(`/api/tracked-keywords?company=${encodeURIComponent(company)}`)
-        .then(r => r.ok ? r.json() : [])
+      fetchAllPages<TrackedKw>(`/api/tracked-keywords?company=${encodeURIComponent(company)}`)
         .catch(() => []),
     ])
       .then(([seoData, kwData]) => {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { requireAdmin } from '@/lib/admin-auth'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -25,7 +25,9 @@ function mapDefinition(row: any) {
 // already-saved values. Rename the display label instead; delete + recreate
 // if the underlying key really needs to change.
 export const PATCH = withErrorHandler('custom-field-definitions/[id] PATCH', async (req, ctx) => {
-  const denied = await requireRole(req, 'Team Member')
+  // AUDIT #241 — same admin-only rationale as the POST route: org-wide
+  // custom field definitions affect every record of that entity type.
+  const denied = await requireAdmin(req)
   if (denied) return denied
 
   const { id } = await ctx!.params
@@ -61,7 +63,7 @@ export const PATCH = withErrorHandler('custom-field-definitions/[id] PATCH', asy
 // reversible (recreate the same field_key to bring the old values back),
 // and avoids a bulk UPDATE across every contact/company/deal on every delete.
 export const DELETE = withErrorHandler('custom-field-definitions/[id] DELETE', async (req, ctx) => {
-  const denied = await requireRole(req, 'Team Member')
+  const denied = await requireAdmin(req)
   if (denied) return denied
 
   const { id } = await ctx!.params

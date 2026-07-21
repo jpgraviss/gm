@@ -160,8 +160,13 @@ export default function PortalSalesTrainingPage() {
                   ? c.modules.filter(m => enrollment.progress[m.id]).length
                   : 0
                 const progress = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0
+                // AUDIT #239 — this course list rendered rows with no
+                // click-through anywhere into the real course viewer
+                // (app/courses/[id]/page.tsx), so a client could see their
+                // progress bar but never actually open a course.
+                const href = enrollment ? `/courses/${c.id}?enrollment=${enrollment.id}` : `/courses/${c.id}`
                 return (
-                  <div key={c.id} className="px-5 py-4 hover:bg-gray-50 transition-colors">
+                  <Link key={c.id} href={href} className="block px-5 py-4 hover:bg-gray-50 transition-colors">
                     <div className="flex items-start gap-3">
                       <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#be123c12' }}>
                         <GraduationCap size={16} style={{ color: '#be123c' }} />
@@ -182,7 +187,7 @@ export default function PortalSalesTrainingPage() {
                         )}
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 )
               })}
             </div>

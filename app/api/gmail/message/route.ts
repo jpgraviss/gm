@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
 
 function decodeBase64Url(str: string): string {
   try {
@@ -60,6 +61,12 @@ interface GmailPayload {
 }
 
 export const POST = withErrorHandler('gmail/message POST', async (req) => {
+  // AUDIT #254 — same identity-check gap as gmail/messages POST.
+  const callerEmail = await getAuthenticatedEmail(req)
+  if (!callerEmail) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   try {
     const { accessToken, id } = await req.json()
 

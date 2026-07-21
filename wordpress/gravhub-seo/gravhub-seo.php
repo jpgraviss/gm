@@ -420,6 +420,19 @@ final class GravHub_SEO {
 
 		update_option( $option, $value );
 
+		// Toggling the sitemap on/off (or changing which post types it
+		// covers) changes which rewrite rules should exist for
+		// /sitemap*.xml, but add_rewrite_rule() only affects the CURRENT
+		// request's in-memory rule set — WordPress actually routes incoming
+		// requests against the persisted `rewrite_rules` option, which is
+		// only rebuilt by flush_rewrite_rules(). Without this, re-enabling
+		// the sitemap here updated the option but /sitemap.xml kept 404ing
+		// until something unrelated (e.g. re-saving Permalinks) happened to
+		// flush the rules.
+		if ( 'gravhub_sitemap_enabled' === $option || 'gravhub_sitemap_post_types' === $option ) {
+			GravHub_Sitemap::flush_rules();
+		}
+
 		return new WP_REST_Response( array( 'success' => true ), 200 );
 	}
 

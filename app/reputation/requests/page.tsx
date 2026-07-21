@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import Link from 'next/link'
+import { useToast } from '@/components/ui/Toast'
 import {
   Send, X, Plus, Mail, Clock, CheckCircle2, Eye,
   Star, ChevronLeft, Calendar, Users, FileText,
@@ -62,6 +63,7 @@ function formatDateTime(iso: string): string {
 }
 
 export default function ReviewRequestsPage() {
+  const { toast } = useToast()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [templates, setTemplates] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -77,11 +79,12 @@ export default function ReviewRequestsPage() {
 
   useEffect(() => {
     fetch('/api/reputation/requests')
-      .then((r) => r.json())
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error('Failed')))
       .then((data) => {
         setCampaigns(data.campaigns)
         setTemplates(data.templates)
       })
+      .catch(() => toast('Failed to load review campaigns', 'error'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -99,12 +102,17 @@ export default function ReviewRequestsPage() {
           scheduled_at: formSchedule && formScheduleDate ? new Date(formScheduleDate).toISOString() : null,
         }),
       })
-      if (res.ok) {
-        const campaign = await res.json()
-        setCampaigns((prev) => [campaign, ...prev])
-        setCreateOpen(false)
-        resetForm()
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to create campaign', 'error')
+        return
       }
+      setCampaigns((prev) => [data, ...prev])
+      setCreateOpen(false)
+      resetForm()
+      toast('Campaign created', 'success')
+    } catch {
+      toast('Failed to create campaign', 'error')
     } finally {
       setSubmitting(false)
     }

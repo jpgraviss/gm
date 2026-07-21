@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { Bell, X } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
 
 export default function PushNotificationBanner() {
+  const { toast } = useToast()
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
@@ -41,14 +43,24 @@ export default function PushNotificationBanner() {
           applicationServerKey: outputArray,
         })
 
-        await fetch('/api/push/subscribe', {
+        const res = await fetch('/api/push/subscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(subscription.toJSON()),
         })
+        if (!res.ok) {
+          // AUDIT #256 — a failed server call previously left the browser
+          // holding a live Push subscription with no corresponding
+          // push_subscriptions row, silently defeating future
+          // sendPushNotification() calls. Unsubscribe so a retry (rather
+          // than a permanently-stuck half-enabled state) is possible.
+          await subscription.unsubscribe().catch(() => {})
+          toast('Failed to enable push notifications. Please try again.', 'error')
+        }
       }
     } catch (err) {
       console.error('[push] registration failed:', err)
+      toast('Failed to enable push notifications. Please try again.', 'error')
     }
   }
 

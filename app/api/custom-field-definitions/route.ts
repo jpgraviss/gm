@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
+import { requireAdmin } from '@/lib/admin-auth'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -44,7 +45,11 @@ export const GET = withErrorHandler('custom-field-definitions GET', async (req: 
 })
 
 export const POST = withErrorHandler('custom-field-definitions POST', async (req: NextRequest) => {
-  const denied = await requireRole(req, 'Team Member')
+  // AUDIT #241 — org-wide custom field definitions affect every record of
+  // that entity type app-wide; creating/editing/deleting them should be
+  // admin-only (matches app/admin/custom-fields/page.tsx living under
+  // /admin/* and the Permissions reference table), not any Team Member.
+  const denied = await requireAdmin(req)
   if (denied) return denied
 
   const body = await req.json()

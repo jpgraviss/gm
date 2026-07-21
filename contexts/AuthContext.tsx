@@ -20,6 +20,7 @@ export interface AuthUser {
   avatar?: string
   userType: 'staff' | 'client'
   company?: string
+  service?: string
   status?: string
   suspendedAt?: string | null
   suspendedUntil?: string | null
@@ -142,6 +143,11 @@ function clientToAuthUser(row: any): AuthUser {
     isAdmin:  false,
     userType: 'client',
     company:  row.company,
+    // AUDIT #233 — GET /api/portal-clients is requireAdmin-gated, so
+    // app/client/page.tsx's own fetch of it always 401'd and fell back to a
+    // generic "Client Portal" label. This row is already fetched here
+    // during login/session-restore; surface it instead of re-fetching.
+    service:  row.service,
   }
 }
 

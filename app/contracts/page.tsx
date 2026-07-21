@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchInvoices, fetchProjects, fetchProposals } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, contractStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
@@ -836,9 +837,10 @@ export default function ContractsPage() {
   )
 
   useEffect(() => {
-    fetch('/api/contracts')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalContracts(data) })
+    // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+    // rows silently truncated the contract list/MRR KPIs past that.
+    fetchAllPages<Contract>('/api/contracts')
+      .then(setLocalContracts)
       .catch(() => toast('Failed to load contracts', 'error'))
       .finally(() => setLoading(false))
     fetchInvoices().then(setInvoices)

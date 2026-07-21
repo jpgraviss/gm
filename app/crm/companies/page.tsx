@@ -410,12 +410,18 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
       .catch(() => {/* non-blocking */})
   }, [company.id])
 
-  function persistTags(tags: string[]) {
-    fetch(`/api/crm/companies/${company.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tags }),
-    }).catch(() => toast('Failed to save company tags', 'error'))
+  async function persistTags(tags: string[], previous: string[]) {
+    try {
+      const res = await fetch(`/api/crm/companies/${company.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      setLocalTags(previous)
+      toast('Failed to save company tags', 'error')
+    }
   }
 
   async function saveNotes() {
@@ -439,17 +445,19 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   function handleAddTag() {
     const tag = newTag.trim()
     if (!tag || localTags.includes(tag)) return
-    const updated = [...localTags, tag]
+    const previous = localTags
+    const updated = [...previous, tag]
     setLocalTags(updated)
     setNewTag('')
     setAddingTag(false)
-    persistTags(updated)
+    persistTags(updated, previous)
   }
 
   function handleRemoveTag(tag: string) {
-    const updated = localTags.filter(t => t !== tag)
+    const previous = localTags
+    const updated = previous.filter(t => t !== tag)
     setLocalTags(updated)
-    persistTags(updated)
+    persistTags(updated, previous)
   }
 
   async function handleAddContact(data: NewContactFormData) {
@@ -1794,35 +1802,62 @@ export default function CompaniesPage() {
     setShowBulkTag(false)
     setBulkTagValue('')
     setSelectedIds(new Set())
-    for (const id of ids) {
+    const failedIds = new Set<string>()
+    await Promise.all(ids.map(async id => {
       const company = localCompanies.find(c => c.id === id)
       if (company && !company.tags.includes(tag)) {
-        fetch(`/api/crm/companies/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tags: [...company.tags, tag] }),
-        }).catch(() => {})
+        try {
+          const res = await fetch(`/api/crm/companies/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: [...company.tags, tag] }),
+          })
+          if (!res.ok) throw new Error('Failed')
+        } catch {
+          failedIds.add(id)
+        }
       }
+    }))
+    if (failedIds.size > 0) {
+      setLocalCompanies(prev => prev.map(c =>
+        failedIds.has(c.id) ? { ...c, tags: c.tags.filter(t => t !== tag) } : c
+      ))
+      toast(`Tag "${tag}" applied to ${ids.length - failedIds.size} companies, ${failedIds.size} failed`, 'error')
+    } else {
+      toast(`Tag "${tag}" applied to ${ids.length} companies`, 'success')
     }
-    toast(`Tag "${tag}" applied to ${ids.length} companies`, 'success')
   }
 
   async function handleBulkReassign() {
     const owner = bulkReassignValue.trim()
     if (!owner) return
     const ids = Array.from(selectedIds)
+    const previousOwners = new Map(localCompanies.filter(c => selectedIds.has(c.id)).map(c => [c.id, c.owner]))
     setLocalCompanies(prev => prev.map(c => selectedIds.has(c.id) ? { ...c, owner } : c))
     setShowBulkReassign(false)
     setBulkReassignValue('')
     setSelectedIds(new Set())
-    for (const id of ids) {
-      fetch(`/api/crm/companies/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner }),
-      }).catch(() => {})
+    const failedIds = new Set<string>()
+    await Promise.all(ids.map(async id => {
+      try {
+        const res = await fetch(`/api/crm/companies/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ owner }),
+        })
+        if (!res.ok) throw new Error('Failed')
+      } catch {
+        failedIds.add(id)
+      }
+    }))
+    if (failedIds.size > 0) {
+      setLocalCompanies(prev => prev.map(c =>
+        failedIds.has(c.id) ? { ...c, owner: previousOwners.get(c.id) ?? c.owner } : c
+      ))
+      toast(`${ids.length - failedIds.size} companies reassigned to ${owner}, ${failedIds.size} failed`, 'error')
+    } else {
+      toast(`${ids.length} companies reassigned to ${owner}`, 'success')
     }
-    toast(`${ids.length} companies reassigned to ${owner}`, 'success')
   }
 
   useEffect(() => { queueMicrotask(() => setCurrentPage(1)) }, [search, statusFilter])

@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Header from '@/components/layout/Header'
+import Link from 'next/link'
 import {
   GraduationCap, Users, Plus, X, Trash2, ChevronUp, ChevronDown,
-  BookOpen, FileText, HelpCircle, DollarSign, Video, Type, Tag,
+  BookOpen, FileText, HelpCircle, DollarSign, Video, Type, Tag, Eye,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 
@@ -586,6 +587,17 @@ export default function CoursesPage() {
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide flex-shrink-0 ml-2 ${statusColors[course.status] ?? statusColors['Draft']}`}>
                     {course.status}
                   </span>
+                  {/* AUDIT #239 — app/courses/[id]/page.tsx had no link
+                      pointing to it anywhere in the live UI; reachable only
+                      by hand-typing the URL. */}
+                  <Link
+                    href={`/courses/${course.id}`}
+                    onClick={e => e.stopPropagation()}
+                    className="flex-shrink-0 ml-2 p-1 rounded-lg text-gray-300 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                    title="Preview course"
+                  >
+                    <Eye size={14} />
+                  </Link>
                 </div>
 
                 {course.description && (

@@ -7,7 +7,26 @@ import { getResend } from '@/lib/resend'
 import { getSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
-import { nowInZone } from '@/lib/timezone'
+import { nowInZone, zonedWallTimeToUtc } from '@/lib/timezone'
+
+// AUDIT #228 — this route had none of the protections its legacy sibling
+// (app/api/bookings/route.ts) has. Same simple per-IP limiter, ported as-is
+// (not shared) since that's how the legacy route already implements it.
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
+const RATE_LIMIT = 5
+const RATE_WINDOW = 15 * 60 * 1000
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now()
+  const entry = rateLimitMap.get(ip)
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW })
+    return true
+  }
+  if (entry.count >= RATE_LIMIT) return false
+  entry.count++
+  return true
+}
 
 export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
   const { searchParams } = new URL(req.url)
@@ -152,7 +171,7 @@ export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
 
   let query = db
     .from('booking_type_bookings')
-    .select('*, booking_types(name, slug, color, location, duration_minutes)')
+    .select('*, booking_types(name, slug, color, location, duration_minutes, intake_questions)')
     .order('date', { ascending: true })
     .order('start_time', { ascending: true })
 
@@ -180,24 +199,85 @@ export const GET = withErrorHandler('calendar/bookings GET', async (req) => {
 })
 
 export const POST = withErrorHandler('calendar/bookings POST', async (req) => {
+  // AUDIT #228 — this route had none of the protections its legacy sibling
+  // (app/api/bookings/route.ts) has: no rate limiter, no timezone-correct
+  // past-date rejection, and no check that the submitted time actually
+  // falls inside the booking type's availability/duration — a caller could
+  // POST arbitrary past dates, off-hours slots, or oversized ranges
+  // directly, each triggering a live Google Calendar call and a real email
+  // send with no throttling.
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json({ error: 'Too many booking attempts. Please try again later.' }, { status: 429 })
+  }
+
   const body = await req.json()
   const { slug, date, start_time, end_time, guest_name, guest_email, guest_phone, guest_company, notes, intake_answers } = body
 
   if (!slug || !date || !start_time || !end_time || !guest_name?.trim() || !guest_email?.trim()) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
+  if (guest_name.length > 200) return NextResponse.json({ error: 'Name too long' }, { status: 400 })
+  if (guest_email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest_email)) {
+    return NextResponse.json({ error: 'Invalid email address' }, { status: 400 })
+  }
+  if (notes && notes.length > 2000) return NextResponse.json({ error: 'Notes too long (max 2000 chars)' }, { status: 400 })
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'Invalid date format' }, { status: 400 })
+  if (!/^\d{2}:\d{2}$/.test(start_time) || !/^\d{2}:\d{2}$/.test(end_time)) {
+    return NextResponse.json({ error: 'Invalid time format' }, { status: 400 })
+  }
 
   const db = createServiceClient()
 
   const { data: bt } = await db
     .from('booking_types')
-    .select('id, active')
+    .select('id, active, duration_minutes, availability')
     .eq('slug', slug)
     .eq('active', true)
     .single()
 
   if (!bt) {
     return NextResponse.json({ error: 'Booking type not found or inactive' }, { status: 404 })
+  }
+
+  const [startH, startM] = start_time.split(':').map(Number)
+  const [endH, endM] = end_time.split(':').map(Number)
+  const submittedMinutes = (endH * 60 + endM) - (startH * 60 + startM)
+  if (submittedMinutes !== bt.duration_minutes) {
+    return NextResponse.json({ error: 'Requested time does not match this booking type’s duration' }, { status: 400 })
+  }
+
+  const availability = bt.availability as { days: number[]; start: string; end: string }
+  const [y, m, d] = date.split('-').map(Number)
+  const dayOfWeek = new Date(y, m - 1, d).getDay()
+  const [availStartH, availStartM] = availability.start.split(':').map(Number)
+  const [availEndH, availEndM] = availability.end.split(':').map(Number)
+  const availStartMinutes = availStartH * 60 + availStartM
+  const availEndMinutes = availEndH * 60 + availEndM
+  const reqStartMinutes = startH * 60 + startM
+  const reqEndMinutes = endH * 60 + endM
+  if (
+    !availability.days.includes(dayOfWeek) ||
+    reqStartMinutes < availStartMinutes ||
+    reqEndMinutes > availEndMinutes
+  ) {
+    return NextResponse.json({ error: 'Requested time is outside this booking type’s availability' }, { status: 400 })
+  }
+
+  // Booking types have no timezone of their own — same fallback resolution
+  // GET already uses (any connected staff Google Calendar's timezone, else
+  // America/Chicago).
+  let tz = 'America/Chicago'
+  const { data: allCalsForTz } = await db
+    .from('calendar_settings')
+    .select('timezone')
+    .not('google_refresh_token', 'is', null)
+    .limit(1)
+  if (allCalsForTz?.[0]?.timezone) tz = allCalsForTz[0].timezone
+
+  const bookingDate = zonedWallTimeToUtc(`${date}T${start_time}`, tz)
+  if (bookingDate < new Date()) {
+    return NextResponse.json({ error: 'Cannot book a time in the past' }, { status: 400 })
   }
 
   const { data: conflict } = await db

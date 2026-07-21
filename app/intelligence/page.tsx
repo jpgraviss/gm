@@ -140,7 +140,13 @@ export default function IntelligencePage() {
       if (pData.data) setPeople(pData.data)
       if (cData.data) setCompanies(cData.data)
       if (sData.data) setStats(sData.data)
+      // AUDIT #249 — only the visitors/people call's failure ever surfaced;
+      // companies/stats failures (e.g. Maverick misconfigured/rate-limited)
+      // were silently dropped, rendering as an honest-looking empty section
+      // with the specific error reason lost.
       if (pData.error) toast(pData.error, 'error')
+      if (cData.error) toast(cData.error, 'error')
+      if (sData.error) toast(sData.error, 'error')
     } catch { toast('Failed to load intelligence data', 'error') }
     finally { setLoading(false); setRefreshing(false) }
   }, [toast])

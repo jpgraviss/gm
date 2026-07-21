@@ -162,22 +162,22 @@ const DASHBOARD_DEFAULTS = {
     night: 'Burning the midnight oil',
   },
   rotatingMessages: [
-    { message: 'Revenue doesn\'t sleep. Neither does GravHub.', emoji: '🔥' },
-    { message: 'Every deal in your pipeline is a future payday.', emoji: '💰' },
-    { message: 'Outwork yesterday. Outclose tomorrow.', emoji: '🚀' },
-    { message: 'Your pipeline is your paycheck — keep it full.', emoji: '📈' },
-    { message: 'Closed is the only stage that pays.', emoji: '🎯' },
-    { message: 'Speed to lead. Speed to close. Speed to invoice.', emoji: '⚡' },
-    { message: 'The follow-up you skip is the deal you lose.', emoji: '📞' },
-    { message: 'A stale pipeline is a broke pipeline.', emoji: '💀' },
-    { message: 'Renewals are revenue you already earned. Go collect.', emoji: '💎' },
-    { message: 'You\'re not just selling — you\'re building an empire.', emoji: '👑' },
-    { message: 'The difference between good and great? One more follow-up.', emoji: '💪' },
-    { message: 'Opportunities don\'t expire — but your competitors don\'t wait.', emoji: '⏳' },
-    { message: 'Today\'s proposal is next month\'s revenue.', emoji: '📝' },
-    { message: 'Track everything. Miss nothing. Close more.', emoji: '🔒' },
-    { message: 'Your CRM is only as strong as the reps using it.', emoji: '🏋️' },
-  ] as { message: string; emoji: string }[],
+    { sub: 'Revenue doesn\'t sleep. Neither does GravHub.', emoji: '🔥' },
+    { sub: 'Every deal in your pipeline is a future payday.', emoji: '💰' },
+    { sub: 'Outwork yesterday. Outclose tomorrow.', emoji: '🚀' },
+    { sub: 'Your pipeline is your paycheck — keep it full.', emoji: '📈' },
+    { sub: 'Closed is the only stage that pays.', emoji: '🎯' },
+    { sub: 'Speed to lead. Speed to close. Speed to invoice.', emoji: '⚡' },
+    { sub: 'The follow-up you skip is the deal you lose.', emoji: '📞' },
+    { sub: 'A stale pipeline is a broke pipeline.', emoji: '💀' },
+    { sub: 'Renewals are revenue you already earned. Go collect.', emoji: '💎' },
+    { sub: 'You\'re not just selling — you\'re building an empire.', emoji: '👑' },
+    { sub: 'The difference between good and great? One more follow-up.', emoji: '💪' },
+    { sub: 'Opportunities don\'t expire — but your competitors don\'t wait.', emoji: '⏳' },
+    { sub: 'Today\'s proposal is next month\'s revenue.', emoji: '📝' },
+    { sub: 'Track everything. Miss nothing. Close more.', emoji: '🔒' },
+    { sub: 'Your CRM is only as strong as the reps using it.', emoji: '🏋️' },
+  ] as { sub: string; emoji: string }[],
 }
 
 const INVOICE_DEFAULTS = {
@@ -1545,8 +1545,8 @@ export default function SettingsPage() {
                 {dashboardConfig.rotatingMessages.map((msg, i) => (
                   <div key={i} className="flex items-center gap-3">
                     <input
-                      value={msg.message}
-                      onChange={e => setDashboardConfig(p => ({ ...p, rotatingMessages: p.rotatingMessages.map((m, j) => j === i ? { ...m, message: e.target.value } : m) }))}
+                      value={msg.sub}
+                      onChange={e => setDashboardConfig(p => ({ ...p, rotatingMessages: p.rotatingMessages.map((m, j) => j === i ? { ...m, sub: e.target.value } : m) }))}
                       placeholder="Message text"
                       className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
                     />
@@ -1566,7 +1566,7 @@ export default function SettingsPage() {
                 ))}
               </div>
               <button
-                onClick={() => setDashboardConfig(p => ({ ...p, rotatingMessages: [...p.rotatingMessages, { message: '', emoji: '' }] }))}
+                onClick={() => setDashboardConfig(p => ({ ...p, rotatingMessages: [...p.rotatingMessages, { sub: '', emoji: '' }] }))}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-white text-xs font-medium"
                 style={{ background: '#015035' }}
               >

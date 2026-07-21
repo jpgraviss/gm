@@ -74,9 +74,9 @@ export const GET = withErrorHandler('tasks GET', async (req: NextRequest) => {
   return paginatedJson(rows.map(mapTask), nextCursor)
 })
 
-const VALID_STATUSES = ['Pending', 'In Progress', 'Completed']
-const VALID_PRIORITIES = ['High', 'Medium', 'Low']
-const VALID_CATEGORIES = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'Email', 'General']
+export const VALID_STATUSES = ['Pending', 'In Progress', 'Completed']
+export const VALID_PRIORITIES = ['High', 'Medium', 'Low']
+export const VALID_CATEGORIES = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'Email', 'General']
 
 export const POST = withErrorHandler('tasks POST', async (req: NextRequest) => {
   const user = await getAuthUser(req)

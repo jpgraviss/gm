@@ -14,6 +14,7 @@ import {
 
 interface UnifiedThread {
   contactEmail: string
+  contactId?: string
   contactName: string
   company?: string
   lastMessage: {
@@ -268,7 +269,7 @@ export default function UnifiedInboxPage() {
                     </div>
                     <div className="flex flex-col gap-2 mt-2">
                       <Link
-                        href={`/crm/contacts?email=${encodeURIComponent(selected.contactEmail)}`}
+                        href={selected.contactId ? `/crm/contacts?open=${selected.contactId}` : '/crm/contacts'}
                         className="flex items-center justify-between p-3 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                       >
                         <span className="flex items-center gap-2"><Users size={14} /> View CRM contact</span>

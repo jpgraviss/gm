@@ -118,9 +118,10 @@ export default function FormsPage() {
   const [showEmbed, setShowEmbed] = useState<LeadForm | null>(null)
 
   useEffect(() => {
-    fetch('/api/forms')
-      .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (Array.isArray(data)) setForms(data) })
+    // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+    // rows silently truncated the forms list past that.
+    fetchAllPages<LeadForm>('/api/forms')
+      .then(setForms)
       .catch(() => toast('Failed to load forms', 'error'))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps

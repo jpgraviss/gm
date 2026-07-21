@@ -487,40 +487,56 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
     return () => { cancelled = true }
   }, [contact.id])
 
-  function persistNotes(notes: ContactNote[]) {
-    fetch(`/api/crm/contacts/${contact.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contactNotes: notes }),
-    }).catch(() => toast('Failed to save note', 'error'))
+  async function persistNotes(notes: ContactNote[], previous: ContactNote[]) {
+    try {
+      const res = await fetch(`/api/crm/contacts/${contact.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactNotes: notes }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      localNotesRef.current = previous
+      setLocalNotes(previous)
+      toast('Failed to save note', 'error')
+    }
   }
 
-  function persistTasks(tasks: ContactTask[]) {
-    fetch(`/api/crm/contacts/${contact.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contactTasks: tasks }),
-    }).catch(() => toast('Failed to save task', 'error'))
+  async function persistTasks(tasks: ContactTask[], previous: ContactTask[]) {
+    try {
+      const res = await fetch(`/api/crm/contacts/${contact.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactTasks: tasks }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      localTasksRef.current = previous
+      setLocalTasks(previous)
+      toast('Failed to save task', 'error')
+    }
   }
 
   function handleAddNote() {
     if (!newNoteBody.trim()) return
+    const previous = localNotesRef.current
     const note: ContactNote = {
       id: `cn-${Date.now()}`,
       body: newNoteBody.trim(),
       date: new Date().toISOString().split('T')[0],
       author: 'You',
     }
-    const updated = [note, ...localNotesRef.current]
+    const updated = [note, ...previous]
     localNotesRef.current = updated
     setLocalNotes(updated)
     setNewNoteBody('')
     setAddingNote(false)
-    persistNotes(updated)
+    persistNotes(updated, previous)
   }
 
   function handleAddTask() {
     if (!newTaskTitle.trim() || !newTaskDue) return
+    const previous = localTasksRef.current
     const task: ContactTask = {
       id: `ct-${Date.now()}`,
       title: newTaskTitle.trim(),
@@ -530,7 +546,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       priority: newTaskPriority,
       assignedTo: 'You',
     }
-    const updated = [task, ...localTasksRef.current]
+    const updated = [task, ...previous]
     localTasksRef.current = updated
     setLocalTasks(updated)
     setNewTaskTitle('')
@@ -538,7 +554,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
     setNewTaskType('follow_up')
     setNewTaskPriority('medium')
     setAddingTask(false)
-    persistTasks(updated)
+    persistTasks(updated, previous)
   }
 
   async function handleSaveActivity(activity: LoggedActivity) {
@@ -571,32 +587,42 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lastActivity: now }),
+      }).then(res => {
+        if (!res.ok) throw new Error('Failed')
       }).catch(() => toast('Failed to update contact activity date', 'error'))
     } catch { console.warn('Failed to persist activity to server') }
   }
 
-  function persistTags(tags: string[]) {
-    fetch(`/api/crm/contacts/${contact.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tags }),
-    }).catch(() => toast('Failed to save contact tags', 'error'))
+  async function persistTags(tags: string[], previous: string[]) {
+    try {
+      const res = await fetch(`/api/crm/contacts/${contact.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      setLocalTags(previous)
+      toast('Failed to save contact tags', 'error')
+    }
   }
 
   function handleAddTag() {
     const tag = newTag.trim()
     if (!tag || localTags.includes(tag)) return
-    const updated = [...localTags, tag]
+    const previous = localTags
+    const updated = [...previous, tag]
     setLocalTags(updated)
     setNewTag('')
     setAddingTag(false)
-    persistTags(updated)
+    persistTags(updated, previous)
   }
 
   function handleRemoveTag(tag: string) {
-    const updated = localTags.filter(t => t !== tag)
+    const previous = localTags
+    const updated = previous.filter(t => t !== tag)
     setLocalTags(updated)
-    persistTags(updated)
+    persistTags(updated, previous)
   }
 
   const company = crmCompanies.find(c => c.id === contact.companyId)

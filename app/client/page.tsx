@@ -78,7 +78,6 @@ export default function ClientPortalPage() {
   const [contract, setContract] = useState<any>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [clientInvoices, setClientInvoices] = useState<any[]>([])
-  const [accountInfo, setAccountInfo] = useState<{ service: string } | null>(null)
   const [ticketSubject, setTicketSubject] = useState('')
   const [ticketMessage, setTicketMessage] = useState('')
   const [ticketSubmitting, setTicketSubmitting] = useState(false)
@@ -118,11 +117,6 @@ export default function ClientPortalPage() {
       fetch(`/api/projects?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setProject(d[0] ?? null) }).catch(() => toast('Failed to load project data', 'error')),
       fetch(`/api/contracts?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setContract(d[0] ?? null) }).catch(() => toast('Failed to load contract data', 'error')),
       fetch(`/api/invoices?company=${q}`).then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setClientInvoices(d) }).catch(() => toast('Failed to load invoices', 'error')),
-      fetch(`/api/portal-clients?company=${q}`).then(r => r.ok ? r.json() : []).then((clients: { company: string; service: string }[]) => {
-        if (!Array.isArray(clients)) return
-        const match = clients.find(c => c.company === company)
-        if (match) setAccountInfo({ service: match.service })
-      }).catch(() => toast('Failed to load account info', 'error')),
       fetch(`/api/files?company=${q}`).then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => toast('Failed to load files', 'error')),
     ]).finally(() => setLoading(false))
   }, [company])
@@ -282,7 +276,7 @@ export default function ClientPortalPage() {
           </div>
           <div>
             <p className="text-white font-bold text-sm" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{company}</p>
-            <p className="text-white/50 text-[11px]">{accountInfo?.service ?? 'Client Portal'}</p>
+            <p className="text-white/50 text-[11px]">{user?.service ?? 'Client Portal'}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">

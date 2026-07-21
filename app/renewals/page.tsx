@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { fetchContracts, fetchCrmContacts, fetchProposals } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, renewalStatusColors, formatDate } from '@/lib/utils'
 import { contractMonthlyValue } from '@/lib/metrics'
 import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
@@ -675,9 +676,10 @@ export default function RenewalsPage() {
   const [renewalAutomationActive, setRenewalAutomationActive] = useState<boolean | null>(null)
 
   useEffect(() => {
-    fetch('/api/renewals')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalRenewals(data) })
+    // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+    // rows silently truncated due30/due60/overdue KPIs past that.
+    fetchAllPages<Renewal>('/api/renewals')
+      .then(setLocalRenewals)
       .catch(() => toast('Failed to load renewals', 'error'))
       .finally(() => setLoading(false))
     fetchContracts().then(setContracts)

@@ -27,6 +27,12 @@ export const PATCH = withErrorHandler('time-entries/[id] PATCH', async (req: Nex
     teamMember: { type: 'string', maxLength: 200 },
     hours: { type: 'number', min: 0, max: 24 },
     minutes: { type: 'number', min: 0, max: 59 },
+    // AUDIT #261 — this route set approval_status straight through with no
+    // enum validation, unlike the bulk endpoint (POST /api/time-entries),
+    // which correctly validates it. An arbitrary string here falls back to
+    // "pending" styling in ApprovalBadge and won't match the bulk-approvals
+    // filter.
+    approvalStatus: { type: 'string', enum: ['pending', 'approved', 'rejected'] },
   })
   if (!result.valid) return validationError(result.error)
   const db = createServiceClient()

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchContracts, fetchRevenueByMonth } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, invoiceStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import type { Invoice, InvoiceStatus, Contract, RevenueMonth } from '@/lib/types'
@@ -421,9 +422,10 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/invoices')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalInvoices(data) })
+    // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+    // rows silently truncated Overdue/Collected/Outstanding KPIs past that.
+    fetchAllPages<Invoice>('/api/invoices')
+      .then(setLocalInvoices)
       .catch(() => toast('Failed to load invoices', 'error'))
       .finally(() => setLoading(false))
     fetchContracts().then(d => { if (Array.isArray(d)) setContracts(d) }).catch(() => toast('Failed to load contracts', 'error'))
@@ -741,7 +743,7 @@ export default function BillingPage() {
             if (skipped > 0) parts.push(`${skipped} skipped (missing company/amount)`)
             toast(parts.join(', '), failed > 0 ? 'error' : 'success')
             setShowImportModal(false)
-            fetch('/api/invoices').then(r => r.ok ? r.json() : []).then(data => { if (Array.isArray(data)) setLocalInvoices(data) })
+            fetchAllPages<Invoice>('/api/invoices').then(setLocalInvoices).catch(() => toast('Failed to reload invoices', 'error'))
           }}
         />
       )}

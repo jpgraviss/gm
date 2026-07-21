@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import CompanySelect from '@/components/ui/CompanySelect'
 import {
   Building, Users, Plus, Trash2, Save, ChevronDown, ChevronRight,
   Mail, Shield, Eye, X, Search, Clock, UserPlus,
@@ -143,6 +144,25 @@ export default function PortalManagementPage() {
   const { toast } = useToast()
 
   const [companies, setCompanies] = useState<CompanyGroup[]>([])
+  const companiesRef = useRef(companies)
+  useEffect(() => { companiesRef.current = companies }, [companies])
+  // AUDIT #189 — per-company save queue. Both saveCompanyConfig (manual
+  // "Save Configuration") and autoSaveCompanyConfig (toggle autosaves) PATCH
+  // the entire portal_config blob with no merge/version check server-side;
+  // rapid successive toggles, or a manual save while an autosave is still
+  // in flight, could let a stale request's write land after a newer one's
+  // and clobber it. Chaining saves per company (and always reading the
+  // LATEST config at the moment each queued save actually runs, via
+  // companiesRef) guarantees requests are issued in order and the last one
+  // in the chain always carries the most current state.
+  const saveChainRef = useRef<Record<string, Promise<void>>>({})
+  // AUDIT #189 — Logo URL/Brand Color/Welcome Message/legacy SEO Strategy/
+  // per-service Frequency fields are pure local state with no autosave and
+  // no unsaved-changes warning — collapsing the panel or navigating away
+  // could silently lose them. Snapshot the last-saved config per company so
+  // we can detect and warn on real drift instead of blindly saving on
+  // every render.
+  const savedConfigRef = useRef<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [expandedCompany, setExpandedCompany] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -158,7 +178,7 @@ export default function PortalManagementPage() {
   const [autoSaving, setAutoSaving] = useState<string | null>(null)
   const [deletingPortal, setDeletingPortal] = useState<string | null>(null)
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false)
-  const [addCompanyForm, setAddCompanyForm] = useState({ companyName: '', service: '' as string, contactName: '', contactEmail: '' })
+  const [addCompanyForm, setAddCompanyForm] = useState({ companyName: '', companyId: undefined as string | undefined, service: '' as string, contactName: '', contactEmail: '' })
   const [addingCompany, setAddingCompany] = useState(false)
 
   useEffect(() => {
@@ -192,7 +212,9 @@ export default function PortalManagementPage() {
           access: client.access,
         })
       }
-      setCompanies(Array.from(grouped.values()).sort((a, b) => a.company.localeCompare(b.company)))
+      const list = Array.from(grouped.values()).sort((a, b) => a.company.localeCompare(b.company))
+      setCompanies(list)
+      for (const g of list) savedConfigRef.current[g.company] = JSON.stringify(g.portalConfig)
     } catch {
       toast('Failed to load portal clients', 'error')
     } finally {
@@ -208,41 +230,72 @@ export default function PortalManagementPage() {
     ))
   }
 
-  const saveCompanyConfig = async (company: string) => {
+  function isDirty(company: string): boolean {
     const group = companies.find(g => g.company === company)
-    if (!group) return
-    setSavingCompany(company)
-    try {
-      const res = await fetch('/api/portal-clients/company-config', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company, portalConfig: group.portalConfig }),
-      })
-      if (!res.ok) throw new Error('Failed to save')
-      toast('Portal configuration saved', 'success')
-    } catch {
-      toast('Failed to save configuration', 'error')
-    } finally {
-      setSavingCompany(null)
-    }
+    if (!group) return false
+    return JSON.stringify(group.portalConfig) !== savedConfigRef.current[company]
   }
 
-  const autoSaveCompanyConfig = useCallback(async (company: string, config: PortalConfig) => {
-    setAutoSaving(company)
-    try {
-      const res = await fetch('/api/portal-clients/company-config', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company, portalConfig: config }),
-      })
-      if (!res.ok) throw new Error('Failed to save')
-      setAutoSaved(company)
-      setTimeout(() => setAutoSaved(prev => prev === company ? null : prev), 2000)
-    } catch {
-      toast('Auto-save failed', 'error')
-    } finally {
-      setAutoSaving(null)
+  // AUDIT #189 — warn on an actual page unload/close/refresh with unsaved
+  // config changes, since navigating away previously lost them silently.
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (companies.some(g => isDirty(g.company))) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
     }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [companies]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveCompanyConfig = useCallback((company: string) => {
+    const run = async () => {
+      const group = companiesRef.current.find(g => g.company === company)
+      if (!group) return
+      setSavingCompany(company)
+      try {
+        const res = await fetch('/api/portal-clients/company-config', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company, portalConfig: group.portalConfig }),
+        })
+        if (!res.ok) throw new Error('Failed to save')
+        savedConfigRef.current[company] = JSON.stringify(group.portalConfig)
+        toast('Portal configuration saved', 'success')
+      } catch {
+        toast('Failed to save configuration', 'error')
+      } finally {
+        setSavingCompany(prev => prev === company ? null : prev)
+      }
+    }
+    const prevChain = saveChainRef.current[company] ?? Promise.resolve()
+    saveChainRef.current[company] = prevChain.then(run)
+  }, [toast])
+
+  const autoSaveCompanyConfig = useCallback((company: string) => {
+    const run = async () => {
+      const group = companiesRef.current.find(g => g.company === company)
+      if (!group) return
+      setAutoSaving(company)
+      try {
+        const res = await fetch('/api/portal-clients/company-config', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company, portalConfig: group.portalConfig }),
+        })
+        if (!res.ok) throw new Error('Failed to save')
+        savedConfigRef.current[company] = JSON.stringify(group.portalConfig)
+        setAutoSaved(company)
+        setTimeout(() => setAutoSaved(prev => prev === company ? null : prev), 2000)
+      } catch {
+        toast('Auto-save failed', 'error')
+      } finally {
+        setAutoSaving(prev => prev === company ? null : prev)
+      }
+    }
+    const prevChain = saveChainRef.current[company] ?? Promise.resolve()
+    saveChainRef.current[company] = prevChain.then(run)
   }, [toast])
 
   const inviteMember = async (company: string) => {
@@ -353,6 +406,7 @@ export default function PortalManagementPage() {
             name: addCompanyForm.contactName.trim(),
             email: addCompanyForm.contactEmail.trim(),
             company: addCompanyForm.companyName.trim(),
+            companyId: addCompanyForm.companyId,
             role: 'Admin',
             service: addCompanyForm.service,
             // AUDIT.md #188 — only `service` (the legacy free-text column)
@@ -381,10 +435,21 @@ export default function PortalManagementPage() {
         }
       } else {
         // Create company-only record without a member
-        const payload: Record<string, string> = {
+        const payload: Record<string, unknown> = {
           company: addCompanyForm.companyName.trim(),
+          companyId: addCompanyForm.companyId,
           service: addCompanyForm.service,
           access: 'Not Setup',
+          // AUDIT.md #188/#236 — this no-contact branch was missing the same
+          // fix #188 already applied to the with-contact branch above: the
+          // portal's active-services list reads services_config[key].enabled,
+          // not the flat `services` array, so a company added without a
+          // contact showed 0 active services until an admin manually
+          // reopened the panel and toggled it on.
+          services: addCompanyForm.service ? [addCompanyForm.service] : [],
+          portalConfig: addCompanyForm.service
+            ? { services_config: { [addCompanyForm.service]: { enabled: true } } }
+            : undefined,
         }
         if (addCompanyForm.contactName.trim()) payload.contact = addCompanyForm.contactName.trim()
         if (addCompanyForm.contactEmail.trim()) payload.email = addCompanyForm.contactEmail.trim()
@@ -402,7 +467,7 @@ export default function PortalManagementPage() {
         toast(`Company "${addCompanyForm.companyName.trim()}" created`, 'success')
       }
       setShowAddCompanyModal(false)
-      setAddCompanyForm({ companyName: '', service: '', contactName: '', contactEmail: '' })
+      setAddCompanyForm({ companyName: '', companyId: undefined, service: '', contactName: '', contactEmail: '' })
       fetchClients()
     } catch {
       toast('Failed to create company', 'error')
@@ -412,7 +477,6 @@ export default function PortalManagementPage() {
   }
 
   const toggleServiceConfig = (company: string, serviceKey: string, enabled: boolean) => {
-    let updatedConfig: PortalConfig | null = null
     updateConfig(company, prev => {
       const sc = { ...prev.services_config }
       if (enabled) {
@@ -426,12 +490,12 @@ export default function PortalManagementPage() {
       const services = enabled
         ? (prev.services.includes(serviceKey as ServiceKey) ? prev.services : [...prev.services, serviceKey as ServiceKey])
         : prev.services.filter(s => s !== serviceKey)
-      updatedConfig = { ...prev, services_config: sc, services }
-      return updatedConfig
+      return { ...prev, services_config: sc, services }
     })
-    setTimeout(() => {
-      if (updatedConfig) autoSaveCompanyConfig(company, updatedConfig)
-    }, 0)
+    // autoSaveCompanyConfig reads companiesRef fresh when it actually runs
+    // (queued in the save chain), so this deferral just lets the state
+    // update's effect flush the ref before that read happens.
+    setTimeout(() => autoSaveCompanyConfig(company), 0)
   }
 
   const updateServiceConfig = (company: string, serviceKey: string, updates: Partial<ServiceConfig>) => {
@@ -491,7 +555,7 @@ export default function PortalManagementPage() {
               <div className="flex items-center gap-3">
                 <span className="text-xs text-gray-400 font-medium">{companies.length} companies</span>
                 <button
-                  onClick={() => { setShowAddCompanyModal(true); setAddCompanyForm({ companyName: '', service: '', contactName: '', contactEmail: '' }) }}
+                  onClick={() => { setShowAddCompanyModal(true); setAddCompanyForm({ companyName: '', companyId: undefined, service: '', contactName: '', contactEmail: '' }) }}
                   className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl text-white transition-opacity hover:opacity-90"
                   style={{ background: '#015035' }}
                 >
@@ -815,7 +879,7 @@ export default function PortalManagementPage() {
                                       visibility: { ...group.portalConfig.visibility, [key]: !on },
                                     }
                                     updateConfig(group.company, () => updated)
-                                    autoSaveCompanyConfig(group.company, updated)
+                                    setTimeout(() => autoSaveCompanyConfig(group.company), 0)
                                   }}
                                   className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors bg-white"
                                 >
@@ -910,17 +974,22 @@ export default function PortalManagementPage() {
 
                       {/* Save / Delete */}
                       <div className="flex items-center justify-between mt-5 pt-4 border-t border-gray-100">
-                        <button
-                          onClick={() => deletePortal(group.company)}
-                          disabled={deletingPortal === group.company}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 border border-red-200 transition-colors disabled:opacity-50"
-                        >
-                          {deletingPortal === group.company ? (
-                            <><div className="w-3.5 h-3.5 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" /> Deleting...</>
-                          ) : (
-                            <><Trash2 size={14} /> Delete Portal</>
+                        <div className="flex items-center gap-3">
+                          {isDirty(group.company) && (
+                            <span className="text-xs font-medium text-amber-600">Unsaved changes</span>
                           )}
-                        </button>
+                          <button
+                            onClick={() => deletePortal(group.company)}
+                            disabled={deletingPortal === group.company}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 border border-red-200 transition-colors disabled:opacity-50"
+                          >
+                            {deletingPortal === group.company ? (
+                              <><div className="w-3.5 h-3.5 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" /> Deleting...</>
+                            ) : (
+                              <><Trash2 size={14} /> Delete Portal</>
+                            )}
+                          </button>
+                        </div>
                         <button
                           onClick={() => saveCompanyConfig(group.company)}
                           disabled={savingCompany === group.company}
@@ -1037,13 +1106,10 @@ export default function PortalManagementPage() {
             <div className="p-5 flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-gray-600">Company Name <span className="text-red-400">*</span></label>
-                <input
-                  type="text"
+                <CompanySelect
                   value={addCompanyForm.companyName}
-                  onChange={e => setAddCompanyForm(prev => ({ ...prev, companyName: e.target.value }))}
+                  onChange={(name, id) => setAddCompanyForm(prev => ({ ...prev, companyName: name, companyId: id }))}
                   placeholder="Acme Corporation"
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
-                  autoFocus
                 />
               </div>
               <div className="flex flex-col gap-1.5">

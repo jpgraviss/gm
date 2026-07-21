@@ -9,6 +9,13 @@ import { fetchTeamMembers } from '@/lib/supabase'
 import type { TeamMember } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
 
+interface IntakeQuestion {
+  id: string
+  label: string
+  type: string
+  required: boolean
+}
+
 interface BookingTypeBooking {
   id: string
   booking_type_id: string
@@ -22,12 +29,14 @@ interface BookingTypeBooking {
   status: string
   created_at: string
   timezone: string
+  intake_answers: Record<string, string> | null
   booking_types: {
     name: string
     slug: string
     color: string
     location: string
     duration_minutes: number
+    intake_questions: IntakeQuestion[] | null
   } | null
 }
 
@@ -47,6 +56,7 @@ interface Booking {
   meet_link: string | null
   subscription_id: string | null
   created_at: string
+  intakeAnswers?: { label: string; answer: string }[]
 }
 
 interface CalendarSubscription {
@@ -404,6 +414,12 @@ export default function CalendarPage() {
         meet_link: (tb as unknown as { meet_link?: string | null }).meet_link ?? null,
         subscription_id: null,
         created_at: tb.created_at,
+        // AUDIT #229 — intake_answers was persisted but no staff-facing
+        // surface ever read it, so guests could be required to answer
+        // questions that were then permanently invisible to staff.
+        intakeAnswers: (tb.booking_types?.intake_questions ?? [])
+          .filter(q => tb.intake_answers?.[q.id])
+          .map(q => ({ label: q.label, answer: tb.intake_answers![q.id] })),
       }))
     return [...base, ...fromTypes]
   }
@@ -1116,6 +1132,18 @@ export default function CalendarPage() {
                 <div>
                   <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Notes</div>
                   <p className="text-xs text-gray-600 leading-relaxed">{selected.notes}</p>
+                </div>
+              )}
+
+              {selected.intakeAnswers && selected.intakeAnswers.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Intake Answers</div>
+                  {selected.intakeAnswers.map((qa, i) => (
+                    <div key={i}>
+                      <div className="text-xs font-medium text-gray-600">{qa.label}</div>
+                      <p className="text-xs text-gray-500 leading-relaxed">{qa.answer}</p>
+                    </div>
+                  ))}
                 </div>
               )}
 

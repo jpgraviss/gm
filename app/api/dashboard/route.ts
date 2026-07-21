@@ -27,7 +27,7 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
   const [dealsRes, invoicesRes, contractsRes, renewalsRes, revenueRes, activityRes, automationsRes, activeClientsRes] = await Promise.all([
     db.from('deals').select('id,stage,value,company,assigned_rep,last_activity,service_type,close_date,created_at').order('created_at', { ascending: false }),
     db.from('invoices').select('id,company,amount,status,due_date,issued_date,paid_date,service_type,contract_id,created_at').order('created_at', { ascending: false }),
-    db.from('contracts').select('id,company,status,value,renewal_date,service_type,assigned_rep,billing_structure').order('created_at', { ascending: false }),
+    db.from('contracts').select('id,company,status,value,renewal_date,service_type,assigned_rep,billing_structure,created_at').order('created_at', { ascending: false }),
     db.from('renewals').select('id,company,status,days_until_expiry,expiration_date').order('expiration_date', { ascending: true }),
     db.from('revenue_months').select('*').order('month', { ascending: true }),
     db.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(20),
@@ -43,8 +43,8 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
   const auditLogs = activityRes.data ?? []
 
   const activeClients   = activeClientsRes.count ?? 0
-  const openDeals       = deals.filter(d => !['Closed Won','Closed Lost'].includes(d.stage)).length
-  const pipelineValue   = deals.filter(d => !['Closed Won','Closed Lost'].includes(d.stage)).reduce((s: number, d: { value: number }) => s + (d.value ?? 0), 0)
+  const openDeals       = deals.filter(d => !d.stage.startsWith('Closed')).length
+  const pipelineValue   = deals.filter(d => !d.stage.startsWith('Closed')).reduce((s: number, d: { value: number }) => s + (d.value ?? 0), 0)
   const totalCollected  = invoices.filter((i: { status: string }) => i.status === 'Paid').reduce((s: number, i: { amount: number }) => s + (i.amount ?? 0), 0)
   const overdueInvoices = invoices.filter((i: { status: string }) => i.status === 'Overdue').length
 
@@ -68,7 +68,7 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
 
   const thirtyDaysAgo = new Date(now - 30 * 86400000).toISOString()
   const deals30d = deals.filter(d => d.created_at >= thirtyDaysAgo).length
-  const contracts30d = contracts.filter(c => c.renewal_date >= thirtyDaysAgo || false).length
+  const contracts30d = contracts.filter(c => c.created_at >= thirtyDaysAgo).length
   const invoices30d = invoices.filter(i => i.created_at >= thirtyDaysAgo).length
 
   const recentDeals     = deals.slice(0, 5).map((d: Record<string, unknown>) => ({ id: d.id, company: d.company, stage: d.stage, value: d.value, serviceType: d.service_type, lastActivity: d.last_activity }))

@@ -40,18 +40,9 @@ export const GET = withErrorHandler('track/click/[token] GET', async (
       .is('clicked_at', null)
   }
 
-  const { data: bc } = await db
-    .from('broadcasts')
-    .select('total_clicked')
-    .eq('id', broadcastId)
-    .single()
-
-  if (bc) {
-    await db
-      .from('broadcasts')
-      .update({ total_clicked: (bc.total_clicked ?? 0) + 1 })
-      .eq('id', broadcastId)
-  }
+  // AUDIT #247 — atomic RPC instead of a read-then-write increment, which
+  // could undercount by one under concurrent clicks.
+  await db.rpc('increment_broadcast_clicked', { p_broadcast_id: broadcastId })
 
   return NextResponse.redirect(url, 302)
 })

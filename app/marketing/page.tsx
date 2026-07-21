@@ -9,6 +9,7 @@ import EmailPreview from '@/components/email/EmailPreview'
 import TemplatePicker from '@/components/email/TemplatePicker'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { type EmailBlock, renderEmailHTML } from '@/lib/email-builder'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   Mail, Send, Users, Trash2, Eye, Edit, X, Sparkles, CheckCircle,
   AlertCircle, Clock, BarChart3, ChevronLeft, Palette, Layout, FlaskConical,
@@ -88,11 +89,12 @@ export default function MarketingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+  // rows silently truncated the broadcast list + its own KPI cards.
   function load() {
     setLoading(true)
-    fetch('/api/broadcasts')
-      .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (Array.isArray(data)) setBroadcasts(data) })
+    fetchAllPages<Broadcast>('/api/broadcasts')
+      .then(setBroadcasts)
       .catch(() => toast('Failed to load broadcasts', 'error'))
       .finally(() => setLoading(false))
   }

@@ -638,6 +638,7 @@ export default function TasksPage() {
   }, [searchParams, tasks, selectedTask])
 
   function updateStatus(id: string, status: AppTaskStatus) {
+    const previous = tasks.find(t => t.id === id)
     const today = getToday()
     const completedDate = status === 'Completed' ? today : undefined
     setTasks(prev => prev.map(t => t.id === id ? { ...t, status, completedDate } : t))
@@ -648,10 +649,19 @@ export default function TasksPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, completedDate: completedDate ?? null }),
-    }).catch(() => toast('Failed to update task', 'error'))
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      if (previous) {
+        setTasks(prev => prev.map(t => t.id === id ? previous : t))
+        setSelectedTask(prev => prev?.id === id ? previous : prev)
+      }
+      toast('Failed to update task', 'error')
+    })
   }
 
   function updateTask(id: string, updates: Partial<AppTask>) {
+    const previous = tasks.find(t => t.id === id)
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
     if (selectedTask?.id === id) {
       setSelectedTask(prev => prev ? { ...prev, ...updates } : null)
@@ -668,13 +678,27 @@ export default function TasksPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(apiBody),
-    }).catch(() => toast('Failed to update task', 'error'))
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      if (previous) {
+        setTasks(prev => prev.map(t => t.id === id ? previous : t))
+        setSelectedTask(prev => prev?.id === id ? previous : prev)
+      }
+      toast('Failed to update task', 'error')
+    })
   }
 
   function deleteTask(id: string) {
     if (!confirm('Delete this task?')) return
+    const previous = tasks.find(t => t.id === id)
     setTasks(prev => prev.filter(t => t.id !== id))
-    fetch(`/api/tasks/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete task', 'error'))
+    fetch(`/api/tasks/${id}`, { method: 'DELETE' }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      if (previous) setTasks(prev => [previous, ...prev])
+      toast('Failed to delete task', 'error')
+    })
   }
 
   function addTask(task: AppTask) {

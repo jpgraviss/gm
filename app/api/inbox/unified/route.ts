@@ -34,6 +34,7 @@ import { fetchGmailMessages, extractEmailAddress, extractFirstOtherAddress } fro
 
 interface UnifiedThread {
   contactEmail: string
+  contactId?: string
   contactName: string
   company?: string
   lastMessage: {
@@ -272,6 +273,28 @@ export const GET = withErrorHandler('inbox/unified GET', async (req) => {
   const result = Array.from(threads.values()).sort(
     (a, b) => new Date(b.lastMessage.timestamp).getTime() - new Date(a.lastMessage.timestamp).getTime(),
   )
+  const page = result.slice(0, limit)
 
-  return NextResponse.json(result.slice(0, limit))
+  // AUDIT #257 — "View CRM contact" linked with ?email=, but
+  // app/crm/contacts/page.tsx only ever reads ?open=<id>, so clicking
+  // through always landed on the plain unfiltered contacts list. Resolve
+  // real contact ids here so the frontend can link correctly.
+  const emails = Array.from(new Set(page.map(t => t.contactEmail.toLowerCase()).filter(Boolean)))
+  const contactIdByEmail = new Map<string, string>()
+  if (emails.length > 0) {
+    const { data: contacts } = await db
+      .from('crm_contacts')
+      .select('id, emails')
+      .overlaps('emails', emails)
+    for (const c of contacts ?? []) {
+      for (const e of (c.emails as string[] | null) ?? []) {
+        if (emails.includes(e.toLowerCase())) contactIdByEmail.set(e.toLowerCase(), c.id)
+      }
+    }
+  }
+
+  return NextResponse.json(page.map(t => ({
+    ...t,
+    contactId: contactIdByEmail.get(t.contactEmail.toLowerCase()),
+  })))
 })

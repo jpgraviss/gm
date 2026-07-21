@@ -71,9 +71,19 @@ export default function NewClientModal({ open, onClose }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: companyName }),
         })
-        if (!companyRes.ok) throw new Error('Failed to create company')
+        if (!companyRes.ok) {
+          const err = await companyRes.json().catch(() => ({}))
+          throw new Error(err.error || 'Failed to create company')
+        }
         const company = await companyRes.json()
         resolvedCompanyId = company.id
+        // AUDIT.md #243 — companyId was only ever set in state when picking
+        // an *existing* company via CompanySelect, never after this POST
+        // creates a new one. If a later step throws, retrying re-submits
+        // this same form, which re-POSTs company creation with the same
+        // name and creates a second crm_companies row (no dedupe on that
+        // route). Persist it immediately so a retry reuses this company.
+        setCompanyId(resolvedCompanyId)
       }
 
       const contactRes = await fetch('/api/crm/contacts', {
@@ -118,7 +128,10 @@ export default function NewClientModal({ open, onClose }: Props) {
           services,
         }),
       })
-      if (!inviteRes.ok) throw new Error('Failed to create portal client')
+      if (!inviteRes.ok) {
+        const err = await inviteRes.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to create portal client')
+      }
 
       // AUDIT.md #181 — SERVICES is the portal-facing taxonomy, not the
       // billing/delivery catalog serviceType validates against; 3 of the 8

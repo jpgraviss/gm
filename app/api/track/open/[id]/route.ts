@@ -38,16 +38,15 @@ export const GET = withErrorHandler('track/open/[id] GET', async (
 
   if (tracked) {
     const isFirstOpen = (tracked.open_count ?? 0) === 0
+    // AUDIT #247 — atomic RPC instead of a read-then-write increment, which
+    // could undercount by one under concurrent opens.
     await Promise.all([
       db.from('tracked_email_opens').insert({
         id: `teo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         tracked_email_id: tracked.id,
         user_agent: req.headers.get('user-agent') ?? null,
       }),
-      db.from('tracked_emails').update({
-        open_count: (tracked.open_count ?? 0) + 1,
-        last_opened_at: new Date().toISOString(),
-      }).eq('id', tracked.id),
+      db.rpc('increment_tracked_email_counts', { p_id: tracked.id, p_opens: 1 }),
     ])
     if (isFirstOpen) {
       await mirrorTrackedEmailActivity(db, tracked, `Opened email${tracked.subject ? `: ${tracked.subject}` : ''}`)

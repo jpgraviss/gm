@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
+import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { SlidersHorizontal, Plus, Trash2, Loader2 } from 'lucide-react'
@@ -22,6 +24,8 @@ const FIELD_TYPES: { value: CustomFieldType; label: string }[] = [
 ]
 
 export default function CustomFieldsAdminPage() {
+  const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const [definitions, setDefinitions] = useState<CustomFieldDefinition[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,6 +36,17 @@ export default function CustomFieldsAdminPage() {
   const [label, setLabel] = useState('')
   const [fieldType, setFieldType] = useState<CustomFieldType>('text')
   const [optionsText, setOptionsText] = useState('')
+
+  // AUDIT #241 — this page had no useAuth()/admin gate at all, unlike every
+  // sibling /admin/* page (per #163's precedent) — and unlike #163's own
+  // finding, the backend here genuinely doesn't require admin either (fixed
+  // separately in app/api/custom-field-definitions/route.ts), so this gap
+  // was a real access-control hole, not a cosmetic one.
+  useEffect(() => {
+    if (!authLoading && (!user || !user.isAdmin)) {
+      router.replace('/admin')
+    }
+  }, [user, authLoading, router])
 
   useEffect(() => {
     fetch('/api/custom-field-definitions')

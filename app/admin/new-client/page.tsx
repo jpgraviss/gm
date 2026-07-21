@@ -206,7 +206,11 @@ export default function NewClientPage() {
       case 0: return !!data.companyName
       case 1: return !!data.firstName && !!data.lastName && !!data.email
       case 2: return data.services.length > 0
-      case 3: return true
+      // AUDIT #271 — an end date before the start date previously passed
+      // through silently: months went negative/zero, duration stayed
+      // undefined, and the contract was created with the server's default
+      // 12-month duration with no validation error or warning.
+      case 3: return !(data.agreementStart && data.agreementEnd && data.agreementEnd < data.agreementStart)
       case 4: return true
       case 5: return true
       case 6: return true
@@ -234,9 +238,21 @@ export default function NewClientPage() {
           owner: data.accountManager || undefined,
         }),
       })
-      if (!companyRes.ok) throw new Error('Failed to save company')
+      if (!companyRes.ok) {
+        const err = await companyRes.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to save company')
+      }
       const company = await companyRes.json()
       const companyId = company.id ?? data.companyId
+      // AUDIT.md #243 — companyId was only ever set in local state when
+      // picking an *existing* company via CompanySelect, never after this
+      // POST creates a new one. If any later step threw (contract creation,
+      // contact 409, portal invite failure — all now throw-visible instead
+      // of silently swallowed), the only recourse was retrying this same
+      // form, which re-POSTed company creation with the same name and
+      // created a second crm_companies row. Persist it immediately so a
+      // retry reuses the existing company instead.
+      if (companyId && companyId !== data.companyId) update('companyId', companyId)
 
       const contactRes = await fetch('/api/crm/contacts', {
         method: 'POST',
@@ -280,7 +296,14 @@ export default function NewClientPage() {
         if (data.agreementStart && data.agreementEnd) {
           const start = new Date(data.agreementStart)
           const end = new Date(data.agreementEnd)
-          const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
+          // AUDIT #271 — year/month-only diff ignored day-of-month, off by
+          // nearly a full month at boundaries (e.g. Jan 31 -> Mar 1 counted
+          // as 2 full months). Round to the nearest whole month using the
+          // actual day gap instead.
+          let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
+          if (end.getDate() < start.getDate()) months -= 1
+          const remainderDays = (end.getTime() - start.getTime()) / 86400000 - months * 30.44
+          if (remainderDays >= 15) months += 1
           if (Number.isFinite(months) && months >= 1) duration = Math.min(months, 120)
         }
         const contractRes = await fetch('/api/contracts', {
@@ -351,7 +374,10 @@ export default function NewClientPage() {
             portalConfig,
           }),
         })
-        if (!portalRes.ok) throw new Error('Failed to create portal client')
+        if (!portalRes.ok) {
+          const err = await portalRes.json().catch(() => ({}))
+          throw new Error(err.error || 'Failed to create portal client')
+        }
       }
 
       // AUDIT.md #181 — the wizard's Service dropdown uses the shorter
@@ -524,6 +550,9 @@ export default function NewClientPage() {
                 <Input value={data.agreementEnd} onChange={v => update('agreementEnd', v)} type="date" icon={Calendar} />
               </div>
             </div>
+            {data.agreementStart && data.agreementEnd && data.agreementEnd < data.agreementStart && (
+              <p className="text-xs text-red-500">Agreement End must be after Agreement Start.</p>
+            )}
             <div>
               <FieldLabel>Monthly Value</FieldLabel>
               <Input value={data.monthlyValue} onChange={v => update('monthlyValue', v)} placeholder="5000" type="number" icon={DollarSign} />

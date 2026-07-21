@@ -4,6 +4,7 @@ import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 import { encrypt } from '@/lib/encryption'
+import { isPrivateOrInternalUrl } from '@/lib/ssrf-guard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSite(row: any) {
@@ -79,6 +80,10 @@ export const PATCH = withErrorHandler('monitored-sites/[id] PATCH', async (req, 
   if (body.url !== undefined) {
     let url = String(body.url).trim()
     if (!/^https?:\/\//i.test(url)) url = `https://${url}`
+    // AUDIT #260 — same denylist check as POST /api/monitored-sites.
+    if (await isPrivateOrInternalUrl(url)) {
+      return NextResponse.json({ error: 'URL resolves to a private or internal address and cannot be monitored' }, { status: 400 })
+    }
     update.url = url
   }
   if (body.checkIntervalMinutes !== undefined) update.check_interval_minutes = body.checkIntervalMinutes

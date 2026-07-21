@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { requireRole, getAuthUser } from '@/lib/rbac'
 
 const TYPE_META: Record<string, { color: string; href: string }> = {
   call:     { color: '#3b82f6', href: '/crm/contacts' },
@@ -16,6 +16,8 @@ const TYPE_META: Record<string, { color: string; href: string }> = {
 }
 
 export const GET = withErrorHandler('notifications GET', async (req: NextRequest) => {
+  const user = await getAuthUser(req)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -29,6 +31,17 @@ export const GET = withErrorHandler('notifications GET', async (req: NextRequest
   if (error) {
     console.error('[notifications GET]', error)
     return NextResponse.json([])
+  }
+
+  const ids = (data ?? []).map(row => row.id)
+  let readIds = new Set<string>()
+  if (ids.length > 0) {
+    const { data: reads } = await db
+      .from('notification_reads')
+      .select('notification_id')
+      .eq('user_email', user.email)
+      .in('notification_id', ids)
+    readIds = new Set((reads ?? []).map(r => r.notification_id))
   }
 
   const now = Date.now()
@@ -56,9 +69,38 @@ export const GET = withErrorHandler('notifications GET', async (req: NextRequest
       body: bodyText.slice(0, 120),
       time,
       href: meta.href,
-      unread: age < 86400000,
+      unread: age < 86400000 && !readIds.has(row.id),
     }
   })
 
   return NextResponse.json(notifications)
+})
+
+export const POST = withErrorHandler('notifications POST', async (req: NextRequest) => {
+  const user = await getAuthUser(req)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
+  const { ids } = await req.json().catch(() => ({ ids: [] })) as { ids?: string[] }
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return NextResponse.json({ error: 'ids required' }, { status: 400 })
+  }
+
+  const db = createServiceClient()
+  const rows = ids.map(notificationId => ({
+    id: crypto.randomUUID(),
+    user_email: user.email,
+    notification_id: notificationId,
+  }))
+  const { error } = await db
+    .from('notification_reads')
+    .upsert(rows, { onConflict: 'user_email,notification_id', ignoreDuplicates: true })
+
+  if (error) {
+    console.error('[notifications POST]', error)
+    return NextResponse.json({ error: 'Failed to mark read' }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true })
 })

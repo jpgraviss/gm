@@ -162,7 +162,7 @@ export async function recordCheck(siteId: string, result: CheckResult): Promise<
  * Compute the 30-day uptime percentage for a site and write it to
  * `monitored_sites.uptime_30d`.
  */
-export async function computeUptime30d(siteId: string): Promise<number> {
+export async function computeUptime30d(siteId: string): Promise<number | null> {
   const db = createServiceClient()
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -172,7 +172,15 @@ export async function computeUptime30d(siteId: string): Promise<number> {
     .eq('site_id', siteId)
     .gte('checked_at', since)
 
-  if (error || !data || data.length === 0) {
+  if (error) {
+    // AUDIT #259 — previously returned a hardcoded 100 on a real query
+    // error, identical to "no checks yet" (a genuinely-healthy site looked
+    // the same as a DB error). Log and return null instead of writing a
+    // fabricated value over whatever uptime_30d already holds.
+    console.error('[uptime] computeUptime30d query failed for site', siteId, error)
+    return null
+  }
+  if (!data || data.length === 0) {
     return 100
   }
 

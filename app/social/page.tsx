@@ -5,6 +5,7 @@ import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import { formatDate } from '@/lib/utils'
 import { PLATFORM_META, type SocialPlatform, type PostStatus } from '@/lib/social-media'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   Calendar, List, ChevronLeft, ChevronRight, X, Send, Clock, Check,
   AlertTriangle, Trash2, Eye, Pencil, Plus, Loader2, Wand2, Link2,
@@ -75,14 +76,15 @@ export default function SocialMediaPage() {
   const [calYear, setCalYear] = useState(now.getFullYear())
   const [calMonth, setCalMonth] = useState(now.getMonth())
 
+  // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+  // rows silently truncated the post list past that.
   const loadPosts = useCallback(() => {
     setLoading(true)
     const params = new URLSearchParams()
     if (clientFilter) params.set('company', clientFilter)
     if (statusFilter !== 'all') params.set('status', statusFilter)
-    fetch(`/api/social-posts?${params}`)
-      .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (Array.isArray(data)) setPosts(data) })
+    fetchAllPages<SocialPost>(`/api/social-posts?${params}`)
+      .then(setPosts)
       .catch(() => toast('Failed to load posts', 'error'))
       .finally(() => setLoading(false))
   }, [clientFilter, statusFilter, toast])

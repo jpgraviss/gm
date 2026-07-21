@@ -73,13 +73,16 @@ export const GET = withErrorHandler('reports/attribution GET', async (req) => {
   for (const deal of (deals ?? [])) {
     const c = deal.contact_id ? contactMap.get(deal.contact_id) : null
     const isWon = deal.stage === 'Closed Won'
-    const isLost = deal.stage === 'Closed Lost'
+    // startsWith('Closed'), not an exact 'Closed Lost' match, so a custom
+    // closed stage (e.g. "Closed — Duplicate") isn't miscounted as pipeline
+    // (same bug class as AUDIT #53/#105/#139/#218)
+    const isClosed = deal.stage.startsWith('Closed')
     const value = deal.value ?? 0
 
     if (!c?.utm_source) {
       unattributedDeals++
       if (isWon) unattributedWonRevenue += value
-      else if (!isLost) unattributedPipelineValue += value
+      else if (!isClosed) unattributedPipelineValue += value
       continue
     }
 
@@ -90,7 +93,7 @@ export const GET = withErrorHandler('reports/attribution GET', async (req) => {
     if (isWon) {
       bucket.wonDeals++
       bucket.wonRevenue += value
-    } else if (!isLost) {
+    } else if (!isClosed) {
       bucket.pipelineValue += value
     }
   }

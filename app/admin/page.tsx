@@ -98,13 +98,20 @@ function IntegrationCard({
   onConfigure?: () => void
   onRefresh?: () => void
 }) {
+  const { toast } = useToast()
   const [enabled, setEnabled] = useState(status === 'connected')
 
+  // AUDIT #268 — this toggle only ever called onConnect() when switching ON;
+  // no onDisconnect prop exists at all, so switching OFF just flipped local
+  // `enabled` state with zero backend effect — a Super Admin toggling off an
+  // integration saw the switch move but nothing was actually disconnected.
   function handleToggle() {
-    if (!enabled && onConnect) {
-      onConnect()
+    if (!enabled) {
+      onConnect?.()
+      setEnabled(true)
+      return
     }
-    setEnabled(!enabled)
+    toast(`Disconnecting ${name} isn't supported here yet — use the integration's own settings to revoke access.`, 'info')
   }
 
   return (

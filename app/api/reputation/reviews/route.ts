@@ -26,8 +26,10 @@ export const GET = withErrorHandler('reputation/reviews GET', async (req) => {
   const { data, error } = await query
 
   if (error) {
+    // AUDIT #248 — was returning [] with a 200 status on a real query
+    // error, indistinguishable from "no reviews yet" to every caller.
     console.error('[reviews GET]', error)
-    return NextResponse.json([], { status: 200 })
+    throw new Error(error.message || 'Failed to load reviews')
   }
 
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'date')

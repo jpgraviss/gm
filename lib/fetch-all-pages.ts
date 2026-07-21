@@ -12,7 +12,17 @@ export async function fetchAllPages<T>(baseUrl: string, maxLimit = 500): Promise
     url.searchParams.set('limit', String(maxLimit))
     if (cursor) url.searchParams.set('cursor', cursor)
     const res = await fetch(url.pathname + url.search)
-    if (!res.ok) break
+    if (!res.ok) {
+      // AUDIT #244 — this used to `break` on a failed page (silently
+      // returning whatever had already accumulated) instead of rejecting,
+      // so a session expiring or a transient network blip between page 1
+      // and page N produced a silently-truncated result with no error —
+      // the exact "false all-clear" this helper exists to prevent for the
+      // first-page case, just not for later pages. Every call site already
+      // has a `.catch()`/try-catch written expecting this to reject on
+      // failure; it just never actually fired.
+      throw new Error(`fetchAllPages: ${baseUrl} failed with ${res.status}${all.length > 0 ? ` after ${all.length} rows` : ''}`)
+    }
     const page = (await res.json()) as T[]
     if (Array.isArray(page)) all.push(...page)
     cursor = res.headers.get('X-Next-Cursor')

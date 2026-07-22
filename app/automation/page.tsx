@@ -14,6 +14,7 @@ interface Automation {
   name: string
   trigger: string
   actions: { type: string; config: Record<string, unknown> }[]
+  config?: Record<string, unknown>
   status: AutoStatus
   runs: number
   lastRun: string
@@ -55,7 +56,7 @@ const ACTION_OPTIONS = [
   'Send Email Reminder', 'Send Follow-up Email', 'Log Activity',
   'Log Touchpoint', 'Flag in Dashboard', 'Update Revenue Metrics',
   'Apply Service Template', 'Update Client Portal', 'Escalate if 7+ Days',
-  'Send Notification', 'Create Task',
+  'Send Notification', 'Create Task', 'Generate Proposal',
 ]
 
 // ─── Automation Templates ────────────────────────────────────────────────────
@@ -134,6 +135,22 @@ function NewAutomationPanel({ onSave, onClose, initialName, initialTrigger, init
   const [name, setName] = useState(initialName ?? '')
   const [trigger, setTrigger] = useState(initialTrigger ?? '')
   const [actions, setActions] = useState<string[]>(initialActions && initialActions.length > 0 ? initialActions : [''])
+  // "Form Submitted" fires for every form in the app by default (nothing
+  // scopes it otherwise) — a client-specific automation like Generate
+  // Proposal needs to be pinned to the one intake form it's meant for, not
+  // every lead-capture/contact form too. Neither this panel nor the
+  // drag-and-drop builder exposed that before; SequenceAutomateTab was the
+  // only caller that ever set it, via its own bespoke code path.
+  const [forms, setForms] = useState<{ id: string; name: string }[]>([])
+  const [formId, setFormId] = useState('')
+
+  useEffect(() => {
+    if (trigger !== 'Form Submitted') return
+    fetch('/api/forms')
+      .then(r => r.ok ? r.json() : { items: [] })
+      .then(data => setForms((Array.isArray(data) ? data : (data.items ?? [])).map((f: { id: string; name: string }) => ({ id: f.id, name: f.name }))))
+      .catch(() => {})
+  }, [trigger])
 
   function addAction() { setActions(prev => [...prev, '']) }
   function removeAction(i: number) { setActions(prev => prev.filter((_, idx) => idx !== i)) }
@@ -148,6 +165,7 @@ function NewAutomationPanel({ onSave, onClose, initialName, initialTrigger, init
       name: name.trim(),
       trigger,
       actions: actions.filter(a => a.trim()).map(type => ({ type, config: {} })),
+      config: trigger === 'Form Submitted' && formId ? { formScope: 'specific', formId } : {},
       status: 'Active',
       runs: 0,
       lastRun: 'Never',
@@ -201,6 +219,21 @@ function NewAutomationPanel({ onSave, onClose, initialName, initialTrigger, init
               {TRIGGER_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
+
+          {trigger === 'Form Submitted' && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Which Form</label>
+              <select
+                value={formId}
+                onChange={e => setFormId(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+              >
+                <option value="">Any form (fires for every form submission)</option>
+                {forms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1">Pin this to one intake form, e.g. for Generate Proposal — otherwise it fires for every form in the app.</p>
+            </div>
+          )}
 
           {/* Arrow connector */}
           {trigger && (

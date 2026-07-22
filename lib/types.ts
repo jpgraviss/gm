@@ -140,6 +140,10 @@ export interface Proposal {
   isRenewal?: boolean
   internalOnly?: boolean
   renewalNotes?: string
+  // AI-generated proposals (Generate Proposal pipeline)
+  pdfPath?: string
+  formSubmissionId?: string
+  generationNotes?: string
 }
 
 export interface Contract {

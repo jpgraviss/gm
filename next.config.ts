@@ -4,6 +4,13 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/wordpress/plugin/download': ['./wordpress/gravhub-seo/**/*'],
+    // lib/proposal-template.ts reads these fonts via readFileSync/path.join
+    // at render time, not a static import, so Next's tracer can't discover
+    // them on its own — every route that can reach the proposal-generation
+    // pipeline needs them explicitly included in its serverless bundle.
+    '/api/proposals/generate': ['./lib/proposal-template/fonts/**/*'],
+    '/api/forms/public/[slug]': ['./lib/proposal-template/fonts/**/*'],
+    '/api/forms/public/funnel-submit': ['./lib/proposal-template/fonts/**/*'],
   },
   experimental: {
     turbopackUseSystemTlsCerts: true,

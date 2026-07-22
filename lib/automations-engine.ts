@@ -595,6 +595,70 @@ async function executeAction(
       break
     }
 
+    case 'Generate Proposal': {
+      // Only meaningful off a Form Submitted trigger — the intake is
+      // whatever fields that specific form actually collected (every
+      // client's intake form is custom-built, no fixed schema), so this
+      // reads the form's own field labels rather than assuming any.
+      const formId = context.formId as string | undefined
+      const data = (context.data as Record<string, string | number | boolean>) ?? {}
+      if (!formId) break
+
+      const { data: formRow } = await db.from('forms').select('name, fields').eq('id', formId).maybeSingle()
+      if (!formRow) break
+
+      const fields = (formRow.fields ?? []) as { name: string; label: string; mapsTo?: string }[]
+      const { buildIntakeTextFromSubmission, generateProposal } = await import('@/lib/proposal-generator')
+      const intakeText = buildIntakeTextFromSubmission(fields, data)
+      if (!intakeText.trim()) break
+
+      let clientName = ''
+      for (const f of fields) {
+        if (f.mapsTo === 'company' && data[f.name]) { clientName = String(data[f.name]); break }
+      }
+      if (!clientName) {
+        const contactId = await resolveContactId(context, company, db)
+        if (contactId) {
+          const { data: contactRow } = await db.from('crm_contacts').select('company_name').eq('id', contactId).maybeSingle()
+          clientName = contactRow?.company_name ?? ''
+        }
+      }
+      if (!clientName) clientName = company || (formRow.name as string)
+
+      let result
+      try {
+        result = await generateProposal({ intakeText, clientName })
+      } catch (err) {
+        console.error('[automations] Generate Proposal: generation failed', err)
+        break
+      }
+
+      const pdfPath = `${clientName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}/${uid()}.pdf`
+      const { error: uploadErr } = await db.storage.from('proposal-pdfs').upload(pdfPath, result.pdf, { contentType: 'application/pdf' })
+      if (uploadErr) {
+        console.error('[automations] Generate Proposal: PDF upload failed', uploadErr)
+        break
+      }
+
+      const recommended = result.draft.options.find(o => o.recommended) ?? result.draft.options[0]
+      const value = Number(String(recommended?.priceLabel ?? '').replace(/[^0-9.]/g, '')) || 0
+
+      await db.from('proposals').insert({
+        id: `prop-auto-${uid()}`,
+        company: clientName,
+        status: 'Draft',
+        value,
+        service_type: 'Custom',
+        assigned_rep: '',
+        items: [],
+        form_submission_id: (context.submissionId as string) ?? null,
+        pdf_path: pdfPath,
+        generation_notes: result.notes || (result.source === 'template' ? 'Generated without an AI provider — placeholder draft, needs manual completion.' : ''),
+        created_date: today,
+      })
+      break
+    }
+
     // Legacy actions from the simple automation panel
     case 'Create Draft Contract': {
       await db.from('contracts').insert({

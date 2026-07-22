@@ -8,11 +8,11 @@ import { fetchDeals, fetchContracts } from '@/lib/supabase'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, proposalStatusColors, serviceTypeColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
-import ProposalBuilderPanel from '@/components/crm/ProposalBuilderPanel'
+import GenerateProposalPanel from '@/components/crm/GenerateProposalPanel'
 import type { Deal, Contract, Proposal, ProposalStatus } from '@/lib/types'
 import {
-  Eye, Send, CheckCircle, XCircle, FileText, DollarSign, Calendar, User, X,
-  Clock, ExternalLink, Mail, Phone, TrendingUp, AlertTriangle, Edit2, ShieldCheck,
+  Eye, Send, CheckCircle, FileText, Calendar, User, X,
+  Clock, ExternalLink, Mail, Phone, TrendingUp, AlertTriangle, ShieldCheck,
   Search, Copy, BarChart3, Percent, Inbox, Trash2, Download,
 } from 'lucide-react'
 import BulkActionBar from '@/components/ui/BulkActionBar'
@@ -34,7 +34,6 @@ function ProposalPanel({
   proposal,
   onClose,
   onUpdateStatus,
-  onEdit,
   onDelete,
   deals,
   contracts,
@@ -42,7 +41,6 @@ function ProposalPanel({
   proposal: Proposal
   onClose: () => void
   onUpdateStatus: (id: string, status: ProposalStatus) => void
-  onEdit: (proposal: Proposal) => void
   onDelete: (id: string) => void
   deals: Deal[]
   contracts: Contract[]
@@ -51,6 +49,15 @@ function ProposalPanel({
 
   const deal = deals.find(d => d.id === proposal.dealId)
   const linkedContract = contracts.find(c => c.proposalId === proposal.id)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!proposal.pdfPath) return
+    fetch(`/api/proposals/${proposal.id}/pdf`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setPdfUrl(data?.url ?? null))
+      .catch(() => setPdfUrl(null))
+  }, [proposal.id, proposal.pdfPath])
 
   const oneTime = proposal.items.filter(i => i.type === 'one-time')
   const recurring = proposal.items.filter(i => i.type === 'recurring')
@@ -65,8 +72,6 @@ function ProposalPanel({
     { label: 'Viewed by Client', date: proposal.viewedDate, done: !!proposal.viewedDate },
     { label: 'Response Received', date: proposal.respondedDate, done: !!proposal.respondedDate },
   ]
-
-  const canEdit = ['Draft', 'Pending Approval', 'Approved'].includes(proposal.status)
 
   return (
     <div className="pointer-events-none fixed inset-0 z-40 flex">
@@ -87,15 +92,6 @@ function ProposalPanel({
               </h2>
             </div>
             <div className="flex items-center gap-1">
-              {canEdit && (
-                <button
-                  onClick={() => { onClose(); onEdit(proposal) }}
-                  className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-                  title="Edit proposal"
-                >
-                  <Edit2 size={14} className="text-white/60" />
-                </button>
-              )}
               {proposal.status === 'Draft' && (
                 <button
                   onClick={() => onDelete(proposal.id)}
@@ -166,6 +162,27 @@ function ProposalPanel({
         <div className="flex-1 overflow-y-auto p-4">
           {activeTab === 'overview' && (
             <div className="flex flex-col gap-4">
+              {proposal.pdfPath && (
+                <a
+                  href={pdfUrl ?? undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold border transition-colors ${
+                    pdfUrl ? 'border-[#015035] text-[#015035] hover:bg-[#015035]/5' : 'border-gray-200 text-gray-400 pointer-events-none'
+                  }`}
+                >
+                  <Download size={14} /> {pdfUrl ? 'Download Generated PDF' : 'Loading PDF link...'}
+                </a>
+              )}
+              {proposal.generationNotes && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-800">AI drafting notes</p>
+                    <p className="text-[11px] text-amber-700 mt-0.5 whitespace-pre-wrap">{proposal.generationNotes}</p>
+                  </div>
+                </div>
+              )}
               {proposal.status === 'Pending Approval' && (
                 <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                   <Clock size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
@@ -370,21 +387,13 @@ function ProposalPanel({
 
         <div className="flex-shrink-0 p-4 border-t border-gray-100 flex gap-2">
           {proposal.status === 'Draft' && (
-            <>
-              <button
-                onClick={() => onUpdateStatus(proposal.id, 'Pending Approval')}
-                className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
-                style={{ background: '#015035' }}
-              >
-                Submit for Approval
-              </button>
-              <button
-                onClick={() => { onClose(); onEdit(proposal) }}
-                className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50"
-              >
-                <Edit2 size={13} />
-              </button>
-            </>
+            <button
+              onClick={() => onUpdateStatus(proposal.id, 'Pending Approval')}
+              className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90"
+              style={{ background: '#015035' }}
+            >
+              Submit for Approval
+            </button>
           )}
           {proposal.status === 'Pending Approval' && (
             <>
@@ -495,7 +504,6 @@ export default function ProposalsPage() {
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'All'>('All')
   const [searchQuery, setSearchQuery] = useState('')
   const [creatingProposal, setCreatingProposal] = useState(false)
-  const [editingProposal, setEditingProposal] = useState<Proposal | null>(null)
   const [deals, setDeals] = useState<Deal[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
   const [loading, setLoading] = useState(true)
@@ -628,63 +636,37 @@ export default function ProposalsPage() {
     }
   }
 
-  async function handleNewProposal(data: Omit<Proposal, 'id' | 'dealId' | 'createdDate'>) {
-    if (editingProposal) {
-      setLocalProposals(prev => prev.map(p =>
-        p.id === editingProposal.id
-          ? { ...p, ...data }
-          : p
-      ))
-      setEditingProposal(null)
-      try {
-        const res = await fetch(`/api/proposals/${editingProposal.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        })
-        if (res.ok) {
-          toast('Proposal updated', 'success')
-        } else {
-          const err = await res.json().catch(() => ({}))
-          toast(err.error || 'Failed to save proposal changes', 'error')
-        }
-      } catch (err) {
-        console.error('Failed to PATCH proposal:', err)
-        toast('Network error — could not save proposal changes', 'error')
+  async function handleDuplicateProposal(data: Omit<Proposal, 'id' | 'dealId' | 'createdDate'>) {
+    const localProposal: Proposal = {
+      id: generateId('prop'),
+      dealId: '',
+      createdDate: new Date().toISOString().split('T')[0],
+      ...data,
+    }
+    setLocalProposals(prev => [localProposal, ...prev])
+    try {
+      const res = await fetch('/api/proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealId: '',
+          createdDate: localProposal.createdDate,
+          ...data,
+        }),
+      })
+      if (res.ok) {
+        const savedProposal = await res.json()
+        setLocalProposals(prev => prev.map(p =>
+          p.id === localProposal.id ? savedProposal : p
+        ))
+        toast('Proposal created', 'success')
+      } else {
+        const err = await res.json().catch(() => ({}))
+        toast(err.error || 'Failed to create proposal', 'error')
       }
-    } else {
-      const localProposal: Proposal = {
-        id: generateId('prop'),
-        dealId: '',
-        createdDate: new Date().toISOString().split('T')[0],
-        ...data,
-      }
-      setLocalProposals(prev => [localProposal, ...prev])
-      setCreatingProposal(false)
-      try {
-        const res = await fetch('/api/proposals', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dealId: '',
-            createdDate: localProposal.createdDate,
-            ...data,
-          }),
-        })
-        if (res.ok) {
-          const savedProposal = await res.json()
-          setLocalProposals(prev => prev.map(p =>
-            p.id === localProposal.id ? savedProposal : p
-          ))
-          toast('Proposal created', 'success')
-        } else {
-          const err = await res.json().catch(() => ({}))
-          toast(err.error || 'Failed to create proposal', 'error')
-        }
-      } catch (err) {
-        console.error('Failed to POST proposal:', err)
-        toast('Network error — could not create proposal', 'error')
-      }
+    } catch (err) {
+      console.error('Failed to POST proposal:', err)
+      toast('Network error — could not create proposal', 'error')
     }
   }
 
@@ -714,7 +696,7 @@ export default function ProposalsPage() {
       assignedRep: proposal.assignedRep,
       items: proposal.items.map(item => ({ ...item, id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` })),
     }
-    handleNewProposal(duplicate)
+    handleDuplicateProposal(duplicate)
     toast('Proposal duplicated as draft', 'success')
   }
 
@@ -958,15 +940,6 @@ export default function ProposalsPage() {
                           >
                             <Eye size={14} />
                           </button>
-                          {['Draft', 'Pending Approval', 'Approved'].includes(p.status) && (
-                            <button
-                              onClick={() => setEditingProposal(p)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                              title="Edit"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                          )}
                           {p.status === 'Approved' && (
                             <button
                               onClick={() => updateProposalStatus(p.id, 'Sent')}
@@ -1019,20 +992,19 @@ export default function ProposalsPage() {
 
       {selected && (
         <ProposalPanel
+          key={selected.id}
           proposal={selected}
           onClose={() => setSelected(null)}
           onUpdateStatus={updateProposalStatus}
-          onEdit={p => { setSelected(null); setEditingProposal(p) }}
           onDelete={handleDeleteProposal}
           deals={deals}
           contracts={contracts}
         />
       )}
-      {(creatingProposal || editingProposal) && (
-        <ProposalBuilderPanel
-          initialData={editingProposal ?? undefined}
-          onSave={handleNewProposal}
-          onClose={() => { setCreatingProposal(false); setEditingProposal(null) }}
+      {creatingProposal && (
+        <GenerateProposalPanel
+          onGenerated={p => setLocalProposals(prev => [p, ...prev])}
+          onClose={() => setCreatingProposal(false)}
         />
       )}
       {someSelected && (

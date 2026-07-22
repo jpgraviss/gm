@@ -148,18 +148,8 @@ export const DELETE = withErrorHandler('courses/[id]/enrollments/[enrollmentId] 
     throw new Error(error.message)
   }
 
-  const { data: course } = await db
-    .from('courses')
-    .select('enrolled_count')
-    .eq('id', id)
-    .single()
-
-  if (course && course.enrolled_count > 0) {
-    await db
-      .from('courses')
-      .update({ enrolled_count: course.enrolled_count - 1 })
-      .eq('id', id)
-  }
+  // AUDIT #276 — atomic RPC instead of a read-then-write decrement.
+  await db.rpc('adjust_course_enrolled_count', { p_id: id, p_delta: -1 })
 
   logAudit({ userName: actor?.name || actor?.email || 'system', action: 'unenrolled_student', module: 'courses', type: 'info', metadata: { courseId: id, enrollmentId } })
   return NextResponse.json({ deleted: enrollmentId })

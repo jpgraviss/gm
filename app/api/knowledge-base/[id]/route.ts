@@ -16,7 +16,8 @@ export const GET = withErrorHandler('knowledge-base/[id] GET', async (req, { par
     return NextResponse.json({ error: error.message }, { status: 404 })
   }
 
-  await db.from('knowledge_articles').update({ views: (data.views ?? 0) + 1 }).eq('id', id)
+  // AUDIT #276 — atomic RPC instead of a read-then-write increment.
+  await db.rpc('increment_kb_article_views', { p_id: id })
 
   return NextResponse.json(data)
 })

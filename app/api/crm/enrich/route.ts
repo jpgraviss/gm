@@ -73,17 +73,41 @@ export const POST = withErrorHandler('crm/enrich POST', async (req) => {
 
   let html: string
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 5000)
-    const res = await fetch(url.toString(), {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; GravHubBot/1.0)',
-        Accept: 'text/html,application/xhtml+xml',
-      },
-      redirect: 'follow',
-    })
-    clearTimeout(timeout)
+    // AUDIT #278 — isSafeToFetch() only validated the INITIAL URL, but the
+    // actual fetch below used redirect: 'follow', which transparently
+    // follows a 3xx to wherever it points with zero re-validation. A
+    // malicious/compromised external site could pass the initial check
+    // then redirect to a private/internal/cloud-metadata address, and this
+    // route would fetch it and reflect the response back to the caller.
+    // Follow redirects manually, one hop at a time, re-validating each.
+    let currentUrl = url
+    let res: Response
+    for (let hop = 0; ; hop++) {
+      if (hop > 5) {
+        return NextResponse.json({ error: 'Too many redirects' }, { status: 502 })
+      }
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 5000)
+      res = await fetch(currentUrl.toString(), {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; GravHubBot/1.0)',
+          Accept: 'text/html,application/xhtml+xml',
+        },
+        redirect: 'manual',
+      })
+      clearTimeout(timeout)
+
+      if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+        const nextUrl = new URL(res.headers.get('location')!, currentUrl)
+        if (!(await isSafeToFetch(nextUrl))) {
+          return NextResponse.json({ error: 'This URL cannot be enriched' }, { status: 400 })
+        }
+        currentUrl = nextUrl
+        continue
+      }
+      break
+    }
     if (!res.ok) {
       return NextResponse.json({ error: `Site returned ${res.status}` }, { status: 502 })
     }

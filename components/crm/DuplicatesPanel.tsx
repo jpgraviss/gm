@@ -80,15 +80,22 @@ export default function DuplicatesPanel({ type, onClose, onMergeComplete }: Dupl
   async function handleIgnore(group: DuplicateGroup) {
     // Instantly remove from local state
     setGroups(prev => prev.filter(g => g.key !== group.key))
-    toast('Duplicate group dismissed', 'success')
     // Persist to server
     try {
-      await fetch('/api/crm/duplicates/ignore', {
+      const res = await fetch('/api/crm/duplicates/ignore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, groupKey: group.key }),
       })
+      // AUDIT #279 — this showed "dismissed" and removed the group from
+      // local state before checking res.ok; a server error meant the
+      // dismissal never actually persisted, and the group silently
+      // reappeared on the next duplicates scan with no indication the
+      // earlier "success" toast had been wrong.
+      if (!res.ok) throw new Error('Failed')
+      toast('Duplicate group dismissed', 'success')
     } catch {
+      setGroups(prev => [...prev, group])
       toast('Failed to save dismissal', 'error')
     }
   }

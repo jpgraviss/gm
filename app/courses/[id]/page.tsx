@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   ArrowLeft, BookOpen, CheckCircle, Circle, Play, FileText,
   HelpCircle, Award, ChevronLeft, ChevronRight,
@@ -235,20 +236,18 @@ export default function CourseViewerPage() {
         const courseData: Course = await courseRes.json()
         setCourse(courseData)
 
+        // AUDIT #275 — GET /api/courses/[id]/enrollments returns a bare
+        // array via paginatedJson(), not {data: [...]}; reading .data off
+        // it was always undefined, so `enrollment` never resolved and
+        // progress tracking/quiz completion were unreachable.
         if (enrollmentId) {
-          const enrRes = await fetch(`/api/courses/${id}/enrollments?limit=200`)
-          if (enrRes.ok) {
-            const enrData = await enrRes.json()
-            const found = (enrData.data ?? []).find((e: Enrollment) => e.id === enrollmentId)
-            if (found) setEnrollment(found)
-          }
+          const enrData = await fetchAllPages<Enrollment>(`/api/courses/${id}/enrollments`).catch(() => [])
+          const found = enrData.find(e => e.id === enrollmentId)
+          if (found) setEnrollment(found)
         } else if (user?.email) {
-          const enrRes = await fetch(`/api/courses/${id}/enrollments?limit=200`)
-          if (enrRes.ok) {
-            const enrData = await enrRes.json()
-            const found = (enrData.data ?? []).find((e: Enrollment) => e.studentEmail === user.email)
-            if (found) setEnrollment(found)
-          }
+          const enrData = await fetchAllPages<Enrollment>(`/api/courses/${id}/enrollments`).catch(() => [])
+          const found = enrData.find(e => e.studentEmail === user.email)
+          if (found) setEnrollment(found)
         }
       } catch {
         toast('Failed to load course', 'error')

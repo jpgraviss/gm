@@ -8,6 +8,7 @@ import {
   BookOpen, FileText, HelpCircle, DollarSign, Video, Type, Tag, Eye,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -98,10 +99,11 @@ function CoursePanel({
     if (!course) return
     setLoadingEnrollments(true)
     try {
-      const res = await fetch(`/api/courses/${course.id}/enrollments?limit=200`)
-      if (!res.ok) throw new Error('Failed to fetch enrollments')
-      const json = await res.json()
-      setEnrollments(json.data ?? [])
+      // AUDIT #275 — GET /api/courses/[id]/enrollments returns a bare
+      // array via paginatedJson() (X-Next-Cursor header, not {data: [...]}).
+      // Reading .data off it was always undefined, so this always fell
+      // through to an empty roster regardless of real enrollments.
+      setEnrollments(await fetchAllPages<Enrollment>(`/api/courses/${course.id}/enrollments`))
     } catch (e) {
       toast((e as Error).message, 'error')
     } finally {
@@ -493,10 +495,10 @@ export default function CoursesPage() {
 
   async function fetchCourses() {
     try {
-      const res = await fetch('/api/courses?limit=200')
-      if (!res.ok) throw new Error('Failed to fetch courses')
-      const json = await res.json()
-      setCourses(json.data ?? [])
+      // AUDIT #275 — GET /api/courses returns a bare array via
+      // paginatedJson(), not {data: [...]}; reading .data off it was
+      // always undefined, so the staff Courses list was always empty.
+      setCourses(await fetchAllPages<Course>('/api/courses'))
     } catch (e) {
       toast((e as Error).message, 'error')
     } finally {

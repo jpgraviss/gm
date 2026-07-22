@@ -38,7 +38,7 @@ const membershipColors: Record<string, string> = {
   Client: 'bg-green-100 text-green-700',
 }
 
-const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Email Templates', 'Email Scheduling', 'Dashboard', 'Navigation', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing'] as const
+const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Email Templates', 'Email Scheduling', 'Dashboard', 'Navigation', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing', 'AI Usage'] as const
 type Tab = typeof tabs[number]
 
 const tabIcons: Record<Tab, React.ReactNode> = {
@@ -56,6 +56,7 @@ const tabIcons: Record<Tab, React.ReactNode> = {
   'CRM Setup': <Tag size={15} />,
   Engagement: <TrendingUp size={15} />,
   Billing: <DollarSign size={15} />,
+  'AI Usage': <Brain size={15} />,
 }
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange?: () => void }) {
@@ -297,6 +298,36 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState<string | null>(null)
 
   useEffect(() => { setLoading(false) }, [])
+
+  // AI Usage — Ollama/Groq expose no usage-query API this app can call, so
+  // this reads the local ai_usage_log every chatCompletion() call writes to
+  // (lib/ai-client.ts), the only real visibility into call volume/provider
+  // split/quota proximity. Fetched lazily, only once the tab is opened.
+  interface AiUsageData {
+    callsLast24h: number
+    callsLast7d: number
+    callsLast30d: number
+    totalTokens30d: number
+    failures30d: number
+    bySource: Record<string, number>
+    byFeature: Record<string, number>
+    noProviderConfigured: boolean
+  }
+  const [aiUsage, setAiUsage] = useState<AiUsageData | null>(null)
+  const [aiUsageLoading, setAiUsageLoading] = useState(false)
+  const [aiUsageError, setAiUsageError] = useState('')
+
+  useEffect(() => {
+    if (activeTab !== 'AI Usage' || aiUsage || aiUsageLoading) return
+    setAiUsageLoading(true)
+    setAiUsageError('')
+    fetch('/api/ai/usage')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to load')))
+      .then(setAiUsage)
+      .catch(() => setAiUsageError('Could not load AI usage data.'))
+      .finally(() => setAiUsageLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
 
   // Company
   const [company, setCompany] = useState(COMPANY_DEFAULTS)
@@ -2231,6 +2262,88 @@ export default function SettingsPage() {
               </button>
             </div>
 
+          </div>
+        )}
+
+        {activeTab === 'AI Usage' && (
+          <div className="flex flex-col gap-4">
+            {aiUsageLoading && !aiUsage && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5 text-sm text-gray-400">Loading AI usage…</div>
+            )}
+            {aiUsageError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700 flex items-center gap-2">
+                <AlertTriangle size={14} /> {aiUsageError}
+              </div>
+            )}
+            {aiUsage && (
+              <>
+                {aiUsage.noProviderConfigured && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 flex items-start gap-2">
+                    <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold">No AI provider is reachable</p>
+                      <p className="text-amber-700 mt-0.5">Every recent AI call fell through to the template fallback. Confirm GROQ_API_KEY is set in this environment.</p>
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Calls (24h)', value: aiUsage.callsLast24h },
+                    { label: 'Calls (7d)', value: aiUsage.callsLast7d },
+                    { label: 'Calls (30d)', value: aiUsage.callsLast30d },
+                    { label: 'Tokens (30d)', value: aiUsage.totalTokens30d.toLocaleString() },
+                  ].map(stat => (
+                    <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-4">
+                      <p className="text-2xl font-bold text-gray-800">{stat.value}</p>
+                      <p className="text-xs text-gray-400 mt-1">{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-4" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Provider Split (30d)</h3>
+                  <div className="flex flex-col gap-2">
+                    {(['groq', 'ollama', 'none'] as const).map(source => {
+                      const count = aiUsage.bySource[source] ?? 0
+                      const pct = aiUsage.callsLast30d > 0 ? Math.round((count / aiUsage.callsLast30d) * 100) : 0
+                      const label = source === 'groq' ? 'Groq (cloud)' : source === 'ollama' ? 'Ollama (local)' : 'No provider / fallback'
+                      const color = source === 'groq' ? '#015035' : source === 'ollama' ? '#3b82f6' : '#d97706'
+                      return (
+                        <div key={source} className="flex items-center gap-3">
+                          <div className="w-32 text-xs text-gray-600 flex-shrink-0">{label}</div>
+                          <div className="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+                          </div>
+                          <div className="w-20 text-right text-xs font-semibold text-gray-700 flex-shrink-0">{count} ({pct}%)</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {aiUsage.failures30d > 0 && (
+                    <p className="text-xs text-gray-400 mt-3">{aiUsage.failures30d} failed call{aiUsage.failures30d === 1 ? '' : 's'} in the last 30 days.</p>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-4" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>By Feature (30d)</h3>
+                  <div className="flex flex-col gap-2">
+                    {Object.entries(aiUsage.byFeature).sort(([, a], [, b]) => b - a).map(([feature, count]) => (
+                      <div key={feature} className="flex items-center justify-between text-xs py-1.5 border-b border-gray-50 last:border-0">
+                        <span className="text-gray-600 font-mono">{feature}</span>
+                        <span className="text-gray-800 font-semibold">{count}</span>
+                      </div>
+                    ))}
+                    {Object.keys(aiUsage.byFeature).length === 0 && (
+                      <p className="text-xs text-gray-400">No AI calls recorded yet.</p>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-400">
+                  Groq and Ollama don&apos;t expose a usage/quota API, so this is call volume tracked locally by GravHub — not a live quota reading from Groq itself. If you&apos;re hitting Groq rate limits, this at least shows what&apos;s driving the volume.
+                </p>
+              </>
+            )}
           </div>
         )}
 

@@ -155,6 +155,7 @@ export async function generateProposal(opts: GenerateProposalOptions): Promise<G
     messages: [{ role: 'user', content: buildUserPrompt(opts) }],
     maxTokens: 4000,
     timeoutMs: 90_000,
+    feature: 'proposal_generator',
   })
 
   let draft: ProposalDraft | null = null

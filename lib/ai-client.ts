@@ -1,5 +1,6 @@
 // Unified AI client — Ollama (local) → Groq (free cloud) → template fallback.
 // Both providers use the OpenAI-compatible chat completions format.
+import { createServiceClient } from '@/lib/supabase'
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,12 @@ interface ChatOpts {
   maxTokens?: number
   fast?: boolean // use the smaller/faster model
   timeoutMs?: number
+  // Short label identifying the calling feature (e.g. 'proposal_generator',
+  // 'crm_enrich') — logged to ai_usage_log so Settings > AI Usage can show
+  // a per-feature breakdown. Neither Ollama nor Groq expose a usage-query
+  // API this app can call, so this local log is the only way to see real
+  // call volume/provider split.
+  feature?: string
 }
 
 // ── Format converters ───────────────────────────────────────────────────────
@@ -92,8 +99,15 @@ interface OpenAiChoice {
   finish_reason: string
 }
 
+interface OpenAiUsage {
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+}
+
 interface OpenAiResponse {
   choices: OpenAiChoice[]
+  usage?: OpenAiUsage
 }
 
 async function callProvider(
@@ -147,6 +161,37 @@ async function callProvider(
   return { text, toolCalls, finishReason, source: 'ollama', raw: data }
 }
 
+// ── Usage logging ────────────────────────────────────────────────────────
+// Fire-and-forget insert so a logging hiccup never affects the caller.
+// Neither Ollama nor Groq expose a usage-query API this app can call, so
+// this local log is the only way to see real call volume / provider split
+// (Settings > AI Usage reads it).
+function logUsage(entry: {
+  source: 'ollama' | 'groq' | 'none'
+  feature: string
+  model: string | null
+  usage: OpenAiUsage | null
+  durationMs: number
+  success: boolean
+  errorMessage?: string
+}) {
+  const db = createServiceClient()
+  db.from('ai_usage_log').insert({
+    id: `ailog-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    source: entry.source,
+    feature: entry.feature,
+    model: entry.model,
+    prompt_tokens: entry.usage?.prompt_tokens ?? null,
+    completion_tokens: entry.usage?.completion_tokens ?? null,
+    total_tokens: entry.usage?.total_tokens ?? null,
+    duration_ms: entry.durationMs,
+    success: entry.success,
+    error_message: entry.errorMessage ?? null,
+  }).then(({ error }) => {
+    if (error) console.error('[ai-client] Failed to log AI usage:', error)
+  })
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
@@ -155,6 +200,8 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
   const maxTokens = opts.maxTokens ?? 4096
   const timeoutMs = opts.timeoutMs ?? 60_000
   const model = opts.fast ? groqFastModel() : groqChatModel()
+  const feature = opts.feature ?? 'unlabeled'
+  const startedAt = Date.now()
 
   // 1. Try Ollama (only if explicitly configured — localhost won't work in production)
   if (process.env.OLLAMA_URL) {
@@ -168,6 +215,7 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
         maxTokens,
         timeoutMs,
       )
+      logUsage({ source: 'ollama', feature, model: ollamaModel(), usage: result.raw.usage ?? null, durationMs: Date.now() - startedAt, success: true })
       return { ...result, source: 'ollama' }
     } catch {
       // Ollama unavailable, fall through to Groq
@@ -187,13 +235,17 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
         maxTokens,
         timeoutMs,
       )
+      logUsage({ source: 'groq', feature, model, usage: result.raw.usage ?? null, durationMs: Date.now() - startedAt, success: true })
       return { ...result, source: 'groq' }
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
       console.error('[ai-client] Groq call failed, no fallback:', err)
+      logUsage({ source: 'groq', feature, model, usage: null, durationMs: Date.now() - startedAt, success: false, errorMessage: message })
     }
   }
 
-  // 3. No provider configured
+  // 3. No provider configured (or Ollama unavailable and no Groq key)
+  logUsage({ source: 'none', feature, model: null, usage: null, durationMs: Date.now() - startedAt, success: false, errorMessage: key ? undefined : 'No AI provider configured' })
   return {
     text: '',
     toolCalls: [],

@@ -1,47 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server'
-import dns from 'dns/promises'
-import net from 'net'
+import { NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { chatCompletion } from '@/lib/ai-client'
 import { requireRole } from '@/lib/rbac'
+import { parseWebsiteUrl, fetchSafeHtml, htmlToText } from '@/lib/website-fetch'
 
 const INDUSTRIES = [
   'OOH', 'Real Estate', 'Healthcare', 'Technology', 'Finance', 'Retail',
   'Education', 'Construction', 'Hospitality', 'Legal', 'Non-Profit', 'Other',
 ]
-
-// This route fetches a caller-supplied URL server-side, so it's a classic
-// SSRF vector — without this check, an authenticated caller could point it
-// at http://169.254.169.254/ (cloud metadata), an internal service, or
-// localhost and read back whatever "enrichment" data comes back.
-function isPrivateOrLoopbackIp(ip: string): boolean {
-  if (net.isIPv6(ip)) {
-    const lower = ip.toLowerCase()
-    return lower === '::1' || lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')
-  }
-  const parts = ip.split('.').map(Number)
-  if (parts.length !== 4 || parts.some(n => Number.isNaN(n))) return true
-  const [a, b] = parts
-  if (a === 127) return true // loopback
-  if (a === 10) return true // 10.0.0.0/8
-  if (a === 172 && b >= 16 && b <= 31) return true // 172.16.0.0/12
-  if (a === 192 && b === 168) return true // 192.168.0.0/16
-  if (a === 169 && b === 254) return true // link-local / cloud metadata
-  if (a === 0) return true
-  return false
-}
-
-async function isSafeToFetch(url: URL): Promise<boolean> {
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
-  const hostname = url.hostname.toLowerCase()
-  if (hostname === 'localhost' || hostname.endsWith('.localhost')) return false
-  try {
-    const addresses = await dns.lookup(hostname, { all: true })
-    return addresses.every(a => !isPrivateOrLoopbackIp(a.address))
-  } catch {
-    return false
-  }
-}
 
 export const POST = withErrorHandler('crm/enrich POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
@@ -59,65 +25,20 @@ export const POST = withErrorHandler('crm/enrich POST', async (req) => {
     return NextResponse.json({ error: 'URL is required' }, { status: 400 })
   }
 
-  let url: URL
-  try {
-    const normalized = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`
-    url = new URL(normalized)
-  } catch {
+  const url = parseWebsiteUrl(rawUrl)
+  if (!url) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
   }
 
-  if (!(await isSafeToFetch(url))) {
-    return NextResponse.json({ error: 'This URL cannot be enriched' }, { status: 400 })
+  // AUDIT #278 — isSafeToFetch() previously only validated the INITIAL URL
+  // while the fetch itself used redirect: 'follow', transparently
+  // following a 3xx to wherever it pointed with zero re-validation. Shared
+  // fetchSafeHtml() re-validates every redirect hop, bounded at 5.
+  const fetched = await fetchSafeHtml(url)
+  if (!fetched.ok) {
+    return NextResponse.json({ error: fetched.error }, { status: fetched.status })
   }
-
-  let html: string
-  try {
-    // AUDIT #278 — isSafeToFetch() only validated the INITIAL URL, but the
-    // actual fetch below used redirect: 'follow', which transparently
-    // follows a 3xx to wherever it points with zero re-validation. A
-    // malicious/compromised external site could pass the initial check
-    // then redirect to a private/internal/cloud-metadata address, and this
-    // route would fetch it and reflect the response back to the caller.
-    // Follow redirects manually, one hop at a time, re-validating each.
-    let currentUrl = url
-    let res: Response
-    for (let hop = 0; ; hop++) {
-      if (hop > 5) {
-        return NextResponse.json({ error: 'Too many redirects' }, { status: 502 })
-      }
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 5000)
-      res = await fetch(currentUrl.toString(), {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; GravHubBot/1.0)',
-          Accept: 'text/html,application/xhtml+xml',
-        },
-        redirect: 'manual',
-      })
-      clearTimeout(timeout)
-
-      if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
-        const nextUrl = new URL(res.headers.get('location')!, currentUrl)
-        if (!(await isSafeToFetch(nextUrl))) {
-          return NextResponse.json({ error: 'This URL cannot be enriched' }, { status: 400 })
-        }
-        currentUrl = nextUrl
-        continue
-      }
-      break
-    }
-    if (!res.ok) {
-      return NextResponse.json({ error: `Site returned ${res.status}` }, { status: 502 })
-    }
-    html = await res.text()
-  } catch (err) {
-    const message = err instanceof Error && err.name === 'AbortError'
-      ? 'Request timed out'
-      : 'Could not reach the website'
-    return NextResponse.json({ error: message }, { status: 502 })
-  }
+  const html = fetched.html
 
   const name = extractMeta(html, 'og:title') || extractTitle(html) || undefined
   const description = extractMeta(html, 'og:description') || extractMetaName(html, 'description') || undefined
@@ -140,13 +61,7 @@ export const POST = withErrorHandler('crm/enrich POST', async (req) => {
     aiAnalysis.linkedInUrl = socialLinks.linkedin
   }
 
-  const textContent = html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 3000)
+  const textContent = htmlToText(html)
 
   try {
     const result = await chatCompletion({
@@ -157,6 +72,7 @@ export const POST = withErrorHandler('crm/enrich POST', async (req) => {
       }],
       maxTokens: 400,
       fast: true,
+      feature: 'crm_enrich',
     })
 
     if (result.source !== 'none' && result.text) {

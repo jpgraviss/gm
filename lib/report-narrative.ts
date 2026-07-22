@@ -123,6 +123,7 @@ export async function generateGrowthNarrative(
       messages: [{ role: 'user', content: facts.join('\n') }],
       maxTokens: 700,
       timeoutMs: 20_000,
+      feature: 'report_narrative',
     })
 
     if (res.finishReason !== 'stop' || !res.text.trim()) return fallback

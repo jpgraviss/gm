@@ -19,6 +19,7 @@ interface SectionResult {
   grade: string
   findings: string[]
   recommendations: string[]
+  unavailable?: boolean
 }
 
 interface AuditData {
@@ -27,8 +28,8 @@ interface AuditData {
   company_name?: string
   audit_type: string
   status: string
-  overall_score: number
-  overall_grade: string
+  overall_score: number | null
+  overall_grade: string | null
   summary: string
   sections: SectionResult[]
   created_at: string
@@ -156,15 +157,23 @@ export default function AuditDetailPage() {
         <div className="rounded-xl overflow-hidden border border-gray-100">
           <div className="p-6 flex flex-col md:flex-row items-start md:items-center gap-6" style={{ background: '#012b1e' }}>
             <div className="flex items-center gap-4">
-              <div
-                className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white flex-shrink-0"
-                style={{ background: gradeHex(audit.overall_grade) }}
-              >
-                {audit.overall_grade}
-              </div>
+              {audit.status === 'failed' || audit.overall_grade === null ? (
+                <div className="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-600">
+                  <AlertTriangle size={24} className="text-white" />
+                </div>
+              ) : (
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white flex-shrink-0"
+                  style={{ background: gradeHex(audit.overall_grade) }}
+                >
+                  {audit.overall_grade}
+                </div>
+              )}
               <div>
-                <div className="text-2xl font-bold text-white">{audit.overall_score}/100</div>
-                <div className="text-sm text-gray-300">Overall Score</div>
+                <div className="text-2xl font-bold text-white">
+                  {audit.overall_score === null ? 'Unavailable' : `${audit.overall_score}/100`}
+                </div>
+                <div className="text-sm text-gray-300">{audit.overall_score === null ? 'AI analysis could not run' : 'Overall Score'}</div>
               </div>
             </div>
             <div className="flex-1 space-y-1">
@@ -206,15 +215,21 @@ export default function AuditDetailPage() {
             {sections.map((s, i) => (
               <div key={i} className="flex items-center gap-3">
                 <div className="w-40 text-sm text-gray-600 shrink-0">{s.name}</div>
-                <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${s.score}%`, background: scoreBarHex(s.score) }}
-                  />
-                </div>
-                <div className="w-16 text-right text-sm font-semibold" style={{ color: gradeHex(s.grade) }}>
-                  {s.grade} ({s.score})
-                </div>
+                {s.unavailable ? (
+                  <div className="flex-1 text-sm text-gray-400 italic">AI analysis unavailable</div>
+                ) : (
+                  <>
+                    <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${s.score}%`, background: scoreBarHex(s.score) }}
+                      />
+                    </div>
+                    <div className="w-16 text-right text-sm font-semibold" style={{ color: gradeHex(s.grade) }}>
+                      {s.grade} ({s.score})
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -225,9 +240,15 @@ export default function AuditDetailPage() {
           <div key={i} className="bg-white border rounded-xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-900">{section.name}</h2>
-              <span className="px-3 py-1 rounded-lg text-sm font-semibold" style={{ ...gradeBgStyle(section.grade), color: gradeHex(section.grade) }}>
-                {section.grade} — {section.score}/100
-              </span>
+              {section.unavailable ? (
+                <span className="px-3 py-1 rounded-lg text-sm font-semibold bg-gray-100 text-gray-500">
+                  Unavailable
+                </span>
+              ) : (
+                <span className="px-3 py-1 rounded-lg text-sm font-semibold" style={{ ...gradeBgStyle(section.grade), color: gradeHex(section.grade) }}>
+                  {section.grade} — {section.score}/100
+                </span>
+              )}
             </div>
 
             {section.findings.length > 0 && (

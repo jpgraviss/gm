@@ -5,6 +5,17 @@ import { chatCompletion, buildToolResultMessage, buildAssistantMessage, type AiM
 import { withErrorHandler } from '@/lib/api-handler'
 import { PROJECT_STATUSES } from '@/lib/validation'
 
+// AUDIT — the agentic tool loop below has up to 10 iterations, each with
+// its own 60s chatCompletion timeout, with no overall wall-clock cap —
+// worst case ~10 minutes, which exceeds most serverless function time
+// limits. Declaring maxDuration makes the platform's own limit explicit
+// (rather than an undocumented default), and WALL_CLOCK_BUDGET_MS below
+// stops the loop with a real, clearly-labeled response well before that,
+// instead of the platform hard-killing the function mid-request with no
+// response at all.
+export const maxDuration = 60
+const WALL_CLOCK_BUDGET_MS = 50_000
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface ChatMessage {
@@ -812,37 +823,60 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
         ? `\nCompany Details from CRM:\n- Industry: ${companyInfo.industry || 'Unknown'}\n- Website: ${companyInfo.website || 'N/A'}\n- Location: ${companyInfo.hq || 'Unknown'}\n- Size: ${companyInfo.size || 'Unknown'}\n- Description: ${companyInfo.description || 'N/A'}`
         : ''
 
-      const proposalPrompt = `Write a professional marketing services proposal for ${company}.
+      // AUDIT — this used to run its own separate, unstyled prompt and
+      // return raw markdown text in the chat, bypassing lib/proposal-
+      // generator.ts entirely (no house-style rules, no branded template,
+      // no PDF, nothing saved to the real Proposals feature). Two "write a
+      // proposal" surfaces with very different output quality and no
+      // relationship to each other. Now shares the same pipeline the
+      // Proposals page and the Generate Proposal automation use, so every
+      // proposal in the app — regardless of how it was started — is the
+      // same real, branded, saved artifact.
+      const intakeText = `Company: ${company}\nServices requested: ${services}\nBudget: ${budget}\nTimeline: ${timeline}${context ? `\nAdditional context: ${context}` : ''}${companyContext}`
 
-Services requested: ${services}
-Budget: ${budget}
-Timeline: ${timeline}
-${context ? `Additional context: ${context}` : ''}
-${companyContext}
-
-Write the proposal in this format:
-1. **Executive Summary** - Brief overview of what Graviss Marketing will deliver
-2. **Understanding Your Needs** - Show understanding of the client's business and goals
-3. **Proposed Services** - Detail each service with scope and deliverables
-4. **Timeline & Milestones** - Phase-by-phase breakdown
-5. **Investment** - Pricing breakdown (use the budget info provided)
-6. **Why Graviss Marketing** - Brief value proposition
-7. **Next Steps** - Clear call to action
-
-Keep the tone professional but approachable. Be specific about deliverables. Use the company details from CRM if available to personalize the content.`
-
-      const proposalResult = await chatCompletion({
-        messages: [{ role: 'user', content: proposalPrompt }],
-        maxTokens: 4096,
-      })
-
-      if (proposalResult.source === 'none') {
-        return 'No AI provider available for proposal generation. Configure Ollama or set GROQ_API_KEY.'
+      let result
+      try {
+        const { generateProposal } = await import('@/lib/proposal-generator')
+        result = await generateProposal({ intakeText, clientName: company })
+      } catch (err) {
+        return `Could not generate the proposal: ${err instanceof Error ? err.message : 'Unknown error'}`
       }
 
-      const proposalText = proposalResult.text
+      if (result.source === 'template') {
+        return 'No AI provider is configured, so I could not draft a real proposal — set GROQ_API_KEY to enable this.'
+      }
 
-      return `--- AI-GENERATED PROPOSAL FOR ${company.toUpperCase()} ---\n\n${proposalText}`
+      const pdfPath = `${company.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`
+      const { error: uploadErr } = await db.storage.from('proposal-pdfs').upload(pdfPath, result.pdf, { contentType: 'application/pdf' })
+      if (uploadErr) {
+        return `Drafted the proposal but failed to save the PDF: ${String(uploadErr)}`
+      }
+
+      const recommended = result.draft.options.find(o => o.recommended) ?? result.draft.options[0]
+      const value = Number(String(recommended?.priceLabel ?? '').replace(/[^0-9.]/g, '')) || 0
+      const today = new Date().toISOString().split('T')[0]
+
+      const { data: saved, error: insertErr } = await db
+        .from('proposals')
+        .insert({
+          id: `prop-chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          company,
+          status: 'Draft',
+          value,
+          service_type: 'Custom',
+          assigned_rep: '',
+          items: [],
+          pdf_path: pdfPath,
+          generation_notes: result.notes,
+          created_date: today,
+        })
+        .select('id')
+        .single()
+      if (insertErr) {
+        return `Drafted the proposal but failed to save it: ${insertErr.message}`
+      }
+
+      return `Created a Draft proposal for ${company} (id ${saved.id}), recommended option ${recommended?.name ?? 'N/A'} at ${recommended?.priceLabel ?? 'TBD'}. Find it in Proposals to review the branded PDF and submit it for approval.${result.notes ? ` Note: ${result.notes}` : ''}`
     }
 
     default:
@@ -916,14 +950,20 @@ Guidelines:
     let finalText = ''
     let source = 'none'
     const maxIterations = 10
+    const loopStartedAt = Date.now()
 
     for (let i = 0; i < maxIterations; i++) {
+      if (Date.now() - loopStartedAt > WALL_CLOCK_BUDGET_MS) {
+        finalText = finalText || "This is taking longer than expected — I've made some progress but ran out of time to finish. Try asking again, or break the request into smaller steps."
+        break
+      }
       const result = await chatCompletion({
         system: systemPrompt,
         messages: currentMessages,
         tools: aiTools,
         maxTokens: 4096,
         timeoutMs: 60_000,
+        feature: 'ai_assistant_chat',
       })
 
       source = result.source

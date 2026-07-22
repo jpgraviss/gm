@@ -230,6 +230,7 @@ export const POST = withErrorHandler('ai/audit POST', async (req) => {
           }],
           maxTokens: 2048,
           timeoutMs: 45_000,
+          feature: `website_audit:${section.key}`,
         })
 
         lastResult = result
@@ -237,12 +238,19 @@ export const POST = withErrorHandler('ai/audit POST', async (req) => {
       }
 
       if (!lastResult || lastResult.source === 'none') {
+        // AUDIT — this used to feed straight into the overall-score average
+        // as a genuine 0/F, so an unconfigured AI provider produced a
+        // client-facing "Grade: F, 0/100" that read as a real failing
+        // finding rather than an infrastructure gap. `unavailable: true`
+        // lets both the score math and the UI treat this section as
+        // "couldn't analyze" instead of "analyzed and failed."
         sectionResults.push({
           name: section.label,
           score: 0,
           grade: 'F',
-          findings: ['AI analysis could not be completed for this section'],
-          recommendations: ['Please retry the audit or contact support'],
+          findings: ['AI analysis could not be completed for this section — no AI provider was reachable'],
+          recommendations: ['Please retry the audit'],
+          unavailable: true,
         })
         continue
       }
@@ -250,24 +258,35 @@ export const POST = withErrorHandler('ai/audit POST', async (req) => {
       sectionResults.push(parseSection(lastResult.text, section.label))
     }
 
-    const totalScore = Math.round(sectionResults.reduce((sum, s) => sum + s.score, 0) / sectionResults.length)
-    const overallGrade = scoreToGrade(totalScore)
+    const availableSections = sectionResults.filter(s => !s.unavailable)
+    const allUnavailable = availableSections.length === 0
 
-    const summaryResult = await chatCompletion({
-      system: 'You are a professional digital marketing consultant writing an executive summary for a client website audit report. Be clear, professional, and actionable. Respond with plain text only (no JSON, no markdown).',
-      messages: [{
-        role: 'user',
-        content: `Write a 3-4 sentence executive summary for a website audit of ${url}${companyName ? ` (${companyName})` : ''}. Overall score: ${totalScore}/100 (Grade: ${overallGrade}). Section scores: ${sectionResults.map(s => `${s.name}: ${s.score}/100`).join(', ')}. Top recommendations: ${sectionResults.flatMap(s => s.recommendations).slice(0, 5).join('; ')}.`,
-      }],
-      maxTokens: 512,
-      fast: true,
-    })
+    const totalScore = allUnavailable
+      ? null
+      : Math.round(availableSections.reduce((sum, s) => sum + s.score, 0) / availableSections.length)
+    const overallGrade = totalScore === null ? null : scoreToGrade(totalScore)
 
-    const summary = summaryResult.text || `This website scored ${totalScore}/100 overall. Review the detailed section results below for specific findings and recommendations.`
+    let summary: string
+    if (allUnavailable) {
+      summary = 'This audit could not be completed — no AI provider was reachable. Please retry the audit; if this keeps happening, check the AI provider configuration.'
+    } else {
+      const summaryResult = await chatCompletion({
+        system: 'You are a professional digital marketing consultant writing an executive summary for a client website audit report. Be clear, professional, and actionable. Respond with plain text only (no JSON, no markdown).',
+        messages: [{
+          role: 'user',
+          content: `Write a 3-4 sentence executive summary for a website audit of ${url}${companyName ? ` (${companyName})` : ''}. Overall score: ${totalScore}/100 (Grade: ${overallGrade}). Section scores: ${availableSections.map(s => `${s.name}: ${s.score}/100`).join(', ')}. Top recommendations: ${availableSections.flatMap(s => s.recommendations).slice(0, 5).join('; ')}.${sectionResults.length !== availableSections.length ? ` Note: ${sectionResults.length - availableSections.length} section(s) could not be analyzed and are excluded from this score.` : ''}`,
+        }],
+        maxTokens: 512,
+        fast: true,
+        feature: 'website_audit:summary',
+      })
+      summary = summaryResult.text || `This website scored ${totalScore}/100 overall. Review the detailed section results below for specific findings and recommendations.`
+    }
 
     const now = new Date().toISOString()
+    const finalStatus = allUnavailable ? 'failed' : 'completed'
     await supabase.from('audits').update({
-      status: 'completed',
+      status: finalStatus,
       overall_score: totalScore,
       overall_grade: overallGrade,
       summary,
@@ -281,7 +300,7 @@ export const POST = withErrorHandler('ai/audit POST', async (req) => {
       companyId: companyId || null,
       companyName: companyName || null,
       auditType,
-      status: 'completed',
+      status: finalStatus,
       overallScore: totalScore,
       overallGrade,
       summary,

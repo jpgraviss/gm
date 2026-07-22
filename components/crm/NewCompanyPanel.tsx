@@ -179,14 +179,17 @@ export default function NewCompanyPanel({ onSave, onClose }: Props) {
       })
       if (!res.ok) throw new Error('AI analysis failed')
       const data = await res.json()
+      // AUDIT — hq/phone/annualRevenue used to be filled here too, but the
+      // route asked the model to guess them from "knowledge of the
+      // company" with no real page content — pure confabulation. hq/phone
+      // are already filled from real extracted page data by the onBlur
+      // enrich flow below; annualRevenue isn't reliably inferable from a
+      // company's own site at all, so it's manual-entry only now.
       setForm(prev => ({
         ...prev,
         industry: data.industry || prev.industry,
         description: data.description || prev.description,
         size: data.size || prev.size,
-        hq: data.hq || prev.hq,
-        annualRevenue: data.annualRevenue || prev.annualRevenue,
-        phone: data.phone || prev.phone,
       }))
     } catch {
       setAiError('Could not analyze website. Please fill in details manually.')

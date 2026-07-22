@@ -31,6 +31,7 @@ export const POST = withErrorHandler('ai/generate POST', async (req) => {
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens: 1500,
       timeoutMs: 30_000,
+      feature: `ai_generate:${type}`,
     })
 
     if (result.source === 'none') {

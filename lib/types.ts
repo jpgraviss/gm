@@ -561,6 +561,10 @@ export interface AuditSectionResult {
   grade: 'A' | 'B' | 'C' | 'D' | 'F'
   findings: string[]
   recommendations: string[]
+  // AUDIT — true when no AI provider was reachable for this section after
+  // retries. score/grade are 0/F placeholders only so downstream math
+  // doesn't crash on undefined; never render them as a real finding.
+  unavailable?: boolean
 }
 
 export interface AuditResult {

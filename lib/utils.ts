@@ -100,3 +100,11 @@ export const renewalStatusColors: Record<string, string> = {
   Renewed: 'bg-green-100 text-green-700',
   Churned: 'bg-red-100 text-red-600',
 }
+
+// Labels the actual source of an AI-generation-endpoint response
+// ('ollama'|'groq'|'template') so a deterministic template fallback (no AI
+// provider configured) is never presented to the user as if it were a real
+// AI draft — the established convention across the app's AI-drafting UIs.
+export function aiSourceLabel(source: string | undefined): string {
+  return source === 'ollama' ? '(local AI)' : source === 'groq' ? '(AI)' : '(template — no AI provider configured)'
+}

@@ -45,6 +45,7 @@ One concrete recommended next step based on their current deal stage, last activ
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens: 800,
       fast: true,
+      feature: 'ai_insights',
     })
 
     if (result.source === 'none') {

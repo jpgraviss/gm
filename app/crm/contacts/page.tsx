@@ -8,7 +8,7 @@ import { fetchCrmContacts, fetchCrmCompanies, fetchDeals, fetchContracts, fetchP
 import { normalizeDomain, PUBLIC_EMAIL_DOMAINS } from '@/lib/domain-utils'
 import {
   formatCurrency, stageColors, serviceTypeColors,
-  contractStatusColors, projectStatusColors,
+  contractStatusColors, projectStatusColors, aiSourceLabel,
 } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import { InfoRow } from '@/components/crm/activityUtils'
@@ -449,6 +449,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   const [showAiExplanation, setShowAiExplanation] = useState(false)
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiDraftContent, setAiDraftContent] = useState<string | null>(null)
+  const [aiDraftSource, setAiDraftSource] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     fetch('/api/settings')
@@ -825,6 +826,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                       if (res.ok) {
                         const data = await res.json()
                         setAiDraftContent(data.content)
+                        setAiDraftSource(data.source)
                       }
                     } catch { /* ignore */ }
                     setAiGenerating(false)
@@ -844,7 +846,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-1.5">
                         <Sparkles size={12} className="text-purple-600" />
-                        <span className="text-xs font-semibold text-purple-800">AI-Generated Follow-Up</span>
+                        <span className="text-xs font-semibold text-purple-800">AI-Generated Follow-Up {aiSourceLabel(aiDraftSource)}</span>
                       </div>
                       <button onClick={() => setAiDraftContent(null)} className="text-purple-400 hover:text-purple-600">
                         <X size={12} />

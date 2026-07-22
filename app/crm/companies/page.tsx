@@ -8,7 +8,7 @@ import { useTeamMembers } from '@/lib/useTeamMembers'
 import { fetchCrmCompanies, fetchCrmContacts, fetchDeals, fetchContracts, fetchInvoices, fetchProjects, fetchCrmActivities } from '@/lib/supabase'
 import {
   formatCurrency, stageColors, serviceTypeColors, contractStatusColors,
-  projectStatusColors, invoiceStatusColors,
+  projectStatusColors, invoiceStatusColors, aiSourceLabel,
 } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
@@ -308,6 +308,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const [recsOpen, setRecsOpen] = useState(false)
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiProposalContent, setAiProposalContent] = useState<string | null>(null)
+  const [aiProposalSource, setAiProposalSource] = useState<string | undefined>(undefined)
   const [wpSite, setWpSite] = useState<{ id: string; site_url: string; last_reported_at: string | null } | null>(null)
   const [localNotes, setLocalNotes] = useState(company.notes ?? '')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -320,6 +321,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const [newTaskAssignee, setNewTaskAssignee] = useState('')
   const [newTaskDueDate, setNewTaskDueDate] = useState(() => new Date().toISOString().split('T')[0])
   const [aiDraftContent, setAiDraftContent] = useState<string | null>(null)
+  const [aiDraftSource, setAiDraftSource] = useState<string | undefined>(undefined)
   const [aiDraftRecipientId, setAiDraftRecipientId] = useState<string | null>(null)
   const teamMembers = useTeamMembers()
 
@@ -398,6 +400,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
       if (res.ok) {
         const data = await res.json()
         setAiDraftContent(data.content)
+        setAiDraftSource(data.source)
       }
     } catch { /* ignore */ }
     setAiGenerating(false)
@@ -860,6 +863,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                         if (res.ok) {
                           const data = await res.json()
                           setAiProposalContent(data.content)
+                          setAiProposalSource(data.source)
                         }
                       } catch { /* ignore */ }
                       setAiGenerating(false)
@@ -872,6 +876,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                   </button>
                   {aiProposalContent && (
                     <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                      <p className="text-[11px] font-semibold text-purple-700 mb-1.5">{aiSourceLabel(aiProposalSource)}</p>
                       <pre className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-sans">{aiProposalContent}</pre>
                       <button
                         onClick={() => {
@@ -1223,7 +1228,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <Sparkles size={12} className="text-purple-600 flex-shrink-0" />
-                  <span className="text-xs font-semibold text-purple-800 truncate">AI Draft — to {draftRecipient?.fullName}</span>
+                  <span className="text-xs font-semibold text-purple-800 truncate">AI Draft {aiSourceLabel(aiDraftSource)} — to {draftRecipient?.fullName}</span>
                 </div>
                 <button onClick={() => setAiDraftContent(null)} className="text-purple-400 hover:text-purple-600 flex-shrink-0">
                   <X size={12} />

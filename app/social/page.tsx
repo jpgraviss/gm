@@ -459,6 +459,7 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
   onDelete: (id: string) => void
   onPublish: (id: string) => void
 }) {
+  const { toast } = useToast()
   const [company, setCompany] = useState(post?.companyName ?? '')
   const [content, setContent] = useState(post?.content ?? '')
   const [platforms, setPlatforms] = useState<SocialPlatform[]>(post?.platforms ?? ['facebook', 'instagram'])
@@ -532,6 +533,12 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
                       if (res.ok) {
                         const data = await res.json()
                         setContent(data.content)
+                        toast(
+                          data.source === 'template'
+                            ? 'Post drafted from a template — no AI provider configured'
+                            : `Post drafted by AI (${data.source === 'ollama' ? 'local' : 'Groq'})`,
+                          data.source === 'template' ? 'info' : 'success',
+                        )
                       }
                     } catch { /* ignore */ }
                     setAiLoading(false)

@@ -94,6 +94,7 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
     messages: chatMessages,
     maxTokens: 2048,
     timeoutMs: 30_000,
+    feature: 'chatbot_widget',
   })
 
   let reply = result.text

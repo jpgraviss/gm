@@ -123,6 +123,7 @@ export async function scoreContact(
         }],
         maxTokens: 300,
         fast: true,
+        feature: 'lead_scoring',
       })
       if (result.source !== 'none' && result.text) {
         explanation = result.text

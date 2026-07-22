@@ -553,6 +553,17 @@ function BroadcastEditor({
                             if (subjectMatch) {
                               setDraft(d => ({ ...d, subject: subjectMatch[1].trim() }))
                             }
+                            // AUDIT — the response's `source` (ollama/groq/template)
+                            // was discarded, so a template fallback (no AI
+                            // provider configured) looked identical to a real
+                            // AI draft, violating the app's established
+                            // "always label AI vs template" convention.
+                            toast(
+                              data.source === 'template'
+                                ? 'Subject drafted from a template — no AI provider configured'
+                                : `Subject drafted by AI (${data.source === 'ollama' ? 'local' : 'Groq'})`,
+                              data.source === 'template' ? 'info' : 'success',
+                            )
                           }
                         } catch { /* ignore */ }
                         setAiDraftLoading(false)

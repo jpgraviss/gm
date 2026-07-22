@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
 import Header from '@/components/layout/Header'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 function toDecimal(hours: number, minutes: number) {
   return hours + minutes / 60
@@ -306,16 +307,24 @@ export default function TimeTrackingPage() {
   const [viewMode, setViewMode]   = useState<'list' | 'calendar'>('list')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const canApprove = user?.isAdmin || user?.role === 'Department Manager'
+  // AUDIT #286 — only recognized one of the two role-name aliases
+  // ROLE_HIERARCHY treats as equal ('Dept Manager' / 'Department Manager'),
+  // unlike app/page.tsx's dashboard-tab visibility, which is defensive of
+  // both. Not exploitable today (no write path sets the short alias), but
+  // a single point of failure if one ever does.
+  const canApprove = user?.isAdmin || user?.role === 'Department Manager' || user?.role === 'Dept Manager'
   const [activeTab, setActiveTab] = useState<'timesheet' | 'approvals'>('timesheet')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [approvalLoading, setApprovalLoading] = useState(false)
 
   useEffect(() => {
-    fetch('/api/time-entries')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setEntries(data) })
+    // AUDIT #285 — raw fetch() against a route cursor-paginated at 100
+    // rows silently truncated past that: past weeks could render empty,
+    // the Approvals queue could hide older pending entries, and the
+    // Hours/Billable/Avg-Daily KPI tiles were computed off a partial set.
+    fetchAllPages<TimeEntry>('/api/time-entries')
+      .then(setEntries)
       .catch(() => toast('Failed to load time entries', 'error'))
       .finally(() => setLoading(false))
     fetchTeamMembers().then(setTeamMembers)

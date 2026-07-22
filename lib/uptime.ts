@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase'
 import { getResend } from '@/lib/resend'
+import { isPrivateOrInternalUrl } from '@/lib/ssrf-guard'
 
 /**
  * Website uptime monitoring.
@@ -41,13 +42,33 @@ const DEGRADED_THRESHOLD_MS = 3_000
 export async function checkSite(url: string): Promise<CheckResult> {
   const started = Date.now()
 
+  // AUDIT #292 — isPrivateOrInternalUrl() (#260) was only ever checked at
+  // write time (POST/PATCH /api/monitored-sites). A URL that resolved to a
+  // public IP at creation but was later repointed via DNS to an internal/
+  // metadata address (DNS rebinding) was fetched by this cron-driven check
+  // forever with no further guard. Re-validate on every check — cheap (one
+  // DNS lookup) relative to the check itself.
+  if (await isPrivateOrInternalUrl(url)) {
+    return {
+      up: false,
+      statusCode: null,
+      responseTimeMs: Date.now() - started,
+      errorMessage: 'URL resolves to a private or internal address',
+    }
+  }
+
   async function attempt(method: 'HEAD' | 'GET'): Promise<Response> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS)
     try {
       return await fetch(url, {
         method,
-        redirect: 'follow',
+        // AUDIT #292 — 'follow' transparently followed a redirect
+        // response to wherever it pointed with no re-validation (e.g. a
+        // compromised site 302-ing to a private/metadata address). A 3xx
+        // response already counts as "up" below without needing to know
+        // where it points, so there's no reason to follow it at all.
+        redirect: 'manual',
         signal: controller.signal,
         headers: { 'user-agent': 'GravHub-Uptime/1.0 (+https://app.gravissmarketing.com)' },
       })

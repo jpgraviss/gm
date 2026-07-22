@@ -17,12 +17,14 @@ import {
   Wand2, Loader2,
 } from 'lucide-react'
 
+// AUDIT #289 — hasEmail/companyStatus were declared here and in
+// lib/broadcasts.ts but applyAudienceFilter() (the single function shared
+// by both the send route and the audience-preview route) never applied
+// either, and no form control ever set them. Removed as dead/misleading.
 interface AudienceFilter {
   lifecycleStage?: string
   tags?: string[]
   owner?: string
-  hasEmail?: boolean
-  companyStatus?: string
   createdAfter?: string
   createdBefore?: string
   lastActivityAfter?: string

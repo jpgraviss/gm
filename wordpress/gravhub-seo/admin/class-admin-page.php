@@ -152,9 +152,28 @@ class GravHub_Admin_Page {
 			)
 		);
 
-		// Sitemap enabled.
+		// AUDIT #291 — Sitemap enabled, sitemap post types, and module
+		// states are all saved exclusively through the REST /save-option route
+		// (rest_save_option() in gravhub-seo.php), never through this
+		// page's <form>/options.php — that form only ever add_settings_field()s
+		// the Connection and Schema fields below, never these three. But
+		// register_setting() with a shared group still adds these three to
+		// that GROUP's allowed_options list regardless of whether a field
+		// was ever rendered for them: WordPress core's options.php update
+		// handler iterates every option registered under the *submitted*
+		// group and calls update_option() for all of them, passing null for
+		// any not present in $_POST. That silently reset the sitemap
+		// toggle to off, the sitemap post types to the default, and every
+		// module toggle to off on every single save of the Connection/
+		// Schema form (e.g. just updating the API key) — and since that
+		// path never goes through rest_save_option(), it also skipped the
+		// rewrite-rules flush that option needs (see class-sitemap.php).
+		// Registering them under a distinct group that no <form> ever
+		// submits keeps their sanitize_callback active (register_setting()
+		// hooks sanitize_option_{name} independently of the group) while
+		// removing them from options.php's per-submission whitelist.
 		register_setting(
-			'gravhub_seo_settings',
+			'gravhub_seo_internal_settings',
 			'gravhub_sitemap_enabled',
 			array(
 				'type'              => 'boolean',
@@ -163,9 +182,8 @@ class GravHub_Admin_Page {
 			)
 		);
 
-		// Sitemap post types.
 		register_setting(
-			'gravhub_seo_settings',
+			'gravhub_seo_internal_settings',
 			'gravhub_sitemap_post_types',
 			array(
 				'type'              => 'array',
@@ -174,9 +192,8 @@ class GravHub_Admin_Page {
 			)
 		);
 
-		// Module states.
 		register_setting(
-			'gravhub_seo_settings',
+			'gravhub_seo_internal_settings',
 			'gravhub_module_states',
 			array(
 				'type'              => 'object',

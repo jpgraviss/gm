@@ -150,6 +150,29 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
         )
       }
     }
+    // AUDIT.md #280 — sends a real email on every call and doubles as an
+    // account-enumeration oracle (404 vs 200); unlike its sibling
+    // brute-force-sensitive endpoints above, it had zero throttling.
+    if (pathname === '/api/portal-clients/magic-link' && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`magic-link:${ip}`, 10, 60 * 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please wait a while and try again.' },
+          { status: 429 }
+        )
+      }
+    }
+    // AUDIT.md #281 — unauthenticated boolean account-enumeration oracle
+    // (checks both team_members and portal_clients) with no throttling.
+    if (pathname === '/api/auth/verify-email' && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`verify-email:${ip}`, 20, 60 * 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please wait a while and try again.' },
+          { status: 429 }
+        )
+      }
+    }
     return NextResponse.next()
   }
 

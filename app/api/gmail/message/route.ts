@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
+import { createServiceClient } from '@/lib/supabase'
 
 function decodeBase64Url(str: string): string {
   try {
@@ -65,6 +66,12 @@ export const POST = withErrorHandler('gmail/message POST', async (req) => {
   const callerEmail = await getAuthenticatedEmail(req)
   if (!callerEmail) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  // AUDIT #284 — same suspended-status gap as gmail/messages POST.
+  const db = createServiceClient()
+  const { data: member } = await db.from('team_members').select('status').eq('email', callerEmail).maybeSingle()
+  if (member && member.status !== 'active') {
+    return NextResponse.json({ error: 'Account is not active' }, { status: 403 })
   }
 
   try {

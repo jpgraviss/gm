@@ -12,8 +12,19 @@ export function formatCurrency(value: number): string {
   }).format(value)
 }
 
+// AUDIT #288 — a plain date-only string ("2026-07-22") is parsed as UTC
+// midnight; toLocaleDateString() with no explicit timeZone then renders in
+// the browser's local zone, rolling back to the previous day for every US
+// timezone (verified: TZ=America/Chicago prints "Jul 21" for "2026-07-22").
+// This is the exact bug 12+ call sites elsewhere already work around
+// ad-hoc by appending 'T12:00:00' before their own `new Date(...)` calls —
+// centralizing that same fix here instead of leaving it to be
+// independently reinvented (or missed) at every formatDate() call site.
+// A real timestamp (has a time component) is left untouched — converting
+// a genuine UTC instant to the viewer's local time there is correct.
 export function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? `${dateStr}T12:00:00` : dateStr
+  return new Date(normalized).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

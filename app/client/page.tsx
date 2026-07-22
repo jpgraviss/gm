@@ -763,13 +763,21 @@ export default function ClientPortalPage() {
                                   }] : [],
                                 }),
                               })
+                              // AUDIT #282 — this only handled the success
+                              // branch; a failed submission just stopped
+                              // the spinner with zero indication anything
+                              // went wrong.
                               if (res.ok) {
                                 setTicketSuccess(true)
                                 fetch(`/api/tickets?company=${encodeURIComponent(company)}`)
                                   .then(r => r.ok ? r.json() : [])
                                   .then(data => { if (Array.isArray(data)) setExistingTickets(data) })
                                   .catch(() => {})
+                              } else {
+                                toast('Failed to submit your request. Please try again.', 'error')
                               }
+                            } catch {
+                              toast('Failed to submit your request. Please try again.', 'error')
                             } finally {
                               setTicketSubmitting(false)
                             }
@@ -938,10 +946,19 @@ export default function ClientPortalPage() {
                         formData.append('file', file)
                         formData.append('company', company)
                         const res = await fetch('/api/files', { method: 'POST', body: formData })
+                        // AUDIT #283 — this only handled the success
+                        // branch; a rejected upload (415 wrong MIME type,
+                        // 413 too large) just reverted the "Uploading…"
+                        // label with zero explanation.
                         if (res.ok) {
                           const saved = await res.json()
                           setFiles(prev => [{ name: saved.name, size: saved.size, createdAt: new Date().toISOString(), url: saved.url }, ...prev])
+                        } else {
+                          const err = await res.json().catch(() => ({}))
+                          toast(err.error || 'Failed to upload file', 'error')
                         }
+                      } catch {
+                        toast('Failed to upload file', 'error')
                       } finally {
                         setUploading(false)
                         e.target.value = ''

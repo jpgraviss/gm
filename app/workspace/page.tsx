@@ -48,7 +48,12 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (!user?.name) return
     Promise.all([
-      fetch(`/api/tasks?assignedTo=${encodeURIComponent(user.name)}&status=Pending`).then(r => r.ok ? r.json() : []),
+      // AUDIT #290 — raw fetch() against a route cursor-paginated at 100
+      // rows; a rep with more than 100 pending tasks would silently lose
+      // some off the end. Realistically stays under 100 per person, but
+      // matching the fetchAllPages() convention this page already uses
+      // for deals.
+      fetchAllPages<AppTask>(`/api/tasks?assignedTo=${encodeURIComponent(user.name)}&status=Pending`).catch(() => []),
       fetch('/api/workspace/guided-actions').then(r => r.ok ? r.json() : []),
       fetch('/api/sequences/rep-activity').then(r => r.ok ? r.json() : null),
       fetchAllPages<Deal>('/api/deals'),

@@ -7,8 +7,6 @@ export interface AudienceFilter {
   lifecycleStage?: string
   tags?: string[]
   owner?: string
-  hasEmail?: boolean
-  companyStatus?: string
   createdAfter?: string
   createdBefore?: string
   lastActivityAfter?: string

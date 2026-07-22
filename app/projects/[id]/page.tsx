@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
@@ -632,6 +632,8 @@ export default function ProjectDetailPage() {
   const { toast } = useToast()
   const allTeamMembers = useTeamMembers()
   const [project, setProject] = useState<Project | null>(null)
+  const projectRef = useRef<Project | null>(null)
+  useEffect(() => { projectRef.current = project }, [project])
   const [tasks, setTasks] = useState<AppTask[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('list')
@@ -795,20 +797,24 @@ export default function ProjectDetailPage() {
   }, [id, tasks.length, toast])
 
   const updateProject = useCallback((updates: Partial<Project>) => {
-    setProject(prev => {
-      if (!prev) return prev
-      const previous = prev
-      fetch(`/api/projects/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      }).then(res => {
-        if (!res.ok) throw new Error('Failed')
-      }).catch(() => {
-        setProject(p => p && p.id === previous.id ? previous : p)
-        toast('Failed to update project', 'error')
-      })
-      return { ...prev, ...updates } as Project
+    // AUDIT #293 — this previously fired the PATCH fetch as a side effect
+    // inside the setProject updater callback. React's contract requires
+    // updaters to be pure (it invokes them twice under StrictMode in dev,
+    // and may re-invoke them in other batching scenarios), so that risked
+    // firing the same PATCH request more than once per call. Read the
+    // pre-update snapshot from the ref (kept in sync via the effect above)
+    // and fire the fetch as a normal statement instead.
+    const previous = projectRef.current
+    setProject(prev => (prev ? { ...prev, ...updates } as Project : prev))
+    fetch(`/api/projects/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      if (previous) setProject(p => p && p.id === previous.id ? previous : p)
+      toast('Failed to update project', 'error')
     })
   }, [id, toast])
 

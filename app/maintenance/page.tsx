@@ -666,18 +666,26 @@ export default function MaintenancePage() {
   }, [records, tabFilter, searchQuery, activeRecords, expiringIn30, cancelledRecords])
 
   async function handleAddRecord(data: Omit<MaintenanceRecord, 'id'>) {
+    // AUDIT #287 — the 6th handler in this file, missed by #213's fix
+    // batch (which covered edit/cancel/updateBilling/updateDocuments/
+    // delete). On a non-2xx response this pushed the parsed {error: ...}
+    // body into `records` as if it were a real record (crashing at render
+    // when `rec.company[0]` hit undefined); on a thrown/network exception
+    // it fabricated a fake "successfully added" record purely in local
+    // state that was never persisted and silently vanished on reload.
     try {
       const res = await fetch('/api/maintenance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
+      if (!res.ok) throw new Error('Failed')
       const saved = await res.json()
       setRecords(prev => [saved, ...prev])
+      setAddingRecord(false)
     } catch {
-      setRecords(prev => [{ ...data, id: `mr-${Date.now()}` }, ...prev])
+      toast('Failed to add record', 'error')
     }
-    setAddingRecord(false)
   }
 
   // AUDIT.md #213 — all 5 handlers below previously applied their optimistic

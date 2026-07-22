@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { fetchGmailMessages, GmailFetchError } from '@/lib/gmail-fetch'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
+import { createServiceClient } from '@/lib/supabase'
 
 export const POST = withErrorHandler('gmail/messages POST', async (req) => {
   // AUDIT #254 — relied solely on proxy.ts's outer gate (presence of an
@@ -11,6 +12,15 @@ export const POST = withErrorHandler('gmail/messages POST', async (req) => {
   const callerEmail = await getAuthenticatedEmail(req)
   if (!callerEmail) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  // AUDIT #284 — getAuthenticatedEmail() only verifies the caller HOLDS a
+  // valid session, not that team_members.status is still 'active'
+  // (suspending someone doesn't revoke an existing session) — matches the
+  // check gmail/token's verifyOwnership() already does.
+  const db = createServiceClient()
+  const { data: member } = await db.from('team_members').select('status').eq('email', callerEmail).maybeSingle()
+  if (member && member.status !== 'active') {
+    return NextResponse.json({ error: 'Account is not active' }, { status: 403 })
   }
 
   const { accessToken, maxResults = 30, pageToken, query = '' } = await req.json()

@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase'
 import { decrypt } from '@/lib/encryption'
+import { isPrivateOrInternalUrl } from '@/lib/ssrf-guard'
 
 const WP_TIMEOUT = 12_000
 
@@ -41,17 +42,42 @@ function compareVersions(a: string, b: string): number {
   return 0
 }
 
+// AUDIT #292 — isPrivateOrInternalUrl() (#260) was only ever enforced at
+// monitored-site create/update time. This function previously let fetch's
+// default 'follow' behavior chase a 3xx to wherever it pointed with no
+// re-validation, so a periodic recheck (or a compromised/malicious site
+// 302-ing internally) could reach a private/metadata address — and the
+// authenticated plugin/theme calls below attach a real WordPress
+// Application Password, which a redirect off-site could exfiltrate. Every
+// hop is re-validated before it's fetched; callers that explicitly want the
+// raw redirect response (the wp-login.php exposure check) still get it —
+// only the URL, not the follow behavior, is guarded in that case.
 async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), WP_TIMEOUT)
-  try {
-    return await fetch(url, {
-      ...opts,
-      signal: controller.signal,
-      headers: { 'User-Agent': 'GravHub-WPCheck/1.0', ...opts.headers },
-    })
-  } finally {
-    clearTimeout(timer)
+  const wantsManual = opts.redirect === 'manual'
+  let currentUrl = url
+  for (let hop = 0; ; hop++) {
+    if (await isPrivateOrInternalUrl(currentUrl)) {
+      throw new Error('URL resolves to a private or internal address')
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), WP_TIMEOUT)
+    let res: Response
+    try {
+      res = await fetch(currentUrl, {
+        ...opts,
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: { 'User-Agent': 'GravHub-WPCheck/1.0', ...opts.headers },
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!wantsManual && res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+      if (hop >= 5) throw new Error('Too many redirects')
+      currentUrl = new URL(res.headers.get('location')!, currentUrl).toString()
+      continue
+    }
+    return res
   }
 }
 

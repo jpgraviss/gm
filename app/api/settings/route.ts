@@ -112,7 +112,13 @@ export const PATCH = withErrorHandler('settings PATCH', async (req) => {
   if (body.maverick              !== undefined) updates.maverick = transformSecretFields(body.maverick, ENCRYPTED_INTEGRATION_FIELDS.maverick, encrypt)
   if (body.apollo                !== undefined) updates.apollo   = transformSecretFields(body.apollo, ENCRYPTED_INTEGRATION_FIELDS.apollo, encrypt)
   if (body.trainingModules      !== undefined) updates.training_modules     = body.trainingModules
-  if (body.sops                 !== undefined) updates.sops                 = body.sops
+  // AUDIT — `sops` defaults to `[]` at the DB level (not null), so an
+  // untouched row and a deliberately-emptied-and-saved row were otherwise
+  // indistinguishable to the client. This flag is set true on any real
+  // save (even one that clears every section), letting the frontend tell
+  // "never configured" (show defaults) apart from "configured as empty"
+  // (show nothing).
+  if (body.sops !== undefined) { updates.sops = body.sops; updates.sops_configured = true }
   if (body.security             !== undefined) updates.security             = body.security
   if (body.wordpress            !== undefined) updates.wordpress            = body.wordpress
   if (body.granola               !== undefined) updates.granola = transformSecretFields(body.granola, ENCRYPTED_INTEGRATION_FIELDS.granola, encrypt)

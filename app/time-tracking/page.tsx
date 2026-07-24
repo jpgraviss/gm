@@ -313,6 +313,17 @@ function RejectModal({ onConfirm, onClose }: { onConfirm: (note: string) => void
   )
 }
 
+// AUDIT — matches app/api/time-entries/[id]/route.ts's server-side
+// ownership comparison exactly (trim + lowercase). The client guard had
+// been a raw strict-equality check, stricter than the server — never a
+// security hole (only ever over-restrictive, blocking something the
+// server would actually allow), but a real false-negative UX bug for any
+// entry whose stored name differs from the caller's current name only in
+// case or incidental whitespace.
+function sameOwner(a: string | undefined | null, b: string | undefined | null): boolean {
+  return (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase() && !!(a ?? '').trim()
+}
+
 export default function TimeTrackingPage() {
   const { toast } = useToast()
   const { user } = useAuth()
@@ -476,7 +487,7 @@ export default function TimeTrackingPage() {
 
   async function handleDelete(id: string) {
     const target = entries.find(e => e.id === id)
-    if (!canApprove && target && target.teamMember !== user?.name) {
+    if (!canApprove && target && !sameOwner(target.teamMember, user?.name)) {
       toast('You can only delete your own time entries', 'error')
       return
     }
@@ -554,7 +565,7 @@ export default function TimeTrackingPage() {
     // clickable regardless of whose entry it is — a non-manager could fill
     // out the whole form only to get a confusing 403 on save. Catch it here
     // instead, before they waste the effort.
-    if (!canApprove && entry.teamMember !== user?.name) {
+    if (!canApprove && !sameOwner(entry.teamMember, user?.name)) {
       toast('You can only edit your own time entries', 'error')
       return
     }

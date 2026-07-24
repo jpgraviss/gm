@@ -83,17 +83,27 @@ export const PATCH = withErrorHandler('social-posts/[id] PATCH', async (req, { p
   // match a row. publishSocialPost also requires approval_status ===
   // 'approved' regardless of status, so both must land together for the
   // cron job to actually publish the row once scheduled_at arrives.
-  const nextScheduledAt = (update.scheduled_at !== undefined ? update.scheduled_at : current.scheduled_at) as string | null
-  const nextStatus = (update.status !== undefined ? update.status : current.status) as string
-  const nextApprovalStatus = (update.approval_status !== undefined ? update.approval_status : current.approval_status) as string
-  const isFutureScheduled = !!nextScheduledAt && new Date(nextScheduledAt) > new Date()
+  // AUDIT — found by an adversarial review of this same fix: only run this
+  // when the caller ISN'T explicitly setting `status` themselves. Both real
+  // callers (the composer saving a future date, and the Approve action,
+  // which only ever sends `approvalStatus`) never send `status` directly —
+  // gating on that means a hypothetical future "revert to draft" caller
+  // that explicitly sends `status: 'draft'` is respected instead of being
+  // silently flipped straight back to 'scheduled' just because the row
+  // still has an old future scheduled_at that wasn't also cleared.
+  if (body.status === undefined) {
+    const nextScheduledAt = (update.scheduled_at !== undefined ? update.scheduled_at : current.scheduled_at) as string | null
+    const nextStatus = current.status as string
+    const nextApprovalStatus = (update.approval_status !== undefined ? update.approval_status : current.approval_status) as string
+    const isFutureScheduled = !!nextScheduledAt && new Date(nextScheduledAt) > new Date()
 
-  if (isFutureScheduled && nextStatus === 'draft') {
-    update.status = 'scheduled'
-    update.approval_status = 'approved'
-    if (update.approved_at === undefined) update.approved_at = new Date().toISOString()
-  } else if (isFutureScheduled && nextStatus === 'pending_approval' && nextApprovalStatus === 'approved') {
-    update.status = 'scheduled'
+    if (isFutureScheduled && nextStatus === 'draft') {
+      update.status = 'scheduled'
+      update.approval_status = 'approved'
+      if (update.approved_at === undefined) update.approved_at = new Date().toISOString()
+    } else if (isFutureScheduled && nextStatus === 'pending_approval' && nextApprovalStatus === 'approved') {
+      update.status = 'scheduled'
+    }
   }
 
   if (Object.keys(update).length === 1) {

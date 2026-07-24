@@ -40,7 +40,7 @@ export const PATCH = withErrorHandler('social-posts/[id] PATCH', async (req, { p
 
   const { data: current, error: fetchErr } = await db
     .from('social_posts')
-    .select('company_name')
+    .select('*')
     .eq('id', id)
     .single()
   if (fetchErr || !current) {
@@ -72,6 +72,28 @@ export const PATCH = withErrorHandler('social-posts/[id] PATCH', async (req, { p
   // Auto-set approved_at when approval status changes to 'approved'
   if (body.approvalStatus === 'approved') {
     update.approved_at = new Date().toISOString()
+  }
+
+  // Auto-transition draft/pending_approval posts to 'scheduled' once a
+  // future scheduled_at is in effect and the post doesn't need further
+  // approval — 'draft' never goes through client approval (self-approve
+  // it here), while 'pending_approval' only qualifies once approved.
+  // Without this, status: 'scheduled' was never written by any code path
+  // and the cron job's `.eq('status', 'scheduled')` query could never
+  // match a row. publishSocialPost also requires approval_status ===
+  // 'approved' regardless of status, so both must land together for the
+  // cron job to actually publish the row once scheduled_at arrives.
+  const nextScheduledAt = (update.scheduled_at !== undefined ? update.scheduled_at : current.scheduled_at) as string | null
+  const nextStatus = (update.status !== undefined ? update.status : current.status) as string
+  const nextApprovalStatus = (update.approval_status !== undefined ? update.approval_status : current.approval_status) as string
+  const isFutureScheduled = !!nextScheduledAt && new Date(nextScheduledAt) > new Date()
+
+  if (isFutureScheduled && nextStatus === 'draft') {
+    update.status = 'scheduled'
+    update.approval_status = 'approved'
+    if (update.approved_at === undefined) update.approved_at = new Date().toISOString()
+  } else if (isFutureScheduled && nextStatus === 'pending_approval' && nextApprovalStatus === 'approved') {
+    update.status = 'scheduled'
   }
 
   if (Object.keys(update).length === 1) {

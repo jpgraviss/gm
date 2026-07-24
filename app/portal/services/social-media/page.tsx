@@ -75,8 +75,11 @@ export default function PortalSocialMediaPage() {
 
   if (loading) return <LoadingScreen />
 
-  const published = data.posts.filter(p => p.status === 'Published' || p.status === 'posted')
-  const scheduled = data.posts.filter(p => p.status === 'Scheduled' || p.status === 'scheduled')
+  // Real PostStatus values (lib/social-media.ts) are lowercase — 'Published'/
+  // 'posted'/'Scheduled' never occur, which left these stats and lists always
+  // empty for clients regardless of real activity.
+  const published = data.posts.filter(p => p.status === 'published')
+  const scheduled = data.posts.filter(p => p.status === 'scheduled')
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>

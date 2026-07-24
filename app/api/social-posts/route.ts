@@ -56,7 +56,23 @@ export const POST = withErrorHandler('social-posts POST', async (req) => {
   // composer's "Submit for Approval" button sent, so no post could ever
   // reach the client portal's approval queue.
   const CREATABLE_STATUSES = new Set(['draft', 'pending_approval'])
-  const status = CREATABLE_STATUSES.has(body.status) ? body.status : 'draft'
+  let status = CREATABLE_STATUSES.has(body.status) ? body.status : 'draft'
+  const scheduledAt: string | null = body.scheduledAt ?? null
+  const isFutureScheduled = !!scheduledAt && new Date(scheduledAt) > new Date()
+
+  // A 'draft' post never goes through client approval, so a future
+  // scheduledAt on one is self-approved right away and flipped to
+  // 'scheduled' — otherwise status: 'scheduled' was never written by any
+  // code path and the cron job's `.eq('status', 'scheduled')` query in
+  // publishScheduledSocialPosts could structurally never match a row.
+  // publishSocialPost also requires approval_status === 'approved'
+  // regardless of status, so both must be set together for the cron job
+  // to actually publish the row once scheduled_at arrives.
+  let approvalStatus: 'pending' | 'approved' = 'pending'
+  if (status === 'draft' && isFutureScheduled) {
+    status = 'scheduled'
+    approvalStatus = 'approved'
+  }
 
   const db = createServiceClient()
   const id = `sp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
@@ -68,12 +84,13 @@ export const POST = withErrorHandler('social-posts POST', async (req) => {
       company_name:    body.companyName,
       content:         body.content,
       platforms:       body.platforms,
-      scheduled_at:    body.scheduledAt ?? null,
+      scheduled_at:    scheduledAt,
       hashtags:        body.hashtags ?? [],
       link_url:        body.linkUrl ?? null,
       media_urls:      body.mediaUrls ?? [],
       status,
-      approval_status: 'pending',
+      approval_status: approvalStatus,
+      approved_at:     approvalStatus === 'approved' ? new Date().toISOString() : null,
     })
     .select()
     .single()

@@ -601,7 +601,7 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
           {isEditing ? (
             <>
               <button onClick={() => handleSave()} disabled={!canSave} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>Save</button>
-              {post.status === 'draft' || post.status === 'approved' ? (
+              {post.status === 'draft' || (post.status === 'pending_approval' && post.approvalStatus === 'approved') ? (
                 <button onClick={() => onPublish(post.id)} className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 flex items-center gap-1.5"><Send size={13} /> Publish</button>
               ) : null}
               <button onClick={() => onDelete(post.id)} className="p-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>

@@ -1,5 +1,6 @@
-// Unified AI client — Ollama (local) → Groq (free cloud) → template fallback.
-// Both providers use the OpenAI-compatible chat completions format.
+// Unified AI client — Ollama (local) → Groq (free cloud) → Gemini (free
+// cloud) → Cerebras (free cloud) → template fallback. All 4 real providers
+// use the OpenAI-compatible chat completions format.
 import { createServiceClient } from '@/lib/supabase'
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -18,6 +19,21 @@ function groqChatModel(): string {
 }
 function groqFastModel(): string {
   return process.env.GROQ_MODEL_FAST || 'llama-3.1-8b-instant'
+}
+function geminiKey(): string | undefined {
+  return process.env.GEMINI_API_KEY
+}
+function geminiModel(): string {
+  return process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+}
+function cerebrasKey(): string | undefined {
+  return process.env.CEREBRAS_API_KEY
+}
+function cerebrasChatModel(): string {
+  return process.env.CEREBRAS_MODEL_CHAT || 'llama-3.3-70b'
+}
+function cerebrasFastModel(): string {
+  return process.env.CEREBRAS_MODEL_FAST || 'llama3.1-8b'
 }
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -50,7 +66,7 @@ export interface AiResponse {
   text: string
   toolCalls: { id: string; name: string; args: Record<string, unknown> }[]
   finishReason: 'stop' | 'tool_calls' | 'length' | 'error'
-  source: 'ollama' | 'groq' | 'none'
+  source: 'ollama' | 'groq' | 'gemini' | 'cerebras' | 'none'
 }
 
 interface ChatOpts {
@@ -167,7 +183,7 @@ async function callProvider(
 // this local log is the only way to see real call volume / provider split
 // (Settings > AI Usage reads it).
 function logUsage(entry: {
-  source: 'ollama' | 'groq' | 'none'
+  source: 'ollama' | 'groq' | 'gemini' | 'cerebras' | 'none'
   feature: string
   model: string | null
   usage: OpenAiUsage | null
@@ -223,12 +239,12 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
   }
 
   // 2. Try Groq
-  const key = groqKey()
-  if (key) {
+  const groqApiKey = groqKey()
+  if (groqApiKey) {
     try {
       const result = await callProvider(
         'https://api.groq.com/openai/v1/chat/completions',
-        { Authorization: `Bearer ${key}` },
+        { Authorization: `Bearer ${groqApiKey}` },
         model,
         msgs,
         openAiTools,
@@ -239,13 +255,59 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
       return { ...result, source: 'groq' }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      console.error('[ai-client] Groq call failed, no fallback:', err)
+      console.error('[ai-client] Groq call failed, falling through:', err)
       logUsage({ source: 'groq', feature, model, usage: null, durationMs: Date.now() - startedAt, success: false, errorMessage: message })
     }
   }
 
-  // 3. No provider configured (or Ollama unavailable and no Groq key)
-  logUsage({ source: 'none', feature, model: null, usage: null, durationMs: Date.now() - startedAt, success: false, errorMessage: key ? undefined : 'No AI provider configured' })
+  // 3. Try Gemini (free tier, OpenAI-compatible endpoint)
+  const geminiApiKey = geminiKey()
+  if (geminiApiKey) {
+    try {
+      const result = await callProvider(
+        'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+        { Authorization: `Bearer ${geminiApiKey}` },
+        geminiModel(),
+        msgs,
+        openAiTools,
+        maxTokens,
+        timeoutMs,
+      )
+      logUsage({ source: 'gemini', feature, model: geminiModel(), usage: result.raw.usage ?? null, durationMs: Date.now() - startedAt, success: true })
+      return { ...result, source: 'gemini' }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[ai-client] Gemini call failed, falling through:', err)
+      logUsage({ source: 'gemini', feature, model: geminiModel(), usage: null, durationMs: Date.now() - startedAt, success: false, errorMessage: message })
+    }
+  }
+
+  // 4. Try Cerebras (free tier, OpenAI-compatible endpoint)
+  const cerebrasApiKey = cerebrasKey()
+  if (cerebrasApiKey) {
+    const cerebrasModel = opts.fast ? cerebrasFastModel() : cerebrasChatModel()
+    try {
+      const result = await callProvider(
+        'https://api.cerebras.ai/v1/chat/completions',
+        { Authorization: `Bearer ${cerebrasApiKey}` },
+        cerebrasModel,
+        msgs,
+        openAiTools,
+        maxTokens,
+        timeoutMs,
+      )
+      logUsage({ source: 'cerebras', feature, model: cerebrasModel, usage: result.raw.usage ?? null, durationMs: Date.now() - startedAt, success: true })
+      return { ...result, source: 'cerebras' }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[ai-client] Cerebras call failed, no fallback left:', err)
+      logUsage({ source: 'cerebras', feature, model: cerebrasModel, usage: null, durationMs: Date.now() - startedAt, success: false, errorMessage: message })
+    }
+  }
+
+  // 5. No provider configured or reachable
+  const noneReason = groqApiKey || geminiApiKey || cerebrasApiKey ? undefined : 'No AI provider configured'
+  logUsage({ source: 'none', feature, model: null, usage: null, durationMs: Date.now() - startedAt, success: false, errorMessage: noneReason })
   return {
     text: '',
     toolCalls: [],

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
-import { formatDate } from '@/lib/utils'
+import { formatDate, aiSourceLabel } from '@/lib/utils'
 import EmailBlockEditor from '@/components/email/EmailBlockEditor'
 import EmailPreview from '@/components/email/EmailPreview'
 import TemplatePicker from '@/components/email/TemplatePicker'
@@ -553,17 +553,12 @@ function BroadcastEditor({
                             if (subjectMatch) {
                               setDraft(d => ({ ...d, subject: subjectMatch[1].trim() }))
                             }
-                            // AUDIT — the response's `source` (ollama/groq/template)
-                            // was discarded, so a template fallback (no AI
-                            // provider configured) looked identical to a real
-                            // AI draft, violating the app's established
-                            // "always label AI vs template" convention.
-                            toast(
-                              data.source === 'template'
-                                ? 'Subject drafted from a template — no AI provider configured'
-                                : `Subject drafted by AI (${data.source === 'ollama' ? 'local' : 'Groq'})`,
-                              data.source === 'template' ? 'info' : 'success',
-                            )
+                            // AUDIT — the response's `source` (ollama/groq/gemini/
+                            // cerebras/template) was discarded, so a template
+                            // fallback (no AI provider reachable) looked
+                            // identical to a real AI draft, violating the app's
+                            // established "always label AI vs template" convention.
+                            toast(`Subject drafted ${aiSourceLabel(data.source)}`, data.source === 'template' ? 'info' : 'success')
                           }
                         } catch { /* ignore */ }
                         setAiDraftLoading(false)

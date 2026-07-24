@@ -2303,11 +2303,11 @@ export default function SettingsPage() {
                 <div className="bg-white rounded-xl border border-gray-200 p-5">
                   <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-4" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Provider Split (30d)</h3>
                   <div className="flex flex-col gap-2">
-                    {(['groq', 'ollama', 'none'] as const).map(source => {
+                    {(['groq', 'gemini', 'cerebras', 'ollama', 'none'] as const).map(source => {
                       const count = aiUsage.bySource[source] ?? 0
                       const pct = aiUsage.callsLast30d > 0 ? Math.round((count / aiUsage.callsLast30d) * 100) : 0
-                      const label = source === 'groq' ? 'Groq (cloud)' : source === 'ollama' ? 'Ollama (local)' : 'No provider / fallback'
-                      const color = source === 'groq' ? '#015035' : source === 'ollama' ? '#3b82f6' : '#d97706'
+                      const label = source === 'groq' ? 'Groq (cloud)' : source === 'gemini' ? 'Gemini (cloud)' : source === 'cerebras' ? 'Cerebras (cloud)' : source === 'ollama' ? 'Ollama (local)' : 'No provider / fallback'
+                      const color = source === 'groq' ? '#015035' : source === 'gemini' ? '#8b5cf6' : source === 'cerebras' ? '#f97316' : source === 'ollama' ? '#3b82f6' : '#d97706'
                       return (
                         <div key={source} className="flex items-center gap-3">
                           <div className="w-32 text-xs text-gray-600 flex-shrink-0">{label}</div>

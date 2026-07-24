@@ -17,7 +17,7 @@ export interface GenerateProposalOptions {
 export interface GenerateProposalResult {
   draft: ProposalDraft
   pdf: Buffer
-  source: 'ollama' | 'groq' | 'template'
+  source: 'ollama' | 'groq' | 'gemini' | 'cerebras' | 'template'
   notes: string
 }
 
@@ -170,7 +170,7 @@ export async function generateProposal(opts: GenerateProposalOptions): Promise<G
     }
   }
 
-  const source: GenerateProposalResult['source'] = draft ? ai.source as 'ollama' | 'groq' : 'template'
+  const source: GenerateProposalResult['source'] = draft ? ai.source as 'ollama' | 'groq' | 'gemini' | 'cerebras' : 'template'
   if (!draft) {
     draft = buildTemplateFallbackDraft(opts)
     notes = 'No AI provider configured, or the AI response could not be parsed as valid JSON — this is a deterministic placeholder draft, not an AI-drafted one. Every section needs manual completion before sending.'

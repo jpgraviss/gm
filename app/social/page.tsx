@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
-import { formatDate } from '@/lib/utils'
+import { formatDate, aiSourceLabel } from '@/lib/utils'
 import { PLATFORM_META, type SocialPlatform, type PostStatus } from '@/lib/social-media'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
@@ -533,12 +533,7 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
                       if (res.ok) {
                         const data = await res.json()
                         setContent(data.content)
-                        toast(
-                          data.source === 'template'
-                            ? 'Post drafted from a template — no AI provider configured'
-                            : `Post drafted by AI (${data.source === 'ollama' ? 'local' : 'Groq'})`,
-                          data.source === 'template' ? 'info' : 'success',
-                        )
+                        toast(`Post drafted ${aiSourceLabel(data.source)}`, data.source === 'template' ? 'info' : 'success')
                       }
                     } catch { /* ignore */ }
                     setAiLoading(false)

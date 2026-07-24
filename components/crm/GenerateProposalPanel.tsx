@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { X, ChevronLeft, Sparkles, FileText, Loader2, AlertTriangle } from 'lucide-react'
 import type { Proposal } from '@/lib/types'
+import { aiSourceLabel } from '@/lib/utils'
 
 interface FormOption {
   id: string
@@ -79,9 +80,7 @@ export default function GenerateProposalPanel({ onGenerated, onClose }: Props) {
     }
   }
 
-  const sourceLabel = result?.source === 'template'
-    ? 'Template — no AI provider configured'
-    : result?.source === 'ollama' ? 'Local AI (Ollama)' : 'AI (Groq)'
+  const sourceLabel = aiSourceLabel(result?.source)
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">

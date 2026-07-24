@@ -59,6 +59,6 @@ export const GET = withErrorHandler('ai/usage GET', async (req) => {
     bySource,
     byFeature,
     recentErrorCount: recentErrors.length,
-    noProviderConfigured: (bySource.none ?? 0) > 0 && (bySource.ollama ?? 0) === 0 && (bySource.groq ?? 0) === 0,
+    noProviderConfigured: (bySource.none ?? 0) > 0 && (bySource.ollama ?? 0) === 0 && (bySource.groq ?? 0) === 0 && (bySource.gemini ?? 0) === 0 && (bySource.cerebras ?? 0) === 0,
   })
 })

@@ -41,6 +41,11 @@ interface ApiKey {
   key: string
   label: string
   createdAt: string
+  // AUDIT #344 — keys generated before this fix have no siteUrl (unscoped,
+  // valid for any site — kept working for backward compat with already
+  // -installed plugins); new keys require picking a site so the server can
+  // enforce that key only works for that site.
+  siteUrl?: string
 }
 
 interface SeoScore {
@@ -179,6 +184,7 @@ export default function WordPressSeoPage() {
   const [showKeys, setShowKeys] = useState(false)
   const [generatingKey, setGeneratingKey] = useState(false)
   const [newKeyLabel, setNewKeyLabel] = useState('')
+  const [newKeySiteUrl, setNewKeySiteUrl] = useState('')
   const [companies, setCompanies] = useState<CompanyOption[]>([])
   const [assigningCompany, setAssigningCompany] = useState(false)
   const [siteToDelete, setSiteToDelete] = useState<SiteHealth | null>(null)
@@ -410,11 +416,20 @@ export default function WordPressSeoPage() {
       toast('Give the key a title first', 'error')
       return
     }
+    // AUDIT #344 — keys were previously a flat, unscoped pool; any valid
+    // key could read/overwrite ANY site's SEO data by just naming a
+    // different siteUrl. Requiring a site here means new keys are actually
+    // bound to it server-side (lib/wordpress-auth.ts). Keys generated
+    // before this fix stay unscoped for backward compatibility.
+    if (!newKeySiteUrl) {
+      toast('Choose which site this key is for', 'error')
+      return
+    }
     setGeneratingKey(true)
     try {
       const newKey = 'ghk_' + Array.from(crypto.getRandomValues(new Uint8Array(24)))
         .map(b => b.toString(16).padStart(2, '0')).join('')
-      const entry: ApiKey = { key: newKey, label: newKeyLabel.trim(), createdAt: new Date().toISOString() }
+      const entry: ApiKey = { key: newKey, label: newKeyLabel.trim(), createdAt: new Date().toISOString(), siteUrl: newKeySiteUrl }
       const updated = [...apiKeys, entry]
       const res = await fetch('/api/settings', {
         method: 'PATCH',
@@ -425,6 +440,7 @@ export default function WordPressSeoPage() {
       setApiKeys(updated)
       setShowKeys(true)
       setNewKeyLabel('')
+      setNewKeySiteUrl('')
       await navigator.clipboard.writeText(newKey)
       toast('API key generated and copied to clipboard', 'success')
     } catch {
@@ -636,6 +652,16 @@ export default function WordPressSeoPage() {
                           className="text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-gray-400 w-56"
                           onKeyDown={e => { if (e.key === 'Enter') generateApiKey() }}
                         />
+                        <select
+                          value={newKeySiteUrl}
+                          onChange={e => setNewKeySiteUrl(e.target.value)}
+                          className="text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-gray-400 w-44"
+                        >
+                          <option value="">Site...</option>
+                          {sites.map(s => (
+                            <option key={s.id} value={s.site_url}>{s.site_url}</option>
+                          ))}
+                        </select>
                         <button
                           onClick={generateApiKey}
                           disabled={generatingKey}
@@ -667,8 +693,17 @@ export default function WordPressSeoPage() {
                         {apiKeys.map((entry, i) => (
                           <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-xl px-4 py-3">
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold text-gray-700 truncate">
+                              <p className="text-xs font-semibold text-gray-700 truncate flex items-center gap-2">
                                 {entry.label || 'Untitled key'}
+                                {entry.siteUrl ? (
+                                  <span className="text-[10px] font-normal px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 truncate max-w-[160px]" title={entry.siteUrl}>
+                                    {entry.siteUrl}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-normal px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700" title="Generated before per-site keys — works for any site. Revoke and regenerate to scope it.">
+                                    Unscoped (legacy)
+                                  </span>
+                                )}
                               </p>
                               <code className="text-xs text-gray-500 font-mono">
                                 {showKeys ? entry.key : `${entry.key.slice(0, 8)}${'*'.repeat(32)}${entry.key.slice(-4)}`}

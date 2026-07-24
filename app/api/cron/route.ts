@@ -225,7 +225,11 @@ async function dispatchScheduledReviewCampaigns(): Promise<{ dispatched: number;
       const result = await dispatchReviewCampaign(db, claimed)
       sent += result.sent
       failed += result.failed
-      await db.from('review_campaigns').update({ status: 'sent' }).eq('id', claimed.id)
+      // AUDIT — same bug as the manual-dispatch path in
+      // app/api/reputation/requests/route.ts (#335): dispatchReviewCampaign
+      // catches per-recipient failures internally and just returns counts,
+      // so an empty audience or every send failing still marked 'sent'.
+      await db.from('review_campaigns').update({ status: result.sent > 0 ? 'sent' : 'failed' }).eq('id', claimed.id)
     } catch (err) {
       console.error('[cron] Failed to dispatch review campaign', claimed.id, err)
       // Leave it claimable again rather than stuck 'active' forever.
@@ -238,34 +242,37 @@ async function dispatchScheduledReviewCampaigns(): Promise<{ dispatched: number;
 }
 
 /**
- * Determine if we should run the daily rank-tracking job on this cron tick.
- * Returns true when the most recently-checked tracked keyword was checked
- * before the start of today (UTC) — i.e., we have not yet run today.
+ * Determine if we should run the rank-tracking job on this cron tick.
+ *
+ * AUDIT #347 — this previously checked only whether the single MOST
+ * RECENTLY checked keyword ran today, which meant one batch of 25 (however
+ * many keywords a workspace tracks) made this return false for the rest of
+ * the day: the 25 just-checked keywords sort newest, so the "most recent"
+ * check always looked satisfied even with hundreds of other keywords still
+ * stale from days ago. checkAllRanks() itself is intentionally batched
+ * (bounded per tick so a single cron invocation can't run too long or
+ * hammer GSC), so the "due" check has to ask "does ANY keyword still need
+ * checking today", not "did the job run at all today" — cron fires every 5
+ * minutes (.github/workflows/cron-ping.yml), so this now runs another
+ * batch on every tick until every tracked keyword has been refreshed for
+ * the day, then correctly goes quiet (avoiding wasted GSC quota) for the
+ * rest of it.
  */
 async function rankCheckDue(): Promise<boolean> {
   const db = createServiceClient()
-  const { data, error } = await db
+  const startOfUtcDay = new Date()
+  startOfUtcDay.setUTCHours(0, 0, 0, 0)
+
+  const { count, error } = await db
     .from('tracked_keywords')
-    .select('last_checked_at')
-    .order('last_checked_at', { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle()
+    .select('id', { count: 'exact', head: true })
+    .or(`last_checked_at.is.null,last_checked_at.lt.${startOfUtcDay.toISOString()}`)
 
   if (error) {
     console.error('[cron] rankCheckDue query failed:', error)
     return false
   }
-  // No tracked keywords yet — nothing to do, but still "due" is fine; the
-  // job is a cheap no-op.
-  if (!data?.last_checked_at) return true
-
-  const last = new Date(data.last_checked_at)
-  const now = new Date()
-  const sameUtcDay =
-    last.getUTCFullYear() === now.getUTCFullYear() &&
-    last.getUTCMonth() === now.getUTCMonth() &&
-    last.getUTCDate() === now.getUTCDate()
-  return !sameUtcDay
+  return (count ?? 0) > 0
 }
 
 /**

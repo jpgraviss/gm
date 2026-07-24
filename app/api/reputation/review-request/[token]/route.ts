@@ -6,7 +6,13 @@ interface Params {
   params: Promise<{ token: string }>
 }
 
-/** GET — look up a review request by token (used by the public review page) */
+/**
+ * GET — look up a review request by token. Not currently called by the
+ * public review page (app/go/review/[token]/page.tsx reads review_requests
+ * directly as a server component, including the "mark opened" logic —
+ * AUDIT #348), but kept as a real, working lookup endpoint since nothing
+ * rules out a future client-side consumer.
+ */
 export const GET = withErrorHandler('reputation/review-request/[token] GET', async (_req, { params }: Params) => {
   const { token } = await params
 
@@ -17,7 +23,7 @@ export const GET = withErrorHandler('reputation/review-request/[token] GET', asy
   const db = createServiceClient()
   const { data, error } = await db
     .from('review_requests')
-    .select('id, token, customer_name, company_name, google_review_url, status, campaign_id, opened_at')
+    .select('id, token, customer_name, company_name, google_review_url, status')
     .eq('token', token)
     .maybeSingle()
 
@@ -25,27 +31,7 @@ export const GET = withErrorHandler('reputation/review-request/[token] GET', asy
     return NextResponse.json({ error: 'Review request not found' }, { status: 404 })
   }
 
-  // Track "opened" for campaign analytics — a conditional update (only
-  // where opened_at IS NULL) so repeat page loads don't double-count, and
-  // so two concurrent loads can't both win the increment race.
-  if (data.campaign_id && !data.opened_at) {
-    const { data: claimed } = await db
-      .from('review_requests')
-      .update({ opened_at: new Date().toISOString() })
-      .eq('token', token)
-      .is('opened_at', null)
-      .select('id')
-      .maybeSingle()
-    if (claimed) {
-      const { error: rpcErr } = await db.rpc('increment_review_campaign_counts', { p_campaign_id: data.campaign_id, p_sent: 0, p_opened: 1, p_reviews: 0 })
-      if (rpcErr) {
-        console.error(`[review-request] increment_review_campaign_counts (opened) failed for campaign ${data.campaign_id}:`, rpcErr.message)
-      }
-    }
-  }
-
-  const { campaign_id: _campaignId, opened_at: _openedAt, ...publicData } = data
-  return NextResponse.json(publicData)
+  return NextResponse.json(data)
 })
 
 /** POST — submit a rating (and optional feedback) for a review request */

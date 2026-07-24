@@ -353,7 +353,16 @@ export default function RankTrackerPage() {
         toast(body?.error || 'Refresh failed', 'error')
         return
       }
-      toast('Rank check queued', 'success')
+      // AUDIT #347 — `total` now reflects the real tracked-keyword count,
+      // not just this batch's size, so a workspace tracking more than one
+      // batch's worth gets an honest "not everything refreshed" signal
+      // instead of a blanket success toast.
+      const result = await res.json().catch(() => null) as { checked?: number; total?: number } | null
+      if (result && typeof result.checked === 'number' && typeof result.total === 'number' && result.checked < result.total) {
+        toast(`Refreshed ${result.checked} of ${result.total} keywords (oldest first) — the rest will refresh automatically`, 'success')
+      } else {
+        toast('Rank check queued', 'success')
+      }
       await load()
     } catch { toast('Refresh failed', 'error') }
     finally { setRefreshing(false) }

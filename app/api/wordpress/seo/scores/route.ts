@@ -4,9 +4,6 @@ import { requireWordPressAuth } from '@/lib/wordpress-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 
 export const POST = withErrorHandler('wordpress/seo/scores POST', async (req) => {
-  const denied = await requireWordPressAuth(req)
-  if (denied) return denied
-
   const body = await req.json()
   const siteUrl = body.siteUrl ?? body.site_url
   const pages = body.pages
@@ -14,6 +11,9 @@ export const POST = withErrorHandler('wordpress/seo/scores POST', async (req) =>
   if (!siteUrl || !Array.isArray(pages)) {
     return NextResponse.json({ error: 'siteUrl and pages array required' }, { status: 400 })
   }
+
+  const denied = await requireWordPressAuth(req, siteUrl)
+  if (denied) return denied
 
   const db = createServiceClient()
   const now = new Date().toISOString()
@@ -55,13 +55,13 @@ export const POST = withErrorHandler('wordpress/seo/scores POST', async (req) =>
 })
 
 export const GET = withErrorHandler('wordpress/seo/scores GET', async (req) => {
-  const denied = await requireWordPressAuth(req)
-  if (denied) return denied
-
   const siteUrl = req.nextUrl.searchParams.get('site')
   if (!siteUrl) {
     return NextResponse.json({ error: 'site query param is required' }, { status: 400 })
   }
+
+  const denied = await requireWordPressAuth(req, siteUrl)
+  if (denied) return denied
 
   const db = createServiceClient()
   const { data, error } = await db

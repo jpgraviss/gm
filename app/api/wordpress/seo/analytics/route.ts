@@ -20,13 +20,13 @@ const DAYS = 28
  * yet" state for whatever's missing.
  */
 export const GET = withErrorHandler('wordpress/seo/analytics GET', async (req) => {
-  const denied = await requireWordPressAuth(req)
-  if (denied) return denied
-
   const siteUrl = req.nextUrl.searchParams.get('site')
   if (!siteUrl) {
     return NextResponse.json({ error: 'site query param is required' }, { status: 400 })
   }
+
+  const denied = await requireWordPressAuth(req, siteUrl)
+  if (denied) return denied
 
   const db = createServiceClient()
 

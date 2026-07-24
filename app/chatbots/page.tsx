@@ -446,10 +446,15 @@ export default function ChatbotsPage() {
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-gray-900">{bot.name}</h3>
-                      {bot.website_url && (
+                      {bot.website_url ? (
                         <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
                           <Globe size={11} />
                           <span>{bot.website_url}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-xs text-amber-600 mt-0.5" title="No website URL set — this bot can be embedded and run from any site">
+                          <Globe size={11} />
+                          <span>No website URL — embeddable anywhere</span>
                         </div>
                       )}
                       <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
@@ -561,6 +566,16 @@ export default function ChatbotsPage() {
                         placeholder="https://acmecorp.com"
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                       />
+                      {/* AUDIT #346 — chatbot ids are only origin-bound to a
+                          specific domain when this is set; without it,
+                          anyone who finds/guesses this bot's id can embed
+                          and run it from any site, burning this bot's AI
+                          spend and impersonating this brand off-domain. */}
+                      {!form.website_url.trim() && (
+                        <p className="text-[10px] text-amber-600 mt-1">
+                          Without a website URL, anyone who has this bot&apos;s id can embed it on their own site and run up your AI usage. Set it once the bot&apos;s live domain is known.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Welcome Message</label>

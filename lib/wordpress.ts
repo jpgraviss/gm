@@ -52,9 +52,33 @@ function compareVersions(a: string, b: string): number {
 // hop is re-validated before it's fetched; callers that explicitly want the
 // raw redirect response (the wp-login.php exposure check) still get it —
 // only the URL, not the follow behavior, is guarded in that case.
+// Headers that carry credentials/secrets and must never cross an origin
+// change on redirect. Native fetch's 'follow' mode strips Authorization
+// automatically on cross-origin redirects; since this loop hand-rolls
+// redirect-following (to re-validate each hop against SSRF), it has to
+// replicate that stripping itself or a compromised/malicious site could
+// 302 off-origin and walk away with the WordPress Application Password.
+const CREDENTIAL_HEADERS = ['authorization', 'cookie']
+
+function stripCredentialHeadersCrossOrigin(
+  headers: Record<string, string>,
+  fromUrl: string,
+  toUrl: string,
+): Record<string, string> {
+  if (new URL(fromUrl).origin === new URL(toUrl).origin) return headers
+  const stripped: Record<string, string> = {}
+  for (const [key, value] of Object.entries(headers)) {
+    if (CREDENTIAL_HEADERS.includes(key.toLowerCase())) continue
+    stripped[key] = value
+  }
+  return stripped
+}
+
 async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
   const wantsManual = opts.redirect === 'manual'
+  const originalUrl = url
   let currentUrl = url
+  let currentHeaders: Record<string, string> = { 'User-Agent': 'GravHub-WPCheck/1.0', ...(opts.headers as Record<string, string> | undefined) }
   for (let hop = 0; ; hop++) {
     if (await isPrivateOrInternalUrl(currentUrl)) {
       throw new Error('URL resolves to a private or internal address')
@@ -67,14 +91,16 @@ async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Re
         ...opts,
         redirect: 'manual',
         signal: controller.signal,
-        headers: { 'User-Agent': 'GravHub-WPCheck/1.0', ...opts.headers },
+        headers: currentHeaders,
       })
     } finally {
       clearTimeout(timer)
     }
     if (!wantsManual && res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       if (hop >= 5) throw new Error('Too many redirects')
-      currentUrl = new URL(res.headers.get('location')!, currentUrl).toString()
+      const nextUrl = new URL(res.headers.get('location')!, currentUrl).toString()
+      currentHeaders = stripCredentialHeadersCrossOrigin(currentHeaders, originalUrl, nextUrl)
+      currentUrl = nextUrl
       continue
     }
     return res

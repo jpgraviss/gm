@@ -167,15 +167,47 @@ export async function recordCheck(siteId: string, result: CheckResult): Promise<
     update.last_down_at = now
   }
 
-  await db.from('monitored_sites').update(update).eq('id', siteId)
+  if (!result.up) {
+    // AUDIT — recordCheck previously read `typed.status` once at the top of
+    // this function and used that stale read to decide whether to fire the
+    // down alert. Two concurrent invocations (a double-clicked manual "Run
+    // Check", or a manual check landing in the same window as a cron tick —
+    // the cron path itself is already guarded by a CAS claim on
+    // last_check_at, but recordCheck has no equivalent guard, and the
+    // manual-trigger route calls checkSite+recordCheck with no claim at
+    // all) can both read status='up', both observe the down result, and
+    // both send duplicate alert emails. Fold the status transition and the
+    // alert decision into one atomic conditional UPDATE: only the request
+    // whose UPDATE actually matches (status wasn't already 'down') gets a
+    // row back and sends the alert; the other's no-match means someone else
+    // already made the transition.
+    const { data: claimed, error: claimErr } = await db
+      .from('monitored_sites')
+      .update(update)
+      .eq('id', siteId)
+      .neq('status', 'down')
+      .select('id')
 
-  // Fire alert on up → down transition
-  if (!result.up && typed.status !== 'down') {
-    try {
-      await sendDownAlert({ ...typed, status: newStatus, last_down_at: now }, result)
-    } catch (err) {
-      console.error('[uptime] sendDownAlert failed', err)
+    if (claimErr) {
+      console.error('[uptime] status transition update failed', claimErr)
     }
+
+    const wonTransition = !claimErr && Array.isArray(claimed) && claimed.length > 0
+
+    if (!wonTransition) {
+      // Site was already 'down' (or the claim lost the race) — still keep
+      // last_check_at/response_time_ms fresh so the UI doesn't show a stale
+      // "Last Check" time while a site remains down, just don't re-alert.
+      await db.from('monitored_sites').update(update).eq('id', siteId)
+    } else {
+      try {
+        await sendDownAlert({ ...typed, status: newStatus, last_down_at: now }, result)
+      } catch (err) {
+        console.error('[uptime] sendDownAlert failed', err)
+      }
+    }
+  } else {
+    await db.from('monitored_sites').update(update).eq('id', siteId)
   }
 }
 

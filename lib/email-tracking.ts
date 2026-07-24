@@ -4,7 +4,16 @@
  * tracking redirect URL that records the click before forwarding.
  */
 
+import { signToken } from './signed-token'
+
 const HREF_RE = /href="([^"]+)"/gi
+
+export interface ClickTokenPayload {
+  broadcastId: string
+  contactId: string
+  email: string
+  url: string
+}
 
 export function rewriteLinksForTracking(
   html: string,
@@ -17,9 +26,10 @@ export function rewriteLinksForTracking(
     if (trimmed.startsWith('mailto:') || trimmed.startsWith('#')) {
       return `href="${url}"`
     }
-    const token = Buffer.from(
-      JSON.stringify({ broadcastId, contactId, email, url: trimmed }),
-    ).toString('base64url')
+    // AUDIT — signed so the click endpoint can verify the token was really
+    // issued by this send, not forged/altered by a recipient (previously
+    // plain unsigned base64 JSON — anyone could decode or fabricate one).
+    const token = signToken<ClickTokenPayload>({ broadcastId, contactId, email, url: trimmed })
     return `href="/api/track/click/${token}"`
   })
 }

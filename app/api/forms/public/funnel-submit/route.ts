@@ -135,11 +135,11 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
   // Credit the page the form was actually submitted from. Falls back to the
   // funnel's first page only if the caller didn't send pageId (e.g. a stale
   // cached embed) or sent one that doesn't belong to this funnel.
-  let targetPage: { id: string; conversions: number | null } | null = null
+  let targetPage: { id: string } | null = null
   if (pageId) {
     const { data: page } = await db
       .from('funnel_pages')
-      .select('id, conversions')
+      .select('id')
       .eq('id', pageId)
       .eq('funnel_id', funnel.id)
       .maybeSingle()
@@ -148,7 +148,7 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
   if (!targetPage) {
     const { data: firstPage } = await db
       .from('funnel_pages')
-      .select('id, conversions')
+      .select('id')
       .eq('funnel_id', funnel.id)
       .order('sort_order', { ascending: true })
       .limit(1)
@@ -157,10 +157,9 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
   }
 
   if (targetPage) {
-    await db
-      .from('funnel_pages')
-      .update({ conversions: (targetPage.conversions ?? 0) + 1 })
-      .eq('id', targetPage.id)
+    // AUDIT — atomic RPC instead of a read-then-write increment, which
+    // could lose a count under concurrent submissions to the same page.
+    await db.rpc('increment_funnel_page_conversions', { p_id: targetPage.id })
   }
 
   return NextResponse.json({ success: true, id: submissionId }, { status: 201, headers: corsHeaders })

@@ -51,10 +51,12 @@ export const PATCH = withErrorHandler('sales-templates/[id] PATCH', async (req: 
   if (body.tags !== undefined)        update.tags = body.tags
   if (body.status !== undefined)      update.status = body.status
   if (body.workspaceId !== undefined) update.workspace_id = body.workspaceId
-  // "Use Template" (app/sales-enablement/page.tsx applyTemplate) PATCHes
-  // this to increment the display counter — previously silently dropped
-  // since it wasn't in this whitelist, so the "X uses" count never moved.
-  if (body.usageCount !== undefined)  update.usage_count = body.usageCount
+  // AUDIT — "Use Template" was migrated to the atomic
+  // POST /api/sales-templates {useTemplate:true, id} path specifically to
+  // avoid a client-computed counter value; this whitelist entry stayed live
+  // after that migration, letting any Team Member PATCH an arbitrary
+  // absolute usage_count (including negative), reopening the tamper/race
+  // surface the atomic endpoint was built to close.
 
   const { data, error } = await db.from('sales_templates').update(update).eq('id', id).select().single()
   if (error || !data) {

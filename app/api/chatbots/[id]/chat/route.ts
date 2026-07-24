@@ -33,6 +33,15 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
   if (!message || typeof message !== 'string' || !message.trim()) {
     return NextResponse.json({ error: 'Message is required' }, { status: 400 })
   }
+  // AUDIT — no length cap at all meant an attacker could POST arbitrarily
+  // large messages (within the per-IP rate limit) to inflate input-token
+  // cost, and full conversation history is resent every turn with no cap
+  // either, so cost also grows unbounded with conversation length.
+  const MAX_MESSAGE_LENGTH = 4000
+  const MAX_HISTORY_MESSAGES = 20
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return NextResponse.json({ error: 'Message is too long' }, { status: 400 })
+  }
 
   const db = createServiceClient()
 
@@ -42,6 +51,28 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
   }
   if (!chatbot.active) {
     return NextResponse.json({ error: 'Chatbot is inactive' }, { status: 403 })
+  }
+  // AUDIT — chatbot ids are ~31 bits of randomness with a guessable
+  // timestamp prefix, and neither this route nor /public checked the
+  // caller's Origin/Referer against the chatbot's own configured
+  // website_url — so anyone who found or brute-forced an id could embed
+  // and invoke another tenant's chatbot from an unrelated site, burning
+  // that tenant's AI spend and impersonating their brand off-domain. Only
+  // enforced when website_url is actually configured, since it's an
+  // optional field on the chatbot form.
+  if (chatbot.website_url) {
+    const origin = req.headers.get('origin') || req.headers.get('referer')
+    if (origin) {
+      try {
+        const originHost = new URL(origin).hostname
+        const allowedHost = new URL(chatbot.website_url).hostname
+        if (originHost !== allowedHost) {
+          return NextResponse.json({ error: 'This chatbot is not permitted on this domain' }, { status: 403 })
+        }
+      } catch {
+        // Malformed Origin/Referer header — fall through rather than block
+      }
+    }
   }
 
   let convoId = conversationId
@@ -87,7 +118,10 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
 
   const knowledgeItems = (chatbot.settings as Record<string, unknown>)?.knowledge_items as KnowledgeItem[] | undefined
   const systemPrompt = buildSystemPrompt(chatbot.system_prompt, chatbot.knowledge, knowledgeItems)
-  const chatMessages = existingMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+  // Only send the AI the most recent messages — the full stored history is
+  // still persisted below, but resending an ever-growing conversation on
+  // every turn means cost grows unbounded with conversation length.
+  const chatMessages = existingMessages.slice(-MAX_HISTORY_MESSAGES).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
   const result = await chatCompletion({
     system: systemPrompt,

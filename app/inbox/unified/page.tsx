@@ -49,13 +49,19 @@ export default function UnifiedInboxPage() {
 
   const load = useCallback(() => {
     setLoading(true)
-    const params = new URLSearchParams({ limit: '200' })
+    // AUDIT — gmailToken now goes in the POST body, not a query string
+    // (query strings leak into logs/history/Sentry error reports).
+    const body: Record<string, unknown> = { limit: 200 }
     if (gmailToken && gmailEmail) {
-      params.set('gmailToken', gmailToken)
-      params.set('gmailEmail', gmailEmail)
+      body.gmailToken = gmailToken
+      body.gmailEmail = gmailEmail
     }
-    fetch(`/api/inbox/unified?${params}`)
-      .then(r => (r.ok ? r.json() : []))
+    fetch('/api/inbox/unified', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('Failed to load inbox'))))
       .then(data => { if (Array.isArray(data)) setThreads(data) })
       .catch(() => toast('Failed to load inbox', 'error'))
       .finally(() => setLoading(false))

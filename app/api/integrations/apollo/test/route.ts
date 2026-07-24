@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { decrypt } from '@/lib/encryption'
 
 export const POST = withErrorHandler('apollo/test POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
@@ -23,7 +24,8 @@ export const POST = withErrorHandler('apollo/test POST', async (req) => {
         .select('apollo')
         .eq('id', 'global')
         .maybeSingle()
-      apiKey = (data?.apollo as { apiKey?: string })?.apiKey || undefined
+      const storedKey = (data?.apollo as { apiKey?: string })?.apiKey
+      apiKey = storedKey ? decrypt(storedKey) : undefined
     } catch { /* no stored key */ }
   }
 

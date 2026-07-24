@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { verifyToken } from '@/lib/signed-token'
+import type { ClickTokenPayload } from '@/lib/email-tracking'
 
 export const GET = withErrorHandler('track/click/[token] GET', async (
   _req,
@@ -8,16 +10,28 @@ export const GET = withErrorHandler('track/click/[token] GET', async (
 ) => {
   const { token } = await params
 
-  let payload: { broadcastId: string; contactId: string; email: string; url: string }
-  try {
-    payload = JSON.parse(Buffer.from(token, 'base64url').toString('utf-8'))
-  } catch {
+  // AUDIT — previously decoded unsigned base64 JSON with no verification,
+  // so anyone could forge a token with an arbitrary contactId/email/url +
+  // any observed broadcastId (open redirect + fake click-analytics
+  // injection). Now rejects anything not signed by this server.
+  const payload = verifyToken<ClickTokenPayload>(token)
+  if (!payload) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
   }
 
   const { broadcastId, contactId, email, url } = payload
   if (!broadcastId || !url) {
     return NextResponse.json({ error: 'Invalid token payload' }, { status: 400 })
+  }
+
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(url)
+  } catch {
+    return NextResponse.json({ error: 'Invalid redirect URL' }, { status: 400 })
+  }
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    return NextResponse.json({ error: 'Invalid redirect URL' }, { status: 400 })
   }
 
   const db = createServiceClient()
@@ -44,5 +58,5 @@ export const GET = withErrorHandler('track/click/[token] GET', async (
   // could undercount by one under concurrent clicks.
   await db.rpc('increment_broadcast_clicked', { p_broadcast_id: broadcastId })
 
-  return NextResponse.redirect(url, 302)
+  return NextResponse.redirect(parsedUrl.toString(), 302)
 })

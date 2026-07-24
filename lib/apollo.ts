@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase'
+import { decrypt } from '@/lib/encryption'
 
 export async function getApolloApiKey(): Promise<string | undefined> {
   if (process.env.APOLLO_API_KEY) return process.env.APOLLO_API_KEY
@@ -10,7 +11,8 @@ export async function getApolloApiKey(): Promise<string | undefined> {
       .select('apollo')
       .eq('id', 'global')
       .maybeSingle()
-    return (data?.apollo as { apiKey?: string })?.apiKey || undefined
+    const apiKey = (data?.apollo as { apiKey?: string })?.apiKey
+    return apiKey ? decrypt(apiKey) : undefined
   } catch {
     return undefined
   }

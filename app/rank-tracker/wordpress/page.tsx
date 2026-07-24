@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   Globe, Shield, AlertTriangle, CheckCircle, RefreshCw, ChevronDown,
   Package, Palette, Lock, Search, X, Copy,
@@ -190,8 +191,10 @@ export default function WordPressSeoPage() {
       .catch(() => toast('Failed to load WordPress sites', 'error'))
       .finally(() => setLoading(false))
 
-    fetch('/api/crm/companies?limit=500')
-      .then(r => r.ok ? r.json() : [])
+    // /api/crm/companies is cursor-paginated (max 500/page) — a raw
+    // fetch(...?limit=500) silently missed everything past the first 500.
+    // fetchAllPages() follows X-Next-Cursor to completion instead.
+    fetchAllPages<CompanyOption>('/api/crm/companies')
       .then(data => { if (Array.isArray(data)) setCompanies(data) })
       .catch(() => {})
 

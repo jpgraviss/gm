@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { fetchGmailMessages, extractEmailAddress, extractFirstOtherAddress } from '@/lib/gmail-fetch'
 
 /**
@@ -49,15 +50,34 @@ interface UnifiedThread {
   sources: string[]
 }
 
-export const GET = withErrorHandler('inbox/unified GET', async (req) => {
+// AUDIT — was GET with gmailToken/gmailEmail as query-string params. Query
+// strings land in server logs, browser history, and (via
+// lib/api-handler.ts's withErrorHandler → Sentry.captureException) get
+// forwarded to Sentry on any unrelated route error — all real Gmail OAuth
+// token leak paths a POST body avoids. Also added a check that gmailEmail
+// actually belongs to the authenticated caller, matching the pattern every
+// sibling Gmail route (gmail/send, gmail/token) already enforces.
+export const POST = withErrorHandler('inbox/unified POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
   const db = createServiceClient()
-  const { searchParams } = new URL(req.url)
-  const limit = Math.min(parseInt(searchParams.get('limit') ?? '100', 10), 200)
-  const gmailToken = searchParams.get('gmailToken')
-  const gmailEmail = searchParams.get('gmailEmail')
+  const body = await req.json().catch(() => ({}) as Record<string, unknown>)
+  const limit = Math.min(parseInt(String(body.limit ?? '100'), 10) || 100, 200)
+  const rawGmailToken = typeof body.gmailToken === 'string' ? body.gmailToken : null
+  const rawGmailEmail = typeof body.gmailEmail === 'string' ? body.gmailEmail : null
+
+  let gmailToken: string | null = null
+  let gmailEmail: string | null = null
+  if (rawGmailToken && rawGmailEmail) {
+    const callerEmail = await getAuthenticatedEmail(req)
+    if (callerEmail && callerEmail.toLowerCase() === rawGmailEmail.toLowerCase()) {
+      gmailToken = rawGmailToken
+      gmailEmail = rawGmailEmail
+    }
+    // Mismatch: silently skip the Gmail source (same behavior as "caller
+    // hasn't connected Gmail") rather than erroring the whole request.
+  }
 
   // 1. Tickets
   const { data: tickets } = await db

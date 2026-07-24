@@ -300,6 +300,16 @@ export default function ReputationPage() {
         setReviews((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
         setResponseText('')
         setExpandedId(null)
+        // AUDIT — the DB write always succeeds here (it's a legitimate
+        // internal reply either way); this flag tells us the separate
+        // publish-to-Google call failed, which previously surfaced no
+        // signal at all — staff saw a plain "Responded" checkmark and
+        // believed the public reply was live on Google when it wasn't.
+        if (updated.googlePostFailed) {
+          toast('Response saved, but posting to Google failed — please retry from Google Business Profile directly', 'error')
+        } else {
+          toast('Response sent', 'success')
+        }
       } else {
         toast('Failed to send response', 'error')
       }

@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 import { normalizeServiceType } from '@/lib/services'
+import { decrypt } from '@/lib/encryption'
 
 const HUBSPOT_DEALS_URL = 'https://api.hubapi.com/crm/v3/objects/deals'
 
@@ -40,7 +41,8 @@ async function getApiKey(): Promise<string | null> {
       .select('hubspot')
       .eq('id', 'global')
       .maybeSingle()
-    return (data?.hubspot as { apiKey?: string })?.apiKey || null
+    const apiKey = (data?.hubspot as { apiKey?: string })?.apiKey
+    return apiKey ? decrypt(apiKey) : null
   } catch {
     return null
   }

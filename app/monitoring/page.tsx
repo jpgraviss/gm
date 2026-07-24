@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   Activity, X, Trash2, RefreshCw, Pause, Play, Pencil, Globe, AlertCircle,
   CheckCircle2, Clock, Shield, ShieldAlert, Puzzle, Palette, ChevronDown,
@@ -114,6 +115,7 @@ export default function MonitoringPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<SiteDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [checkingId, setCheckingId] = useState<string | null>(null)
 
   useEffect(() => {
     loadSites()
@@ -176,6 +178,12 @@ export default function MonitoringPage() {
   }
 
   async function runCheck(id: string) {
+    // Guards against a double-click firing two concurrent checks for the
+    // same site — recordCheck() itself is now race-safe (atomic transition
+    // + alert claim), but there's no reason to let the UI trivially trigger
+    // the race in the first place.
+    if (checkingId === id) return
+    setCheckingId(id)
     try {
       const res = await fetch(`/api/monitored-sites/${id}/check`, { method: 'POST' })
       if (!res.ok) {
@@ -187,6 +195,8 @@ export default function MonitoringPage() {
       if (selectedId === id) await openDetail(id)
     } catch {
       toast('Check failed', 'error')
+    } finally {
+      setCheckingId(prev => (prev === id ? null : prev))
     }
   }
 
@@ -381,6 +391,7 @@ export default function MonitoringPage() {
         <SiteDetailPanel
           loading={detailLoading}
           detail={detail}
+          checking={checkingId === selectedId}
           onClose={() => { setSelectedId(null); setDetail(null) }}
           onRunCheck={() => runCheck(selectedId)}
           onTogglePause={() => detail && togglePause(detail)}
@@ -409,20 +420,20 @@ function AddSiteModal({
   const [showDropdown, setShowDropdown] = useState(false)
 
   useEffect(() => {
-    fetch('/api/crm/companies')
-      .then(r => (r.ok ? r.json() : []))
-      .then((data: unknown) => {
-        if (Array.isArray(data)) {
-          setCompanies(
-            data
-              .filter((c): c is { id: string; name: string } =>
-                typeof c === 'object' && c !== null &&
-                typeof (c as { id?: unknown }).id === 'string' &&
-                typeof (c as { name?: unknown }).name === 'string'
-              )
-              .map(c => ({ id: c.id, name: c.name })),
-          )
-        }
+    // /api/crm/companies is cursor-paginated (100/page) — a raw fetch()
+    // here silently missed every company past the most-recently-created
+    // 100. fetchAllPages() follows X-Next-Cursor to completion instead.
+    fetchAllPages<{ id: string; name: string }>('/api/crm/companies')
+      .then(data => {
+        setCompanies(
+          data
+            .filter((c): c is { id: string; name: string } =>
+              typeof c === 'object' && c !== null &&
+              typeof (c as { id?: unknown }).id === 'string' &&
+              typeof (c as { name?: unknown }).name === 'string'
+            )
+            .map(c => ({ id: c.id, name: c.name })),
+        )
       })
       .catch(() => { /* non-fatal */ })
   }, [])
@@ -524,6 +535,7 @@ function AddSiteModal({
 function SiteDetailPanel({
   loading,
   detail,
+  checking,
   onClose,
   onRunCheck,
   onTogglePause,
@@ -532,6 +544,7 @@ function SiteDetailPanel({
 }: {
   loading: boolean
   detail: SiteDetail | null
+  checking: boolean
   onClose: () => void
   onRunCheck: () => void
   onTogglePause: () => void
@@ -742,10 +755,11 @@ function SiteDetailPanel({
             <div className="p-4 border-t border-gray-100 flex gap-2">
               <button
                 onClick={onRunCheck}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-1.5"
+                disabled={checking}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-1.5 disabled:opacity-50"
                 style={{ background: FOREST }}
               >
-                <RefreshCw size={13} /> Run Check
+                <RefreshCw size={13} className={checking ? 'animate-spin' : ''} /> {checking ? 'Checking…' : 'Run Check'}
               </button>
               <button
                 onClick={onTogglePause}

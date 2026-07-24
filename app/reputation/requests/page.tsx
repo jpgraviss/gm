@@ -6,10 +6,10 @@ import Link from 'next/link'
 import { useToast } from '@/components/ui/Toast'
 import {
   Send, X, Plus, Mail, Clock, CheckCircle2, Eye,
-  Star, ChevronLeft, Calendar, Users, FileText,
+  Star, ChevronLeft, Calendar, Users, FileText, AlertTriangle,
 } from 'lucide-react'
 
-type CampaignStatus = 'draft' | 'scheduled' | 'sent' | 'active'
+type CampaignStatus = 'draft' | 'scheduled' | 'sent' | 'active' | 'failed'
 
 interface Campaign {
   id: string
@@ -30,6 +30,11 @@ const STATUS_CONFIG: Record<CampaignStatus, { bg: string; text: string; label: s
   scheduled: { bg: '#eff6ff', text: '#3b82f6', label: 'Scheduled', icon: <Clock size={11} /> },
   sent: { bg: '#f0fdf4', text: '#16a34a', label: 'Sent', icon: <CheckCircle2 size={11} /> },
   active: { bg: '#fefce8', text: '#ca8a04', label: 'Active', icon: <Send size={11} /> },
+  // AUDIT — POST /api/reputation/requests previously marked every
+  // just-dispatched campaign 'sent' even when the resolved audience was
+  // empty or every send failed, showing a green "Sent" badge
+  // indistinguishable from a real success with zero engagement yet.
+  failed: { bg: '#fef2f2', text: '#dc2626', label: 'Failed to send', icon: <AlertTriangle size={11} /> },
 }
 
 const TEMPLATE_NAMES = ['Happy Client Follow-Up', 'Post-Project Review', 'Annual Check-In']

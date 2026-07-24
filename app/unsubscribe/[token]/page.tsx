@@ -35,11 +35,12 @@ export default function UnsubscribePage() {
   async function handleUnsubscribe() {
     setSubmitting(true)
     try {
-      await fetch(`/api/unsubscribe/${params.token}`, {
+      const res = await fetch(`/api/unsubscribe/${params.token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'unsubscribe', reason }),
       })
+      if (!res.ok) throw new Error('Unsubscribe failed')
       setView('done')
     } catch {
       setView('error')
@@ -51,11 +52,12 @@ export default function UnsubscribePage() {
   async function handleResubscribe() {
     setSubmitting(true)
     try {
-      await fetch(`/api/unsubscribe/${params.token}`, {
+      const res = await fetch(`/api/unsubscribe/${params.token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'resubscribe' }),
       })
+      if (!res.ok) throw new Error('Resubscribe failed')
       setView('resubscribed')
     } catch {
       setView('error')

@@ -67,17 +67,29 @@ export const POST = withErrorHandler('reputation/requests POST', async (req: Nex
   // the campaign row behind so it's visible and can be investigated.
   if (!scheduled_at) {
     try {
-      await dispatchReviewCampaign(db, data)
+      const result = await dispatchReviewCampaign(db, data)
+      // AUDIT — previously marked 'sent' unconditionally whenever dispatch
+      // didn't throw, even if the resolved audience was empty or every
+      // send failed (dispatchReviewCampaign catches per-recipient errors
+      // internally and just returns counts). The UI showed a green "Sent"
+      // badge indistinguishable from "it worked, nobody's responded yet."
+      const status = result.sent > 0 ? 'sent' : 'failed'
       const { data: updated } = await db
         .from('review_campaigns')
-        .update({ status: 'sent' })
+        .update({ status })
         .eq('id', data.id)
         .select()
         .single()
       return NextResponse.json(updated ?? data, { status: 201 })
     } catch (err) {
       console.error(`[reputation/requests] dispatch failed for campaign ${data.id}:`, err)
-      return NextResponse.json(data, { status: 201 })
+      const { data: updated } = await db
+        .from('review_campaigns')
+        .update({ status: 'failed' })
+        .eq('id', data.id)
+        .select()
+        .single()
+      return NextResponse.json(updated ?? data, { status: 201 })
     }
   }
 

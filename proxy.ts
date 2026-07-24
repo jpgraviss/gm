@@ -104,11 +104,29 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
     // otherwise the only public route with zero request throttling,
     // a real cost/DoS vector (unlimited scripted requests run up live
     // AI-provider spend with no server-side limit at all).
-    if (/^\/api\/chatbots\/[^/]+\/chat$/.test(pathname) && req.method === 'POST') {
+    if (/^\/api\/chatbots\/([^/]+)\/chat$/.test(pathname) && req.method === 'POST') {
       const ip = getClientIp(req)
-      if (memoryLimited(`chatbot-chat:${ip}`, 30, 60 * 1000)) {
+      const chatbotId = pathname.match(/^\/api\/chatbots\/([^/]+)\/chat$/)?.[1] ?? 'unknown'
+      // AUDIT — the per-IP limit alone still let a single high-volume
+      // caller (or one behind a shared/NAT'd IP) run indefinitely against
+      // one tenant's LLM spend since there was no per-chatbot ceiling at
+      // all; adding a coarser per-chatbot-id cap alongside the existing
+      // per-IP one bounds worst-case cost per tenant regardless of how
+      // many distinct IPs a scripted attacker spreads requests across.
+      if (memoryLimited(`chatbot-chat:${ip}`, 30, 60 * 1000) || memoryLimited(`chatbot-chat-bot:${chatbotId}`, 300, 60 * 1000)) {
         return NextResponse.json(
           { error: 'Too many messages. Please wait a moment and try again.' },
+          { status: 429 }
+        )
+      }
+    }
+    // The widget's config-fetch endpoint (welcome message/brand color) had
+    // no throttling at all, unlike its sibling /chat route above.
+    if (/^\/api\/chatbots\/[^/]+\/public$/.test(pathname) && req.method === 'GET') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`chatbot-public:${ip}`, 60, 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please wait a moment and try again.' },
           { status: 429 }
         )
       }
@@ -167,6 +185,32 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
     if (pathname === '/api/auth/verify-email' && req.method === 'POST') {
       const ip = getClientIp(req)
       if (memoryLimited(`verify-email:${ip}`, 20, 60 * 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please wait a while and try again.' },
+          { status: 429 }
+        )
+      }
+    }
+    // AUDIT — public form/funnel submission POSTs had zero throttling,
+    // unlike every other public write route above. A scripted flood on a
+    // known slug can create unlimited crm_contacts rows, send unlimited
+    // notification emails, hit an admin-configured webhook_url repeatedly,
+    // and fire unlimited automations — all with no server-side ceiling.
+    if (pathname.startsWith('/api/forms/public/') && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`forms-public:${ip}`, 20, 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many submissions. Please wait a moment and try again.' },
+          { status: 429 }
+        )
+      }
+    }
+    // AUDIT — same unthrottled account-existence-oracle class as
+    // verify-email/magic-link above (404 vs 200+status for any email),
+    // just missed when those got their fix.
+    if ((pathname === '/api/team-members/check-approval' || pathname === '/api/portal-clients/check-approval') && req.method === 'GET') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`check-approval:${ip}`, 20, 60 * 60 * 1000)) {
         return NextResponse.json(
           { error: 'Too many requests. Please wait a while and try again.' },
           { status: 429 }

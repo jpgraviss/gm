@@ -150,7 +150,7 @@ export async function getAdsSummary(customerId: string, days = 28): Promise<AdsS
   const dateRange = dateRangeClause(days)
   const query =
     'SELECT metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions, metrics.ctr, metrics.average_cpc, metrics.conversions_value ' +
-    `FROM customer WHERE segments.date DURING ${dateRange}`
+    `FROM customer WHERE segments.date ${dateRange}`
 
   const rows = await adsFetch(customerId, query)
 
@@ -213,7 +213,7 @@ export async function getAdsCampaigns(
   const query =
     'SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, ' +
     'metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions ' +
-    `FROM campaign WHERE segments.date DURING ${dateRange}`
+    `FROM campaign WHERE segments.date ${dateRange}`
 
   const rows = await adsFetch(customerId, query)
 
@@ -260,13 +260,33 @@ export async function getAdsCampaigns(
 }
 
 /**
- * Map a day count to one of the supported Google Ads LAST_N_DAYS literals.
- * Falls back to the closest supported window.
+ * Format a Date as GAQL's literal date format, YYYY-MM-DD (local calendar
+ * day — Google Ads reports are date-only, not timestamped).
+ */
+function formatGaqlDate(d: Date): string {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+/**
+ * Build a GAQL `segments.date BETWEEN 'start' AND 'end'` clause covering
+ * exactly the requested number of days, ending yesterday (Google Ads data
+ * for "today" is still incomplete/unstable while the day is in progress).
+ *
+ * GAQL only offers a fixed set of LAST_N_DAYS literals (7/14/30/90/...) —
+ * rounding an arbitrary `days` value to the nearest one silently changes the
+ * reporting window (e.g. 28 days would round to 30, a ~7% overstatement).
+ * Using explicit BETWEEN start/end dates instead makes the query window
+ * exactly match `days` for any value, not just the literals GAQL happens to
+ * define.
  */
 function dateRangeClause(days: number): string {
-  const supported = [7, 14, 30, 90]
-  const closest = supported.reduce((prev, curr) =>
-    Math.abs(curr - days) < Math.abs(prev - days) ? curr : prev,
-  )
-  return `LAST_${closest}_DAYS`
+  const end = new Date()
+  end.setDate(end.getDate() - 1) // yesterday — today's data is incomplete
+  const start = new Date(end)
+  start.setDate(start.getDate() - (days - 1)) // inclusive of both endpoints
+
+  return `BETWEEN '${formatGaqlDate(start)}' AND '${formatGaqlDate(end)}'`
 }

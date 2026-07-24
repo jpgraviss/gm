@@ -175,6 +175,8 @@ export default function InboxPage() {
       if (res.ok) {
         const full = await res.json()
         setSelected(full)
+      } else {
+        toast('Failed to load message details', 'error')
       }
     } catch { toast('Failed to load message details', 'error') }
     finally {
@@ -232,7 +234,8 @@ export default function InboxPage() {
         timestamp: activity.loggedAt,
       }),
     })
-      .then(() => {
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to log activity')
         // Update contact's lastActivity
         fetch(`/api/crm/contacts/${activity.contactId}`, {
           method: 'PATCH',

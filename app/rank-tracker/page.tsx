@@ -5,6 +5,7 @@ import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   TrendingUp, TrendingDown, Minus, X, Trash2, Search, RefreshCw,
   Target, ArrowUp, ArrowDown, ChevronDown, ChevronUp, Download,
@@ -118,6 +119,12 @@ const TAG_PRESETS = ['branded', 'non-branded', 'long-tail', 'local', 'commercial
 
 export default function RankTrackerPage() {
   const { toast } = useToast()
+  const { user } = useAuth()
+  // /api/tracked-keywords/check requires Leadership (or Super Admin/isAdmin)
+  // server-side via requireRole(). The Refresh button used to render
+  // unconditionally for anyone who could load this page, so a Team Member
+  // or Dept Manager saw a working-looking button that always 403s.
+  const canRefresh = !!user?.isAdmin || user?.role === 'Leadership' || user?.role === 'Super Admin'
   const [rows, setRows] = useState<TrackedKeyword[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -337,6 +344,7 @@ export default function RankTrackerPage() {
   }
 
   async function refreshAll() {
+    if (!canRefresh) return
     setRefreshing(true)
     try {
       const res = await fetch('/api/tracked-keywords/check', { method: 'POST' })
@@ -474,10 +482,12 @@ export default function RankTrackerPage() {
                 <button onClick={exportCSV} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50">
                   <Download size={13} className="inline -mt-0.5 mr-1" />Export
                 </button>
-                <button onClick={refreshAll} disabled={refreshing} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
-                  <RefreshCw size={13} className={`inline -mt-0.5 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-                  {refreshing ? 'Checking...' : 'Refresh'}
-                </button>
+                {canRefresh && (
+                  <button onClick={refreshAll} disabled={refreshing} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                    <RefreshCw size={13} className={`inline -mt-0.5 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+                    {refreshing ? 'Checking...' : 'Refresh'}
+                  </button>
+                )}
                 <button onClick={() => setShowGscSync(true)} disabled={gscSyncing} className="px-3 py-2 rounded-xl border border-blue-200 text-blue-700 text-xs font-medium hover:bg-blue-50 disabled:opacity-50">
                   <Globe size={13} className="inline -mt-0.5 mr-1" />
                   {gscSyncing ? 'Syncing...' : 'Sync from GSC'}

@@ -33,9 +33,10 @@ export const PATCH = withErrorHandler('knowledge-base/[id] PATCH', async (req, {
   // below (real content edits) requires staff.
   if (body.feedback === 'helpful' || body.feedback === 'not_helpful') {
     const col = body.feedback === 'helpful' ? 'helpful_count' : 'not_helpful_count'
-    const { data: current } = await db.from('knowledge_articles').select(col).eq('id', id).single()
-    const currentVal = (current as Record<string, number> | null)?.[col] ?? 0
-    const { error: fbErr } = await db.from('knowledge_articles').update({ [col]: currentVal + 1 }).eq('id', id)
+    // AUDIT — atomic RPC instead of a read-then-write increment, which
+    // could lose a count under concurrent feedback submissions, unlike the
+    // sibling `views` counter above (already fixed via increment_kb_article_views).
+    const { error: fbErr } = await db.rpc('increment_kb_article_feedback', { p_id: id, p_column: col })
     if (fbErr) {
       throw new Error(fbErr?.message || 'Failed to update feedback')
     }

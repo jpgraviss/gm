@@ -15,6 +15,7 @@
 import Stripe from 'stripe'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { createServiceClient } from '@/lib/supabase'
+import { decrypt } from '@/lib/encryption'
 
 const STRIPE_API_VERSION = '2026-06-24.dahlia' as const
 
@@ -29,7 +30,15 @@ async function getStripeSettings(db: SupabaseClient): Promise<StripeSettings> {
     .select('stripe')
     .eq('id', 'global')
     .maybeSingle()
-  return (data?.stripe as StripeSettings) ?? {}
+  const settings = (data?.stripe as StripeSettings) ?? {}
+  // secretKey/webhookSecret are encrypted at rest (app/api/settings/route.ts
+  // PATCH); decrypt() safely no-ops on legacy rows saved before encryption
+  // was added.
+  return {
+    ...settings,
+    secretKey: settings.secretKey ? decrypt(settings.secretKey) : settings.secretKey,
+    webhookSecret: settings.webhookSecret ? decrypt(settings.webhookSecret) : settings.webhookSecret,
+  }
 }
 
 export async function isStripeConfigured(db?: SupabaseClient): Promise<boolean> {

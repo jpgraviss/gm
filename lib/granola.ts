@@ -25,6 +25,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { createServiceClient } from '@/lib/supabase'
+import { encrypt, decrypt } from '@/lib/encryption'
 
 const GRANOLA_API_BASE = 'https://public-api.granola.ai/v1'
 
@@ -53,7 +54,10 @@ async function getGranolaSettings(db: SupabaseClient): Promise<GranolaSettings> 
     .select('granola')
     .eq('id', 'global')
     .maybeSingle()
-  return (data?.granola as GranolaSettings) ?? {}
+  const settings = (data?.granola as GranolaSettings) ?? {}
+  // apiKey is encrypted at rest (app/api/settings/route.ts PATCH); decrypt()
+  // safely no-ops on legacy rows saved before encryption was added.
+  return settings.apiKey ? { ...settings, apiKey: decrypt(settings.apiKey) } : settings
 }
 
 export async function isGranolaConfigured(db?: SupabaseClient): Promise<boolean> {
@@ -204,9 +208,18 @@ export async function syncGranolaNotes(db?: SupabaseClient): Promise<GranolaSync
     imported++
   }
 
+  // `settings` here holds the decrypted apiKey (from getGranolaSettings) —
+  // re-encrypt it before writing back so this sync bookkeeping update
+  // doesn't undo at-rest encryption on every tick.
   await supabase
     .from('app_settings')
-    .update({ granola: { ...settings, lastSyncedAt: latestSeen || new Date().toISOString() } })
+    .update({
+      granola: {
+        ...settings,
+        apiKey: settings.apiKey ? encrypt(settings.apiKey) : settings.apiKey,
+        lastSyncedAt: latestSeen || new Date().toISOString(),
+      },
+    })
     .eq('id', 'global')
 
   return { fetched: docs.length, imported, matched, skipped }

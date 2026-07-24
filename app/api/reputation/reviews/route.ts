@@ -113,14 +113,22 @@ export const POST = withErrorHandler('reputation/reviews POST', async (req) => {
     return NextResponse.json({ error: 'Review not found' }, { status: 404 })
   }
 
+  // AUDIT — the DB row was already committed to status:'responded' above
+  // (unconditionally, since it's a legitimate reply either way), but a
+  // failed publish to Google was previously swallowed with only a
+  // console.error — the client always saw a plain success response and
+  // showed a "Responded" checkmark even when the public reply never
+  // actually posted to Google.
+  let googlePostFailed = false
   if (postToGoogle && data.google_review_id && data.location_name) {
     try {
       const { replyToGBPReview } = await import('@/lib/google-business-profile')
       await replyToGBPReview(data.location_name, data.google_review_id, response)
     } catch (err) {
       console.error('[reviews POST google-reply]', err)
+      googlePostFailed = true
     }
   }
 
-  return NextResponse.json(data)
+  return NextResponse.json({ ...data, googlePostFailed })
 })

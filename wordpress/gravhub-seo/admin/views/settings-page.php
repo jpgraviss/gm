@@ -14,8 +14,7 @@
  * @var array  $score_distribution   Score distribution (green, yellow, red counts).
  * @var bool   $sitemap_enabled      Whether sitemap is enabled.
  * @var array  $sitemap_post_types   Enabled sitemap post types.
- * @var array  $module_states        Module toggle states.
- * @var array  $modules              Full module catalog (toggleable + navigational).
+ * @var array  $modules              Full module catalog (always-on status + navigational).
  * @var array  $notifications        Notification feed items (type, message, link).
  * @var int    $redirect_count       Count of configured redirects.
  * @var int    $count_404            Count of distinct logged 404 paths.
@@ -430,7 +429,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 	<div class="gravhub-two-col">
 		<!-- Sitemap Settings Card -->
-		<div class="gravhub-card">
+		<div class="gravhub-card" id="gravhub-sitemap-settings">
 			<div class="gravhub-card-header">
 				<div class="gravhub-card-icon">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -497,10 +496,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<div class="gravhub-modules-grid">
 					<?php
 					foreach ( $modules as $module_key => $module ) :
-						$is_toggleable = ! empty( $module['toggle'] );
-						$is_active     = $is_toggleable && ! empty( $module_states[ $module_key ] );
+						$is_always_on = ! empty( $module['always_on'] );
 					?>
-						<div class="gravhub-module-card <?php echo $is_active ? 'gravhub-module-card--active' : ''; ?>">
+						<div class="gravhub-module-card <?php echo $is_always_on ? 'gravhub-module-card--active' : ''; ?>">
 							<div class="gravhub-module-icon">
 								<?php echo $module['icon']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Static SVG. ?>
 							</div>
@@ -508,11 +506,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 								<div class="gravhub-module-name"><?php echo esc_html( $module['name'] ); ?></div>
 								<div class="gravhub-module-desc"><?php echo esc_html( $module['desc'] ); ?></div>
 							</div>
-							<?php if ( $is_toggleable ) : ?>
-								<label class="gravhub-toggle">
-									<input type="checkbox" class="gravhub-module-toggle" data-module="<?php echo esc_attr( $module_key ); ?>" <?php checked( $is_active ); ?>>
-									<span class="gravhub-toggle-slider"></span>
-								</label>
+							<?php if ( $is_always_on ) : ?>
+								<span class="gravhub-module-status" title="<?php esc_attr_e( 'Always on — no per-page or site-wide disable exists for this feature.', 'gravhub-seo' ); ?>">
+									<?php esc_html_e( 'Active', 'gravhub-seo' ); ?>
+								</span>
 							<?php else : ?>
 								<a href="<?php echo esc_url( $module['link'] ); ?>" class="gravhub-btn gravhub-btn--sm gravhub-btn--secondary">
 									<?php esc_html_e( 'Manage', 'gravhub-seo' ); ?>
@@ -950,28 +947,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 				checked.push(c.value);
 			});
 			saveOption('gravhub_sitemap_post_types', checked);
-		});
-	});
-
-	/* ----- Module Toggles ----- */
-	document.querySelectorAll('.gravhub-module-toggle').forEach(function(toggle) {
-		toggle.addEventListener('change', function() {
-			var moduleKey = this.getAttribute('data-module');
-			var card = this.closest('.gravhub-module-card');
-
-			if (this.checked) {
-				card.classList.add('gravhub-module-card--active');
-			} else {
-				card.classList.remove('gravhub-module-card--active');
-			}
-
-			// Gather all module states and save.
-			var states = {};
-			document.querySelectorAll('.gravhub-module-toggle').forEach(function(t) {
-				states[t.getAttribute('data-module')] = t.checked ? 1 : 0;
-			});
-			saveOption('gravhub_module_states', states);
-			showToast(this.checked ? '<?php echo esc_js( __( 'Module enabled', 'gravhub-seo' ) ); ?>' : '<?php echo esc_js( __( 'Module disabled', 'gravhub-seo' ) ); ?>', 'success');
 		});
 	});
 

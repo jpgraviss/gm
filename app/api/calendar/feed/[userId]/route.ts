@@ -22,12 +22,21 @@ export const GET = withErrorHandler('calendar/feed/[userId] GET', async (_req, {
   const organizerEmail = cal.user_email ?? 'info@gravissmarketing.com'
   const tz = cal.timezone ?? 'America/Chicago'
 
-  const { data: bookings } = await db
-    .from('booking_type_bookings')
-    .select('*, booking_types(name)')
-    .eq('status', 'confirmed')
-    .gte('date', new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0])
-    .order('date', { ascending: true })
+  // AUDIT #231 — booking_types/booking_type_bookings have no per-staff
+  // ownership column at all (confirmed via the create-booking flow,
+  // app/api/calendar/bookings/route.ts: the Google Calendar event a new
+  // booking syncs to is picked via `calendar_settings.limit(1)` — an
+  // effectively arbitrary "first connected calendar," not this specific
+  // staff member's). There is no correct way to attribute a new-flow
+  // booking to one staff member's personal feed under the current data
+  // model, so every staff member's "your iCal feed URL" was returning the
+  // exact same full company-wide set of new-flow bookings — every
+  // colleague's client meeting (guest name/email/phone/notes) leaking into
+  // every other colleague's personal calendar subscription. Until a real
+  // per-staff ownership model exists for booking types, new-flow bookings
+  // are omitted from the personal feed entirely (a real, honest empty
+  // result) rather than shown unscoped to everyone — the loop that used to
+  // render them into vevents was removed along with the query.
 
   const { data: legacyBookings } = await db
     .from('bookings')
@@ -38,24 +47,6 @@ export const GET = withErrorHandler('calendar/feed/[userId] GET', async (_req, {
     .order('date', { ascending: true })
 
   const vevents: string[] = []
-
-  for (const b of bookings ?? []) {
-    const btName = (b.booking_types as { name: string } | null)?.name ?? 'Meeting'
-    const ics = generateICS({
-      title: `${btName} — ${b.guest_name}`,
-      startDateTime: `${b.date}T${b.start_time}`,
-      endDateTime: `${b.date}T${b.end_time}`,
-      timezone: tz,
-      description: b.notes || `${btName} — Booked via GravHub`,
-      location: b.meet_link || '',
-      organizerName,
-      organizerEmail,
-      attendeeEmail: b.guest_email,
-      uid: `booking-${b.id}@gravhub`,
-    })
-    const vevent = ics.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/)
-    if (vevent) vevents.push(vevent[0])
-  }
 
   for (const b of legacyBookings ?? []) {
     const ics = generateICS({

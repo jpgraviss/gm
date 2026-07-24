@@ -1014,6 +1014,22 @@
 	height: 20px;
 }
 
+/* AUDIT #245 — honest always-on status badge, replacing a toggle that
+   previously looked interactive but had no real effect on anything. */
+.gravhub-module-status {
+	flex-shrink: 0;
+	align-self: center;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--gh-brand);
+	background: var(--gh-brand-light);
+	border-radius: 999px;
+	padding: 4px 10px;
+	white-space: nowrap;
+}
+
 .gravhub-module-info {
 	flex: 1;
 	min-width: 0;

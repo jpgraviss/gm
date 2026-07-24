@@ -29,6 +29,7 @@ export const GET = withErrorHandler('portal-clients GET', async (req) => {
   if (denied) return denied
   const db = createServiceClient()
   const companyFilter = req.nextUrl.searchParams.get('company')
+  const companyIdFilter = req.nextUrl.searchParams.get('companyId')
   const pendingFilter = req.nextUrl.searchParams.get('pending_approval')
 
   let query = db
@@ -36,8 +37,18 @@ export const GET = withErrorHandler('portal-clients GET', async (req) => {
     .select('*')
     .order('created_at', { ascending: true })
 
-  if (companyFilter) {
-    query = query.eq('company', companyFilter)
+  // AUDIT #187 — company names are not DB-unique, so matching solely by
+  // `company` can silently span two unrelated companies that happen to
+  // share a display name. When `companyId` is supplied, use the precise,
+  // collision-proof `company_id` scope. The legacy `company` name filter is
+  // kept working independently (other callers may still rely on it) but is
+  // narrowed to rows never linked to a real CRM company (`company_id is
+  // null`) so it can no longer match a row that belongs to a specific,
+  // possibly different, company.
+  if (companyIdFilter) {
+    query = query.eq('company_id', companyIdFilter)
+  } else if (companyFilter) {
+    query = query.eq('company', companyFilter).is('company_id', null)
   }
 
   if (pendingFilter === 'true') {
@@ -97,15 +108,25 @@ export const POST = withErrorHandler('portal-clients POST', async (req) => {
     }
   }
 
-  // If company already has portal users, inherit their portal_config
+  // If company already has portal users, inherit their portal_config.
+  // AUDIT #187 — matching purely on the `company` name could inherit a
+  // DIFFERENT company's branding/config when two companies share a name.
+  // Prefer the precise `company_id` scope when the caller supplied one;
+  // otherwise fall back to name-matching restricted to other unlinked rows
+  // only, so a linked company's config is never leaked to an unrelated
+  // same-named company.
+  const bodyCompanyId = (body.companyId as string | undefined) ?? undefined
   let portalConfig = body.portalConfig ?? null
   if (!portalConfig) {
-    const { data: existing } = await db
+    let inheritQuery = db
       .from('portal_clients')
       .select('portal_config')
-      .eq('company', body.company as string)
       .not('portal_config', 'is', null)
       .limit(1)
+    inheritQuery = bodyCompanyId
+      ? inheritQuery.eq('company_id', bodyCompanyId)
+      : inheritQuery.eq('company', body.company as string).is('company_id', null)
+    const { data: existing } = await inheritQuery
     if (existing && existing.length > 0) {
       portalConfig = existing[0].portal_config
     }
@@ -116,7 +137,7 @@ export const POST = withErrorHandler('portal-clients POST', async (req) => {
     .insert({
       id:            body.id ?? `pc-${Date.now()}`,
       company:       body.company,
-      company_id:    (body.companyId as string | undefined) ?? null,
+      company_id:    bodyCompanyId ?? null,
       service:       body.service ?? '',
       access:        body.access ?? 'Not Setup',
       last_login:    body.lastLogin ?? 'Never',
@@ -135,28 +156,39 @@ export const POST = withErrorHandler('portal-clients POST', async (req) => {
   return NextResponse.json({ ...mapClient(data), tempPassword }, { status: 201 })
 })
 
-// DELETE /api/portal-clients?company=... — delete all portal clients for a company
+// DELETE /api/portal-clients?company=...&companyId=... — delete all portal
+// clients for a company. Prefer companyId (precise, collision-proof); the
+// legacy company name match is kept for backward compatibility but is
+// DESTRUCTIVE, so it is restricted to unlinked rows only — see AUDIT #187.
 export const DELETE = withErrorHandler('portal-clients DELETE', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
   const actor = await getAuthUser(req)
 
   const company = req.nextUrl.searchParams.get('company')
-  if (!company) {
-    return NextResponse.json({ error: 'company query parameter is required' }, { status: 400 })
+  const companyId = req.nextUrl.searchParams.get('companyId')
+  if (!company && !companyId) {
+    return NextResponse.json({ error: 'company or companyId query parameter is required' }, { status: 400 })
   }
 
   const db = createServiceClient()
-  const { data: deleted, error } = await db
-    .from('portal_clients')
-    .delete()
-    .eq('company', company)
-    .select('id, email')
+  let deleteQuery = db.from('portal_clients').delete()
+  // AUDIT #187 — deleting purely by `company` name is destructive: since
+  // company names are not DB-unique, two genuinely distinct companies
+  // sharing a name would both be wiped out. When companyId is supplied,
+  // scope the delete to that exact company. Otherwise, restrict the
+  // name-match fallback to rows never linked to a real CRM company so it
+  // can never delete a row belonging to a different, linked company.
+  deleteQuery = companyId
+    ? deleteQuery.eq('company_id', companyId)
+    : deleteQuery.eq('company', company as string).is('company_id', null)
+
+  const { data: deleted, error } = await deleteQuery.select('id, email')
 
   if (error) {
     throw new Error(error?.message || 'Failed to delete portal')
   }
 
-  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_portal_company', module: 'portal', type: 'action', metadata: { company, deletedCount: deleted?.length ?? 0 } })
-  return NextResponse.json({ deleted: deleted?.length ?? 0, company })
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_portal_company', module: 'portal', type: 'action', metadata: { company, companyId, deletedCount: deleted?.length ?? 0 } })
+  return NextResponse.json({ deleted: deleted?.length ?? 0, company, companyId })
 })

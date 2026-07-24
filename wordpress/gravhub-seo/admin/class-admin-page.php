@@ -660,45 +660,58 @@ class GravHub_Admin_Page {
 	}
 
 	/**
-	 * The plugin's full module catalog — the 5 original toggleable modules
-	 * plus the features shipped this session that had no card representation
-	 * at all. The new ones are purely navigational (link to their real page)
-	 * rather than toggleable, since they don't have a natural single on/off
-	 * state (e.g. Redirects has per-redirect entries, not a global switch).
+	 * The plugin's full module catalog.
+	 *
+	 * AUDIT #245 — seo_analysis/focus_keywords/meta_management/xml_sitemap/
+	 * social_previews were all rendered as interactive on/off toggles
+	 * persisting to `gravhub_module_states`, but nothing else in the plugin
+	 * ever read that option — SEO analysis always ran, meta tags always
+	 * output, the Focus Keyword field always rendered, regardless of the
+	 * toggle. `xml_sitemap` was also a second, non-functional switch sitting
+	 * on the same settings page as the genuinely-working
+	 * `gravhub_sitemap_enabled` toggle in the Sitemap Settings card — same
+	 * label, only one of the two actually did anything. Rather than build 5
+	 * separate real feature-gating mechanisms (a much larger, riskier change
+	 * touching core always-on SEO behavior with no clear signal that
+	 * per-module disabling was ever wanted), these are now honest
+	 * always-on status badges — no fake control, no invented gating
+	 * behavior — and xml_sitemap links to the one real toggle instead of
+	 * duplicating it.
 	 *
 	 * @return array
 	 */
 	private function get_module_catalog() {
 		return array(
 			'seo_analysis'    => array(
-				'name'    => __( 'SEO Analysis', 'gravhub-seo' ),
-				'desc'    => __( 'Analyze pages for SEO best practices.', 'gravhub-seo' ),
-				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
-				'toggle'  => true,
+				'name'      => __( 'SEO Analysis', 'gravhub-seo' ),
+				'desc'      => __( 'Analyze pages for SEO best practices.', 'gravhub-seo' ),
+				'icon'      => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+				'always_on' => true,
 			),
 			'focus_keywords'  => array(
-				'name'    => __( 'Focus Keywords', 'gravhub-seo' ),
-				'desc'    => __( 'Set target keywords for each page.', 'gravhub-seo' ),
-				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
-				'toggle'  => true,
+				'name'      => __( 'Focus Keywords', 'gravhub-seo' ),
+				'desc'      => __( 'Set target keywords for each page.', 'gravhub-seo' ),
+				'icon'      => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+				'always_on' => true,
 			),
 			'meta_management' => array(
-				'name'    => __( 'Meta Management', 'gravhub-seo' ),
-				'desc'    => __( 'Control title tags and meta descriptions.', 'gravhub-seo' ),
-				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-				'toggle'  => true,
+				'name'      => __( 'Meta Management', 'gravhub-seo' ),
+				'desc'      => __( 'Control title tags and meta descriptions.', 'gravhub-seo' ),
+				'icon'      => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+				'always_on' => true,
 			),
 			'xml_sitemap'     => array(
 				'name'    => __( 'XML Sitemap', 'gravhub-seo' ),
 				'desc'    => __( 'Auto-generate XML sitemaps.', 'gravhub-seo' ),
 				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
-				'toggle'  => true,
+				'toggle'  => false,
+				'link'    => admin_url( 'admin.php?page=gravhub-seo#gravhub-sitemap-settings' ),
 			),
 			'social_previews' => array(
-				'name'    => __( 'Social Previews', 'gravhub-seo' ),
-				'desc'    => __( 'Open Graph and Twitter Card tags.', 'gravhub-seo' ),
-				'icon'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>',
-				'toggle'  => true,
+				'name'      => __( 'Social Previews', 'gravhub-seo' ),
+				'desc'      => __( 'Open Graph and Twitter Card tags.', 'gravhub-seo' ),
+				'icon'      => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>',
+				'always_on' => true,
 			),
 			'redirects'       => array(
 				'name'    => __( 'Redirections', 'gravhub-seo' ),
@@ -876,19 +889,6 @@ class GravHub_Admin_Page {
 		// Sitemap settings.
 		$sitemap_enabled    = (bool) get_option( 'gravhub_sitemap_enabled', true );
 		$sitemap_post_types = (array) get_option( 'gravhub_sitemap_post_types', array( 'post', 'page' ) );
-
-		// Module states.
-		$default_modules = array(
-			'seo_analysis'    => 1,
-			'focus_keywords'  => 1,
-			'meta_management' => 1,
-			'xml_sitemap'     => 1,
-			'social_previews' => 0,
-		);
-		$module_states = wp_parse_args(
-			(array) get_option( 'gravhub_module_states', array() ),
-			$default_modules
-		);
 
 		$modules       = $this->get_module_catalog();
 		$notifications = $this->build_notifications( $total_issues );

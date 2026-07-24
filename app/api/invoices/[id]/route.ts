@@ -3,12 +3,14 @@ import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError, INVOICE_STATUSES } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
+import { logAudit } from '@/lib/audit'
 
 // PATCH updates invoice status/payment data
 export const PATCH = withErrorHandler('invoices/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+  const actor = await getAuthUser(req)
 
   const { id } = await params
 
@@ -46,9 +48,30 @@ export const PATCH = withErrorHandler('invoices/[id] PATCH', async (req, { param
     return validationError('No valid fields to update')
   }
 
+  // AUDIT — status/amount edits on recognized-revenue records previously
+  // left zero trace of who changed what from what value, unlike the
+  // sibling contracts route (logAudit on every status change). Read the
+  // pre-update row so the log entry can show the real before/after, not
+  // just the new value.
+  const { data: before } = await db.from('invoices').select('status, amount').eq('id', id).single()
+
   const { data, error } = await db.from('invoices').update(update).eq('id', id).select().single()
   if (error) {
     throw new Error(error?.message || 'Failed to update invoice')
+  }
+
+  if (body.status !== undefined || body.amount !== undefined) {
+    logAudit({
+      userName: actor?.name || actor?.email || 'system',
+      action: 'invoice_updated',
+      module: 'billing',
+      type: 'action',
+      metadata: {
+        invoiceId: id,
+        ...(body.status !== undefined ? { statusFrom: before?.status, statusTo: body.status } : {}),
+        ...(body.amount !== undefined ? { amountFrom: before?.amount, amountTo: body.amount } : {}),
+      },
+    })
   }
 
   if (body.status === 'Paid') {

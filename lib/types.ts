@@ -176,6 +176,9 @@ export interface Invoice {
   paidDate?: string
   serviceType: ServiceType
   companyId?: string | null
+  // Populated by the Stripe webhook on payment — see AUDIT.md.
+  amountPaid?: number
+  stripePaymentIntentId?: string
 }
 
 export interface Milestone {

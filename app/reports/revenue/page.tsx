@@ -81,8 +81,14 @@ export default function RevenueReportPage() {
   const maxRevenue = Math.max(...visibleMonths.map(r => r.revenue), 1)
 
   const pipelineForecast = useMemo(() => {
+    // AUDIT — this only excluded 'Closed Lost', leaving 'Closed Won' deals
+    // (weight 1.0) in the pipeline breakdown alongside a separate "Closed
+    // Won" KPI tile just below — double-counting already-realized revenue
+    // as if it were still forecast. "Pipeline" should mean open deals only,
+    // matching the openDeals-only convention app/crm/pipeline/page.tsx's
+    // weightedValue already uses for this exact computation.
     const stages: Record<string, { count: number; value: number; weighted: number }> = {}
-    filteredDeals.filter(d => d.stage !== 'Closed Lost').forEach(d => {
+    filteredDeals.filter(d => !d.stage.startsWith('Closed')).forEach(d => {
       if (!stages[d.stage]) stages[d.stage] = { count: 0, value: 0, weighted: 0 }
       stages[d.stage].count++
       stages[d.stage].value += d.value

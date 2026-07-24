@@ -19,6 +19,12 @@ function mapInvoice(row: any) {
     issuedDate:  row.issued_date ?? '',
     paidDate:    row.paid_date ?? undefined,
     serviceType: row.service_type,
+    // AUDIT — captured by the Stripe webhook on payment but never returned
+    // anywhere, so the actual amount Stripe collected and the payment
+    // intent id (needed to look the charge up in Stripe) were invisible
+    // in the app despite being in the database.
+    amountPaid:  row.amount_paid ?? undefined,
+    stripePaymentIntentId: row.stripe_payment_intent_id ?? undefined,
   }
 }
 

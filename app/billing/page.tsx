@@ -136,6 +136,19 @@ function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: I
           {isPaid && invoice.paidDate && (
             <p className="text-xs text-emerald-600 mt-1 font-medium">Paid on {formatDate(invoice.paidDate)}</p>
           )}
+          {/* AUDIT — amount_paid/stripe_payment_intent_id were captured by
+              the webhook but never surfaced anywhere; also flags the case
+              where the invoice's amount was edited after a payment link
+              for the old amount was already paid, so the amount actually
+              collected differs from what's now on record. */}
+          {isPaid && invoice.amountPaid !== undefined && invoice.amountPaid !== invoice.amount && (
+            <p className="text-xs text-amber-600 mt-1 font-medium">
+              ⚠ Stripe actually collected {formatCurrency(invoice.amountPaid)}, not {formatCurrency(invoice.amount)} — invoice amount may have changed after payment
+            </p>
+          )}
+          {isPaid && invoice.stripePaymentIntentId && (
+            <p className="text-[10px] text-gray-400 mt-1 font-mono">{invoice.stripePaymentIntentId}</p>
+          )}
         </div>
 
         {/* Details */}

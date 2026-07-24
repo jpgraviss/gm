@@ -267,9 +267,10 @@ function EmailSchedulingSection() {
           <p className="text-xs font-semibold text-gray-700">Queue processing</p>
         </div>
         <p className="text-xs text-gray-500">
-          Scheduled emails are processed via cron at <span className="font-semibold text-gray-700">/api/email/scheduled/process</span>.
-          Configure your cron provider (Vercel Cron, Railway, etc.) to call this endpoint at your desired interval (e.g. every 5 minutes).
-          The endpoint is protected by the <code className="bg-gray-200 px-1 rounded text-[11px]">CRON_SECRET</code> environment variable.
+          Scheduled emails are processed automatically — a GitHub Actions workflow (<span className="font-semibold text-gray-700">.github/workflows/cron-ping.yml</span>) already pings
+          <span className="font-semibold text-gray-700"> /api/cron</span> every 5 minutes, which in turn runs the scheduled-email queue along with the app&apos;s other periodic jobs.
+          No additional cron setup is needed; pointing a separate cron job directly at <span className="font-semibold text-gray-700">/api/email/scheduled/process</span> would just be a redundant second caller.
+          That workflow reads the <code className="bg-gray-200 px-1 rounded text-[11px]">CRON_TARGET_URL</code> and <code className="bg-gray-200 px-1 rounded text-[11px]">CRON_SECRET</code> repo secrets — see the workflow file to reconfigure.
         </p>
       </div>
       <button onClick={save} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>

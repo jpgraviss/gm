@@ -53,6 +53,18 @@ export const PATCH = withErrorHandler('invoices/[id] PATCH', async (req, { param
   // sibling contracts route (logAudit on every status change). Read the
   // pre-update row so the log entry can show the real before/after, not
   // just the new value.
+  //
+  // KNOWN LIMITATION (flagged, not fixed): this SELECT-then-UPDATE is not
+  // atomic — the `invoices` row itself has no concurrency protection
+  // (pre-existing, not introduced by this fix), so two PATCHes racing on
+  // the same invoice within this window could both read the same `before`
+  // snapshot, and whichever commits second logs a "from" value that
+  // wasn't actually the true prior state at that moment. The invoice row
+  // itself always ends up correct either way (last write wins, as before);
+  // only the audit-log entry's "from" value could misrepresent history in
+  // this narrow, rare race. A real fix needs either a DB trigger-based
+  // audit log or a dedicated atomic RPC — bigger than this pass's scope
+  // for a low-stakes, audit-trail-only edge case.
   const { data: before } = await db.from('invoices').select('status, amount').eq('id', id).single()
 
   const { data, error } = await db.from('invoices').update(update).eq('id', id).select().single()

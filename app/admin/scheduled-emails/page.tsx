@@ -50,16 +50,25 @@ export default function ScheduledEmailsPage() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const [emails, setEmails] = useState<ScheduledEmail[]>([])
+  const [allEmails, setAllEmails] = useState<ScheduledEmail[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<StatusTab>('pending')
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [retryingId, setRetryingId] = useState<string | null>(null)
 
+  // Backend (app/api/email/scheduled/route.ts) gates on requireRole(req,
+  // 'Leadership'), which lib/rbac.ts's requireRole treats as satisfied by
+  // role >= Leadership OR is_admin — a broader set than isAdmin alone.
+  // Mirror that here so a Leadership-but-not-admin staffer isn't bounced
+  // by the frontend before ever making a request that the backend would
+  // actually allow (same class of fix as rank-tracker's canRefresh).
+  const canAccessScheduledEmails = !!user?.isAdmin || user?.role === 'Leadership' || user?.role === 'Super Admin'
+
   useEffect(() => {
-    if (!authLoading && (!user || !user.isAdmin)) {
+    if (!authLoading && (!user || !canAccessScheduledEmails)) {
       router.replace('/admin')
     }
-  }, [user, authLoading, router])
+  }, [user, authLoading, canAccessScheduledEmails, router])
 
   // AUDIT #267 — GET /api/email/scheduled?limit=200 with no offset
   // follow-up despite getScheduledEmails() supporting it, so the
@@ -91,6 +100,20 @@ export default function ScheduledEmailsPage() {
       .finally(() => setLoading(false))
   }
 
+  // The KPI cards (Pending / Sent Today / Failed / Next Due) must reflect
+  // totals across ALL statuses, independent of whichever tab is currently
+  // selected — `emails` above is deliberately scoped to just the active
+  // tab's status for the table, so it can't be reused here without the
+  // counts collapsing to 0 for every status except the current tab.
+  function loadCounts() {
+    fetchAllScheduled().then(setAllEmails).catch(() => {/* KPI cards just keep their last known values */})
+  }
+
+  useEffect(() => {
+    loadCounts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -106,6 +129,7 @@ export default function ScheduledEmailsPage() {
       const res = await fetch(`/api/email/scheduled?id=${id}`, { method: 'DELETE' })
       if (!res.ok) { toast('Failed to cancel', 'error'); return }
       setEmails(prev => prev.map(e => e.id === id ? { ...e, status: 'cancelled' as const } : e))
+      setAllEmails(prev => prev.map(e => e.id === id ? { ...e, status: 'cancelled' as const } : e))
       toast('Email cancelled', 'success')
     } catch {
       toast('Failed to cancel', 'error')
@@ -137,6 +161,7 @@ export default function ScheduledEmailsPage() {
       if (!res.ok) { toast('Failed to retry', 'error'); return }
       toast('Re-scheduled for immediate send', 'success')
       load(activeTab)
+      loadCounts()
     } catch {
       toast('Failed to retry', 'error')
     } finally {
@@ -144,12 +169,12 @@ export default function ScheduledEmailsPage() {
     }
   }
 
-  const pending = emails.filter(e => e.status === 'pending')
-  const sentToday = emails.filter(e => {
+  const pending = allEmails.filter(e => e.status === 'pending')
+  const sentToday = allEmails.filter(e => {
     if (e.status !== 'sent' || !e.sentAt) return false
     return new Date(e.sentAt).toDateString() === new Date().toDateString()
   })
-  const failedCount = emails.filter(e => e.status === 'failed').length
+  const failedCount = allEmails.filter(e => e.status === 'failed').length
   const nextDue = pending.length > 0 ? pending.reduce((a, b) => new Date(a.sendAt) < new Date(b.sendAt) ? a : b) : null
 
   const preview = previewId ? emails.find(e => e.id === previewId) : null
@@ -207,7 +232,7 @@ export default function ScheduledEmailsPage() {
             </button>
           ))}
           <button
-            onClick={() => load(activeTab)}
+            onClick={() => { load(activeTab); loadCounts() }}
             className="ml-auto p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
           >
             <RefreshCw size={14} />

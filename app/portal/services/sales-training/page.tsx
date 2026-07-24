@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   ArrowLeft, GraduationCap, BookOpen,
   CheckCircle, Play,
@@ -56,10 +57,12 @@ export default function PortalSalesTrainingPage() {
   useEffect(() => {
     if (!company) { requestAnimationFrame(() => setLoading(false)); return }
 
-    fetch('/api/courses?limit=50')
-      .then(r => r.ok ? r.json() : { data: [] })
+    // AUDIT — /api/courses is cursor-paginated; a raw fetch(?limit=50)
+    // silently dropped any courses past the first 50, same truncation
+    // class as #212. fetchAllPages() follows the cursor to completion.
+    fetchAllPages<Record<string, unknown>>('/api/courses')
       .then(async (result) => {
-        const courses: Course[] = (result.data ?? result ?? []).map((c: Record<string, unknown>) => ({
+        const courses: Course[] = (result ?? []).map((c: Record<string, unknown>) => ({
           id: c.id as string,
           title: c.title as string ?? '',
           description: c.description as string ?? '',

@@ -6,6 +6,7 @@ import { getAuthUser, requireRole } from '@/lib/rbac'
 import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 import { mapTicket } from '@/lib/tickets'
+import { stableStringify } from '@/lib/stable-json'
 
 // Portal clients can only reply to their own ticket (Tickets page's Reply
 // box) — status/priority/assignedTo/tags/companyId are staff-only.
@@ -66,9 +67,15 @@ export const PATCH = withErrorHandler('tickets/[id] PATCH', async (req: NextRequ
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const incoming = (body.messages ?? []) as any[]
 
+      // AUDIT — plain JSON.stringify is key-order-sensitive, but `existing`
+      // just came back through a jsonb column, which does NOT preserve
+      // insertion order (Postgres normalizes it) — so an unmodified prefix
+      // could still fail this comparison purely from key reordering,
+      // rejecting a legitimate second reply in the same session. Compare
+      // with sorted keys so only real content changes trigger a mismatch.
       const prefixUnchanged =
         incoming.length >= existing.length &&
-        existing.every((m, i) => JSON.stringify(m) === JSON.stringify(incoming[i]))
+        existing.every((m, i) => stableStringify(m) === stableStringify(incoming[i]))
 
       if (!prefixUnchanged) {
         return NextResponse.json({ error: 'Cannot modify or remove existing messages' }, { status: 403 })
@@ -93,9 +100,10 @@ export const PATCH = withErrorHandler('tickets/[id] PATCH', async (req: NextRequ
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const incoming = (body.messages ?? []) as any[]
 
+      // Same jsonb key-order caveat as the staff branch above.
       const prefixUnchanged =
         incoming.length >= existingVisible.length &&
-        existingVisible.every((m, i) => JSON.stringify(m) === JSON.stringify(incoming[i]))
+        existingVisible.every((m, i) => stableStringify(m) === stableStringify(incoming[i]))
 
       if (!prefixUnchanged) {
         return NextResponse.json({ error: 'Cannot modify or remove existing messages' }, { status: 403 })

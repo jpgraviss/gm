@@ -59,11 +59,21 @@ interface LogFormProps {
   defaultDate?: string
   teamMembers: TeamMember[]
   projects: Project[]
+  // AUDIT — the server now requires a non-manager caller to submit
+  // teamMember matching their own identity (time-entries ownership check),
+  // but this modal previously defaulted to `teamMembers[0]` (an arbitrary
+  // name, not the current user) and offered a free-choice dropdown to
+  // everyone. A non-manager who didn't happen to manually reselect their
+  // own name got a confusing 403 on a perfectly normal submission.
+  currentUserName: string
+  canManageOthers: boolean
 }
 
-function LogTimeModal({ entry, onSave, onClose, defaultDate, teamMembers, projects }: LogFormProps) {
+function LogTimeModal({ entry, onSave, onClose, defaultDate, teamMembers, projects, currentUserName, canManageOthers }: LogFormProps) {
   const [date, setDate]             = useState(entry?.date ?? defaultDate ?? toIso(new Date()))
-  const [teamMember, setTeamMember] = useState(entry?.teamMember ?? teamMembers[0]?.name ?? '')
+  const [teamMember, setTeamMember] = useState(
+    entry?.teamMember ?? (canManageOthers ? (teamMembers[0]?.name ?? '') : currentUserName)
+  )
   const [projectId, setProjectId]   = useState(entry?.projectId ?? '')
   const [description, setDesc]      = useState(entry?.description ?? '')
   const [serviceType, setService]   = useState<TeamServiceLine>(entry?.serviceType ?? 'General')
@@ -124,15 +134,24 @@ function LogTimeModal({ entry, onSave, onClose, defaultDate, teamMembers, projec
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Team Member</label>
-              <select
-                value={teamMember}
-                onChange={e => setTeamMember(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
-              >
-                {teamMembers.map(m => (
-                  <option key={m.id} value={m.name}>{m.name}</option>
-                ))}
-              </select>
+              {canManageOthers ? (
+                <select
+                  value={teamMember}
+                  onChange={e => setTeamMember(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
+                >
+                  {teamMembers.map(m => (
+                    <option key={m.id} value={m.name}>{m.name}</option>
+                  ))}
+                </select>
+              ) : (
+                // AUDIT — non-managers can only log/edit their own time
+                // (server-enforced); a free-choice dropdown here would just
+                // let them pick a name that always 403s. Lock it to self.
+                <div className="w-full border border-gray-100 bg-gray-50 rounded-xl px-3 py-2.5 text-sm text-gray-600">
+                  {teamMember || currentUserName}
+                </div>
+              )}
             </div>
           </div>
 
@@ -456,6 +475,11 @@ export default function TimeTrackingPage() {
   }
 
   async function handleDelete(id: string) {
+    const target = entries.find(e => e.id === id)
+    if (!canApprove && target && target.teamMember !== user?.name) {
+      toast('You can only delete your own time entries', 'error')
+      return
+    }
     if (!confirm('Delete this time entry?')) return
     setEntries(prev => prev.filter(e => e.id !== id))
     try {
@@ -525,6 +549,15 @@ export default function TimeTrackingPage() {
   }
 
   function openEdit(entry: TimeEntry) {
+    // AUDIT — the server now rejects a non-manager editing a colleague's
+    // entry (ownership check), but every row's Edit button was still
+    // clickable regardless of whose entry it is — a non-manager could fill
+    // out the whole form only to get a confusing 403 on save. Catch it here
+    // instead, before they waste the effort.
+    if (!canApprove && entry.teamMember !== user?.name) {
+      toast('You can only edit your own time entries', 'error')
+      return
+    }
     setEditEntry(entry)
     setLogDate(undefined)
     setShowLog(true)
@@ -1036,6 +1069,8 @@ export default function TimeTrackingPage() {
           onClose={() => { setShowLog(false); setEditEntry(undefined) }}
           teamMembers={teamMembers}
           projects={projects}
+          currentUserName={user?.name ?? ''}
+          canManageOthers={canApprove}
         />
       )}
     </div>

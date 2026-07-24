@@ -53,6 +53,16 @@ export const PATCH = withErrorHandler('time-entries/[id] PATCH', async (req: Nex
     return NextResponse.json({ error: 'Time entry not found' }, { status: 404 })
   }
 
+  // KNOWN LIMITATION (flagged, not fixed): `team_member` is a plain text
+  // snapshot taken at entry-creation time, not a stable FK to
+  // team_members.id — there is no created-by-email column on this table.
+  // If a user's display name is changed later (typo fix, legal name
+  // change), this comparison against their CURRENT name will no longer
+  // match their OLD entries, locking a non-manager out of editing/deleting
+  // their own historical rows (a Dept Manager+ can still do it for them).
+  // A real fix needs a schema change (a stable owner-identity column) —
+  // not attempted here since name changes are rare and the workaround
+  // (manager intervention) already exists.
   const canManageOthers = (await requireRole(req, 'Dept Manager')) === null
   if (!canManageOthers) {
     const caller = await getAuthUser(req)

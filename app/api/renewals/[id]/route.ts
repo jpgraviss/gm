@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { validate, validationError } from '@/lib/validation'
+import { validate, validationError, RENEWAL_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
@@ -13,6 +13,11 @@ export const PATCH = withErrorHandler('renewals/[id] PATCH', async (req, { param
   const result = validate(body, {
     company: { type: 'string', maxLength: 200 },
     renewalValue: { type: 'number', min: 0 },
+    // AUDIT — status was previously accepted as any string; renewalStatusColors
+    // (lib/utils.ts) has no fallback for an unknown value and every tab filter
+    // checks exact equality against the 4 real statuses, so a bad value would
+    // silently render unstyled and drop the row out of every tab.
+    status: { type: 'string', enum: [...RENEWAL_STATUSES] },
   })
   if (!result.valid) return validationError(result.error)
   const db = createServiceClient()

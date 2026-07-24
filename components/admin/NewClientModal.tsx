@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import CompanySelect from '@/components/ui/CompanySelect'
 import { useToast } from '@/components/ui/Toast'
+import { useAuth } from '@/contexts/AuthContext'
 import { toCatalogServiceValue } from '@/lib/services'
 import {
   X, Building2, User, Briefcase, ChevronRight, ChevronLeft,
-  Loader2, CheckCircle, Mail,
+  Loader2, CheckCircle, Mail, ShieldAlert,
 } from 'lucide-react'
 
 const SERVICES = [
@@ -25,6 +26,15 @@ interface Props {
 export default function NewClientModal({ open, onClose }: Props) {
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuth()
+  // POST /api/portal-clients/invite requires requireAdmin server-side —
+  // stricter than the Team Member level this modal is otherwise reachable
+  // at (from the CRM pipeline / delivery-dashboard "New Client" buttons).
+  // Gate the invite step on the client the same way, so a non-admin Team
+  // Member never attempts a call that can only ever 403, and never sees a
+  // failure toast that implies the whole submission failed when the
+  // company + contact were in fact already created.
+  const canInviteToPortal = !!user?.isAdmin
   const [step, setStep] = useState(0)
   const [submitting, setSubmitting] = useState(false)
 
@@ -116,21 +126,40 @@ export default function NewClientModal({ open, onClose }: Props) {
       // POST first (which also creates the row) and then invite would
       // always hit that 409 — the invite email would never send and the
       // client would have no way to log in despite the "success" toast.
-      const inviteRes = await fetch('/api/portal-clients/invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: `${firstName} ${lastName}`,
-          email,
-          company: companyName,
-          companyId: resolvedCompanyId,
-          role: 'Viewer',
-          services,
-        }),
-      })
-      if (!inviteRes.ok) {
-        const err = await inviteRes.json().catch(() => ({}))
-        throw new Error(err.error || 'Failed to create portal client')
+      //
+      // Portal invite requires requireAdmin server-side. The company and
+      // contact rows above are the core value of this modal and only
+      // require Team Member — that's a real, valid CRM record either way,
+      // so a non-admin caller skips this step entirely rather than
+      // attempting a call that can only 403. If somehow reached anyway
+      // (e.g. a stale client-side session), a 403 here is reported
+      // distinctly below instead of a generic "failed to create client"
+      // that would wrongly imply nothing was saved.
+      let portalInvited = false
+      let portalForbidden = false
+      if (canInviteToPortal) {
+        const inviteRes = await fetch('/api/portal-clients/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: `${firstName} ${lastName}`,
+            email,
+            company: companyName,
+            companyId: resolvedCompanyId,
+            role: 'Viewer',
+            services,
+          }),
+        })
+        if (!inviteRes.ok) {
+          if (inviteRes.status === 403) {
+            portalForbidden = true
+          } else {
+            const err = await inviteRes.json().catch(() => ({}))
+            throw new Error(err.error || 'Failed to create portal client')
+          }
+        } else {
+          portalInvited = true
+        }
       }
 
       // AUDIT.md #181 — SERVICES is the portal-facing taxonomy, not the
@@ -150,7 +179,15 @@ export default function NewClientModal({ open, onClose }: Props) {
         toast(err.error || 'Client created, but the delivery workflow could not be started', 'error')
       }
 
-      toast('Client created successfully', 'success')
+      if (portalInvited) {
+        toast('Client created successfully', 'success')
+      } else if (portalForbidden) {
+        toast('Company and contact created, but you don’t have permission to also set up portal access — ask an admin to invite them', 'error')
+      } else if (!canInviteToPortal) {
+        toast('Client created — ask an admin to invite them to the portal', 'success')
+      } else {
+        toast('Client created successfully', 'success')
+      }
       handleClose()
       router.refresh()
     } catch (err) {
@@ -266,6 +303,14 @@ export default function NewClientModal({ open, onClose }: Props) {
                   )
                 })}
               </div>
+              {!canInviteToPortal && (
+                <div className="flex items-start gap-2 mt-3 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200">
+                  <ShieldAlert size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700">
+                    The company and contact will be created, but only an admin can invite the client to the portal. Ask an admin to send the invite afterward.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>

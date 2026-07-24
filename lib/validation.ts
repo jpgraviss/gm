@@ -72,3 +72,4 @@ export const INVOICE_STATUSES = ['Pending', 'Sent', 'Paid', 'Overdue', 'Cancelle
 export const PROJECT_STATUSES = ['Not Started', 'In Progress', 'Awaiting Client', 'Completed', 'Launched', 'In Maintenance'] as const
 export const TASK_PRIORITIES = ['High', 'Medium', 'Low'] as const
 export const TICKET_STATUSES = ['Open', 'In Progress', 'Waiting', 'Resolved', 'Closed'] as const
+export const RENEWAL_STATUSES = ['Upcoming', 'In Progress', 'Renewed', 'Churned'] as const

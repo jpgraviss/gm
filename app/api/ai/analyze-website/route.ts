@@ -44,7 +44,7 @@ export const POST = withErrorHandler('ai/analyze-website POST', async (req) => {
     system: 'You are a business analyst. Analyze real website content and return ONLY valid JSON, no markdown, no commentary.',
     messages: [{
       role: 'user',
-      content: `Analyze this website's actual content and return a JSON object with:\n{\n  "industry": one of ${JSON.stringify(INDUSTRIES)},\n  "description": a 2-3 sentence company description grounded in the content below,\n  "size": one of "1-10", "11-50", "51-200", "201-500", "500+" (best estimate from the content; if there's no real signal, use "1-10")\n}\n\nWebsite URL: ${url.toString()}\nContent:\n${textContent}`,
+      content: `Analyze this website's actual content and return a JSON object with:\n{\n  "industry": one of ${JSON.stringify(INDUSTRIES)},\n  "description": a 2-3 sentence company description grounded in the content below,\n  "size": one of "1-10", "11-50", "51-200", "201-500", "501-1000", "1001-5000", "5001-10000", "10001+" (best estimate from the content; if there's no real signal, use "1-10")\n}\n\nWebsite URL: ${url.toString()}\nContent:\n${textContent}`,
     }],
     maxTokens: 400,
     fast: true,

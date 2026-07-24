@@ -2,13 +2,18 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
-import { generateProposal, buildIntakeTextFromSubmission } from '@/lib/proposal-generator'
+import { generateProposal, buildIntakeTextFromSubmission, parsePriceLabel } from '@/lib/proposal-generator'
 
 interface GenerateBody {
   submissionId?: string
   intakeText?: string
   clientName?: string
 }
+
+// AUDIT — the AI draft (up to 3 provider tiers) + headless Chromium PDF
+// render can take a while; declaring this explicitly avoids the platform's
+// undeclared default cutting the request off mid-render with no response.
+export const maxDuration = 180
 
 export const POST = withErrorHandler('proposals/generate POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
@@ -75,7 +80,7 @@ export const POST = withErrorHandler('proposals/generate POST', async (req) => {
   }
 
   const recommended = result.draft.options.find(o => o.recommended) ?? result.draft.options[0]
-  const value = Number(String(recommended?.priceLabel ?? '').replace(/[^0-9.]/g, '')) || 0
+  const value = parsePriceLabel(recommended?.priceLabel)
   const today = new Date().toISOString().split('T')[0]
 
   const { data: saved, error: insertErr } = await db

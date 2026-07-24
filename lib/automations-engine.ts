@@ -596,21 +596,35 @@ async function executeAction(
     }
 
     case 'Generate Proposal': {
-      // Only meaningful off a Form Submitted trigger — the intake is
-      // whatever fields that specific form actually collected (every
-      // client's intake form is custom-built, no fixed schema), so this
-      // reads the form's own field labels rather than assuming any.
+      // AUDIT — every early `break` below (except the 2 explicitly marked
+      // "not applicable") used to make a genuine failure (AI generation
+      // erroring, the PDF upload failing, or — previously not even
+      // checked — the DB insert failing) look identical to a real success
+      // in the automation's Runs tab, since executeWorkflow only marks a
+      // step 'failed' on a THROWN error, not a normal return. Throwing
+      // now means a broken run (e.g. Chromium failing to launch) is
+      // actually visible instead of silently reporting success forever.
+
+      // Not a Form Submitted trigger, or a public/spoofable trigger — this
+      // is the single most expensive action in the engine (a real AI API
+      // call, a headless Chromium render, a storage upload, a DB insert),
+      // so it gets the same public-source guard #46 gave Rotate Contact
+      // Owner: anyone who knows a form's public slug could otherwise spam
+      // submissions to burn AI-provider spend and flood the CRM with junk
+      // Draft proposals, fully unauthenticated.
       const formId = context.formId as string | undefined
+      if (!formId) break // not applicable — this automation isn't form-triggered
+      if (context._publicSource) break // not applicable — refuse to run from a public, unauthenticated submission
+
       const data = (context.data as Record<string, string | number | boolean>) ?? {}
-      if (!formId) break
 
       const { data: formRow } = await db.from('forms').select('name, fields').eq('id', formId).maybeSingle()
-      if (!formRow) break
+      if (!formRow) throw new Error(`Generate Proposal: form ${formId} not found`)
 
       const fields = (formRow.fields ?? []) as { name: string; label: string; mapsTo?: string }[]
-      const { buildIntakeTextFromSubmission, generateProposal } = await import('@/lib/proposal-generator')
+      const { buildIntakeTextFromSubmission, generateProposal, parsePriceLabel } = await import('@/lib/proposal-generator')
       const intakeText = buildIntakeTextFromSubmission(fields, data)
-      if (!intakeText.trim()) break
+      if (!intakeText.trim()) break // not applicable — submission had no usable fields to draft from
 
       let clientName = ''
       for (const f of fields) {
@@ -625,25 +639,16 @@ async function executeAction(
       }
       if (!clientName) clientName = company || (formRow.name as string)
 
-      let result
-      try {
-        result = await generateProposal({ intakeText, clientName })
-      } catch (err) {
-        console.error('[automations] Generate Proposal: generation failed', err)
-        break
-      }
+      const result = await generateProposal({ intakeText, clientName })
 
       const pdfPath = `${clientName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}/${uid()}.pdf`
       const { error: uploadErr } = await db.storage.from('proposal-pdfs').upload(pdfPath, result.pdf, { contentType: 'application/pdf' })
-      if (uploadErr) {
-        console.error('[automations] Generate Proposal: PDF upload failed', uploadErr)
-        break
-      }
+      if (uploadErr) throw new Error(`Generate Proposal: PDF upload failed — ${String(uploadErr)}`)
 
       const recommended = result.draft.options.find(o => o.recommended) ?? result.draft.options[0]
-      const value = Number(String(recommended?.priceLabel ?? '').replace(/[^0-9.]/g, '')) || 0
+      const value = parsePriceLabel(recommended?.priceLabel)
 
-      await db.from('proposals').insert({
+      const { error: insertErr } = await db.from('proposals').insert({
         id: `prop-auto-${uid()}`,
         company: clientName,
         status: 'Draft',
@@ -656,6 +661,7 @@ async function executeAction(
         generation_notes: result.notes || (result.source === 'template' ? 'Generated without an AI provider — placeholder draft, needs manual completion.' : ''),
         created_date: today,
       })
+      if (insertErr) throw new Error(`Generate Proposal: failed to save proposal — ${insertErr.message}`)
       break
     }
 

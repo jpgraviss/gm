@@ -33,6 +33,8 @@ export const GET = withErrorHandler('auth/health GET', async () => {
       CRON_SECRET: present(process.env.CRON_SECRET),
       RESEND_API_KEY: present(process.env.RESEND_API_KEY),
       GROQ_API_KEY: present(process.env.GROQ_API_KEY),
+      GEMINI_API_KEY: present(process.env.GEMINI_API_KEY),
+      CEREBRAS_API_KEY: present(process.env.CEREBRAS_API_KEY),
       OLLAMA_URL: process.env.OLLAMA_URL || '(default: http://localhost:11434)',
     },
     clientIdMatch:

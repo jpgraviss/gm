@@ -97,7 +97,17 @@ export default function AuditsPage() {
       })
       if (!res.ok) throw new Error('Audit failed')
       const result = await res.json()
-      toast(`Audit complete — Score: ${result.overallScore}/100`, 'success')
+      // AUDIT — POST /api/ai/audit returns HTTP 200 with status: 'failed'
+      // and overallScore: null when no AI provider was reachable for any
+      // section (the intentional fix so a fabricated 0/F never displays
+      // as real) — but this toast only checked res.ok, so the user saw
+      // "Audit complete — Score: null/100" as a success message,
+      // contradicting the whole point of that fix.
+      if (result.status === 'failed' || result.overallScore === null) {
+        toast('Audit could not complete — no AI provider was reachable. Please retry.', 'error')
+      } else {
+        toast(`Audit complete — Score: ${result.overallScore}/100`, 'success')
+      }
       setShowNew(false)
       setUrl('')
       setCompanyName('')

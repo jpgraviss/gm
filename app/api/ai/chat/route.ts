@@ -843,7 +843,7 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
       }
 
       if (result.source === 'template') {
-        return 'No AI provider is configured, so I could not draft a real proposal — set GROQ_API_KEY to enable this.'
+        return 'No AI provider is reachable right now, so I could not draft a real proposal — check that at least one of GROQ_API_KEY, GEMINI_API_KEY, or CEREBRAS_API_KEY is set and working.'
       }
 
       const pdfPath = `${company.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`
@@ -852,8 +852,9 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
         return `Drafted the proposal but failed to save the PDF: ${String(uploadErr)}`
       }
 
+      const { parsePriceLabel } = await import('@/lib/proposal-generator')
       const recommended = result.draft.options.find(o => o.recommended) ?? result.draft.options[0]
-      const value = Number(String(recommended?.priceLabel ?? '').replace(/[^0-9.]/g, '')) || 0
+      const value = parsePriceLabel(recommended?.priceLabel)
       const today = new Date().toISOString().split('T')[0]
 
       const { data: saved, error: insertErr } = await db
@@ -964,13 +965,20 @@ Guidelines:
         maxTokens: 4096,
         timeoutMs: 60_000,
         feature: 'ai_assistant_chat',
+        // AUDIT — the loop's own WALL_CLOCK_BUDGET_MS check only ran
+        // between iterations, but a single chatCompletion() call can try
+        // up to 4 providers sequentially, each with its own full
+        // timeoutMs — one call could internally run far longer than the
+        // budget suggested. deadlineAt lets chatCompletion() itself stop
+        // trying further tiers once the loop's real budget is exhausted.
+        deadlineAt: loopStartedAt + WALL_CLOCK_BUDGET_MS,
       })
 
       source = result.source
 
       if (result.source === 'none') {
         return NextResponse.json({
-          reply: 'AI is not configured. Please set GROQ_API_KEY in your environment variables.',
+          reply: 'No AI provider is reachable right now. Check that at least one of GROQ_API_KEY, GEMINI_API_KEY, or CEREBRAS_API_KEY is set and working.',
           source: 'error',
         })
       }
@@ -991,7 +999,7 @@ Guidelines:
       const toolResultMessages: AiMessage[] = []
       for (const tc of result.toolCalls) {
         const toolOutput = await executeTool(tc.name, tc.args)
-        toolResultMessages.push(buildToolResultMessage(tc.id, toolOutput))
+        toolResultMessages.push(buildToolResultMessage(tc.id, toolOutput, tc.name))
       }
 
       currentMessages = [

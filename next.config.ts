@@ -8,9 +8,16 @@ const nextConfig: NextConfig = {
     // at render time, not a static import, so Next's tracer can't discover
     // them on its own — every route that can reach the proposal-generation
     // pipeline needs them explicitly included in its serverless bundle.
+    // AUDIT — this list previously missed /api/ai/chat (the AI Assistant's
+    // write_proposal tool calls generateProposal() too) and /api/cron
+    // (Generate Proposal automations resuming from a paused Wait step run
+    // through the cron route) — both would ENOENT on the font read in
+    // production despite working fine in this dev sandbox.
     '/api/proposals/generate': ['./lib/proposal-template/fonts/**/*'],
     '/api/forms/public/[slug]': ['./lib/proposal-template/fonts/**/*'],
     '/api/forms/public/funnel-submit': ['./lib/proposal-template/fonts/**/*'],
+    '/api/ai/chat': ['./lib/proposal-template/fonts/**/*'],
+    '/api/cron': ['./lib/proposal-template/fonts/**/*'],
   },
   experimental: {
     turbopackUseSystemTlsCerts: true,

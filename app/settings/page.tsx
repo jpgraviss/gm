@@ -747,7 +747,18 @@ export default function SettingsPage() {
         {/* Top tab bar */}
         <div className="bg-white rounded-xl border border-gray-200 mb-5 overflow-x-auto">
           <div className="flex min-w-max">
-            {tabs.filter(tab => (tab !== 'Navigation' && tab !== 'Team') || user?.isAdmin).map(tab => (
+            {tabs.filter(tab => {
+              if (tab === 'Navigation' || tab === 'Team') return !!user?.isAdmin
+              // AUDIT — the API route (GET /api/ai/usage) is already
+              // correctly gated to Leadership/Super Admin, but the tab
+              // itself was visible to everyone, so a non-Leadership user
+              // could see the tab exists and click into a generic load
+              // error — needlessly revealing the feature to unauthorized
+              // users instead of just not showing it, unlike every other
+              // admin-only tab in this file.
+              if (tab === 'AI Usage') return user?.role === 'Leadership' || user?.role === 'Super Admin'
+              return true
+            }).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -2282,7 +2293,7 @@ export default function SettingsPage() {
                     <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="font-semibold">No AI provider is reachable</p>
-                      <p className="text-amber-700 mt-0.5">Every recent AI call fell through to the template fallback. Confirm GROQ_API_KEY is set in this environment.</p>
+                      <p className="text-amber-700 mt-0.5">Every recent AI call fell through to the template fallback. Confirm at least one of GROQ_API_KEY, GEMINI_API_KEY, or CEREBRAS_API_KEY is set and working in this environment.</p>
                     </div>
                   </div>
                 )}

@@ -297,7 +297,7 @@ export function buildProposalHtml(d: ProposalDraft): string {
     <div class="section avoid-break">
       <h2 class="sec"><span class="num">${num()}</span>Next Steps</h2>
       <ul class="clean">
-        <li>Select your option${d.options.length > 1 ? ` (${d.options.map(o => o.name).join(' or ')})` : ''}.</li>
+        <li>Select your option${d.options.length > 1 ? ` (${d.options.map(o => esc(o.name)).join(' or ')})` : ''}.</li>
         <li>Approve and sign this proposal.</li>
         <li>Submit payment per the terms above to reserve your project start date.</li>
         <li>Schedule the kickoff call.</li>

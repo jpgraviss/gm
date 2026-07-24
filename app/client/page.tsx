@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatCurrency, projectStatusColors, invoiceStatusColors, formatDate } from '@/lib/utils'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
+import type { Invoice } from '@/lib/types'
 import StatusBadge from '@/components/ui/StatusBadge'
 import {
   Globe, CheckCircle, FolderKanban, FileText, MessageSquare,
@@ -76,8 +78,7 @@ export default function ClientPortalPage() {
   const [project, setProject] = useState<any>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [contract, setContract] = useState<any>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [clientInvoices, setClientInvoices] = useState<any[]>([])
+  const [clientInvoices, setClientInvoices] = useState<Invoice[]>([])
   const [ticketSubject, setTicketSubject] = useState('')
   const [ticketMessage, setTicketMessage] = useState('')
   const [ticketSubmitting, setTicketSubmitting] = useState(false)
@@ -116,7 +117,11 @@ export default function ClientPortalPage() {
     Promise.all([
       fetch(`/api/projects?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setProject(d[0] ?? null) }).catch(() => toast('Failed to load project data', 'error')),
       fetch(`/api/contracts?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setContract(d[0] ?? null) }).catch(() => toast('Failed to load contract data', 'error')),
-      fetch(`/api/invoices?company=${q}`).then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setClientInvoices(d) }).catch(() => toast('Failed to load invoices', 'error')),
+      // AUDIT — /api/invoices is cursor-paginated at 100/page; a raw
+      // fetch() silently truncated a long-tenured client's billing view
+      // (and the totals computed from it) to only their newest 100
+      // invoices, same bug class as #206/#212.
+      fetchAllPages<Invoice>(`/api/invoices?company=${q}`).then(d => setClientInvoices(d)).catch(() => toast('Failed to load invoices', 'error')),
       fetch(`/api/files?company=${q}`).then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => toast('Failed to load files', 'error')),
     ]).finally(() => setLoading(false))
   }, [company])
@@ -148,9 +153,11 @@ export default function ClientPortalPage() {
   useEffect(() => {
     if (activeTab !== 'tickets' || !company) return
     setTicketsLoading(true)
-    fetch(`/api/tickets?company=${encodeURIComponent(company)}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setExistingTickets(data) })
+    // AUDIT — /api/tickets is cursor-paginated at 100/page; a raw fetch()
+    // silently truncated a client with a long support history to only
+    // their newest 100 tickets, same bug class as #206/#212.
+    fetchAllPages<ClientTicket>(`/api/tickets?company=${encodeURIComponent(company)}`)
+      .then(data => setExistingTickets(data))
       .catch(() => {/* non-fatal */})
       .finally(() => setTicketsLoading(false))
   }, [activeTab, company])
@@ -769,9 +776,8 @@ export default function ClientPortalPage() {
                               // went wrong.
                               if (res.ok) {
                                 setTicketSuccess(true)
-                                fetch(`/api/tickets?company=${encodeURIComponent(company)}`)
-                                  .then(r => r.ok ? r.json() : [])
-                                  .then(data => { if (Array.isArray(data)) setExistingTickets(data) })
+                                fetchAllPages<ClientTicket>(`/api/tickets?company=${encodeURIComponent(company)}`)
+                                  .then(data => setExistingTickets(data))
                                   .catch(() => {})
                               } else {
                                 toast('Failed to submit your request. Please try again.', 'error')

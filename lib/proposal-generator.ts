@@ -150,11 +150,16 @@ function buildTemplateFallbackDraft(opts: GenerateProposalOptions): ProposalDraf
 }
 
 export async function generateProposal(opts: GenerateProposalOptions): Promise<GenerateProposalResult> {
+  // AUDIT — with Groq/Gemini/Cerebras all live, a 90s per-tier timeout
+  // meant a single call could take up to ~270s before Chromium even
+  // launches, well past any reasonable serverless function limit. 35s per
+  // tier still gives a real model plenty of room while keeping the worst
+  // case (3 tiers + PDF render) comfortably inside maxDuration below.
   const ai = await chatCompletion({
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: buildUserPrompt(opts) }],
     maxTokens: 4000,
-    timeoutMs: 90_000,
+    timeoutMs: 35_000,
     feature: 'proposal_generator',
   })
 
@@ -181,6 +186,26 @@ export async function generateProposal(opts: GenerateProposalOptions): Promise<G
   const pdf = await renderProposalPdf(html, footerTemplate)
 
   return { draft, pdf, source, notes }
+}
+
+/**
+ * Extracts a usable number from an AI-drafted price label for the
+ * proposals.value column. Every call site used to strip all non-digit
+ * characters (`replace(/[^0-9.]/g, '')`), which mangles a range like
+ * "$5,000-$8,000" into "50005000" and an abbreviation like "$1.5M" into
+ * "1.5" (dropping 6 orders of magnitude) — both plausible AI outputs
+ * despite the house-style rule against dashes/ranges, since AI compliance
+ * with a style rule isn't guaranteed. Takes the first digit-group
+ * (reasonable "starting from" reading for a range) and applies a K/M/B
+ * suffix if present.
+ */
+export function parsePriceLabel(priceLabel: string | undefined): number {
+  const match = String(priceLabel ?? '').match(/([\d,]+(?:\.\d+)?)\s*([kKmMbB])?/)
+  if (!match) return 0
+  const base = Number(match[1].replace(/,/g, '')) || 0
+  const suffix = match[2]?.toLowerCase()
+  const multiplier = suffix === 'k' ? 1_000 : suffix === 'm' ? 1_000_000 : suffix === 'b' ? 1_000_000_000 : 1
+  return base * multiplier
 }
 
 /**

@@ -26,6 +26,9 @@ function geminiKey(): string | undefined {
 function geminiModel(): string {
   return process.env.GEMINI_MODEL || 'gemini-2.0-flash'
 }
+function geminiFastModel(): string {
+  return process.env.GEMINI_MODEL_FAST || 'gemini-2.0-flash-lite'
+}
 function cerebrasKey(): string | undefined {
   return process.env.CEREBRAS_API_KEY
 }
@@ -43,6 +46,12 @@ export interface AiMessage {
   content: string | null
   tool_calls?: AiToolCall[]
   tool_call_id?: string
+  // The function name a 'tool' message is responding to. OpenAI/Groq/
+  // Cerebras don't require this (they key off tool_call_id), but Gemini's
+  // OpenAI-compat layer rejects a tool-result message that omits it
+  // ("function_response.name empty") — always populating it is harmless
+  // for every other provider and required for this one.
+  name?: string
 }
 
 export interface AiToolCall {
@@ -82,6 +91,14 @@ interface ChatOpts {
   // API this app can call, so this local log is the only way to see real
   // call volume/provider split.
   feature?: string
+  // Absolute timestamp (Date.now()-comparable) after which chatCompletion
+  // should stop trying further provider tiers and fall straight to the
+  // template. Without this, a caller's own wall-clock budget (e.g.
+  // app/api/ai/chat/route.ts's agentic loop) only gets checked BETWEEN
+  // chatCompletion() calls — but a single call can itself try up to 4
+  // providers sequentially, each with its own full timeoutMs, so one call
+  // could internally run far longer than any per-call timeout suggests.
+  deadlineAt?: number
 }
 
 // ── Format converters ───────────────────────────────────────────────────────
@@ -134,16 +151,21 @@ async function callProvider(
   tools: OpenAiToolDef[] | undefined,
   maxTokens: number,
   timeoutMs: number,
-): Promise<AiResponse & { raw: OpenAiResponse }> {
+  // Cerebras' chat completions endpoint is strict and rejects `max_tokens`
+  // outright — it wants `max_completion_tokens`. Every other provider here
+  // accepts the OpenAI-standard `max_tokens`.
+  tokenParam: 'max_tokens' | 'max_completion_tokens' = 'max_tokens',
+): Promise<Omit<AiResponse, 'source'> & { raw: OpenAiResponse }> {
   const body: Record<string, unknown> = {
     model,
     messages: msgs.map(m => {
       const out: Record<string, unknown> = { role: m.role, content: m.content }
       if (m.tool_calls) out.tool_calls = m.tool_calls
       if (m.tool_call_id) out.tool_call_id = m.tool_call_id
+      if (m.name) out.name = m.name
       return out
     }),
-    max_tokens: maxTokens,
+    [tokenParam]: maxTokens,
   }
   if (tools?.length) body.tools = tools
 
@@ -174,7 +196,7 @@ async function callProvider(
     : choice.finish_reason === 'length' ? 'length' as const
     : 'stop' as const
 
-  return { text, toolCalls, finishReason, source: 'ollama', raw: data }
+  return { text, toolCalls, finishReason, raw: data }
 }
 
 // ── Usage logging ────────────────────────────────────────────────────────
@@ -218,9 +240,19 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
   const model = opts.fast ? groqFastModel() : groqChatModel()
   const feature = opts.feature ?? 'unlabeled'
   const startedAt = Date.now()
+  const deadlineAt = opts.deadlineAt
+
+  const anyConfigured = !!(process.env.OLLAMA_URL || groqKey() || geminiKey() || cerebrasKey())
+
+  // Past the deadline: skip straight to the template rather than starting
+  // (or continuing) a chain of provider attempts a caller's own wall-clock
+  // budget has no way to interrupt once started.
+  function pastDeadline(): boolean {
+    return deadlineAt !== undefined && Date.now() >= deadlineAt
+  }
 
   // 1. Try Ollama (only if explicitly configured — localhost won't work in production)
-  if (process.env.OLLAMA_URL) {
+  if (process.env.OLLAMA_URL && !pastDeadline()) {
     try {
       const result = await callProvider(
         `${ollamaUrl()}/v1/chat/completions`,
@@ -233,14 +265,16 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
       )
       logUsage({ source: 'ollama', feature, model: ollamaModel(), usage: result.raw.usage ?? null, durationMs: Date.now() - startedAt, success: true })
       return { ...result, source: 'ollama' }
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      logUsage({ source: 'ollama', feature, model: ollamaModel(), usage: null, durationMs: Date.now() - startedAt, success: false, errorMessage: message })
       // Ollama unavailable, fall through to Groq
     }
   }
 
   // 2. Try Groq
   const groqApiKey = groqKey()
-  if (groqApiKey) {
+  if (groqApiKey && !pastDeadline()) {
     try {
       const result = await callProvider(
         'https://api.groq.com/openai/v1/chat/completions',
@@ -262,29 +296,30 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
 
   // 3. Try Gemini (free tier, OpenAI-compatible endpoint)
   const geminiApiKey = geminiKey()
-  if (geminiApiKey) {
+  if (geminiApiKey && !pastDeadline()) {
+    const geminiModelToUse = opts.fast ? geminiFastModel() : geminiModel()
     try {
       const result = await callProvider(
         'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
         { Authorization: `Bearer ${geminiApiKey}` },
-        geminiModel(),
+        geminiModelToUse,
         msgs,
         openAiTools,
         maxTokens,
         timeoutMs,
       )
-      logUsage({ source: 'gemini', feature, model: geminiModel(), usage: result.raw.usage ?? null, durationMs: Date.now() - startedAt, success: true })
+      logUsage({ source: 'gemini', feature, model: geminiModelToUse, usage: result.raw.usage ?? null, durationMs: Date.now() - startedAt, success: true })
       return { ...result, source: 'gemini' }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error('[ai-client] Gemini call failed, falling through:', err)
-      logUsage({ source: 'gemini', feature, model: geminiModel(), usage: null, durationMs: Date.now() - startedAt, success: false, errorMessage: message })
+      logUsage({ source: 'gemini', feature, model: geminiModelToUse, usage: null, durationMs: Date.now() - startedAt, success: false, errorMessage: message })
     }
   }
 
   // 4. Try Cerebras (free tier, OpenAI-compatible endpoint)
   const cerebrasApiKey = cerebrasKey()
-  if (cerebrasApiKey) {
+  if (cerebrasApiKey && !pastDeadline()) {
     const cerebrasModel = opts.fast ? cerebrasFastModel() : cerebrasChatModel()
     try {
       const result = await callProvider(
@@ -295,6 +330,7 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
         openAiTools,
         maxTokens,
         timeoutMs,
+        'max_completion_tokens',
       )
       logUsage({ source: 'cerebras', feature, model: cerebrasModel, usage: result.raw.usage ?? null, durationMs: Date.now() - startedAt, success: true })
       return { ...result, source: 'cerebras' }
@@ -305,8 +341,9 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
     }
   }
 
-  // 5. No provider configured or reachable
-  const noneReason = groqApiKey || geminiApiKey || cerebrasApiKey ? undefined : 'No AI provider configured'
+  // 5. No provider configured, none reachable, or the deadline was hit
+  //    before any tier got a chance to run.
+  const noneReason = !anyConfigured ? 'No AI provider configured' : pastDeadline() ? 'Deadline exceeded before a provider succeeded' : undefined
   logUsage({ source: 'none', feature, model: null, usage: null, durationMs: Date.now() - startedAt, success: false, errorMessage: noneReason })
   return {
     text: '',
@@ -316,8 +353,8 @@ export async function chatCompletion(opts: ChatOpts): Promise<AiResponse> {
   }
 }
 
-export function buildToolResultMessage(toolCallId: string, content: string): AiMessage {
-  return { role: 'tool', content, tool_call_id: toolCallId }
+export function buildToolResultMessage(toolCallId: string, content: string, name?: string): AiMessage {
+  return { role: 'tool', content, tool_call_id: toolCallId, name }
 }
 
 export function buildAssistantMessage(

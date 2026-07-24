@@ -8,6 +8,18 @@ import { withErrorHandler } from '@/lib/api-handler'
 
 const CHUNK_SIZE = 50 // Resend allows batches — we throttle to 50 per batch
 
+// AUDIT — this route had no declared maxDuration despite sequentially
+// emailing the full matched audience in chunks of 50; a large-enough
+// audience could outrun the platform's undeclared default, getting
+// hard-killed mid-send with the broadcast stuck at status: 'sending'
+// forever (marketing/page.tsx treats 'sending' as already-sent for
+// re-send purposes, so there's no way to retry from the UI either).
+// Declaring this doesn't fix the "stuck forever" recovery gap for an
+// audience that genuinely exceeds even this budget — that needs a real
+// resume/retry mechanism, tracked as a separate, larger follow-up — but
+// it meaningfully raises the audience size that can complete cleanly.
+export const maxDuration = 300
+
 /**
  * Send a broadcast to its audience. Paginated through the matched contacts,
  * individual email sends (not Resend Broadcasts API — we want per-contact

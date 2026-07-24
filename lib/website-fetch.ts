@@ -5,11 +5,7 @@
 import dns from 'dns/promises'
 import net from 'net'
 
-function isPrivateOrLoopbackIp(ip: string): boolean {
-  if (net.isIPv6(ip)) {
-    const lower = ip.toLowerCase()
-    return lower === '::1' || lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')
-  }
+function isPrivateIPv4(ip: string): boolean {
   const parts = ip.split('.').map(Number)
   if (parts.length !== 4 || parts.some(n => Number.isNaN(n))) return true
   const [a, b] = parts
@@ -18,8 +14,26 @@ function isPrivateOrLoopbackIp(ip: string): boolean {
   if (a === 172 && b >= 16 && b <= 31) return true // 172.16.0.0/12
   if (a === 192 && b === 168) return true // 192.168.0.0/16
   if (a === 169 && b === 254) return true // link-local / cloud metadata
+  if (a === 100 && b >= 64 && b <= 127) return true // CGNAT
   if (a === 0) return true
   return false
+}
+
+function isPrivateOrLoopbackIp(ip: string): boolean {
+  if (net.isIPv6(ip)) {
+    const lower = ip.toLowerCase()
+    if (lower === '::1') return true // loopback
+    if (lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')) return true // link-local / unique-local
+    // AUDIT — IPv4-mapped IPv6 (::ffff:a.b.c.d) was never checked, so a
+    // DNS record pointing at ::ffff:169.254.169.254 (or ::ffff:127.0.0.1)
+    // passed this guard even though most dual-stack network stacks route
+    // it as a plain connection to the embedded IPv4 address — a clean
+    // bypass of every IPv4 private/loopback/metadata check below.
+    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+    if (mapped) return isPrivateIPv4(mapped[1])
+    return false
+  }
+  return isPrivateIPv4(ip)
 }
 
 export async function isSafeToFetch(url: URL): Promise<boolean> {

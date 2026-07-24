@@ -51,7 +51,30 @@ export const PATCH = withErrorHandler('tickets/[id] PATCH', async (req: NextRequ
   if (body.tags !== undefined)       update.tags = body.tags
   if (body.messages !== undefined) {
     if (staffCaller) {
-      update.messages = body.messages
+      // Previously a blind full-array overwrite with no concurrency
+      // protection — two staff members (or two browser tabs) replying to
+      // the same ticket within the same round trip could have one reply
+      // silently overwritten and permanently lost. Staff only ever append
+      // (see app/tickets/page.tsx's sendReply — always `[...t.messages,
+      // newMsg]`, never edits existing message content), so the same
+      // append-only prefix-check pattern the portal-client branch below
+      // already uses transfers directly, minus the isInternal
+      // filter/stripping (staff already see and can add internal notes).
+      const { data: currentFull } = await db.from('tickets').select('messages').eq('id', id).single()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const existing = (currentFull?.messages ?? []) as any[]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const incoming = (body.messages ?? []) as any[]
+
+      const prefixUnchanged =
+        incoming.length >= existing.length &&
+        existing.every((m, i) => JSON.stringify(m) === JSON.stringify(incoming[i]))
+
+      if (!prefixUnchanged) {
+        return NextResponse.json({ error: 'Cannot modify or remove existing messages' }, { status: 403 })
+      }
+
+      update.messages = [...existing, ...incoming.slice(existing.length)]
     } else {
       // The client-supplied `messages` field is a full-array replace with
       // no server-side check it's actually an append — previously trusted

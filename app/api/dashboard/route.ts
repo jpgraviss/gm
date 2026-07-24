@@ -24,11 +24,16 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
   const unit = user.unit
   const db = createServiceClient()
 
+  // Capped at 5000 (not the implicit 1000-row Supabase default) — this
+  // route aggregates every deal/invoice/contract/renewal for dashboard KPIs
+  // (pipelineValue, winRate, totalCollected, overdueInvoices, etc.), not a
+  // paginated list, so it needs an explicit generous cap rather than relying
+  // on the implicit default. Same convention as app/api/reports/attribution.
   const [dealsRes, invoicesRes, contractsRes, renewalsRes, revenueRes, activityRes, automationsRes, activeClientsRes] = await Promise.all([
-    db.from('deals').select('id,stage,value,company,assigned_rep,last_activity,service_type,close_date,created_at').order('created_at', { ascending: false }),
-    db.from('invoices').select('id,company,amount,status,due_date,issued_date,paid_date,service_type,contract_id,created_at').order('created_at', { ascending: false }),
-    db.from('contracts').select('id,company,status,value,renewal_date,service_type,assigned_rep,billing_structure,created_at').order('created_at', { ascending: false }),
-    db.from('renewals').select('id,company,status,days_until_expiry,expiration_date').order('expiration_date', { ascending: true }),
+    db.from('deals').select('id,stage,value,company,assigned_rep,last_activity,service_type,close_date,created_at').order('created_at', { ascending: false }).limit(5000),
+    db.from('invoices').select('id,company,amount,status,due_date,issued_date,paid_date,service_type,contract_id,created_at').order('created_at', { ascending: false }).limit(5000),
+    db.from('contracts').select('id,company,status,value,renewal_date,service_type,assigned_rep,billing_structure,created_at').order('created_at', { ascending: false }).limit(5000),
+    db.from('renewals').select('id,company,status,days_until_expiry,expiration_date').order('expiration_date', { ascending: true }).limit(5000),
     db.from('revenue_months').select('*').order('month', { ascending: true }),
     db.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(20),
     db.from('automations').select('id,name,status,runs').order('created_at', { ascending: false }).limit(10),

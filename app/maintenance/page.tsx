@@ -710,7 +710,13 @@ export default function MaintenancePage() {
       const fresh = await fetchAllPages<MaintenanceRecord>('/api/maintenance')
       const match = fresh.find(r => r.id === id)
       if (match) {
-        setRecords(prev => prev.map(r => r.id === id ? match : r))
+        // AUDIT — a failed DELETE calls this too, and the delete handler
+        // already optimistically filtered the id out of `records` before
+        // the failure was caught, so it's no longer in `prev` for .map()
+        // to find and replace — the server-confirmed-still-existing record
+        // was silently never restored, contradicting the failure toast.
+        // Re-insert when it's missing instead of assuming it's present.
+        setRecords(prev => prev.some(r => r.id === id) ? prev.map(r => r.id === id ? match : r) : [match, ...prev])
         setSelected(prev => prev?.id === id ? match : prev)
       } else {
         // No longer exists server-side (e.g. it really was deleted).

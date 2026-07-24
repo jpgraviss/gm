@@ -336,6 +336,33 @@ export default function TicketsPage() {
     }
   }, [searchParams, localTickets, selected])
 
+  // AUDIT — reverting to a `previous` closure snapshot on a failed PATCH is
+  // itself a race: if a first edit's failure arrives after a second edit to
+  // the same ticket already succeeded, reverting to the first's stale
+  // snapshot would clobber the second's (already-persisted) result in the
+  // UI. Matches the AUDIT #294 fix pattern used in app/maintenance/page.tsx
+  // and app/tasks/page.tsx — refetch the affected ticket from the server
+  // instead of trusting a pre-edit snapshot. No single-ticket GET endpoint
+  // exists, so fall back to the same paginated list fetch used on load, but
+  // only merge the ONE affected ticket's fresh server state back into local
+  // state.
+  async function refetchTicket(id: string) {
+    try {
+      const fresh = await fetchAllPages<Ticket>('/api/tickets')
+      const match = fresh.find(t => t.id === id)
+      if (match) {
+        setLocalTickets(prev => prev.map(t => t.id === id ? match : t))
+        setSelected(prev => prev?.id === id ? match : prev)
+      } else {
+        setLocalTickets(prev => prev.filter(t => t.id !== id))
+        setSelected(prev => prev?.id === id ? null : prev)
+      }
+    } catch {
+      // Best-effort reconciliation; if this also fails leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }
+
   function sendReply(id: string, body: string, isInternal: boolean) {
     const now = new Date()
     const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
@@ -365,7 +392,12 @@ export default function TicketsPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: newMessages }),
-      }).catch(() => toast('Failed to send reply', 'error'))
+      }).then(res => {
+        if (!res.ok) throw new Error('Failed')
+      }).catch(() => {
+        toast('Failed to send reply', 'error')
+        refetchTicket(id)
+      })
     }
     setSelected(prev => prev?.id === id ? { ...prev, messages: [...prev.messages, newMsg] } : prev)
   }
@@ -392,11 +424,15 @@ export default function TicketsPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
-    }).catch(() => toast('Failed to update ticket status', 'error'))
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      toast('Failed to update ticket status', 'error')
+      refetchTicket(id)
+    })
   }
 
   async function handleNewTicket(data: NewTicketFormData) {
-    const today = new Date().toISOString().split('T')[0]
     const timestamp = new Date().toLocaleString('en-CA', { hour12: false }).replace(',', '').slice(0, 16)
     const payload = {
       subject: data.subject,
@@ -423,16 +459,28 @@ export default function TicketsPage() {
         ...(data.attachments.length > 0 ? { attachments: data.attachments } : {}),
       }] : [],
     }
+    // AUDIT — this never checked res.ok: a non-2xx response's error body
+    // ({error: "..."}) got parsed and pushed into localTickets as if it
+    // were a real created ticket, and the catch block fabricated a
+    // fully client-only ticket with a fake id that was never persisted
+    // (looked created, then silently vanished on the next reload).
+    // Mirrors app/client/page.tsx's portal-client ticket-submit flow
+    // (AUDIT #282): check res.ok, toast on any failure, and never add a
+    // fabricated row to localTickets.
     try {
       const res = await fetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      const saved = await res.json()
-      setLocalTickets(prev => [saved, ...prev])
+      if (!res.ok) {
+        toast('Failed to create ticket', 'error')
+      } else {
+        const saved = await res.json()
+        setLocalTickets(prev => [saved, ...prev])
+      }
     } catch {
-      setLocalTickets(prev => [{ id: `tkt-${Date.now()}`, createdDate: today, updatedDate: today, ...payload } as Ticket, ...prev])
+      toast('Failed to create ticket', 'error')
     }
     setCreatingTicket(false)
   }

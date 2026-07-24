@@ -5,6 +5,7 @@ import Header from '@/components/layout/Header'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { useToast } from '@/components/ui/Toast'
 import { formatCurrency, aiSourceLabel } from '@/lib/utils'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { Wand2, Loader2, X, RefreshCw } from 'lucide-react'
 
 type DateRange = '30D' | '90D' | '12M' | 'Custom'
@@ -157,8 +158,8 @@ export default function MarketingAnalyticsPage() {
   function loadData() {
     setLoading(true)
     Promise.all([
-      fetch('/api/broadcasts').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
-      fetch('/api/forms').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
+      fetchAllPages<Broadcast>('/api/broadcasts'),
+      fetchAllPages<FormDef>('/api/forms'),
     ]).then(([b, f]) => {
       if (Array.isArray(b)) setBroadcasts(b)
       if (Array.isArray(f)) setForms(f)

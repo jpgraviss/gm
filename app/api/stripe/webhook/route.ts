@@ -63,6 +63,27 @@ export const POST = withErrorHandler('stripe/webhook POST', async (req: NextRequ
 
       if (claimed) {
         fireAutomations('invoice_paid', { invoiceId, ...claimed })
+      } else {
+        // AUDIT — the atomic claim above correctly stops a second
+        // completed-session event from double-firing invoice_paid or
+        // clobbering paid_date, but it previously did nothing else at all,
+        // silently swallowing the case where the SECOND event is a real,
+        // separate charge (e.g. a client opening "Pay Now" in two tabs) —
+        // Stripe genuinely charged the card twice with zero record or
+        // alert on the GravHub side. Stripe's own at-least-once delivery
+        // also redelivers the exact same event, which is harmless and
+        // shouldn't alert — distinguish the two by comparing payment
+        // intent ids against what's already stored on the invoice.
+        const { data: existing } = await db
+          .from('invoices')
+          .select('stripe_payment_intent_id')
+          .eq('id', invoiceId)
+          .maybeSingle()
+        if (existing && existing.stripe_payment_intent_id !== paymentIntentId) {
+          console.error(
+            `[stripe/webhook] POSSIBLE DOUBLE CHARGE on invoice ${invoiceId}: already paid via payment_intent ${existing.stripe_payment_intent_id}, but a second checkout.session.completed arrived for payment_intent ${paymentIntentId} (session ${session.id}). Verify in Stripe and refund if this is a genuine duplicate charge.`,
+          )
+        }
       }
     } else {
       console.error('[stripe/webhook] checkout.session.completed with no invoiceId metadata:', session.id)

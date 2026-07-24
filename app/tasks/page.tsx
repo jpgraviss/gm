@@ -652,7 +652,13 @@ export default function TasksPage() {
       const fresh = await fetchAllPages<AppTask>('/api/tasks')
       const match = fresh.find(t => t.id === id)
       if (match) {
-        setTasks(prev => prev.map(t => t.id === id ? match : t))
+        // AUDIT — a failed DELETE calls this too, and deleteTask() already
+        // optimistically filtered the id out of `tasks` before the failure
+        // was caught, so it's no longer in `prev` for .map() to find and
+        // replace — the server-confirmed-still-existing task was silently
+        // never restored, contradicting the "Failed to delete" toast.
+        // Re-insert when it's missing instead of assuming it's present.
+        setTasks(prev => prev.some(t => t.id === id) ? prev.map(t => t.id === id ? match : t) : [match, ...prev])
         setSelectedTask(prev => prev?.id === id ? match : prev)
       } else {
         // No longer exists server-side (e.g. it really was deleted).

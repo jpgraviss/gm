@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/Toast'
 import { formatCurrency } from '@/lib/utils'
 import {
   FileText, TrendingUp, TrendingDown, Eye, Search, Download,
-  Globe, BarChart3, Star, Activity, CheckCircle, RefreshCw,
+  Globe, BarChart3, Star, Activity, CheckCircle, RefreshCw, AlertTriangle,
 } from 'lucide-react'
 
 interface Company {
@@ -50,6 +50,7 @@ interface ClientReport {
     uptimePercent: number
     incidents: number
   }
+  warnings?: string[]
 }
 
 function firstOfMonth(d = new Date()): string {
@@ -249,6 +250,26 @@ export default function ClientReportsPage() {
             )}
           </div>
         </div>
+
+        {/* Warnings — staff-only, never included in the client-facing PDF */}
+        {report && report.warnings && report.warnings.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 print:hidden">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle size={15} className="text-amber-600" />
+              <h3 className="text-sm font-bold text-amber-800">
+                {report.warnings.length} data source{report.warnings.length === 1 ? '' : 's'} failed to load — report may be incomplete
+              </h3>
+            </div>
+            <ul className="list-disc list-inside space-y-0.5">
+              {report.warnings.map((w, i) => (
+                <li key={i} className="text-xs text-amber-700">{w}</li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-amber-600 mt-2">
+              These sections were configured for this client but the live data pull failed — double-check before sending this report.
+            </p>
+          </div>
+        )}
 
         {/* Report preview */}
         {report && (

@@ -388,6 +388,39 @@ export default function TimeTrackingPage() {
     return Object.entries(map).sort(([a], [b]) => b.localeCompare(a))
   }, [weekEntries])
 
+  // AUDIT #294 — reverting to a `previous` closure snapshot on failure is
+  // itself a race: if two edits to the same entry fire back-to-back and
+  // the first request's failure arrives after the second already
+  // succeeded, reverting to the first's stale snapshot would clobber the
+  // second's (already-persisted) result in the UI. There's no
+  // single-entry GET endpoint for time entries, so we fall back to the
+  // same paginated list fetch the page uses on load, but only merge the
+  // ONE affected entry's fresh server state back into local state —
+  // leaving every other entry (including any other edit that's
+  // mid-flight) untouched. Mirrors the fix applied to
+  // app/maintenance/page.tsx and app/tasks/page.tsx.
+  async function refetchEntry(id: string) {
+    try {
+      const fresh = await fetchAllPages<TimeEntry>('/api/time-entries')
+      const match = fresh.find(e => e.id === id)
+      if (match) {
+        // AUDIT — a failed DELETE calls this too, and handleDelete already
+        // optimistically filtered the id out of `entries` before the
+        // failure was caught, so it's no longer in `prev` for .map() to
+        // find and replace — the server-confirmed-still-existing entry was
+        // silently never restored, contradicting the failure toast.
+        // Re-insert when it's missing instead of assuming it's present.
+        setEntries(prev => prev.some(e => e.id === id) ? prev.map(e => e.id === id ? match : e) : [match, ...prev])
+      } else {
+        // No longer exists server-side (e.g. it really was deleted).
+        setEntries(prev => prev.filter(e => e.id !== id))
+      }
+    } catch {
+      // Best-effort reconciliation; if this also fails leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }
+
   async function handleSave(entry: TimeEntry) {
     const isNew = !entries.find(e => e.id === entry.id)
     if (isNew) {
@@ -405,7 +438,6 @@ export default function TimeTrackingPage() {
         toast('Failed to save time entry', 'error')
       }
     } else {
-      const previous = entries.find(e => e.id === entry.id)
       setEntries(prev => prev.map(e => e.id === entry.id ? entry : e))
       try {
         const res = await fetch(`/api/time-entries/${entry.id}`, {
@@ -416,7 +448,7 @@ export default function TimeTrackingPage() {
         if (!res.ok) throw new Error('Failed')
       } catch {
         toast('Failed to update time entry — reverted', 'error')
-        if (previous) setEntries(prev => prev.map(e => e.id === entry.id ? previous : e))
+        await refetchEntry(entry.id)
       }
     }
     setShowLog(false)
@@ -425,14 +457,13 @@ export default function TimeTrackingPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('Delete this time entry?')) return
-    const previous = entries.find(e => e.id === id)
     setEntries(prev => prev.filter(e => e.id !== id))
     try {
       const res = await fetch(`/api/time-entries/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed')
     } catch {
       toast('Failed to delete time entry — restored', 'error')
-      if (previous) setEntries(prev => [previous, ...prev])
+      await refetchEntry(id)
     }
   }
 

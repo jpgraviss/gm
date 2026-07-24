@@ -733,7 +733,13 @@ export default function ProjectDetailPage() {
       const list: AppTask[] = Array.isArray(data) ? data : (data?.data ?? [])
       const match = list.find(t => t.id === taskId)
       if (match) {
-        setTasks(prev => prev.map(t => t.id === taskId ? match : t))
+        // AUDIT — a failed DELETE calls this too, and deleteTask() already
+        // optimistically filtered the id out of `tasks` before the failure
+        // was caught, so it's no longer in `prev` for .map() to find and
+        // replace — the server-confirmed-still-existing task was silently
+        // never restored, contradicting the failure toast. Re-insert when
+        // it's missing instead of assuming it's present.
+        setTasks(prev => prev.some(t => t.id === taskId) ? prev.map(t => t.id === taskId ? match : t) : [match, ...prev])
         setSelectedTask(prev => prev?.id === taskId ? match : prev)
       } else {
         setTasks(prev => prev.filter(t => t.id !== taskId))

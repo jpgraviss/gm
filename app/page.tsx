@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency, contractStatusColors, invoiceStatusColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import type { RevenueMonth } from '@/lib/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
@@ -449,8 +450,8 @@ function ContractorDashboard({ userName }: { userName: string }) {
     const weekEnd = sunday.toISOString().split('T')[0]
 
     Promise.all([
-      fetch('/api/projects').then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch('/api/tasks').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetchAllPages<ContractorProject>('/api/projects').catch(() => []),
+      fetchAllPages<ContractorTask>('/api/tasks').catch(() => []),
       fetch(`/api/time-entries?weekStart=${weekStart}&weekEnd=${weekEnd}&limit=500`).then(r => r.ok ? r.json() : []).catch(() => []),
     ]).then(([p, tk, te]) => {
       if (Array.isArray(p)) setProjects(p)
@@ -769,9 +770,9 @@ function OperationsView() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/projects').then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch('/api/tickets').then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch('/api/tasks').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetchAllPages<ContractorProject>('/api/projects').catch(() => []),
+      fetchAllPages<ContractorTicket>('/api/tickets').catch(() => []),
+      fetchAllPages<ContractorTask>('/api/tasks').catch(() => []),
     ]).then(([p, t, tk]) => {
       if (Array.isArray(p)) setProjects(p)
       if (Array.isArray(t)) setTickets(t)
@@ -981,9 +982,8 @@ function MarketingView() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/broadcasts')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setBroadcasts(data) })
+    fetchAllPages<{ id: string; name: string; subject: string; status: string; totalSent: number; totalOpened: number; totalClicked: number; createdAt: string }>('/api/broadcasts')
+      .then(data => setBroadcasts(data))
       .catch(() => toast('Failed to load marketing data', 'error'))
       .finally(() => setLoading(false))
   }, [])

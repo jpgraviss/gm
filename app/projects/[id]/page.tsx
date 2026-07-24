@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
@@ -70,6 +70,32 @@ const serviceTypeIcons: Partial<Record<string, React.ReactNode>> = {
 
 interface ProjectFile {
   name: string; size: number; url: string; path: string; type: string; createdAt?: string
+}
+
+// Shared with the initial load effect and with refetchProject() (AUDIT.md
+// #294) so a failed PATCH's reconciliation fetch maps the response the same
+// way the page does on first load.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapProjectResponse(proj: any): Project {
+  return {
+    id: proj.id,
+    contractId: proj.contract_id ?? proj.contractId ?? '',
+    company: proj.company,
+    serviceType: proj.service_type ?? proj.serviceType,
+    status: proj.status,
+    startDate: proj.start_date ?? proj.startDate ?? '',
+    launchDate: proj.launch_date ?? proj.launchDate ?? '',
+    maintenanceStartDate: proj.maintenance_start_date ?? proj.maintenanceStartDate,
+    assignedTeam: proj.assigned_team ?? proj.assignedTeam ?? [],
+    progress: proj.progress ?? 0,
+    milestones: proj.milestones ?? [],
+    tasks: proj.tasks ?? [],
+    notes: proj.notes ?? [],
+    overview: proj.overview ?? '',
+    sections: proj.sections ?? ['To Do', 'In Progress', 'Done'],
+    color: proj.color ?? '#015035',
+    description: proj.description ?? '',
+  }
 }
 
 function TaskRow({
@@ -632,8 +658,6 @@ export default function ProjectDetailPage() {
   const { toast } = useToast()
   const allTeamMembers = useTeamMembers()
   const [project, setProject] = useState<Project | null>(null)
-  const projectRef = useRef<Project | null>(null)
-  useEffect(() => { projectRef.current = project }, [project])
   const [tasks, setTasks] = useState<AppTask[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('list')
@@ -658,26 +682,7 @@ export default function ProjectDetailPage() {
       fetch(`/api/tasks?projectId=${id}&limit=500`).then(r => r.ok ? r.json() : []),
     ]).then(([proj, taskData]) => {
       if (proj && !proj.error) {
-        const mapped: Project = {
-          id: proj.id,
-          contractId: proj.contract_id ?? proj.contractId ?? '',
-          company: proj.company,
-          serviceType: proj.service_type ?? proj.serviceType,
-          status: proj.status,
-          startDate: proj.start_date ?? proj.startDate ?? '',
-          launchDate: proj.launch_date ?? proj.launchDate ?? '',
-          maintenanceStartDate: proj.maintenance_start_date ?? proj.maintenanceStartDate,
-          assignedTeam: proj.assigned_team ?? proj.assignedTeam ?? [],
-          progress: proj.progress ?? 0,
-          milestones: proj.milestones ?? [],
-          tasks: proj.tasks ?? [],
-          notes: proj.notes ?? [],
-          overview: proj.overview ?? '',
-          sections: proj.sections ?? ['To Do', 'In Progress', 'Done'],
-          color: proj.color ?? '#015035',
-          description: proj.description ?? '',
-        }
-        setProject(mapped)
+        setProject(mapProjectResponse(proj))
       }
       const list = Array.isArray(taskData) ? taskData : (taskData?.data ?? [])
       setTasks(list)
@@ -711,6 +716,35 @@ export default function ProjectDetailPage() {
   const overdueTasks = tasks.filter(t => t.status !== 'Completed' && t.dueDate && t.dueDate < new Date().toISOString().split('T')[0]).length
   const computedProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : project?.progress ?? 0
 
+  // AUDIT.md #294 — reverting to a `previous` closure snapshot on failure is
+  // itself a race: if two edits to the same task fire back-to-back and the
+  // first request's failure arrives after the second already succeeded,
+  // reverting to the first's stale snapshot would clobber the second's
+  // (already-persisted) result in the UI. There's no single-task GET
+  // endpoint, so on failure these refetch this project's task list (the
+  // same scoped call the page uses on load) and merge only the ONE
+  // affected task's fresh server state back into local state, leaving
+  // every other task (including any other edit that's mid-flight)
+  // untouched.
+  const refetchTask = useCallback(async (taskId: string) => {
+    try {
+      const res = await fetch(`/api/tasks?projectId=${id}&limit=500`)
+      const data = res.ok ? await res.json() : []
+      const list: AppTask[] = Array.isArray(data) ? data : (data?.data ?? [])
+      const match = list.find(t => t.id === taskId)
+      if (match) {
+        setTasks(prev => prev.map(t => t.id === taskId ? match : t))
+        setSelectedTask(prev => prev?.id === taskId ? match : prev)
+      } else {
+        setTasks(prev => prev.filter(t => t.id !== taskId))
+        setSelectedTask(prev => prev?.id === taskId ? null : prev)
+      }
+    } catch {
+      // Best-effort reconciliation; if this also fails we simply leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }, [id])
+
   const toggleTaskStatus = useCallback((taskId: string) => {
     const previous = tasks.find(t => t.id === taskId)
     if (!previous) return
@@ -724,13 +758,12 @@ export default function ProjectDetailPage() {
     }).then(res => {
       if (!res.ok) throw new Error('Failed')
     }).catch(() => {
-      setTasks(prev => prev.map(t => t.id === taskId ? previous : t))
+      refetchTask(taskId)
       toast('Failed to update task', 'error')
     })
-  }, [tasks, toast])
+  }, [tasks, toast, refetchTask])
 
   const updateTask = useCallback((taskId: string, updates: Partial<AppTask>) => {
-    const previous = tasks.find(t => t.id === taskId)
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t))
     setSelectedTask(prev => prev?.id === taskId ? { ...prev, ...updates } : prev)
     const apiBody: Record<string, unknown> = {}
@@ -749,24 +782,20 @@ export default function ProjectDetailPage() {
     }).then(res => {
       if (!res.ok) throw new Error('Failed')
     }).catch(() => {
-      if (previous) {
-        setTasks(prev => prev.map(t => t.id === taskId ? previous : t))
-        setSelectedTask(prev => prev?.id === taskId ? previous : prev)
-      }
+      refetchTask(taskId)
       toast('Failed to update task', 'error')
     })
-  }, [tasks, toast])
+  }, [toast, refetchTask])
 
   const deleteTask = useCallback((taskId: string) => {
-    const previous = tasks.find(t => t.id === taskId)
     setTasks(prev => prev.filter(t => t.id !== taskId))
     fetch(`/api/tasks/${taskId}`, { method: 'DELETE' }).then(res => {
       if (!res.ok) throw new Error('Failed')
     }).catch(() => {
-      if (previous) setTasks(prev => [...prev, previous])
+      refetchTask(taskId)
       toast('Failed to delete task', 'error')
     })
-  }, [tasks, toast])
+  }, [toast, refetchTask])
 
   const addTask = useCallback((data: { title: string; section: string; assignedTo: string; dueDate: string; priority: TaskPriority }) => {
     const newTask: AppTask = {
@@ -796,15 +825,33 @@ export default function ProjectDetailPage() {
     })
   }, [id, tasks.length, toast])
 
+  // AUDIT.md #294 — reverting to the `previous` ref snapshot on failure is
+  // itself a race: if two updates to the project fire back-to-back and the
+  // first request's failure arrives after the second already succeeded,
+  // reverting to the first's stale snapshot would clobber the second's
+  // (already-persisted) result in the UI. Unlike the tasks/records handlers
+  // elsewhere in this file, a real single-record GET exists for projects
+  // (`/api/projects/[id]`), so on failure we refetch and re-map the
+  // authoritative server state instead of trusting a pre-edit snapshot.
+  const refetchProject = useCallback(async () => {
+    if (!id) return
+    try {
+      const res = await fetch(`/api/projects/${id}`)
+      const proj = res.ok ? await res.json() : null
+      if (proj && !proj.error) setProject(mapProjectResponse(proj))
+    } catch {
+      // Best-effort reconciliation; if this also fails we simply leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }, [id])
+
   const updateProject = useCallback((updates: Partial<Project>) => {
     // AUDIT #293 — this previously fired the PATCH fetch as a side effect
     // inside the setProject updater callback. React's contract requires
     // updaters to be pure (it invokes them twice under StrictMode in dev,
     // and may re-invoke them in other batching scenarios), so that risked
-    // firing the same PATCH request more than once per call. Read the
-    // pre-update snapshot from the ref (kept in sync via the effect above)
-    // and fire the fetch as a normal statement instead.
-    const previous = projectRef.current
+    // firing the same PATCH request more than once per call. Fire the fetch
+    // as a normal statement instead.
     setProject(prev => (prev ? { ...prev, ...updates } as Project : prev))
     fetch(`/api/projects/${id}`, {
       method: 'PATCH',
@@ -813,10 +860,10 @@ export default function ProjectDetailPage() {
     }).then(res => {
       if (!res.ok) throw new Error('Failed')
     }).catch(() => {
-      if (previous) setProject(p => p && p.id === previous.id ? previous : p)
+      refetchProject()
       toast('Failed to update project', 'error')
     })
-  }, [id, toast])
+  }, [id, toast, refetchProject])
 
   const deleteProject = useCallback(async () => {
     if (!id) return

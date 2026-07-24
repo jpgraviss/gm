@@ -152,6 +152,23 @@ function EngagementScoreBar({ score, breakdown, points, thresholds }: {
   )
 }
 
+// AUDIT.md #294 — several handlers below capture a `previous` closure
+// snapshot when an optimistic edit fires and revert to that stale snapshot
+// on failure. If two edits to the same contact fire back-to-back and the
+// first request's failure arrives after the second already succeeded,
+// reverting to the first's snapshot would clobber the second's
+// (already-persisted) result in the UI. There's no single-contact GET
+// endpoint, so the fallback is the same list fetch the page already uses
+// on load (`fetchCrmContacts`), filtered down to the one record we need.
+async function fetchCrmContactById(id: string): Promise<CRMContact | null> {
+  try {
+    const fresh = await fetchCrmContacts()
+    return fresh.find(c => c.id === id) ?? null
+  } catch {
+    return null
+  }
+}
+
 // ─── Edit Contact Panel ───────────────────────────────────────────────────────
 
 function EditContactPanel({
@@ -420,8 +437,6 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   const [savingEntry, setSavingEntry] = useState(false)
 
   async function handleUpdateActivity(id: string, updates: { title: string; body: string }) {
-    const prevTimeline = timelineEntries
-    const prevLocal = localActivities
     setSavingEntry(true)
     setTimelineEntries(prev => prev.map(e => e.id === id ? { ...e, title: updates.title, description: updates.body } : e))
     setLocalActivities(prev => prev.map(a => a.id === id ? { ...a, title: updates.title, body: updates.body } : a))
@@ -434,8 +449,20 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       if (!res.ok) throw new Error()
       setEditingEntryId(null)
     } catch {
-      setTimelineEntries(prevTimeline)
-      setLocalActivities(prevLocal)
+      // AUDIT.md #294 — reverting to the captured `prevTimeline`/`prevLocal`
+      // snapshots races with a second edit to the same activity that
+      // succeeds before this failure is handled; refetch activities from
+      // the server and merge only this one activity's fresh state instead.
+      try {
+        const fresh = await fetchCrmActivities()
+        const match = fresh.find(a => a.id === id)
+        if (match) {
+          setLocalActivities(prev => prev.map(a => a.id === id ? match : a))
+          setTimelineEntries(prev => prev.map(e => e.id === id ? { ...e, title: match.title, description: match.body } : e))
+        }
+      } catch {
+        // Best-effort reconciliation; leave the optimistic state if this fails too.
+      }
       toast('Failed to save changes', 'error')
     }
     setSavingEntry(false)
@@ -488,7 +515,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
     return () => { cancelled = true }
   }, [contact.id])
 
-  async function persistNotes(notes: ContactNote[], previous: ContactNote[]) {
+  async function persistNotes(notes: ContactNote[]) {
     try {
       const res = await fetch(`/api/crm/contacts/${contact.id}`, {
         method: 'PATCH',
@@ -497,13 +524,20 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       })
       if (!res.ok) throw new Error('Failed')
     } catch {
-      localNotesRef.current = previous
-      setLocalNotes(previous)
+      // AUDIT.md #294 — reverting to a captured `previous` snapshot races
+      // with a second note edit that succeeds before this failure is
+      // handled; refetch the contact from the server and adopt its current
+      // contactNotes instead of trusting a pre-edit snapshot.
+      const fresh = await fetchCrmContactById(contact.id)
+      if (fresh) {
+        localNotesRef.current = fresh.contactNotes ?? []
+        setLocalNotes(fresh.contactNotes ?? [])
+      }
       toast('Failed to save note', 'error')
     }
   }
 
-  async function persistTasks(tasks: ContactTask[], previous: ContactTask[]) {
+  async function persistTasks(tasks: ContactTask[]) {
     try {
       const res = await fetch(`/api/crm/contacts/${contact.id}`, {
         method: 'PATCH',
@@ -512,8 +546,12 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       })
       if (!res.ok) throw new Error('Failed')
     } catch {
-      localTasksRef.current = previous
-      setLocalTasks(previous)
+      // AUDIT.md #294 — same rationale as persistNotes above.
+      const fresh = await fetchCrmContactById(contact.id)
+      if (fresh) {
+        localTasksRef.current = fresh.contactTasks ?? []
+        setLocalTasks(fresh.contactTasks ?? [])
+      }
       toast('Failed to save task', 'error')
     }
   }
@@ -532,7 +570,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
     setLocalNotes(updated)
     setNewNoteBody('')
     setAddingNote(false)
-    persistNotes(updated, previous)
+    persistNotes(updated)
   }
 
   function handleAddTask() {
@@ -555,7 +593,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
     setNewTaskType('follow_up')
     setNewTaskPriority('medium')
     setAddingTask(false)
-    persistTasks(updated, previous)
+    persistTasks(updated)
   }
 
   async function handleSaveActivity(activity: LoggedActivity) {
@@ -594,7 +632,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
     } catch { console.warn('Failed to persist activity to server') }
   }
 
-  async function persistTags(tags: string[], previous: string[]) {
+  async function persistTags(tags: string[]) {
     try {
       const res = await fetch(`/api/crm/contacts/${contact.id}`, {
         method: 'PATCH',
@@ -603,7 +641,12 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       })
       if (!res.ok) throw new Error('Failed')
     } catch {
-      setLocalTags(previous)
+      // AUDIT.md #294 — reverting to a captured `previous` snapshot races
+      // with a second tag edit that succeeds before this failure is
+      // handled; refetch the contact from the server instead of trusting
+      // a pre-edit snapshot.
+      const fresh = await fetchCrmContactById(contact.id)
+      if (fresh) setLocalTags(fresh.tags ?? [])
       toast('Failed to save contact tags', 'error')
     }
   }
@@ -611,19 +654,17 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
   function handleAddTag() {
     const tag = newTag.trim()
     if (!tag || localTags.includes(tag)) return
-    const previous = localTags
-    const updated = [...previous, tag]
+    const updated = [...localTags, tag]
     setLocalTags(updated)
     setNewTag('')
     setAddingTag(false)
-    persistTags(updated, previous)
+    persistTags(updated)
   }
 
   function handleRemoveTag(tag: string) {
-    const previous = localTags
-    const updated = previous.filter(t => t !== tag)
+    const updated = localTags.filter(t => t !== tag)
     setLocalTags(updated)
-    persistTags(updated, previous)
+    persistTags(updated)
   }
 
   const company = crmCompanies.find(c => c.id === contact.companyId)

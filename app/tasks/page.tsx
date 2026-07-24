@@ -637,8 +637,35 @@ export default function TasksPage() {
     }
   }, [searchParams, tasks, selectedTask])
 
+  // AUDIT.md #294 — reverting to a `previous` closure snapshot on failure is
+  // itself a race: if two edits to the same task fire back-to-back and the
+  // first request's failure arrives after the second already succeeded,
+  // reverting to the first's stale snapshot would clobber the second's
+  // (already-persisted) result in the UI. There's no single-task GET
+  // endpoint, so we fall back to the same paginated list fetch the page
+  // uses on load, but only merge the ONE affected task's fresh server
+  // state back into local state — leaving every other task (including any
+  // other edit that's mid-flight) untouched, rather than blanket-replacing
+  // the array.
+  async function refetchTask(id: string) {
+    try {
+      const fresh = await fetchAllPages<AppTask>('/api/tasks')
+      const match = fresh.find(t => t.id === id)
+      if (match) {
+        setTasks(prev => prev.map(t => t.id === id ? match : t))
+        setSelectedTask(prev => prev?.id === id ? match : prev)
+      } else {
+        // No longer exists server-side (e.g. it really was deleted).
+        setTasks(prev => prev.filter(t => t.id !== id))
+        setSelectedTask(prev => prev?.id === id ? null : prev)
+      }
+    } catch {
+      // Best-effort reconciliation; if this also fails we simply leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }
+
   function updateStatus(id: string, status: AppTaskStatus) {
-    const previous = tasks.find(t => t.id === id)
     const today = getToday()
     const completedDate = status === 'Completed' ? today : undefined
     setTasks(prev => prev.map(t => t.id === id ? { ...t, status, completedDate } : t))
@@ -652,16 +679,12 @@ export default function TasksPage() {
     }).then(res => {
       if (!res.ok) throw new Error('Failed')
     }).catch(() => {
-      if (previous) {
-        setTasks(prev => prev.map(t => t.id === id ? previous : t))
-        setSelectedTask(prev => prev?.id === id ? previous : prev)
-      }
+      refetchTask(id)
       toast('Failed to update task', 'error')
     })
   }
 
   function updateTask(id: string, updates: Partial<AppTask>) {
-    const previous = tasks.find(t => t.id === id)
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
     if (selectedTask?.id === id) {
       setSelectedTask(prev => prev ? { ...prev, ...updates } : null)
@@ -681,22 +704,18 @@ export default function TasksPage() {
     }).then(res => {
       if (!res.ok) throw new Error('Failed')
     }).catch(() => {
-      if (previous) {
-        setTasks(prev => prev.map(t => t.id === id ? previous : t))
-        setSelectedTask(prev => prev?.id === id ? previous : prev)
-      }
+      refetchTask(id)
       toast('Failed to update task', 'error')
     })
   }
 
   function deleteTask(id: string) {
     if (!confirm('Delete this task?')) return
-    const previous = tasks.find(t => t.id === id)
     setTasks(prev => prev.filter(t => t.id !== id))
     fetch(`/api/tasks/${id}`, { method: 'DELETE' }).then(res => {
       if (!res.ok) throw new Error('Failed')
     }).catch(() => {
-      if (previous) setTasks(prev => [previous, ...prev])
+      refetchTask(id)
       toast('Failed to delete task', 'error')
     })
   }

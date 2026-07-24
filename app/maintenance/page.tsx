@@ -694,6 +694,35 @@ export default function MaintenancePage() {
   // while the record was unchanged server-side. Each now reverts the
   // optimistic state on a non-OK response, matching the pattern
   // `handleDeleteRecord` already used correctly for its own catch branch.
+  //
+  // AUDIT.md #294 — reverting to a `previous` closure snapshot is itself a
+  // race: if two edits to the same record fire back-to-back and the first
+  // request's failure arrives after the second request already succeeded,
+  // reverting to the first's stale snapshot would clobber the second's
+  // (already-persisted) result in the UI. There's no single-record GET
+  // endpoint for maintenance records, so we fall back to the same
+  // paginated list fetch the page uses on load, but only merge the ONE
+  // affected record's fresh server state back into local state — leaving
+  // every other record (including any other edit that's mid-flight)
+  // untouched, rather than blanket-replacing the array.
+  async function refetchRecord(id: string) {
+    try {
+      const fresh = await fetchAllPages<MaintenanceRecord>('/api/maintenance')
+      const match = fresh.find(r => r.id === id)
+      if (match) {
+        setRecords(prev => prev.map(r => r.id === id ? match : r))
+        setSelected(prev => prev?.id === id ? match : prev)
+      } else {
+        // No longer exists server-side (e.g. it really was deleted).
+        setRecords(prev => prev.filter(r => r.id !== id))
+        setSelected(prev => prev?.id === id ? null : prev)
+      }
+    } catch {
+      // Best-effort reconciliation; if this also fails we simply leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }
+
   async function handleEditRecord(data: Omit<MaintenanceRecord, 'id'>) {
     if (!editingRecord) return
     const previous = editingRecord
@@ -708,13 +737,12 @@ export default function MaintenancePage() {
       })
       if (!res.ok) throw new Error('Failed')
     } catch {
-      setRecords(prev => prev.map(r => r.id === previous.id ? previous : r))
+      await refetchRecord(previous.id)
       toast('Failed to save maintenance record changes', 'error')
     }
   }
 
   async function confirmCancellation(id: string) {
-    const previous = records.find(r => r.id === id)
     setRecords(prev => prev.map(r => r.id === id ? { ...r, status: 'Cancelled' } : r))
     setSelected(null)
     try {
@@ -725,13 +753,12 @@ export default function MaintenancePage() {
       })
       if (!res.ok) throw new Error('Failed')
     } catch {
-      if (previous) setRecords(prev => prev.map(r => r.id === id ? previous : r))
+      await refetchRecord(id)
       toast('Failed to confirm cancellation', 'error')
     }
   }
 
   async function updateBilling(id: string, fee: number, nextDate: string) {
-    const previous = records.find(r => r.id === id)
     setRecords(prev => prev.map(r => r.id === id ? { ...r, monthlyFee: fee, nextBillingDate: nextDate } : r))
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, monthlyFee: fee, nextBillingDate: nextDate } : prev)
     try {
@@ -742,16 +769,12 @@ export default function MaintenancePage() {
       })
       if (!res.ok) throw new Error('Failed')
     } catch {
-      if (previous) {
-        setRecords(prev => prev.map(r => r.id === id ? previous : r))
-        if (selected?.id === id) setSelected(previous)
-      }
+      await refetchRecord(id)
       toast('Failed to update billing details', 'error')
     }
   }
 
   async function updateDocuments(id: string, documents: MaintenanceRecord['documents']) {
-    const previous = records.find(r => r.id === id)
     setRecords(prev => prev.map(r => r.id === id ? { ...r, documents } : r))
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, documents } : prev)
     try {
@@ -762,18 +785,13 @@ export default function MaintenancePage() {
       })
       if (!res.ok) throw new Error('Failed')
     } catch {
-      if (previous) {
-        setRecords(prev => prev.map(r => r.id === id ? previous : r))
-        if (selected?.id === id) setSelected(previous)
-      }
+      await refetchRecord(id)
       toast('Failed to save document', 'error')
     }
   }
 
   async function handleDeleteRecord(id: string) {
     if (!confirm('Are you sure you want to permanently delete this maintenance record?')) return
-    const previous = records.find(r => r.id === id)
-    const previousIndex = records.findIndex(r => r.id === id)
     setRecords(prev => prev.filter(r => r.id !== id))
     setSelected(null)
     try {
@@ -781,7 +799,7 @@ export default function MaintenancePage() {
       if (!res.ok) throw new Error('Failed')
       toast('Maintenance record deleted', 'success')
     } catch {
-      if (previous) setRecords(prev => [...prev.slice(0, previousIndex), previous, ...prev.slice(previousIndex)])
+      await refetchRecord(id)
       toast('Failed to delete maintenance record', 'error')
     }
   }

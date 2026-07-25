@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
+import { validateCustomFieldValues } from '@/lib/custom-fields'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {
@@ -51,6 +52,9 @@ export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) =>
     owner:       { type: 'string', maxLength: 200 },
   })
   if (!result.valid) return validationError(result.error)
+
+  const customFieldsError = await validateCustomFieldValues('contacts', body.customFields)
+  if (customFieldsError) return validationError(customFieldsError)
 
   const db = createServiceClient()
   const { data, error } = await db
@@ -106,6 +110,9 @@ export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx
     owner: { type: 'string', maxLength: 200 },
   })
   if (!result.valid) return validationError(result.error)
+
+  const customFieldsError = await validateCustomFieldValues('contacts', body.customFields)
+  if (customFieldsError) return validationError(customFieldsError)
 
   const db = createServiceClient()
   const updates: Record<string, unknown> = {}

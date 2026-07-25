@@ -5,6 +5,8 @@ import { fireAutomations } from '@/lib/automations-engine'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { computeDealScore } from '@/lib/deal-score'
+import { validateCustomFieldValues } from '@/lib/custom-fields'
+import { validationError } from '@/lib/validation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDeal(row: any) {
@@ -41,6 +43,10 @@ export const PATCH = withErrorHandler('deals/[id] PATCH', async (req, ctx) => {
   if (denied) return denied
   const { id } = await ctx!.params
   const body = await req.json()
+
+  const customFieldsError = await validateCustomFieldValues('deals', body.customFields)
+  if (customFieldsError) return validationError(customFieldsError)
+
   const db = createServiceClient()
   const update: Record<string, unknown> = {}
   if (body.stage !== undefined)       update.stage = body.stage

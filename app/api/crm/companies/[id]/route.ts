@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getCompanyRelatedCounts, hasBlockingRelatedRecords, describeRelatedCounts, deleteCompanyActivities } from '@/lib/crm-cascade'
+import { validateCustomFieldValues } from '@/lib/custom-fields'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCompany(row: any) {
@@ -50,6 +51,9 @@ export const PUT = withErrorHandler('crm/companies/[id] PUT', async (
     status:   { type: 'string', enum: ['Prospect', 'Active Client', 'Past Client', 'Partner', 'Churned'] },
   })
   if (!result.valid) return validationError(result.error)
+
+  const customFieldsError = await validateCustomFieldValues('companies', body.customFields)
+  if (customFieldsError) return validationError(customFieldsError)
 
   const db = createServiceClient()
   const { data, error } = await db
@@ -99,6 +103,9 @@ export const PATCH = withErrorHandler('crm/companies/[id] PATCH', async (
     owner:  { type: 'string', maxLength: 200 },
   })
   if (!result.valid) return validationError(result.error)
+
+  const customFieldsError = await validateCustomFieldValues('companies', body.customFields)
+  if (customFieldsError) return validationError(customFieldsError)
 
   const db = createServiceClient()
   const updates: Record<string, unknown> = {}

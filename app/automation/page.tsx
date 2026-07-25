@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
-import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight, GitBranch, FileText, Inbox, ArrowRightLeft, Trash2 } from 'lucide-react'
+import { Zap, CheckCircle, Clock, AlertCircle, Play, Pause, X, Plus, ChevronRight, ArrowRight, GitBranch, FileText, Inbox, ArrowRightLeft, Trash2, Sparkles, Loader2, AlertTriangle } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 
@@ -300,6 +300,216 @@ function NewAutomationPanel({ onSave, onClose, initialName, initialTrigger, init
   )
 }
 
+// ─── AI Automation Builder ─────────────────────────────────────────────────────
+
+interface GeneratedAction { type: string; config: Record<string, unknown> }
+interface GeneratedAutomation { name: string; trigger: string; actions: GeneratedAction[]; warnings: string[] }
+
+function describeActionConfig(action: GeneratedAction): string | null {
+  const cfg = action.config
+  if (!cfg || Object.keys(cfg).length === 0) return null
+  switch (action.type) {
+    case 'Send Email Reminder':
+      return cfg.subject ? `"${cfg.subject}"` : null
+    case 'Create Task':
+      return cfg.title ? `"${cfg.title}"${cfg.assignee ? ` → ${cfg.assignee}` : ''}` : null
+    case 'Update Contact':
+      return cfg.field ? `${cfg.field} = "${cfg.value ?? ''}"` : null
+    case 'Create Deal':
+      return cfg.dealName ? `"${cfg.dealName}" (${cfg.stage ?? 'Lead'})` : null
+    case 'Log Activity':
+      return cfg.note ? `"${cfg.note}"` : null
+    case 'Send Notification':
+      return cfg.target ? `to ${String(cfg.target).replace(/_/g, ' ')}` : null
+    case 'Add Tag':
+    case 'Remove Tag':
+      return cfg.tag ? `"${cfg.tag}"` : null
+    case 'Wait':
+      return cfg.duration ? `${cfg.duration} ${cfg.unit ?? 'days'}` : null
+    case 'If/Else':
+      return cfg.field ? `${cfg.field} ${String(cfg.operator ?? '').replace(/_/g, ' ')} "${cfg.value ?? ''}"` : null
+    default:
+      return null
+  }
+}
+
+function AiAutomationModal({ onCreated, onClose }: { onCreated: (a: Automation) => void; onClose: () => void }) {
+  const { toast } = useToast()
+  const [description, setDescription] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [result, setResult] = useState<GeneratedAutomation | null>(null)
+  const [error, setError] = useState('')
+
+  async function generate() {
+    if (!description.trim() || generating) return
+    setGenerating(true)
+    setError('')
+    setResult(null)
+    try {
+      const res = await fetch('/api/automations/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: description.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Generation failed')
+      } else {
+        setResult(data.automation)
+      }
+    } catch {
+      setError('Failed to reach the AI builder. Try again.')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  async function create() {
+    if (!result || creating) return
+    setCreating(true)
+    try {
+      const res = await fetch('/api/automations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: result.name,
+          trigger: result.trigger,
+          actions: result.actions,
+          // Created paused, not active — an AI-drafted automation fires
+          // real actions (emails, tasks, deals) the first time a matching
+          // event happens, so it needs a human to review and explicitly
+          // activate it rather than going live unattended.
+          status: 'Paused',
+        }),
+      })
+      if (!res.ok) {
+        toast('Failed to create automation', 'error')
+        return
+      }
+      const saved = await res.json()
+      onCreated(saved)
+      onClose()
+      toast('Automation created — review it and activate when ready', 'success')
+    } catch {
+      toast('Failed to create automation', 'error')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="p-5 flex items-start justify-between flex-shrink-0" style={{ background: '#012b1e' }}>
+          <div className="flex items-center gap-2">
+            <Sparkles size={18} className="text-emerald-300" />
+            <div>
+              <h2 className="text-white font-bold text-base">Describe your automation</h2>
+              <p className="text-white/50 text-xs mt-0.5">Plain English in, a working automation out</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 flex-shrink-0">
+            <X size={16} className="text-white/70" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+          <div>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder='e.g. "When an invoice goes overdue, send the client a reminder email and notify finance." or "When a proposal is accepted, create a task for the assigned rep to kick off onboarding."'
+              autoFocus
+              rows={4}
+              disabled={generating}
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 resize-none disabled:opacity-60"
+            />
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+              <AlertTriangle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-red-700">{error}</p>
+            </div>
+          )}
+
+          {result && (
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                <p className="text-sm font-semibold text-gray-900">{result.name}</p>
+              </div>
+              <div className="p-4 flex flex-col gap-2.5">
+                <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5 w-fit">
+                  <Clock size={11} className="text-blue-500" />
+                  <span className="text-[11px] font-semibold text-blue-700">WHEN: {result.trigger}</span>
+                </div>
+                {result.actions.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {result.actions.map((action, i) => {
+                      const detail = describeActionConfig(action)
+                      return (
+                        <div key={i} className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5">
+                          <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide flex-shrink-0">{i === 0 ? 'THEN' : 'AND'}</span>
+                          <span className="text-[11px] text-gray-700">{action.type}{detail ? ` — ${detail}` : ''}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                {result.warnings.length > 0 && (
+                  <div className="flex flex-col gap-1 mt-1">
+                    {result.warnings.map((w, i) => (
+                      <div key={i} className="flex items-start gap-1.5">
+                        <AlertTriangle size={12} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-amber-700">{w}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
+          {!result ? (
+            <button
+              onClick={generate}
+              disabled={!description.trim() || generating}
+              className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+              style={{ background: '#015035' }}
+            >
+              {generating ? <><Loader2 size={14} className="animate-spin" /> Generating...</> : <><Sparkles size={14} /> Generate</>}
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={create}
+                disabled={creating || result.actions.length === 0}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+                style={{ background: '#015035' }}
+              >
+                {creating ? <><Loader2 size={14} className="animate-spin" /> Creating...</> : 'Create Automation'}
+              </button>
+              <button
+                onClick={() => { setResult(null); setError('') }}
+                disabled={creating}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+              >
+                Try Again
+              </button>
+            </>
+          )}
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AutomationPage() {
@@ -307,6 +517,7 @@ export default function AutomationPage() {
   const [automations, setAutomations] = useState<Automation[]>([])
   const [creatingAutomation, setCreatingAutomation] = useState(false)
   const [activeTemplate, setActiveTemplate] = useState<AutomationTemplate | null>(null)
+  const [showAiModal, setShowAiModal] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -366,7 +577,15 @@ export default function AutomationPage() {
         action={{ label: 'New Automation', onClick: () => { setActiveTemplate(null); setCreatingAutomation(true) } }}
       />
       <div className="p-3 sm:p-6 flex-1">
-        <div className="flex items-center justify-end mb-4">
+        <div className="flex items-center justify-end gap-2 mb-4">
+          <button
+            onClick={() => setShowAiModal(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold transition-opacity hover:opacity-90"
+            style={{ background: 'linear-gradient(135deg, #015035, #0a7a52)' }}
+          >
+            <Sparkles size={15} />
+            Describe with AI
+          </button>
           <Link
             href="/automation/builder"
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold transition-opacity hover:opacity-90"
@@ -545,6 +764,13 @@ export default function AutomationPage() {
           initialName={activeTemplate?.name}
           initialTrigger={activeTemplate?.trigger}
           initialActions={activeTemplate?.actions}
+        />
+      )}
+
+      {showAiModal && (
+        <AiAutomationModal
+          onCreated={a => setAutomations(prev => [a, ...prev])}
+          onClose={() => setShowAiModal(false)}
         />
       )}
     </>

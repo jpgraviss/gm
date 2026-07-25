@@ -9,7 +9,7 @@ import {
   X, Mail, Plus, Play, Pause, CheckCircle, Clock, Users, Zap,
   ChevronRight, Edit2, Copy, TrendingUp, Search, MoreHorizontal,
   Eye, MousePointerClick, Trash2, ArrowUpDown, Filter,
-  Phone, Linkedin, BarChart3,
+  Phone, Linkedin, BarChart3, Sparkles, Loader2, AlertTriangle,
 } from 'lucide-react'
 import type { SequenceStatus, SequenceStepType, SequenceStep, EmailSequence } from '@/lib/types'
 
@@ -146,6 +146,192 @@ function NewSequenceModal({ onSave, onClose }: { onSave: (s: EmailSequence) => v
   )
 }
 
+// ─── AI Sequence Builder ────────────────────────────────────────────────────
+
+interface GeneratedSequence {
+  name: string
+  targetSegment: string
+  trigger: string
+  steps: SequenceStep[]
+  warnings: string[]
+}
+
+function AiSequenceModal({ onCreate, onClose }: { onCreate: (s: EmailSequence) => void; onClose: () => void }) {
+  const [description, setDescription] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [result, setResult] = useState<GeneratedSequence | null>(null)
+  const [error, setError] = useState('')
+
+  async function generate() {
+    if (!description.trim() || generating) return
+    setGenerating(true)
+    setError('')
+    setResult(null)
+    try {
+      const res = await fetch('/api/sequences/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: description.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Generation failed')
+      } else {
+        setResult(data.sequence)
+      }
+    } catch {
+      setError('Failed to reach the AI builder. Try again.')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  function create() {
+    if (!result || creating) return
+    setCreating(true)
+    const newSeq: EmailSequence = {
+      id: `seq-${Date.now()}`,
+      name: result.name,
+      // Created Draft, same as a manually-created sequence — nothing
+      // sends until a human reviews the AI-written copy and activates it.
+      status: 'Draft',
+      trigger: result.trigger || 'Manual enrollment',
+      targetSegment: result.targetSegment || 'All contacts',
+      enrolledCount: 0,
+      activeCount: 0,
+      completedCount: 0,
+      openRate: 0,
+      clickRate: 0,
+      replyRate: 0,
+      steps: result.steps,
+      createdDate: new Date().toISOString().split('T')[0],
+      lastModified: new Date().toISOString().split('T')[0],
+      sendVia: 'gmail',
+      meetingRate: 0,
+      bounceRate: 0,
+      unsubscribeRate: 0,
+    }
+    onCreate(newSeq)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="p-5 flex items-start justify-between flex-shrink-0" style={{ background: '#012b1e' }}>
+          <div className="flex items-center gap-2">
+            <Sparkles size={18} className="text-emerald-300" />
+            <div>
+              <h2 className="text-white font-bold text-base">Describe your sequence</h2>
+              <p className="text-white/50 text-xs mt-0.5">Plain English in, a written multi-step sequence out</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 flex-shrink-0">
+            <X size={16} className="text-white/70" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+          <div>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder={'e.g. "A 5-touch nurture sequence for SEO leads who filled out a form but haven\'t responded — friendly, not pushy, spaced a few days apart." or "A quick 2-email follow-up after a discovery call."'}
+              autoFocus
+              rows={4}
+              disabled={generating}
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 resize-none disabled:opacity-60"
+            />
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+              <AlertTriangle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-red-700">{error}</p>
+            </div>
+          )}
+
+          {result && (
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                <p className="text-sm font-semibold text-gray-900">{result.name}</p>
+                {result.targetSegment && <p className="text-xs text-gray-500 mt-0.5">{result.targetSegment}</p>}
+              </div>
+              <div className="p-4 flex flex-col gap-2">
+                {result.steps.map((step, i) => {
+                  const cfg = stepTypeConfig[step.type]
+                  return (
+                    <div key={step.id} className="flex items-start gap-2.5 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                      <div className="flex flex-col items-center flex-shrink-0 w-10">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Day</span>
+                        <span className="text-sm font-bold text-gray-700">{step.day}</span>
+                      </div>
+                      <div className="w-px self-stretch bg-gray-200 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span style={{ color: cfg.color }}>{cfg.icon}</span>
+                          <span className="text-[11px] font-semibold text-gray-600">{cfg.label}</span>
+                        </div>
+                        <p className="text-xs text-gray-800 font-medium truncate">{step.subject || step.taskTitle || '(untitled)'}</p>
+                        {step.body && <p className="text-[11px] text-gray-500 line-clamp-2 mt-0.5">{step.body}</p>}
+                      </div>
+                      <span className="text-[10px] text-gray-300 font-semibold flex-shrink-0">#{i + 1}</span>
+                    </div>
+                  )
+                })}
+                {result.warnings.length > 0 && (
+                  <div className="flex flex-col gap-1 mt-1">
+                    {result.warnings.map((w, i) => (
+                      <div key={i} className="flex items-start gap-1.5">
+                        <AlertTriangle size={12} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-amber-700">{w}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
+          {!result ? (
+            <button
+              onClick={generate}
+              disabled={!description.trim() || generating}
+              className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+              style={{ background: '#015035' }}
+            >
+              {generating ? <><Loader2 size={14} className="animate-spin" /> Generating...</> : <><Sparkles size={14} /> Generate</>}
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={create}
+                disabled={creating || result.steps.length === 0}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+                style={{ background: '#015035' }}
+              >
+                {creating ? <><Loader2 size={14} className="animate-spin" /> Creating...</> : 'Create Sequence'}
+              </button>
+              <button
+                onClick={() => { setResult(null); setError('') }}
+                disabled={creating}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50"
+              >
+                Try Again
+              </button>
+            </>
+          )}
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Actions Dropdown ────────────────────────────────────────────────────────
 
 function ActionsDropdown({ seq, onUpdate, onDelete }: { seq: EmailSequence; onUpdate: (s: EmailSequence) => void; onDelete: (id: string) => void }) {
@@ -208,6 +394,7 @@ export default function SequencesPage() {
   const [sequences, setSequences] = useState<EmailSequence[]>([])
   const [statusFilter, setStatusFilter] = useState<SequenceStatus | 'All'>('All')
   const [creatingSeq, setCreatingSeq] = useState(false)
+  const [showAiModal, setShowAiModal] = useState(false)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'name' | 'enrolled' | 'reply' | 'modified'>('modified')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -345,6 +532,14 @@ export default function SequencesPage() {
             <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Sequences</h2>
             <p className="text-xs text-gray-500 mt-0.5">{sequences.length} sequence{sequences.length !== 1 ? 's' : ''}</p>
           </div>
+          <button
+            onClick={() => setShowAiModal(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold transition-opacity hover:opacity-90"
+            style={{ background: 'linear-gradient(135deg, #015035, #0a7a52)' }}
+          >
+            <Sparkles size={15} />
+            Describe with AI
+          </button>
         </div>
 
         {/* Top Tabs (HubSpot-style) */}
@@ -688,6 +883,7 @@ export default function SequencesPage() {
       </div>
 
       {creatingSeq && <NewSequenceModal onSave={addSequence} onClose={() => setCreatingSeq(false)} />}
+      {showAiModal && <AiSequenceModal onCreate={s => { addSequence(s); setShowAiModal(false) }} onClose={() => setShowAiModal(false)} />}
     </>
   )
 }

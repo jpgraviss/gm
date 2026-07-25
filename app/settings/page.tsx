@@ -505,13 +505,21 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(null), 2500)
   }
 
+  // AUDIT — this only caught a network-level rejection; fetch() does NOT
+  // reject on a non-2xx HTTP status, so a real save failure (validation
+  // error, DB error) still ran flash(label) unconditionally, showing a
+  // false "Saved" confirmation for every one of this helper's 11 callers
+  // (Company, Notifications, Billing, CRM Setup, Branding, Email Defaults,
+  // Dashboard, Engagement, Email Templates, Navigation).
   function patchSettings(payload: Record<string, unknown>, label: string) {
     fetch('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    }).catch(() => toast('Failed to save settings', 'error'))
-    flash(label)
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+      flash(label)
+    }).catch(() => toast(`Failed to save ${label}`, 'error'))
   }
 
   function saveCompany() {
@@ -2659,6 +2667,7 @@ const GOOGLE_PRODUCT_META: Record<MarketingStatus['product'], { name: string; de
 }
 
 function MarketingIntegrationsSection() {
+  const { toast } = useToast()
   const [statuses, setStatuses] = useState<MarketingStatus[]>([])
   const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null)
   const [gscSiteUrl, setGscSiteUrl] = useState('')
@@ -2799,12 +2808,16 @@ function MarketingIntegrationsSection() {
               onClick={async () => {
                 setGscSaving(true)
                 try {
-                  await fetch('/api/settings', {
+                  const res = await fetch('/api/settings', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ gsc_site_url: gscSiteUrl.trim() }),
                   })
-                } catch {/* ignore */}
+                  if (!res.ok) throw new Error('Failed')
+                  toast('Search Console site saved', 'success')
+                } catch {
+                  toast('Failed to save Search Console site', 'error')
+                }
                 setGscSaving(false)
               }}
               disabled={gscSaving}
@@ -2875,6 +2888,7 @@ function MarketingIntegrationsSection() {
 }
 
 function HubSpotIntegrationSection() {
+  const { toast } = useToast()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
@@ -2920,12 +2934,16 @@ function HubSpotIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hubspot: { apiKey: apiKey.trim() } }),
       })
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error('Failed')
+      toast('HubSpot API key saved', 'success')
+    } catch {
+      toast('Failed to save HubSpot API key', 'error')
+    }
     setSaving(false)
   }
 
@@ -3004,6 +3022,7 @@ function HubSpotIntegrationSection() {
 }
 
 function GranolaIntegrationSection() {
+  const { toast } = useToast()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
@@ -3052,12 +3071,16 @@ function GranolaIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ granola: { apiKey: apiKey.trim(), lastSyncedAt } }),
       })
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error('Failed')
+      toast('Granola API key saved', 'success')
+    } catch {
+      toast('Failed to save Granola API key', 'error')
+    }
     setSaving(false)
   }
 
@@ -3181,6 +3204,7 @@ function GranolaIntegrationSection() {
 }
 
 function StripeIntegrationSection() {
+  const { toast } = useToast()
   const [secretKey, setSecretKey] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
   const [showKey, setShowKey] = useState(false)
@@ -3228,12 +3252,16 @@ function StripeIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stripe: { secretKey: secretKey.trim(), webhookSecret: webhookSecret.trim() } }),
       })
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error('Failed')
+      toast('Stripe settings saved', 'success')
+    } catch {
+      toast('Failed to save Stripe settings', 'error')
+    }
     setSaving(false)
   }
 
@@ -3483,6 +3511,7 @@ function EmailTrackingSection() {
 }
 
 function GoogleReviewsIntegrationSection() {
+  const { toast } = useToast()
   const [locationName, setLocationName] = useState('')
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
   const [gbpStatus, setGbpStatus] = useState<'idle' | 'testing' | 'connected' | 'syncing' | 'error'>('idle')
@@ -3526,12 +3555,16 @@ function GoogleReviewsIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ google_reviews: { locationName: locationName.trim(), lastSyncAt } }),
       })
-    } catch {}
+      if (!res.ok) throw new Error('Failed')
+      toast('Google Reviews settings saved', 'success')
+    } catch {
+      toast('Failed to save Google Reviews settings', 'error')
+    }
     setSaving(false)
   }
 
@@ -3644,6 +3677,7 @@ function GoogleReviewsIntegrationSection() {
 }
 
 function MaverickIntegrationSection() {
+  const { toast } = useToast()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
@@ -3679,12 +3713,16 @@ function MaverickIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ maverick: { apiKey: apiKey.trim() } }),
       })
-    } catch {}
+      if (!res.ok) throw new Error('Failed')
+      toast('Maverick API key saved', 'success')
+    } catch {
+      toast('Failed to save Maverick API key', 'error')
+    }
     setSaving(false)
   }
 
@@ -3745,6 +3783,7 @@ function MaverickIntegrationSection() {
 }
 
 function ResendIntegrationSection() {
+  const { toast } = useToast()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
@@ -3780,12 +3819,16 @@ function ResendIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resend: { apiKey: apiKey.trim() } }),
       })
-    } catch {}
+      if (!res.ok) throw new Error('Failed')
+      toast('Resend API key saved', 'success')
+    } catch {
+      toast('Failed to save Resend API key', 'error')
+    }
     setSaving(false)
   }
 
@@ -3846,6 +3889,7 @@ function ResendIntegrationSection() {
 }
 
 function ApolloIntegrationSection() {
+  const { toast } = useToast()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
@@ -3890,12 +3934,16 @@ function ApolloIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apollo: { apiKey: apiKey.trim() } }),
       })
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error('Failed')
+      toast('Apollo API key saved', 'success')
+    } catch {
+      toast('Failed to save Apollo API key', 'error')
+    }
     setSaving(false)
   }
 

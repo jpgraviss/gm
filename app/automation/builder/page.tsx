@@ -20,7 +20,7 @@ type TriggerType =
 
 type ActionType =
   | 'send_email'
-  | 'update_contact' | 'create_deal' | 'add_tag' | 'remove_tag'
+  | 'update_contact' | 'create_deal' | 'add_tag' | 'remove_tag' | 'rotate_owner'
   | 'create_task' | 'log_activity' | 'send_notification'
   | 'generate_proposal'
   | 'wait' | 'if_else'
@@ -59,6 +59,7 @@ const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: s
       { value: 'create_deal',    label: 'Create Deal',      icon: <Briefcase size={18} />,  description: 'Create a new deal record' },
       { value: 'add_tag',        label: 'Add Tag',          icon: <Tag size={18} />,        description: 'Add a tag to the contact' },
       { value: 'remove_tag',     label: 'Remove Tag',       icon: <Tag size={18} />,        description: 'Remove a tag from the contact' },
+      { value: 'rotate_owner',   label: 'Rotate Contact Owner', icon: <RefreshCw size={18} />, description: 'Reassign the contact to the next rep in a unit’s round-robin rotation' },
     ],
   },
   {
@@ -112,6 +113,7 @@ const ACTION_TO_DB: Record<ActionType, string> = {
   create_deal:       'Create Deal',
   add_tag:           'Add Tag',
   remove_tag:        'Remove Tag',
+  rotate_owner:      'Rotate Contact Owner',
   create_task:       'Create Task',
   log_activity:      'Log Activity',
   send_notification: 'Send Notification',
@@ -409,6 +411,16 @@ function NodeConfigPanel({ node, onChange, onClose }: {
         return (
           <FieldLabel label="Tag Name">
             <input value={(config.tag as string) ?? ''} onChange={e => update('tag', e.target.value)} placeholder="e.g. VIP, Hot Lead" className="cfg-input" />
+          </FieldLabel>
+        )
+      case 'rotate_owner':
+        return (
+          <FieldLabel label="Rotate Within Unit">
+            <select value={(config.unit as string) ?? 'Sales'} onChange={e => update('unit', e.target.value)} className="cfg-input">
+              {['Sales', 'Delivery/Operations', 'Billing/Finance'].map(u => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
           </FieldLabel>
         )
       case 'update_contact':

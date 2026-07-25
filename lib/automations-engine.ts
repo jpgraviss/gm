@@ -77,6 +77,17 @@ const ACTION_CONFIG_ADAPTERS: Record<string, (cfg: Record<string, unknown>) => R
   'Send Notification': (cfg) => ({ notifyTarget: cfg.target, notifyMessage: cfg.message }),
   'Add Tag': (cfg) => ({ tag: cfg.tag }),
   'Remove Tag': (cfg) => ({ tag: cfg.tag }),
+  // AUDIT.md #295 — previously had no adapter at all, so the visual builder
+  // (app/automation/builder/page.tsx) had no way to actually reach the
+  // engine's `context.unit` read in the 'Rotate Contact Owner' case below —
+  // the action was only ever reachable via SequenceAutomateTab's bespoke
+  // automation-level config.unit, and only against the Form Submitted
+  // trigger, which the action's own _publicSource gate always blocks. Kept
+  // unprefixed (`unit`, not e.g. `rotateUnit`) to match the engine's
+  // existing read — safe here since this action is only meaningful against
+  // the Contact Created trigger, whose trigger data (a crm_contacts row)
+  // has no `unit` column to collide with.
+  'Rotate Contact Owner': (cfg) => ({ unit: cfg.unit }),
 }
 
 function translateActionConfig(actionType: string, cfg: Record<string, unknown>): Record<string, unknown> {

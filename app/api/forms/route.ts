@@ -41,6 +41,9 @@ function mapForm(row: any) {
 }
 
 export const GET = withErrorHandler('forms GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const pag = parsePagination(req)
   const db = createServiceClient()
 

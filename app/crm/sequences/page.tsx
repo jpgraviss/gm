@@ -241,15 +241,43 @@ export default function SequencesPage() {
     setCreatingSeq(false)
   }
 
+  // Re-resolves a single sequence's real server state via the list route
+  // (no dedicated single-sequence GET exists) and merges it back into local
+  // state — insert-if-missing so a failed DELETE (which already optimistically
+  // removed the row before the failure was caught) correctly restores it,
+  // matching AUDIT #294/#351's fix for this same optimistic-update race.
+  async function refetchSequenceInto(id: string): Promise<EmailSequence | null> {
+    try {
+      const res = await fetch('/api/sequences')
+      if (!res.ok) return null
+      const seqs = await res.json()
+      const found = Array.isArray(seqs) ? seqs.find((s: EmailSequence) => s.id === id) : null
+      if (found) {
+        setSequences(prev => prev.some(s => s.id === id) ? prev.map(s => s.id === id ? found : s) : [found, ...prev])
+      } else {
+        setSequences(prev => prev.filter(s => s.id !== id))
+      }
+      return found ?? null
+    } catch {
+      return null
+    }
+  }
+
   async function updateSequence(updated: EmailSequence) {
     const exists = sequences.some(s => s.id === updated.id)
     if (exists) {
       setSequences(prev => prev.map(s => s.id === updated.id ? updated : s))
-      await fetch(`/api/sequences/${updated.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      })
+      try {
+        const res = await fetch(`/api/sequences/${updated.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated),
+        })
+        if (!res.ok) throw new Error('Failed')
+      } catch {
+        toast('Failed to update sequence', 'error')
+        await refetchSequenceInto(updated.id)
+      }
     } else {
       const res = await fetch('/api/sequences', {
         method: 'POST',
@@ -265,8 +293,14 @@ export default function SequencesPage() {
 
   async function deleteSequence(id: string) {
     setSequences(prev => prev.filter(s => s.id !== id))
-    await fetch(`/api/sequences/${id}`, { method: 'DELETE' })
-    toast('Sequence deleted', 'success')
+    try {
+      const res = await fetch(`/api/sequences/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed')
+      toast('Sequence deleted', 'success')
+    } catch {
+      toast('Failed to delete sequence', 'error')
+      await refetchSequenceInto(id)
+    }
   }
 
   const folders = [...new Set(sequences.map(s => (s as EmailSequence & { folder?: string }).folder).filter(Boolean))]

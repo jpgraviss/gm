@@ -170,7 +170,7 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
 
   if (Array.isArray(form.notify_emails) && form.notify_emails.length > 0) {
     const summary = Object.entries(body)
-      .map(([k, v]) => `<strong>${k}:</strong> ${String(v)}`)
+      .map(([k, v]) => `<strong>${escapeHtml(k)}:</strong> ${escapeHtml(String(v))}`)
       .join('<br/>')
     getResend().then(r => r.emails.send({
       from: 'GravHub <noreply@app.gravissmarketing.com>',
@@ -196,7 +196,7 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
           <div style="width:48px;height:48px;border-radius:12px;background:#015035;display:flex;align-items:center;justify-content:center;margin-bottom:20px">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
-          <h1 style="font-size:20px;font-weight:700;color:#1B211D;margin:0 0 8px">${firstName ? `Thanks, ${firstName}!` : 'Thank you!'}</h1>
+          <h1 style="font-size:20px;font-weight:700;color:#1B211D;margin:0 0 8px">${firstName ? `Thanks, ${escapeHtml(firstName)}!` : 'Thank you!'}</h1>
           <p style="font-size:14px;color:#4b5563;line-height:1.6;margin:0 0 24px">${message}</p>
           <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
           <p style="font-size:11px;color:#9ca3af">&copy; Graviss Marketing</p>
@@ -231,3 +231,15 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
     { status: 201, headers: corsHeaders },
   )
 })
+
+// Public, unauthenticated endpoint — submitted field values and the
+// respondent's own name are interpolated into HTML emails sent to real
+// staff/client inboxes (the notify-email and confirmation-email below),
+// so they must be escaped before interpolation.
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}

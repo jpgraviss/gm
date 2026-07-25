@@ -111,6 +111,7 @@ export async function cancelScheduledEmail(id: string): Promise<ScheduledEmail> 
 
 function getNextSendAt(current: string, recurring: string): string | null {
   const date = new Date(current)
+  const originalDay = date.getDate()
   switch (recurring) {
     case 'daily':
       date.setDate(date.getDate() + 1)
@@ -123,9 +124,14 @@ function getNextSendAt(current: string, recurring: string): string | null {
       return date.toISOString()
     case 'monthly':
       date.setMonth(date.getMonth() + 1)
+      // setMonth silently overflows for due-days 29-31 into whatever day
+      // the target month lands on (Jan 31 + 1mo -> Mar 3, skipping
+      // February entirely) — clamp back to the target month's last day.
+      if (date.getDate() !== originalDay) date.setDate(0)
       return date.toISOString()
     case 'quarterly':
       date.setMonth(date.getMonth() + 3)
+      if (date.getDate() !== originalDay) date.setDate(0)
       return date.toISOString()
     default:
       return null

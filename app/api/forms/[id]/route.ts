@@ -38,7 +38,10 @@ function mapForm(row: any) {
   }
 }
 
-export const GET = withErrorHandler('forms/[id] GET', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('forms/[id] GET', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db.from('forms').select('*').eq('id', id).single()

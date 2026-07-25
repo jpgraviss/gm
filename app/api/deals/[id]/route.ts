@@ -44,10 +44,11 @@ export const PATCH = withErrorHandler('deals/[id] PATCH', async (req, ctx) => {
   const { id } = await ctx!.params
   const body = await req.json()
 
-  const customFieldsError = await validateCustomFieldValues('deals', body.customFields)
+  const db = createServiceClient()
+  const { data: existingDeal } = await db.from('deals').select('custom_fields').eq('id', id).single()
+  const customFieldsError = await validateCustomFieldValues('deals', body.customFields, existingDeal?.custom_fields)
   if (customFieldsError) return validationError(customFieldsError)
 
-  const db = createServiceClient()
   const update: Record<string, unknown> = {}
   if (body.stage !== undefined)       update.stage = body.stage
   if (body.value !== undefined)       update.value = body.value

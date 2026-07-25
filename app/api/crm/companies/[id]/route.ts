@@ -52,10 +52,11 @@ export const PUT = withErrorHandler('crm/companies/[id] PUT', async (
   })
   if (!result.valid) return validationError(result.error)
 
-  const customFieldsError = await validateCustomFieldValues('companies', body.customFields)
+  const db = createServiceClient()
+  const { data: existing } = await db.from('crm_companies').select('custom_fields').eq('id', id).single()
+  const customFieldsError = await validateCustomFieldValues('companies', body.customFields, existing?.custom_fields)
   if (customFieldsError) return validationError(customFieldsError)
 
-  const db = createServiceClient()
   const { data, error } = await db
     .from('crm_companies')
     .update({
@@ -104,10 +105,11 @@ export const PATCH = withErrorHandler('crm/companies/[id] PATCH', async (
   })
   if (!result.valid) return validationError(result.error)
 
-  const customFieldsError = await validateCustomFieldValues('companies', body.customFields)
+  const db = createServiceClient()
+  const { data: existing } = await db.from('crm_companies').select('custom_fields').eq('id', id).single()
+  const customFieldsError = await validateCustomFieldValues('companies', body.customFields, existing?.custom_fields)
   if (customFieldsError) return validationError(customFieldsError)
 
-  const db = createServiceClient()
   const updates: Record<string, unknown> = {}
   if (body.tags !== undefined) updates.tags = body.tags
   if (body.status !== undefined) updates.status = body.status

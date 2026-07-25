@@ -23,10 +23,19 @@ interface FieldDefRow {
  * or null if the object is valid (or empty). Unknown keys (no matching
  * definition — e.g. a since-deleted field) are left alone, matching the
  * existing lenient behavior elsewhere in this codebase.
+ *
+ * `currentCustomFields`, if passed, is the record's already-stored value —
+ * any key whose incoming value is unchanged from what's already stored is
+ * skipped. A field definition can be retyped after values were saved under
+ * the old type (the edit UI has no migration step), and every save from the
+ * main edit panel round-trips the entire customFields object regardless of
+ * what was actually edited — without this, a stale untouched value would
+ * permanently block saving unrelated changes to that record.
  */
 export async function validateCustomFieldValues(
   entityType: CustomFieldEntityType,
   customFields: unknown,
+  currentCustomFields?: Record<string, unknown> | null,
 ): Promise<string | null> {
   if (customFields === undefined || customFields === null) return null
   if (typeof customFields !== 'object' || Array.isArray(customFields)) {
@@ -36,10 +45,14 @@ export async function validateCustomFieldValues(
   if (entries.length === 0) return null
 
   const db = createServiceClient()
-  const { data: defs } = await db
+  const { data: defs, error } = await db
     .from('custom_field_definitions')
     .select('field_key, label, field_type, options')
     .eq('entity_type', entityType)
+  if (error) {
+    console.error(`validateCustomFieldValues: failed to load definitions for ${entityType}`, error)
+    return null
+  }
 
   const byKey = new Map((defs ?? []).map((d: FieldDefRow) => [d.field_key, d]))
 
@@ -47,6 +60,7 @@ export async function validateCustomFieldValues(
     const def = byKey.get(key)
     if (!def) continue
     if (rawValue === null || rawValue === undefined || rawValue === '') continue
+    if (currentCustomFields && currentCustomFields[key] === rawValue) continue
 
     switch (def.field_type) {
       case 'number':

@@ -53,10 +53,11 @@ export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) =>
   })
   if (!result.valid) return validationError(result.error)
 
-  const customFieldsError = await validateCustomFieldValues('contacts', body.customFields)
+  const db = createServiceClient()
+  const { data: existing } = await db.from('crm_contacts').select('custom_fields').eq('id', id).single()
+  const customFieldsError = await validateCustomFieldValues('contacts', body.customFields, existing?.custom_fields)
   if (customFieldsError) return validationError(customFieldsError)
 
-  const db = createServiceClient()
   const { data, error } = await db
     .from('crm_contacts')
     .update({
@@ -111,10 +112,11 @@ export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx
   })
   if (!result.valid) return validationError(result.error)
 
-  const customFieldsError = await validateCustomFieldValues('contacts', body.customFields)
+  const db = createServiceClient()
+  const { data: existing } = await db.from('crm_contacts').select('custom_fields').eq('id', id).single()
+  const customFieldsError = await validateCustomFieldValues('contacts', body.customFields, existing?.custom_fields)
   if (customFieldsError) return validationError(customFieldsError)
 
-  const db = createServiceClient()
   const updates: Record<string, unknown> = {}
   if (body.tags !== undefined) updates.tags = body.tags
   if (body.lastActivity !== undefined) updates.last_activity = body.lastActivity

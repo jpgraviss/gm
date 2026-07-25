@@ -103,15 +103,21 @@ export const POST = withErrorHandler('bookings POST', async (req) => {
     return NextResponse.json({ error: 'Cannot book a time in the past' }, { status: 400 })
   }
 
-  // Double-check slot is still available (prevent race conditions)
+  // Double-check slot is still available (prevent race conditions).
+  // AUDIT — this used inclusive lte/gte boundaries, but the slot picker a
+  // guest actually sees (computeAvailableSlots / the GET handlers below)
+  // uses strict less-than/greater-than to decide overlap — a slot picked
+  // immediately back-to-back with another confirmed booking (any type with
+  // buffer_minutes: 0) showed as free but this write-time check falsely
+  // flagged it as a conflict every time. lt/gt matches the read side.
   const { data: conflict } = await db
     .from('bookings')
     .select('id')
     .eq('calendar_slug', calendarSlug)
     .eq('date', date)
     .eq('status', 'confirmed')
-    .lte('start_time', endTime)
-    .gte('end_time', startTime)
+    .lt('start_time', endTime)
+    .gt('end_time', startTime)
     .limit(1)
 
   if (conflict && conflict.length > 0) {

@@ -223,11 +223,14 @@ export default function CalendarPage() {
     if (!confirm('Permanently delete this event? This cannot be undone.')) return
     setDeletingId(id)
     try {
-      await fetch(`/api/bookings/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed')
       setBookings(prev => prev.filter(b => b.id !== id))
       setTypeBookings(prev => prev.filter(b => b.id !== id))
       if (selected?.id === id) setSelected(null)
-    } catch { /* ignore */ }
+    } catch {
+      toast('Failed to delete event', 'error')
+    }
     setDeletingId(null)
   }
 

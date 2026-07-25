@@ -17,10 +17,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
-import FileUpload from '@/components/ui/FileUpload'
 import LoadingScreen from '@/components/ui/LoadingScreen'
-
-const DEPARTMENTS = [...SERVICE_NAMES]
 
 const statusOrder: ProjectStatus[] = [
   'Not Started', 'In Progress', 'Awaiting Client', 'Completed', 'Launched', 'In Maintenance',
@@ -121,48 +118,6 @@ function ProjectGridCard({ project, onClick, overdueTasks }: { project: Project;
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-interface ProjectFile {
-  name: string
-  size: number
-  url: string
-  path: string
-  type: string
-  createdAt?: string
-}
-
-function ProjectFilesTab({ company }: { company: string }) {
-  const [files, setFiles] = useState<ProjectFile[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    fetch(`/api/files?company=${encodeURIComponent(company)}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setFiles(data.map((f: ProjectFile) => ({ ...f, type: f.type ?? '' }))) })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [company])
-
-  if (loading) return <div className="py-12 text-center text-sm text-gray-400">Loading files...</div>
-
-  return (
-    <div className="flex flex-col gap-4">
-      <FileUpload
-        company={company}
-        files={files}
-        onUpload={file => setFiles(prev => [file, ...prev])}
-        onRemove={file => {
-          fetch('/api/files', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: file.path }),
-          })
-          setFiles(prev => prev.filter(f => f.path !== file.path))
-        }}
-      />
     </div>
   )
 }
@@ -269,17 +224,6 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
                     onChange={e => setSelectedTeam(prev => e.target.checked ? [...prev, o] : prev.filter(x => x !== o))}
                     className="rounded border-gray-300 text-green-700 focus:ring-green-700" />
                   {o}
-                </label>
-              ))}
-            </div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Departments</label>
-            <div className="flex flex-wrap gap-2">
-              {DEPARTMENTS.map(d => (
-                <label key={d} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border cursor-pointer transition-colors ${selectedTeam.includes(d) ? 'bg-green-50 border-green-600 text-green-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                  <input type="checkbox" checked={selectedTeam.includes(d)}
-                    onChange={e => setSelectedTeam(prev => e.target.checked ? [...prev, d] : prev.filter(x => x !== d))}
-                    className="hidden" />
-                  {d}
                 </label>
               ))}
             </div>

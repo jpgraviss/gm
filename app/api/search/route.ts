@@ -24,13 +24,19 @@ export const GET = withErrorHandler('search GET', async (req) => {
 
   const db = createServiceClient()
   const pattern = `%${q}%`
+  // PostgREST's .or() filter syntax splits on top-level commas — a search
+  // term containing one (e.g. a contact typed "Smith, John") would silently
+  // break that filter's parsing without this. Quoting the value, escaping
+  // any embedded quote/backslash, is the documented PostgREST escape for a
+  // value containing reserved characters (comma, semicolon, parentheses).
+  const orPattern = `"${pattern.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 
   const [contacts, companies, deals, projects, tickets, tasks, proposals, contracts] =
     await Promise.all([
       db
         .from('crm_contacts')
         .select('id, first_name, last_name, company_name, title')
-        .or(`first_name.ilike.${pattern},last_name.ilike.${pattern},company_name.ilike.${pattern}`)
+        .or(`first_name.ilike.${orPattern},last_name.ilike.${orPattern},company_name.ilike.${orPattern}`)
         .limit(LIMIT_PER_TYPE),
       db
         .from('crm_companies')
@@ -50,7 +56,7 @@ export const GET = withErrorHandler('search GET', async (req) => {
       db
         .from('tickets')
         .select('id, subject, company, status')
-        .or(`subject.ilike.${pattern},company.ilike.${pattern}`)
+        .or(`subject.ilike.${orPattern},company.ilike.${orPattern}`)
         .limit(LIMIT_PER_TYPE),
       db
         .from('app_tasks')
@@ -68,6 +74,20 @@ export const GET = withErrorHandler('search GET', async (req) => {
         .ilike('company', pattern)
         .limit(LIMIT_PER_TYPE),
     ])
+
+  // None of these query errors were checked before — a broken filter (or
+  // any other Supabase error) on one table silently produced an empty
+  // result for that type with zero indication anything went wrong; a
+  // normal-looking "no results" is indistinguishable from a real query
+  // failure without this.
+  const named: [string, { error: unknown } ][] = [
+    ['contacts', contacts], ['companies', companies], ['deals', deals],
+    ['projects', projects], ['tickets', tickets], ['tasks', tasks],
+    ['proposals', proposals], ['contracts', contracts],
+  ]
+  for (const [name, res] of named) {
+    if (res.error) console.error(`[search] ${name} query failed:`, res.error)
+  }
 
   const results: SearchResult[] = []
 

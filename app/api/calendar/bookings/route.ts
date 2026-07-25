@@ -280,14 +280,19 @@ export const POST = withErrorHandler('calendar/bookings POST', async (req) => {
     return NextResponse.json({ error: 'Cannot book a time in the past' }, { status: 400 })
   }
 
+  // AUDIT — inclusive lte/gte here disagreed with the strict lt/gt overlap
+  // check GET's slot picker actually uses above (`min < bEnd && slotEndMin
+  // > bStart`), so a guest picking a slot immediately back-to-back with an
+  // existing booking (any type with buffer_minutes: 0) saw it as free but
+  // this write-time re-check falsely rejected it as a conflict every time.
   const { data: conflict } = await db
     .from('booking_type_bookings')
     .select('id')
     .eq('booking_type_id', bt.id)
     .eq('date', date)
     .eq('status', 'confirmed')
-    .lte('start_time', end_time)
-    .gte('end_time', start_time)
+    .lt('start_time', end_time)
+    .gt('end_time', start_time)
 
   if (conflict && conflict.length > 0) {
     return NextResponse.json({ error: 'Time slot is no longer available' }, { status: 409 })
@@ -308,8 +313,8 @@ export const POST = withErrorHandler('calendar/bookings POST', async (req) => {
     .eq('calendar_slug', 'imported')
     .eq('date', date)
     .eq('status', 'confirmed')
-    .lte('start_time', end_time)
-    .gte('end_time', start_time)
+    .lt('start_time', end_time)
+    .gt('end_time', start_time)
 
   if (importedConflict && importedConflict.length > 0) {
     return NextResponse.json({ error: 'Time slot is no longer available' }, { status: 409 })

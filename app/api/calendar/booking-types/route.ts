@@ -47,11 +47,19 @@ export const POST = withErrorHandler('calendar/booking-types POST', async (req) 
   const db = createServiceClient()
 
   if (id) {
+    // AUDIT — this used to regenerate the slug from the current name on
+    // every edit, with no uniqueness check or redirect (unlike the insert
+    // path below, which checks for collisions). Renaming a booking type to
+    // fix a typo silently 404'd any already-shared/embedded /go/book/{slug}
+    // link, and renaming into another type's existing slug threw a raw DB
+    // unique-constraint error. The slug is now set once at creation and
+    // never changes on a name edit — a public URL a client bookmarked or an
+    // agency embedded on their site keeps working regardless of later
+    // renames.
     const { data, error } = await db
       .from('booking_types')
       .update({
         name: name.trim(),
-        slug: slugify(name.trim()),
         description: description?.trim() || null,
         duration_minutes: duration_minutes ?? 30,
         location: location ?? 'zoom',

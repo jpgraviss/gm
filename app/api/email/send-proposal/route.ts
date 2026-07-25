@@ -42,8 +42,21 @@ export const POST = withErrorHandler('email/send-proposal POST', async (req) => 
     }
 
     const contactName = contact.full_name || `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim() || 'there'
-    const portalUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
     const items = proposal.items ?? []
+
+    // The CTA previously linked to the bare app root (a dead end for any
+    // prospect who isn't yet a portal client — the normal case, since
+    // proposals typically precede becoming one) even though a working
+    // public token-based viewer already exists at /proposal/[token]
+    // (see app/api/proposals/[id]/share/route.ts). Mint/reuse the same
+    // token here so the "mark as Sent" flow lands somewhere real instead
+    // of requiring staff to separately discover and use the /share route.
+    const token = proposal.token || crypto.randomUUID()
+    if (!proposal.token) {
+      await db.from('proposals').update({ token, client_email: recipientEmail }).eq('id', proposalId)
+    }
+    const portalUrl = `${appUrl}/proposal/${token}`
 
     const result = await sendEmail({
       to: recipientEmail,

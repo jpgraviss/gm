@@ -4,6 +4,7 @@ import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { chatCompletion, buildToolResultMessage, buildAssistantMessage, type AiMessage, type AiToolDef } from '@/lib/ai-client'
 import { withErrorHandler } from '@/lib/api-handler'
 import { PROJECT_STATUSES } from '@/lib/validation'
+import { logAudit } from '@/lib/audit'
 
 // AUDIT — the agentic tool loop below has up to 10 iterations, each with
 // its own 60s chatCompletion timeout, with no overall wall-clock cap —
@@ -385,7 +386,18 @@ const TOOLS = [
 
 // ─── Tool execution ─────────────────────────────────────────────────────────
 
-async function executeTool(name: string, input: Record<string, unknown>): Promise<string> {
+// Fields with a real governed transition graph/audit-log requirement in
+// their dedicated PATCH route (VALID_TRANSITIONS for contracts, the
+// status/amount audit log for invoices) — update_record's generic
+// db.update() bypasses all of that with no field validation at all, so
+// these are blocked here rather than allowing the AI to jump a contract
+// straight to "Fully Executed" or silently change invoice amounts.
+const GOVERNED_FIELDS: Record<string, string[]> = {
+  contracts: ['status'],
+  invoices: ['status', 'amount'],
+}
+
+async function executeTool(name: string, input: Record<string, unknown>, actorName: string): Promise<string> {
   const db = createServiceClient()
 
   switch (name) {
@@ -715,9 +727,16 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
       const validTables = ['crm_companies', 'crm_contacts', 'deals', 'contracts', 'proposals', 'invoices', 'projects', 'tickets', 'app_tasks', 'time_entries']
       if (!validTables.includes(table)) return `Invalid table: ${table}. Valid tables: ${validTables.join(', ')}`
       if (!updates || Object.keys(updates).length === 0) return 'No updates provided.'
+
+      const blocked = (GOVERNED_FIELDS[table] ?? []).filter(f => f in updates)
+      if (blocked.length > 0) {
+        return `Can't update ${blocked.join(', ')} on ${table} through this tool — ${table === 'contracts' ? 'contract status changes must go through the app UI, which enforces valid status transitions and fires the related automations' : 'invoice status/amount changes must go through the app UI, which keeps the audit trail and payment records accurate'}. Ask the user to make this change directly in GravHub, or update the other fields you have and leave ${blocked.join(', ')} out of the request.`
+      }
+
       const { data, error } = await db.from(table).update(updates).eq('id', id).select().single()
       if (error) return `Error updating record: ${error.message}`
       if (!data) return `No record found with id "${id}" in table "${table}".`
+      logAudit({ userName: actorName, action: 'ai_updated_record', module: 'ai_assistant', type: 'action', metadata: { table, id, fields: Object.keys(updates) } })
       return JSON.stringify(data)
     }
 
@@ -897,7 +916,7 @@ export const POST = withErrorHandler('ai/chat POST', async (req) => {
     const staffDb = createServiceClient()
     const { data: staffRow } = await staffDb
       .from('team_members')
-      .select('id, status')
+      .select('id, name, status')
       .ilike('email', callerEmail)
       .maybeSingle()
 
@@ -998,7 +1017,7 @@ Guidelines:
 
       const toolResultMessages: AiMessage[] = []
       for (const tc of result.toolCalls) {
-        const toolOutput = await executeTool(tc.name, tc.args)
+        const toolOutput = await executeTool(tc.name, tc.args, staffRow.name || callerEmail)
         toolResultMessages.push(buildToolResultMessage(tc.id, toolOutput, tc.name))
       }
 

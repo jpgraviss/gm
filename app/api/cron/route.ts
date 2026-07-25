@@ -9,6 +9,7 @@ import { processScheduledEmails } from '@/lib/email-scheduler'
 import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender'
 import { syncGranolaNotes, isGranolaConfigured } from '@/lib/granola'
 import { dispatchReviewCampaign } from '@/lib/review-campaigns'
+import { sendBroadcastNow } from '@/lib/broadcasts'
 
 /**
  * Cron endpoint — called on a schedule (e.g. every 6 hours via Vercel Cron).
@@ -186,6 +187,14 @@ export const GET = withErrorHandler('cron GET', async (req) => {
     results.rankTrackerReports = { error: 'Failed' }
   }
 
+  // 12. Dispatch scheduled broadcasts whose scheduled_at has passed.
+  try {
+    results.broadcasts = await dispatchScheduledBroadcasts()
+  } catch (err) {
+    console.error('[cron] Scheduled broadcast dispatch failed:', err)
+    results.broadcasts = { error: 'Failed' }
+  }
+
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })
 })
 
@@ -234,6 +243,58 @@ async function dispatchScheduledReviewCampaigns(): Promise<{ dispatched: number;
       console.error('[cron] Failed to dispatch review campaign', claimed.id, err)
       // Leave it claimable again rather than stuck 'active' forever.
       await db.from('review_campaigns').update({ status: 'scheduled' }).eq('id', claimed.id)
+      failed++
+    }
+  }
+
+  return { dispatched, sent, failed }
+}
+
+/**
+ * Send broadcasts whose scheduled_at has arrived. `app/marketing/page.tsx`'s
+ * scheduleSend() sets status: 'scheduled' and shows a "Scheduled for..."
+ * success toast implying real, automated delivery, but nothing anywhere
+ * ever transitioned a broadcast out of 'scheduled' — it sat forever with no
+ * error surfaced. Same dead-feature pattern already fixed for Rank
+ * Tracker's Scheduled Reports (#112) and Review Campaigns (#111) above;
+ * this sibling instance was missed. Each row is claimed atomically
+ * (status 'scheduled' -> 'sending', only proceeding if the update actually
+ * returned a row) so two overlapping cron ticks can't both send it twice.
+ */
+async function dispatchScheduledBroadcasts(): Promise<{ dispatched: number; sent: number; failed: number }> {
+  const db = createServiceClient()
+  const now = new Date().toISOString()
+
+  const { data: due } = await db
+    .from('broadcasts')
+    .select('id')
+    .eq('status', 'scheduled')
+    .lte('scheduled_at', now)
+    .limit(10)
+
+  let dispatched = 0
+  let sent = 0
+  let failed = 0
+
+  for (const row of due ?? []) {
+    const { data: claimed } = await db
+      .from('broadcasts')
+      .update({ status: 'sending', sent_at: now })
+      .eq('id', row.id)
+      .eq('status', 'scheduled')
+      .select('*')
+      .maybeSingle()
+    if (!claimed) continue
+
+    dispatched++
+    try {
+      const result = await sendBroadcastNow(db, claimed)
+      sent += result.sent
+      if (result.sent === 0 && result.total > 0) failed++
+    } catch (err) {
+      console.error('[cron] Failed to send scheduled broadcast', claimed.id, err)
+      // Leave it claimable again rather than stuck 'sending' forever.
+      await db.from('broadcasts').update({ status: 'scheduled' }).eq('id', claimed.id)
       failed++
     }
   }

@@ -524,6 +524,7 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
                           type: 'social_post',
                           context: {
                             topic: company || 'marketing',
+                            company,
                             platform: platforms[0] || 'LinkedIn',
                             url: linkUrl || '',
                             additionalContext: content || '',

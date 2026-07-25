@@ -6,6 +6,7 @@
 import { chatCompletion } from '@/lib/ai-client'
 import { buildProposalHtml, buildFooterTemplate, type ProposalDraft, type ProposalOption } from '@/lib/proposal-template'
 import { renderProposalPdf } from '@/lib/proposal-render'
+import { getBrandVoice, brandVoicePromptAddendum } from '@/lib/brand-kit'
 
 export interface GenerateProposalOptions {
   intakeText: string
@@ -155,8 +156,13 @@ export async function generateProposal(opts: GenerateProposalOptions): Promise<G
   // launches, well past any reasonable serverless function limit. 35s per
   // tier still gives a real model plenty of room while keeping the worst
   // case (3 tiers + PDF render) comfortably inside maxDuration below.
+  // AUDIT.md #320 — fold the client's Brand Kit voice into the system
+  // prompt, if one exists for opts.clientName, so proposal copy matches
+  // house style plus this specific client's tone rather than always the
+  // generic default.
+  const brand = await getBrandVoice(opts.clientName)
   const ai = await chatCompletion({
-    system: SYSTEM_PROMPT,
+    system: SYSTEM_PROMPT + brandVoicePromptAddendum(brand),
     messages: [{ role: 'user', content: buildUserPrompt(opts) }],
     maxTokens: 4000,
     timeoutMs: 35_000,

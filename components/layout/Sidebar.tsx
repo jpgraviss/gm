@@ -13,7 +13,7 @@ import {
   BookOpen, Star, Megaphone, Bot, ChevronDown,
   ScrollText, GraduationCap, Share2, Mail, ClipboardList, Layers,
   CheckSquare, Clock, CalendarDays, CalendarCheck, Wrench, RefreshCw, PackageCheck, Zap,
-  BarChart3, Plug, Search, Activity, FileSearch, Radar, Compass, SlidersHorizontal,
+  BarChart3, Plug, Search, Activity, FileSearch, Radar, Compass, SlidersHorizontal, Palette,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -139,6 +139,7 @@ export const defaultNavigation: NavSection[] = [
       { label: 'SOPs',             href: '/admin/sops',                icon: <FileText size={16} />,    adminOnly: true },
       { label: 'Document Templates', href: '/admin/document-templates', icon: <FileText size={16} />,   allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
       { label: 'Custom Fields',    href: '/admin/custom-fields',       icon: <SlidersHorizontal size={16} />, allowedUnits: ['Leadership/Admin', 'Sales'] },
+      { label: 'Brand Kits',       href: '/admin/brand-kits',          icon: <Palette size={16} />,       allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
     ],
   },
 ]

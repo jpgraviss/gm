@@ -30,19 +30,34 @@ export const POST = withErrorHandler('broadcasts/[id]/send POST', async (req, { 
   const { id } = await params
   const db = createServiceClient()
 
-  const { data: broadcast } = await db
+  const { data: existing } = await db
     .from('broadcasts')
-    .select('*')
+    .select('status')
     .eq('id', id)
     .single()
 
-  if (!broadcast) return NextResponse.json({ error: 'Broadcast not found' }, { status: 404 })
-  if (broadcast.status === 'sent' || broadcast.status === 'sending') {
-    return NextResponse.json({ error: `Broadcast is already ${broadcast.status}` }, { status: 400 })
+  if (!existing) return NextResponse.json({ error: 'Broadcast not found' }, { status: 404 })
+  if (existing.status === 'sent' || existing.status === 'sending') {
+    return NextResponse.json({ error: `Broadcast is already ${existing.status}` }, { status: 400 })
   }
 
-  // Mark as sending
-  await db.from('broadcasts').update({ status: 'sending', sent_at: new Date().toISOString() }).eq('id', id)
+  // Atomically claim the broadcast (only proceeding if the update actually
+  // returned a row) instead of a read-then-write "mark as sending" — the
+  // cron dispatcher (dispatchScheduledBroadcasts in app/api/cron/route.ts)
+  // can independently pick up the same scheduled broadcast at the same
+  // moment a staff member clicks "Send Now"; without this guard both paths
+  // would call sendBroadcastNow and email the full audience twice.
+  const { data: broadcast } = await db
+    .from('broadcasts')
+    .update({ status: 'sending', sent_at: new Date().toISOString() })
+    .eq('id', id)
+    .in('status', ['draft', 'scheduled'])
+    .select('*')
+    .maybeSingle()
+
+  if (!broadcast) {
+    return NextResponse.json({ error: 'Broadcast is already being sent' }, { status: 409 })
+  }
 
   const { sent, skipped, failed, total } = await sendBroadcastNow(db, broadcast)
 

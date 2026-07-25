@@ -11,6 +11,19 @@ import { syncGranolaNotes, isGranolaConfigured } from '@/lib/granola'
 import { dispatchReviewCampaign } from '@/lib/review-campaigns'
 import { sendBroadcastNow } from '@/lib/broadcasts'
 
+// AUDIT — dispatchScheduledBroadcasts (added below) runs the same
+// sequentially-chunked email-sending workload that app/api/broadcasts/
+// [id]/send/route.ts declares its own 300s maxDuration for, but as the
+// 12th of 12 jobs already running in this single request. Declaring the
+// same budget here doesn't guarantee every job fits, but it stops the
+// platform's undeclared default from being the limiting factor —
+// combined with dispatchScheduledBroadcasts's own small per-tick limit
+// and this endpoint's every-5-minutes real cadence (.github/workflows/
+// cron-ping.yml), a broadcast that doesn't finish this tick is picked up
+// again shortly, same bounded-batch pattern already used by
+// checkAllRanks()/rankCheckDue() below.
+export const maxDuration = 300
+
 /**
  * Cron endpoint — called on a schedule (e.g. every 6 hours via Vercel Cron).
  * Handles:
@@ -265,12 +278,19 @@ async function dispatchScheduledBroadcasts(): Promise<{ dispatched: number; sent
   const db = createServiceClient()
   const now = new Date().toISOString()
 
+  // Kept small — this runs as the last of 12 sequential jobs in one cron
+  // tick with no per-job time budget, and each broadcast here can itself
+  // be a full chunked audience send. A small per-tick cap plus the
+  // every-5-minute real cadence (.github/workflows/cron-ping.yml) works
+  // through a backlog the same way checkAllRanks()/rankCheckDue() below
+  // does, instead of risking one tick running long enough to hit the
+  // platform's hard timeout mid-send.
   const { data: due } = await db
     .from('broadcasts')
     .select('id')
     .eq('status', 'scheduled')
     .lte('scheduled_at', now)
-    .limit(10)
+    .limit(3)
 
   let dispatched = 0
   let sent = 0
@@ -293,8 +313,14 @@ async function dispatchScheduledBroadcasts(): Promise<{ dispatched: number; sent
       if (result.sent === 0 && result.total > 0) failed++
     } catch (err) {
       console.error('[cron] Failed to send scheduled broadcast', claimed.id, err)
-      // Leave it claimable again rather than stuck 'sending' forever.
-      await db.from('broadcasts').update({ status: 'scheduled' }).eq('id', claimed.id)
+      // sendBroadcastNow already sets status: 'failed' itself for a
+      // deterministic error (e.g. the contact query erroring) before
+      // re-throwing — resetting to 'scheduled' unconditionally here would
+      // clobber that and silently retry the same permanent failure forever.
+      // Only reclaim it if it's still sitting in 'sending' (a genuinely
+      // transient failure — a thrown network/timeout error mid-send that
+      // never got to set any status of its own).
+      await db.from('broadcasts').update({ status: 'scheduled' }).eq('id', claimed.id).eq('status', 'sending')
       failed++
     }
   }

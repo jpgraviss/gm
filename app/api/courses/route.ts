@@ -36,6 +36,12 @@ export const GET = withErrorHandler('courses GET', async (req) => {
   if (!email) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
   }
+  // A portal client passes the auth check above but isn't in team_members,
+  // so getAuthUser resolves null for them — used here to keep unpublished
+  // course content (including quiz answer keys, via mapCourse's modules
+  // passthrough) restricted to staff, matching the client-side filter
+  // app/portal/services/sales-training/page.tsx already applies.
+  const staffUser = await getAuthUser(req)
 
   const pag = parsePagination(req)
   const db = createServiceClient()
@@ -43,6 +49,7 @@ export const GET = withErrorHandler('courses GET', async (req) => {
   let query = db
     .from('courses')
     .select('*')
+  if (!staffUser) query = query.eq('status', 'Published')
   query = applyCursor(query, pag)
 
   const { data, error } = await query

@@ -351,6 +351,25 @@ async function resolveContactId(context: Record<string, unknown>, company: strin
   return contacts?.[0]?.id ?? null
 }
 
+// `assigned_rep_user_id` is never set anywhere in the app — every trigger
+// only ever spreads a DB row's `assigned_rep`, which is plain text (a
+// name), not a user id. Without this fallback, "Assigned Rep" notification
+// targeting (both the Send Notification action and the standalone Notify
+// Assigned Rep action) silently resolved zero recipients on every run.
+async function resolveAssignedRepUserId(context: Record<string, unknown>, db: SupabaseClient): Promise<string | null> {
+  const direct = (context.assigned_rep_user_id as string) ?? null
+  if (direct) return direct
+  const repName = (context.assigned_rep as string) ?? ''
+  if (!repName) return null
+  const { data: member } = await db
+    .from('team_members')
+    .select('id')
+    .eq('name', repName)
+    .eq('status', 'active')
+    .maybeSingle()
+  return member?.id ?? null
+}
+
 async function executeAction(
   action: string,
   context: Record<string, unknown>,
@@ -367,18 +386,23 @@ async function executeAction(
     case 'Send Email':
     case 'Send Email Reminder':
     case 'Send Follow-up Email': {
-      if (!company) break
-      const { data: contacts } = await db
+      // form_submitted (and other contact-only triggers) never populate
+      // `company` in context — only requiring it meant Send Email was
+      // structurally dead on the most intuitive builder combo ("Form
+      // Submitted" -> "Send Email"). resolveContactId already falls back
+      // from a direct contactId to a company-name lookup; do the same here
+      // instead of requiring company up front.
+      const contactId = await resolveContactId(context, company, db)
+      if (!contactId) break
+      const { data: contact } = await db
         .from('crm_contacts')
         .select('emails, full_name')
-        .eq('company_name', company)
-        .order('is_primary', { ascending: false })
-        .limit(1)
-      const contact = contacts?.[0]
+        .eq('id', contactId)
+        .maybeSingle()
       if (!contact?.emails?.[0]) break
 
       const subject = (context.emailSubject as string) ?? `Update from GravHub — ${action}`
-      const rawHtml = (context.emailBody as string) ?? `<p>Hi ${contact.full_name ?? 'there'},</p><p>This is an automated message regarding ${company}.</p>`
+      const rawHtml = (context.emailBody as string) ?? `<p>Hi ${contact.full_name ?? 'there'},</p><p>This is an automated message regarding ${company || 'your account'}.</p>`
       const html = await wrapBrandedEmail(rawHtml, 'AUTOMATED NOTIFICATION')
       const fromName = context.fromName as string | undefined
       const from = fromName ? `${fromName} <${(await getSettings()).email.fromEmail}>` : undefined
@@ -452,17 +476,31 @@ async function executeAction(
     }
 
     case 'Create Deal': {
-      const dealName = (context.dealName as string) ?? `Deal for ${company}`
+      let dealCompany = company
+      let dealCompanyId = (context.companyId as string) ?? (context.company_id as string) ?? null
+      const dealContactId = (context.contactId as string) ?? (context.contact_id as string) ?? null
+      // form_submitted/funnel_submitted never populate `company` in context
+      // (only contactId) — without this fallback, a deal auto-created from
+      // a form had a blank company name and no company_id, invisible on
+      // that company's Deals tab despite contact_id correctly resolving.
+      if (!dealCompany && dealContactId) {
+        const { data: contactRow } = await db.from('crm_contacts').select('company_name, company_id').eq('id', dealContactId).maybeSingle()
+        if (contactRow) {
+          dealCompany = contactRow.company_name ?? ''
+          dealCompanyId = dealCompanyId ?? contactRow.company_id ?? null
+        }
+      }
+      const dealName = (context.dealName as string) ?? `Deal for ${dealCompany}`
       const stage = (context.dealStage as string) ?? 'Lead'
       await db.from('deals').insert({
         id: `deal-auto-${uid()}`,
-        company,
+        company: dealCompany,
         // Previously unset on every automation-created deal — a deal
         // spawned from a form/funnel submission had no way back to the
         // contact it came from, which silently broke any join meant to
         // trace revenue back to how that contact was originally sourced.
-        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
-        contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
+        company_id: dealCompanyId,
+        contact_id: dealContactId,
         stage,
         value: (context.value as number) ?? 0,
         service_type: (context.service_type as string) ?? 'General',
@@ -504,7 +542,7 @@ async function executeAction(
 
       const targetUserIds: string[] = []
       if (target === 'assigned_rep') {
-        const userId = (context.assigned_rep_user_id as string) ?? ''
+        const userId = await resolveAssignedRepUserId(context, db)
         if (userId) targetUserIds.push(userId)
       } else {
         const unitMap: Record<string, string> = {
@@ -755,7 +793,7 @@ async function executeAction(
           sendPushNotification({ userId: m.id, title: action, body: notifMessage, url: '/automation' }).catch(() => {})
         }
       } else if (action === 'Notify Assigned Rep') {
-        const repId = (context.assigned_rep_user_id as string) ?? ''
+        const repId = await resolveAssignedRepUserId(context, db)
         if (repId) {
           sendPushNotification({ userId: repId, title: action, body: notifMessage, url: '/automation' }).catch(() => {})
         }

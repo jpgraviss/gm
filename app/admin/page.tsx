@@ -361,7 +361,7 @@ export default function AdminPage() {
   const [exporting, setExporting] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importType, setImportType] = useState<'contacts' | 'companies' | 'pipeline'>('contacts')
-  const [importProgress, setImportProgress] = useState<{ done: number; total: number; error: string } | null>(null)
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number; error: string; failed: number } | null>(null)
   const [cacheCleared, setCacheCleared] = useState(false)
   const [backupDone, setBackupDone] = useState(false)
   const [bulkResetTarget, setBulkResetTarget] = useState('')
@@ -654,7 +654,7 @@ export default function AdminPage() {
     if (!importFile) return
     const text = await importFile.text()
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
-    if (lines.length < 2) { setImportProgress({ done: 0, total: 0, error: 'CSV file is empty or has no data rows.' }); return }
+    if (lines.length < 2) { setImportProgress({ done: 0, total: 0, error: 'CSV file is empty or has no data rows.', failed: 0 }); return }
 
     // Field name normalisation maps per type
     const CONTACT_MAP: Record<string, string> = {
@@ -699,16 +699,19 @@ export default function AdminPage() {
     })
 
     const rows = lines.slice(1)
-    setImportProgress({ done: 0, total: rows.length, error: '' })
+    setImportProgress({ done: 0, total: rows.length, error: '', failed: 0 })
     let done = 0
+    let failed = 0
+    const ownerName = user?.name || 'Unknown'
 
     for (const line of rows) {
       const values = parseCSVLine(line)
       const row: Record<string, string> = {}
       headers.forEach((h, i) => { if (h) row[h] = values[i] ?? '' })
       try {
+        let res: Response
         if (importType === 'contacts') {
-          await fetch('/api/crm/contacts', {
+          res = await fetch('/api/crm/contacts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -719,14 +722,14 @@ export default function AdminPage() {
               phones:       row.phone ? [row.phone] : [],
               title:        row.title ?? null,
               companyName:  row.company_name ?? '',
-              owner:        'Jonathan Graviss',
+              owner:        ownerName,
               tags:         [],
               contactNotes: [],
               contactTasks: [],
             }),
           })
         } else if (importType === 'companies') {
-          await fetch('/api/crm/companies', {
+          res = await fetch('/api/crm/companies', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -738,7 +741,7 @@ export default function AdminPage() {
               size:          row.size ?? '',
               annualRevenue: row.annual_revenue ? parseFloat(row.annual_revenue.replace(/[^0-9.]/g, '')) : null,
               status:        'Prospect',
-              owner:         'Jonathan Graviss',
+              owner:         ownerName,
               tags:          [],
             }),
           })
@@ -746,7 +749,7 @@ export default function AdminPage() {
           // pipeline / deals
           const VALID_STAGES = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
           const stage = VALID_STAGES.find(s => s.toLowerCase() === (row.stage ?? '').toLowerCase()) ?? 'Lead'
-          await fetch('/api/deals', {
+          res = await fetch('/api/deals', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -756,19 +759,24 @@ export default function AdminPage() {
               value:       row.value ? parseFloat(row.value.replace(/[^0-9.]/g, '')) : 0,
               serviceType: row.service_type || 'General',
               closeDate:   row.close_date || null,
-              assignedRep: row.assigned_rep || 'Jonathan Graviss',
+              assignedRep: row.assigned_rep || ownerName,
               probability: row.probability ? parseInt(row.probability) : 0,
               notes:       [],
             }),
           })
         }
+        if (!res.ok) {
+          failed++
+          setImportProgress(prev => prev ? { ...prev, failed } : null)
+        }
       } catch {
-        setImportProgress(prev => prev ? { ...prev, error: `Failed to import row ${done + 1}` } : null)
+        failed++
+        setImportProgress(prev => prev ? { ...prev, failed } : null)
       }
       done++
       setImportProgress(prev => prev ? { ...prev, done } : null)
     }
-    setTimeout(() => { setShowImportModal(false); setImportFile(null); setImportProgress(null) }, 1500)
+    setTimeout(() => { setShowImportModal(false); setImportFile(null); setImportProgress(null) }, failed > 0 ? 4000 : 1500)
   }
 
   async function sendInviteEmail(name: string, email: string, role: string, unit: string) {
@@ -2334,7 +2342,7 @@ export default function AdminPage() {
                       <div className="w-full bg-gray-100 rounded-full h-1.5">
                         <div className="bg-emerald-600 h-1.5 rounded-full transition-all" style={{ width: `${importProgress.total ? Math.round((importProgress.done / importProgress.total) * 100) : 0}%` }} />
                       </div>
-                      <p className="text-xs text-gray-500">{importProgress.done === importProgress.total ? `Done — ${importProgress.done} records imported` : `Importing ${importProgress.done} / ${importProgress.total}…`}</p>
+                      <p className="text-xs text-gray-500">{importProgress.done === importProgress.total ? `Done — ${importProgress.done - importProgress.failed} of ${importProgress.done} records imported${importProgress.failed ? ` (${importProgress.failed} failed)` : ''}` : `Importing ${importProgress.done} / ${importProgress.total}…`}</p>
                     </>
                   )}
                 </div>

@@ -40,6 +40,13 @@ export const GET = withErrorHandler('courses/[id] GET', async (
   if (error || !data) {
     return NextResponse.json({ error: 'Course not found' }, { status: 404 })
   }
+  // Unpublished course content (including quiz answer keys, via mapCourse's
+  // modules passthrough) is staff-only — a portal client resolves null from
+  // getAuthUser (not in team_members), matching the same gate in
+  // courses/route.ts's list GET.
+  if (data.status !== 'Published' && !(await getAuthUser(req))) {
+    return NextResponse.json({ error: 'Course not found' }, { status: 404 })
+  }
   return NextResponse.json(mapCourse(data))
 })
 

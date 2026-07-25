@@ -74,8 +74,15 @@ export default function ClientPortalPage() {
   const [socialLoading, setSocialLoading] = useState(false)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  // AUDIT — /api/projects?company= can return more than one row for a
+  // company with concurrent engagements; this used to keep only d[0], so
+  // every project but the newest was silently invisible to the client with
+  // no list/selector and no error. Now keeps the full list and derives the
+  // displayed project from a selection, defaulting to the first.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [project, setProject] = useState<any>(null)
+  const [projects, setProjects] = useState<any[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const project = projects.find(p => p.id === selectedProjectId) ?? projects[0] ?? null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [contract, setContract] = useState<any>(null)
   const [clientInvoices, setClientInvoices] = useState<Invoice[]>([])
@@ -115,7 +122,7 @@ export default function ClientPortalPage() {
     if (!company) { setLoading(false); return }
     const q = encodeURIComponent(company)
     Promise.all([
-      fetch(`/api/projects?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setProject(d[0] ?? null) }).catch(() => toast('Failed to load project data', 'error')),
+      fetch(`/api/projects?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setProjects(d) }).catch(() => toast('Failed to load project data', 'error')),
       fetch(`/api/contracts?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setContract(d[0] ?? null) }).catch(() => toast('Failed to load contract data', 'error')),
       // AUDIT — /api/invoices is cursor-paginated at 100/page; a raw
       // fetch() silently truncated a long-tenured client's billing view
@@ -461,6 +468,20 @@ export default function ClientPortalPage() {
         {/* Project */}
         {activeTab === 'project' && (
           <div className="max-w-3xl mx-auto flex flex-col gap-5">
+            {projects.length > 1 && (
+              <div className="flex flex-wrap gap-2">
+                {projects.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelectedProjectId(p.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${p.id === project?.id ? 'text-white' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                    style={p.id === project?.id ? { background: '#015035', borderColor: '#015035' } : undefined}
+                  >
+                    {p.serviceType}
+                  </button>
+                ))}
+              </div>
+            )}
             {project ? (
               <>
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">

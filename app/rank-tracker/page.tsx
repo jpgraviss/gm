@@ -307,16 +307,24 @@ export default function RankTrackerPage() {
     if (selectedIds.size === 0) return
     if (!confirm(`Delete ${selectedIds.size} keywords and their history?`)) return
     const ids = Array.from(selectedIds)
-    let ok = 0
+    // Only remove ids whose DELETE actually succeeded — previously removed
+    // every selected id from local state unconditionally, so a mid-batch
+    // failure showed a correctly-lower success toast while the UI still
+    // displayed every selected keyword as gone until the next reload.
+    const deleted = new Set<string>()
     for (const id of ids) {
       try {
         const res = await fetch(`/api/rank-tracker/keywords/${id}`, { method: 'DELETE' })
-        if (res.ok) ok++
+        if (res.ok) deleted.add(id)
       } catch { /* skip */ }
     }
-    setRows(prev => prev.filter(r => !selectedIds.has(r.id)))
-    setSelectedIds(new Set())
-    toast(`Deleted ${ok} keywords`, 'success')
+    setRows(prev => prev.filter(r => !deleted.has(r.id)))
+    setSelectedIds(prev => { const next = new Set(prev); for (const id of deleted) next.delete(id); return next })
+    if (deleted.size < ids.length) {
+      toast(`Deleted ${deleted.size} of ${ids.length} keywords — some failed`, 'error')
+    } else {
+      toast(`Deleted ${deleted.size} keywords`, 'success')
+    }
   }
 
   async function bulkTagApply(tag: string) {

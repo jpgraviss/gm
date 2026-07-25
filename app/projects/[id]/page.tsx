@@ -958,10 +958,23 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (!project || !id) return
     if (project.progress !== computedProgress) {
+      // AUDIT — this never updated local project.progress on success, so
+      // the divergence condition above never cleared and re-fired a
+      // redundant PATCH on every subsequent, unrelated project edit
+      // (settings save, note add, section rename). setProject only inside
+      // the .then() callback, not synchronously in the effect body itself
+      // (calling the shared updateProject() helper directly here would
+      // violate the set-state-in-effect rule, since it calls setState
+      // synchronously) — the divergence condition actually resolves once
+      // this lands.
+      const newProgress = computedProgress
       fetch(`/api/projects/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ progress: computedProgress }),
+        body: JSON.stringify({ progress: newProgress }),
+      }).then(res => {
+        if (!res.ok) throw new Error('Failed')
+        setProject(prev => (prev ? { ...prev, progress: newProgress } : prev))
       }).catch(() => {})
     }
   }, [computedProgress, project, id])

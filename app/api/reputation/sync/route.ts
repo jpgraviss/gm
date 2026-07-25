@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { getGBPReviews, STAR_TO_NUMBER } from '@/lib/google-business-profile'
+import { getGBPReviews, STAR_TO_NUMBER, GBP_SUMMARY_REVIEW_LIMIT } from '@/lib/google-business-profile'
 import type { GBPStarRating } from '@/lib/google-business-profile'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
@@ -30,7 +30,13 @@ export const POST = withErrorHandler('reputation/sync POST', async (req) => {
   }
 
   try {
-    const { reviews: gbpReviews } = await getGBPReviews(config.locationName, 50)
+    // AUDIT — was hardcoded to 50, unlike getGBPSummary's own call to this
+    // same function, which pages up to GBP_SUMMARY_REVIEW_LIMIT (500). Any
+    // location with more than 50 reviews never had its older reviews synced
+    // into GravHub's local `reviews` table at all — the actual Reputation
+    // page review list, average rating, and response-rate KPI stayed
+    // computed from a stale, incomplete subset indefinitely.
+    const { reviews: gbpReviews } = await getGBPReviews(config.locationName, GBP_SUMMARY_REVIEW_LIMIT)
 
     let newCount = 0
     let updatedCount = 0
@@ -44,13 +50,33 @@ export const POST = withErrorHandler('reputation/sync POST', async (req) => {
       const responseDate = review.reviewReply?.updateTime ?? null
       const status = review.reviewReply ? 'responded' : 'pending'
 
-      const { data: existing } = await db
-        .from('reviews')
-        .select('id')
-        .eq('reviewer_name', reviewerName)
-        .eq('date', date)
-        .eq('source', 'Google')
-        .maybeSingle()
+      // AUDIT — matched only by reviewer_name + date + source, even though
+      // a row already carries the stable google_review_id from a prior
+      // sync. If a reviewer edits their Google display name between syncs,
+      // this failed to match the existing row and inserted a duplicate,
+      // inflating review counts and skewing the average-rating KPI. Match
+      // on google_review_id first; fall back to name+date only for legacy
+      // rows synced before this column was populated.
+      let existing: { id: string } | null = null
+      if (review.reviewId) {
+        const { data } = await db
+          .from('reviews')
+          .select('id')
+          .eq('google_review_id', review.reviewId)
+          .eq('source', 'Google')
+          .maybeSingle()
+        existing = data
+      }
+      if (!existing) {
+        const { data } = await db
+          .from('reviews')
+          .select('id')
+          .eq('reviewer_name', reviewerName)
+          .eq('date', date)
+          .eq('source', 'Google')
+          .maybeSingle()
+        existing = data
+      }
 
       if (existing) {
         await db

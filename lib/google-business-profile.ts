@@ -294,8 +294,10 @@ export async function replyToGBPReview(
 // Reviews-per-page × MAX_GBP_PAGES (50 × 10 = 500) — comfortably covers a
 // single location's full review history in realistic cases, so the
 // "new reviews in the last N days" count below isn't silently undercounted
-// for any location with more than one page of reviews.
-const GBP_SUMMARY_REVIEW_LIMIT = 50 * MAX_GBP_PAGES
+// for any location with more than one page of reviews. Exported so other
+// getGBPReviews() callers (e.g. app/api/reputation/sync/route.ts) can use
+// the same real-history-covering limit instead of a much smaller one.
+export const GBP_SUMMARY_REVIEW_LIMIT = 50 * MAX_GBP_PAGES
 
 /**
  * Summary metrics for a location over the last N days:

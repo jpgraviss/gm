@@ -75,6 +75,10 @@ export const POST = withErrorHandler('auth/2fa-verify POST', async (req) => {
     role: user.role,
     isAdmin: user.isAdmin,
     userType: user.userType,
+    // AUDIT.md #343 — this is the one place a real 2FA code is ever
+    // checked, so it's the only place that gets to stamp this. See the
+    // matching comment in app/api/auth/session/route.ts.
+    twoFactorVerifiedAt: Math.floor(Date.now() / 1000),
   }, sessionTimeoutToSeconds(security.sessionTimeout)))
   return res
 })

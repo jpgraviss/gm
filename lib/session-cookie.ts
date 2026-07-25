@@ -16,6 +16,13 @@ export interface SessionPayload {
   role: string
   isAdmin: boolean
   userType: 'staff' | 'client'
+  // Unix seconds when this specific browser session completed a real 2FA
+  // code check (set only by app/api/auth/2fa-verify/route.ts). Left
+  // undefined for cookies issued while Two-Factor Auth wasn't Required, or
+  // for client sessions (which never go through 2FA) — see AUDIT.md #343's
+  // gate in app/api/auth/session/route.ts for why this can't just be
+  // "does a valid cookie for this email already exist."
+  twoFactorVerifiedAt?: number
 }
 
 interface SignedBody extends SessionPayload {

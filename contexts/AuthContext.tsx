@@ -377,6 +377,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
         await clearAuthCookie()
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        // AUDIT.md #343 — app/auth/confirm/page.tsx makes its own explicit
+        // POST /api/auth/session call right after a fresh magic-link sign-in
+        // so it can show a 2FA code-entry step inline, and sets a
+        // sessionStorage marker right before triggering the SIGNED_IN event.
+        // This skip is a UX nicety only — it avoids this listener firing a
+        // redundant second /api/auth/session call (and a duplicate 2FA
+        // email) right on top of confirm page's own call for the same
+        // event. It is NOT the security boundary: an earlier version of
+        // this fix relied on a client-supplied flag to decide whether to
+        // gate on 2FA, and a security review found that this listener has
+        // no reliable way to always see that flag (a second, independent
+        // mount-time restore path, and cross-tab session sync, can both
+        // reach establishSessionCookie without it). 2FA enforcement now
+        // lives entirely server-side in app/api/auth/session/route.ts,
+        // which gates on whether the request already carries a signed
+        // session cookie proving THIS browser session specifically
+        // completed 2FA (not just any still-valid cookie for the same
+        // email — a second review round caught that a valid-but-never-2FA
+        // -verified cookie, e.g. one issued before "Required" was turned
+        // on, would otherwise satisfy an email-only check forever, since
+        // this route reissues the cookie with a fresh expiry on every
+        // refresh) — correct regardless of this flag's state, so if this
+        // skip ever fails to fire (e.g. a second tab), the worst case is a
+        // redundant cookie reissue/2FA email, not a bypass. Never skipped
+        // for TOKEN_REFRESHED, so routine background
+        // refresh is completely unaffected.
+        if (event === 'SIGNED_IN' && typeof sessionStorage !== 'undefined' && sessionStorage.getItem('gravhub_magic_link_pending') === '1') {
+          return
+        }
         if (session?.user?.email) {
           await restoreProfile(session.user.email, session.access_token)
         }

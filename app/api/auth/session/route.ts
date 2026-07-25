@@ -1,14 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
-import { buildSessionCookie, sessionTimeoutToSeconds, SESSION_COOKIE_NAME } from '@/lib/session-cookie'
+import { buildSessionCookie, verifySessionCookie, sessionTimeoutToSeconds, SESSION_COOKIE_NAME } from '@/lib/session-cookie'
 import { getSecuritySettings } from '@/lib/settings'
+import { sendTwoFactorCode } from '@/lib/two-factor'
 
 /**
  * Exchanges a real Supabase access token (proven via db.auth.getUser) for a
  * signed gravhub-auth session cookie. Called by AuthContext whenever it has
  * a live Supabase session — password login, magic-link-via-Supabase, and
- * session restore on page load/token refresh.
+ * session restore on page load/token refresh. Also called directly by
+ * app/auth/confirm/page.tsx right after a magic-link sign-in, so it can show
+ * a 2FA code-entry step inline — see the 2FA gate comment below for how
+ * this route tells a fresh login apart from a routine refresh.
  */
 export const POST = withErrorHandler('auth/session POST', async (req) => {
   const authHeader = req.headers.get('authorization')
@@ -26,7 +30,7 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
 
   const { data: teamRow } = await db
     .from('team_members')
-    .select('id, email, role, is_admin, status')
+    .select('id, email, name, role, is_admin, status')
     .ilike('email', email)
     .maybeSingle()
 
@@ -42,17 +46,45 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
   const security = await getSecuritySettings()
   const maxAgeSeconds = sessionTimeoutToSeconds(security.sessionTimeout)
 
-  // Two-Factor Auth ("Required") is deliberately NOT enforced here.
-  // This route's own doc comment above explains why it's a harder fit than
-  // google-verify: it's called for both a fresh magic-link/OTP login AND
-  // routine session-restore/token-refresh on every page load, and nothing
-  // in the request distinguishes the two — gating it here would force a
-  // fresh 2FA code on every token refresh, not just real new logins, which
-  // would break normal usage far worse than the gap it would close. 2FA is
-  // fully enforced on the Google Sign-In path (google-verify); a staff
-  // member using the "sign in with email" magic-link alternative instead
-  // currently bypasses it. Noted as a real, known gap rather than silently
-  // left half-covered.
+  // AUDIT.md #343 — this route is called for both a fresh magic-link/OTP
+  // login AND routine session-restore/token-refresh, and gating 2FA
+  // unconditionally would force a fresh code on every refresh, not just
+  // real new logins. The distinguishing signal is NOT a client-supplied
+  // flag/query param — an earlier version of this fix used one
+  // (`fresh=1`, sent only by app/auth/confirm/page.tsx's own call), but a
+  // security review correctly caught that contexts/AuthContext.tsx has a
+  // SECOND, independent call path (its mount-time getSession()-driven
+  // restore, separate from the onAuthStateChange listener) that never sent
+  // the flag — since the underlying Supabase session is already live the
+  // instant the magic link is clicked, a page reload before the 2FA code
+  // was entered hit that second path and got a cookie with zero 2FA check.
+  //
+  // Instead: does the request already carry a VALID, already-signed
+  // gravhub-auth cookie for this exact staff email that itself proves 2FA
+  // was completed for THIS browser session? Checking email-match alone
+  // (an earlier version of this fix) isn't enough — a second security
+  // review found that any still-live cookie for that email would pass,
+  // including one issued before 2FA was ever turned on for this account
+  // (2FA cookies never expire early just because the setting changed later,
+  // and this route reissues the cookie with a fresh maxAge on every refresh
+  // — that combination meant "Required" had no effect on any session that
+  // was already live when the setting was turned on). So the cookie itself
+  // has to carry proof, not just presence: `twoFactorVerifiedAt` is stamped
+  // only by app/api/auth/2fa-verify/route.ts, the one place a real code is
+  // actually checked (see lib/session-cookie.ts). Also require
+  // `userType === 'staff'` — email alone could theoretically be satisfied
+  // by an unrelated portal_clients cookie for the same address, and clients
+  // never go through 2FA at all.
+  const existingCookie = await verifySessionCookie(req.cookies.get(SESSION_COOKIE_NAME)?.value)
+  const existingStaffCookieForThisUser = existingCookie?.email?.toLowerCase() === email && existingCookie.userType === 'staff'
+    ? existingCookie
+    : null
+  const hasVerifiedStaffSession = typeof existingStaffCookieForThisUser?.twoFactorVerifiedAt === 'number'
+  if (teamRow && !hasVerifiedStaffSession && security.twoFactor === 'required') {
+    await sendTwoFactorCode(teamRow.id, teamRow.email, teamRow.name)
+    return NextResponse.json({ requires2FA: true, email: teamRow.email })
+  }
+
   if (teamRow) {
     const res = NextResponse.json({ ok: true })
     res.cookies.set(await buildSessionCookie({
@@ -61,6 +93,11 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
       role: teamRow.role,
       isAdmin: teamRow.is_admin ?? false,
       userType: 'staff',
+      // Carry the verification timestamp forward across routine refreshes
+      // rather than dropping it — this cookie rebuild only ever happens
+      // when 2FA wasn't required for this session (nothing to carry) or
+      // the gate above already confirmed it was verified.
+      twoFactorVerifiedAt: existingStaffCookieForThisUser?.twoFactorVerifiedAt,
     }, maxAgeSeconds))
     return res
   }

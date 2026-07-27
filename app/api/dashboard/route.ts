@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuthUser } from '@/lib/rbac'
+import { contractMonthlyValue } from '@/lib/metrics'
 import type { OccupationalUnit } from '@/lib/types'
 
 /** Units that must never receive financial data */
@@ -29,12 +30,11 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
   // (pipelineValue, winRate, totalCollected, overdueInvoices, etc.), not a
   // paginated list, so it needs an explicit generous cap rather than relying
   // on the implicit default. Same convention as app/api/reports/attribution.
-  const [dealsRes, invoicesRes, contractsRes, renewalsRes, revenueRes, activityRes, automationsRes, activeClientsRes] = await Promise.all([
+  const [dealsRes, invoicesRes, contractsRes, renewalsRes, activityRes, automationsRes, activeClientsRes] = await Promise.all([
     db.from('deals').select('id,stage,value,company,assigned_rep,last_activity,service_type,close_date,created_at').order('created_at', { ascending: false }).limit(5000),
     db.from('invoices').select('id,company,amount,status,due_date,issued_date,paid_date,service_type,contract_id,created_at').order('created_at', { ascending: false }).limit(5000),
     db.from('contracts').select('id,company,status,value,renewal_date,service_type,assigned_rep,billing_structure,created_at').order('created_at', { ascending: false }).limit(5000),
     db.from('renewals').select('id,company,status,days_until_expiry,expiration_date').order('expiration_date', { ascending: true }).limit(5000),
-    db.from('revenue_months').select('*').order('month', { ascending: true }),
     db.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(20),
     db.from('automations').select('id,name,status,runs').order('created_at', { ascending: false }).limit(10),
     db.from('crm_companies').select('id', { count: 'exact', head: true }).eq('status', 'Active Client'),
@@ -44,7 +44,6 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
   const invoices  = invoicesRes.data ?? []
   const contracts = contractsRes.data ?? []
   const renewals  = renewalsRes.data ?? []
-  const revenueMonths = revenueRes.data ?? []
   const auditLogs = activityRes.data ?? []
 
   const activeClients   = activeClientsRes.count ?? 0
@@ -85,7 +84,57 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
     timestamp: a.created_at,
   }))
 
-  const revenueByMonth = revenueMonths.map((r: Record<string, unknown>) => ({ month: r.month, revenue: r.revenue, recurring: r.recurring }))
+  // AUDIT.md #447 — `revenue_months` is only ever written by the optional,
+  // non-default 'Update Revenue Metrics' automation action (lib/automations-
+  // engine.ts), and even when that automation exists it only upserts the
+  // *current* month on each run — it never backfills history, so a 12-month
+  // trend built from it is holed by design. Worse, what it writes as
+  // "revenue" is actually contract MRR (contractMonthlyValue over 'Fully
+  // Executed' contracts), not real collected revenue, and its "recurring"
+  // field is always identical to "revenue" (contractMonthlyValue already
+  // zeroes out non-recurring billing structures before the sum, so filtering
+  // them out again changes nothing) — the two numbers carry no distinct
+  // information. None of that is worth preferring over a live computation,
+  // so we compute the trend directly from real data every time, the same
+  // way the "Revenue Collected" KPI on the Reports pages already does
+  // (paid invoices, bucketed by issuedDate — same field/status filter used
+  // there), and reuse contractMonthlyValue() from lib/metrics to classify
+  // which of those paid invoices are tied to a recurring contract.
+  const trailingMonthKeys: string[] = (() => {
+    const anchor = new Date()
+    anchor.setDate(1)
+    const keys: string[] = []
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(anchor.getFullYear(), anchor.getMonth() - i, 1)
+      keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    }
+    return keys
+  })()
+
+  const contractById = new Map(contracts.map((c: Record<string, unknown>) => [c.id, c]))
+  const revenueByMonthMap = new Map(
+    trailingMonthKeys.map(month => [month, { month, revenue: 0, recurring: 0 }])
+  )
+
+  invoices
+    .filter((i: { status: string }) => i.status === 'Paid')
+    .forEach((i: Record<string, unknown>) => {
+      const issuedDate = i.issued_date as string | null
+      const month = issuedDate ? issuedDate.slice(0, 7) : null
+      const bucket = month ? revenueByMonthMap.get(month) : undefined
+      if (!bucket) return // outside the trailing 12-month window
+      const amount = Number(i.amount) || 0
+      bucket.revenue += amount
+      const contract = i.contract_id ? contractById.get(i.contract_id as string) : undefined
+      if (contract && contractMonthlyValue({
+        value: Number(contract.value) || 0,
+        billingStructure: (contract.billing_structure as string) ?? '',
+      }) > 0) {
+        bucket.recurring += amount
+      }
+    })
+
+  const revenueByMonth = Array.from(revenueByMonthMap.values())
 
   const automations = (automationsRes.data ?? []).map((a: Record<string, unknown>) => ({
     name: a.name, status: a.status, runs: a.runs ?? 0,

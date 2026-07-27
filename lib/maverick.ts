@@ -7,14 +7,19 @@ async function getApiKey(): Promise<string> {
   if (_cachedMaverickKey) return _cachedMaverickKey
   try {
     const { createServiceClient } = await import('@/lib/supabase')
+    const { decrypt } = await import('@/lib/encryption')
     const db = createServiceClient()
     const { data } = await db
       .from('app_settings')
       .select('maverick')
       .eq('id', 'global')
       .maybeSingle()
-    const key = (data?.maverick as { apiKey?: string })?.apiKey
-    if (key) { _cachedMaverickKey = key; return key }
+    const encryptedKey = (data?.maverick as { apiKey?: string })?.apiKey
+    if (encryptedKey) {
+      const key = decrypt(encryptedKey)
+      _cachedMaverickKey = key
+      return key
+    }
   } catch { /* fall through */ }
   throw new Error('MAVERICK_API_KEY not set')
 }

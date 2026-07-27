@@ -8,14 +8,19 @@ async function getApiKey(): Promise<string | null> {
   if (cachedKey) return cachedKey
   try {
     const { createServiceClient } = await import('@/lib/supabase')
+    const { decrypt } = await import('@/lib/encryption')
     const db = createServiceClient()
     const { data } = await db
       .from('app_settings')
       .select('resend')
       .eq('id', 'global')
       .maybeSingle()
-    const key = (data?.resend as { apiKey?: string })?.apiKey
-    if (key) { cachedKey = key; return key }
+    const encryptedKey = (data?.resend as { apiKey?: string })?.apiKey
+    if (encryptedKey) {
+      const key = decrypt(encryptedKey)
+      cachedKey = key
+      return key
+    }
   } catch { /* fall through */ }
   return null
 }

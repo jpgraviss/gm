@@ -1763,7 +1763,7 @@ export default function PipelinePage() {
           defaultType="deals"
           onClose={() => setShowImport(false)}
           onComplete={() => {
-            fetchAllPages<LocalDeal>('/api/deals').then(data => setLocalDeals(data))
+            fetchAllPages<LocalDeal>('/api/deals').then(data => setLocalDeals(data)).catch(() => toast('Failed to load deals', 'error'))
           }}
         />
       )}

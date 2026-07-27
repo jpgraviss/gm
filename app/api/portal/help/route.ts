@@ -21,10 +21,10 @@ export const GET = withErrorHandler('portal/help GET', async (req) => {
       return NextResponse.json({ error: 'Article not found' }, { status: 404 })
     }
 
-    await db
-      .from('knowledge_articles')
-      .update({ views: (data.views ?? 0) + 1 })
-      .eq('id', articleId)
+    // Atomic RPC — a read-then-write here can lose a view increment under
+    // concurrent portal-client reads of the same article (already fixed
+    // for the staff-side sibling route via this same RPC, see #276).
+    await db.rpc('increment_kb_article_views', { p_id: articleId })
 
     return NextResponse.json(data)
   }

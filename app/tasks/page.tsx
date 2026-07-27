@@ -637,6 +637,40 @@ export default function TasksPage() {
     }
   }, [searchParams, tasks, selectedTask])
 
+  // AUDIT.md #294 — reverting to a `previous` closure snapshot on failure is
+  // itself a race: if two edits to the same task fire back-to-back and the
+  // first request's failure arrives after the second already succeeded,
+  // reverting to the first's stale snapshot would clobber the second's
+  // (already-persisted) result in the UI. There's no single-task GET
+  // endpoint, so we fall back to the same paginated list fetch the page
+  // uses on load, but only merge the ONE affected task's fresh server
+  // state back into local state — leaving every other task (including any
+  // other edit that's mid-flight) untouched, rather than blanket-replacing
+  // the array.
+  async function refetchTask(id: string) {
+    try {
+      const fresh = await fetchAllPages<AppTask>('/api/tasks')
+      const match = fresh.find(t => t.id === id)
+      if (match) {
+        // AUDIT — a failed DELETE calls this too, and deleteTask() already
+        // optimistically filtered the id out of `tasks` before the failure
+        // was caught, so it's no longer in `prev` for .map() to find and
+        // replace — the server-confirmed-still-existing task was silently
+        // never restored, contradicting the "Failed to delete" toast.
+        // Re-insert when it's missing instead of assuming it's present.
+        setTasks(prev => prev.some(t => t.id === id) ? prev.map(t => t.id === id ? match : t) : [match, ...prev])
+        setSelectedTask(prev => prev?.id === id ? match : prev)
+      } else {
+        // No longer exists server-side (e.g. it really was deleted).
+        setTasks(prev => prev.filter(t => t.id !== id))
+        setSelectedTask(prev => prev?.id === id ? null : prev)
+      }
+    } catch {
+      // Best-effort reconciliation; if this also fails we simply leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }
+
   function updateStatus(id: string, status: AppTaskStatus) {
     const today = getToday()
     const completedDate = status === 'Completed' ? today : undefined
@@ -648,7 +682,12 @@ export default function TasksPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, completedDate: completedDate ?? null }),
-    }).catch(() => toast('Failed to update task', 'error'))
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      refetchTask(id)
+      toast('Failed to update task', 'error')
+    })
   }
 
   function updateTask(id: string, updates: Partial<AppTask>) {
@@ -668,13 +707,23 @@ export default function TasksPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(apiBody),
-    }).catch(() => toast('Failed to update task', 'error'))
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      refetchTask(id)
+      toast('Failed to update task', 'error')
+    })
   }
 
   function deleteTask(id: string) {
     if (!confirm('Delete this task?')) return
     setTasks(prev => prev.filter(t => t.id !== id))
-    fetch(`/api/tasks/${id}`, { method: 'DELETE' }).catch(() => toast('Failed to delete task', 'error'))
+    fetch(`/api/tasks/${id}`, { method: 'DELETE' }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      refetchTask(id)
+      toast('Failed to delete task', 'error')
+    })
   }
 
   function addTask(task: AppTask) {
@@ -684,8 +733,19 @@ export default function TasksPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(task),
-    }).then(res => {
+    }).then(async res => {
       if (!res.ok) throw new Error('Failed')
+      // AUDIT #460 — the server always self-generates its own id
+      // (`task-${Date.now()}`, ignoring body.id), so the optimistic
+      // `at-${Date.now()}` id above never matches what's actually
+      // persisted. Swap the optimistic entry for the server's real
+      // returned row (matching the pattern in app/crm/pipeline/page.tsx's
+      // handleCreateDeal) so subsequent PATCH/DELETE calls target a real,
+      // existing id instead of 500ing and getting silently filtered out
+      // of local state by the "not found" recovery path.
+      const saved = await res.json()
+      setTasks(prev => prev.map(t => t.id === task.id ? (saved as AppTask) : t))
+      setSelectedTask(prev => prev?.id === task.id ? (saved as AppTask) : prev)
       toast('Task created', 'success')
     }).catch(() => {
       setTasks(prev => prev.filter(t => t.id !== task.id))

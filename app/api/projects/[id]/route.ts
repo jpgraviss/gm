@@ -55,10 +55,26 @@ export const PATCH = withErrorHandler('projects/[id] PATCH', async (req, ctx) =>
   const result = validate(body, {
     status: { type: 'string', enum: [...PROJECT_STATUSES] },
     overview: { type: 'string', maxLength: 5000 },
+    contractId: { type: 'string', maxLength: 100 },
   })
   if (!result.valid) return validationError(result.error)
   const db = createServiceClient()
+
+  // AUDIT.md #400/#137 — contractId was a fully persisted, mapped column
+  // with no code path that ever set it (not even here: this PATCH silently
+  // dropped it if a caller sent it). "Convert to Project" and "Link
+  // Existing Project" (app/contracts/page.tsx) both PATCH this field now,
+  // so verify the target contract is real before linking — an unchecked
+  // string would let a project silently point at a nonexistent contract.
+  if (body.contractId !== undefined && body.contractId !== '') {
+    const { data: contract, error: cErr } = await db.from('contracts').select('id').eq('id', body.contractId).single()
+    if (cErr || !contract) {
+      return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
+    }
+  }
+
   const update: Record<string, unknown> = {}
+  if (body.contractId !== undefined)           update.contract_id = body.contractId || null
   if (body.status !== undefined)               update.status = body.status
   if (body.progress !== undefined)             update.progress = body.progress
   if (body.milestones !== undefined)           update.milestones = body.milestones

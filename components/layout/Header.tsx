@@ -56,8 +56,19 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
 
   const unreadCount = notifications.filter(n => n.unread).length
 
+  function markRead(ids: string[]) {
+    if (ids.length === 0) return
+    fetch('/api/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }).catch(() => {})
+  }
+
   function markAllRead() {
+    const ids = notifications.filter(n => n.unread).map(n => n.id)
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })))
+    markRead(ids)
   }
 
   function openCommandPalette() {
@@ -164,6 +175,7 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
                       onClick={() => {
                         setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, unread: false } : x))
                         setNotificationsOpen(false)
+                        markRead([n.id])
                       }}
                       className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${n.unread ? 'bg-blue-50/40' : ''}`}
                     >

@@ -3,11 +3,15 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { isGeolocationConfigured } from '@/lib/geolocation'
 import { isGranolaConfigured } from '@/lib/granola'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // GET /api/admin/integration-health
 // Returns which integrations have valid stored credentials, plus real
 // database reachability and auth-signing-key configuration checks.
-export const GET = withErrorHandler('admin/integration-health GET', async () => {
+export const GET = withErrorHandler('admin/integration-health GET', async (req) => {
+  const denied = await requireAdmin(req)
+  if (denied) return denied
+
   const db = createServiceClient()
 
   // Database: a real round-trip query, not just "did the process start"

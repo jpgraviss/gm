@@ -8,7 +8,7 @@ import { useTeamMembers } from '@/lib/useTeamMembers'
 import { fetchCrmCompanies, fetchCrmContacts, fetchDeals, fetchContracts, fetchInvoices, fetchProjects, fetchCrmActivities } from '@/lib/supabase'
 import {
   formatCurrency, stageColors, serviceTypeColors, contractStatusColors,
-  projectStatusColors, invoiceStatusColors,
+  projectStatusColors, invoiceStatusColors, aiSourceLabel,
 } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
@@ -106,6 +106,23 @@ interface CompanyFile {
 }
 
 const FILE_CATEGORIES = ['contract', 'proposal', 'invoice', 'report', 'other'] as const
+
+// AUDIT.md #294 — several handlers below capture a `previous` closure
+// snapshot when an optimistic edit fires and revert to that stale snapshot
+// on failure. If two edits to the same company fire back-to-back and the
+// first request's failure arrives after the second already succeeded,
+// reverting to the first's snapshot would clobber the second's
+// (already-persisted) result in the UI. There's no single-company GET
+// endpoint, so the fallback is the same list fetch the page already uses
+// on load (`fetchCrmCompanies`), filtered down to the one record we need.
+async function fetchCrmCompanyById(id: string): Promise<CRMCompany | null> {
+  try {
+    const fresh = await fetchCrmCompanies()
+    return fresh.find(c => c.id === id) ?? null
+  } catch {
+    return null
+  }
+}
 
 function CompanyFilesTab({ companyId }: { companyId: string }) {
   const { toast } = useToast()
@@ -308,6 +325,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const [recsOpen, setRecsOpen] = useState(false)
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiProposalContent, setAiProposalContent] = useState<string | null>(null)
+  const [aiProposalSource, setAiProposalSource] = useState<string | undefined>(undefined)
   const [wpSite, setWpSite] = useState<{ id: string; site_url: string; last_reported_at: string | null } | null>(null)
   const [localNotes, setLocalNotes] = useState(company.notes ?? '')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -320,6 +338,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const [newTaskAssignee, setNewTaskAssignee] = useState('')
   const [newTaskDueDate, setNewTaskDueDate] = useState(() => new Date().toISOString().split('T')[0])
   const [aiDraftContent, setAiDraftContent] = useState<string | null>(null)
+  const [aiDraftSource, setAiDraftSource] = useState<string | undefined>(undefined)
   const [aiDraftRecipientId, setAiDraftRecipientId] = useState<string | null>(null)
   const teamMembers = useTeamMembers()
 
@@ -370,7 +389,19 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
       if (!res.ok) throw new Error('Failed')
     } catch {
       toast('Failed to update task — reverted', 'error')
-      setCompanyTasks(prev => prev.map(t => t.id === task.id ? task : t))
+      // AUDIT.md #294 — reverting to the `task` closure snapshot races with
+      // a second edit to the same task; refetch this company's task list
+      // (the same scoped call used on load) and merge only this one task's
+      // fresh server state instead of trusting a pre-edit snapshot.
+      try {
+        const res = await fetch(`/api/tasks?companyId=${encodeURIComponent(company.id)}`)
+        const data = res.ok ? await res.json() : { items: [] }
+        const list: AppTask[] = Array.isArray(data) ? data : (data.items ?? [])
+        const match = list.find(t => t.id === task.id)
+        if (match) setCompanyTasks(prev => prev.map(t => t.id === task.id ? match : t))
+      } catch {
+        // Best-effort reconciliation; leave the optimistic state if this fails too.
+      }
     }
   }
 
@@ -398,6 +429,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
       if (res.ok) {
         const data = await res.json()
         setAiDraftContent(data.content)
+        setAiDraftSource(data.source)
       }
     } catch { /* ignore */ }
     setAiGenerating(false)
@@ -410,12 +442,23 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
       .catch(() => {/* non-blocking */})
   }, [company.id])
 
-  function persistTags(tags: string[]) {
-    fetch(`/api/crm/companies/${company.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tags }),
-    }).catch(() => toast('Failed to save company tags', 'error'))
+  async function persistTags(tags: string[]) {
+    try {
+      const res = await fetch(`/api/crm/companies/${company.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      // AUDIT.md #294 — reverting to a captured `previous` snapshot races
+      // with a second tag edit that succeeds before this failure is
+      // handled; refetch the company from the server instead of trusting
+      // a pre-edit snapshot.
+      const fresh = await fetchCrmCompanyById(company.id)
+      if (fresh) setLocalTags(fresh.tags)
+      toast('Failed to save company tags', 'error')
+    }
   }
 
   async function saveNotes() {
@@ -511,7 +554,6 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   }
 
   async function handleUpdateActivity(id: string, updates: { title: string; body: string }) {
-    const prev = localActivities
     setLocalActivities(prevList => prevList.map(a => a.id === id ? { ...a, title: updates.title, body: updates.body } : a))
     try {
       const res = await fetch(`/api/crm/activities/${id}`, {
@@ -521,7 +563,17 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
       })
       if (!res.ok) throw new Error()
     } catch {
-      setLocalActivities(prev)
+      // AUDIT.md #294 — reverting to the captured `prev` list snapshot
+      // races with a second edit to the same activity that succeeds before
+      // this failure is handled; refetch activities from the server and
+      // merge only this one activity's fresh state instead.
+      try {
+        const fresh = await fetchCrmActivities()
+        const match = fresh.find(a => a.id === id)
+        if (match) setLocalActivities(prevList => prevList.map(a => a.id === id ? match : a))
+      } catch {
+        // Best-effort reconciliation; leave the optimistic state if this fails too.
+      }
       toast('Failed to save changes', 'error')
     }
   }
@@ -570,7 +622,10 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               <a
-                href={`/portal/preview?company=${encodeURIComponent(company.name)}`}
+                // AUDIT #154 / Batch 5 — "View as Client" now points at the real
+                // merged /client tree instead of the deleted /portal/preview.
+                // See lib/useClientCompany.tsx.
+                href={`/client?company=${encodeURIComponent(company.name)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0"
@@ -852,6 +907,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                         if (res.ok) {
                           const data = await res.json()
                           setAiProposalContent(data.content)
+                          setAiProposalSource(data.source)
                         }
                       } catch { /* ignore */ }
                       setAiGenerating(false)
@@ -864,6 +920,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                   </button>
                   {aiProposalContent && (
                     <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                      <p className="text-[11px] font-semibold text-purple-700 mb-1.5">{aiSourceLabel(aiProposalSource)}</p>
                       <pre className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-sans">{aiProposalContent}</pre>
                       <button
                         onClick={() => {
@@ -1215,7 +1272,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <Sparkles size={12} className="text-purple-600 flex-shrink-0" />
-                  <span className="text-xs font-semibold text-purple-800 truncate">AI Draft — to {draftRecipient?.fullName}</span>
+                  <span className="text-xs font-semibold text-purple-800 truncate">AI Draft {aiSourceLabel(aiDraftSource)} — to {draftRecipient?.fullName}</span>
                 </div>
                 <button onClick={() => setAiDraftContent(null)} className="text-purple-400 hover:text-purple-600 flex-shrink-0">
                   <X size={12} />
@@ -1704,21 +1761,26 @@ export default function CompaniesPage() {
 
   async function handleDeleteCompany(id: string) {
     if (!confirm('Delete this company? This action cannot be undone.')) return
-    const removed = localCompanies.find(c => c.id === id)
     setLocalCompanies(prev => prev.filter(c => c.id !== id))
     if (selectedCompany?.id === id) setSelectedCompany(null)
     try {
       const res = await fetch(`/api/crm/companies/${id}`, { method: 'DELETE' })
       if (!res.ok) {
         // Most commonly a 409 — company still has related records (AUDIT
-        // #96 blocks rather than cascade-deletes them). Revert the
-        // optimistic removal so the UI doesn't show it as gone when it isn't.
+        // #96 blocks rather than cascade-deletes them). Restore the
+        // optimistic removal so the UI doesn't show it as gone when it
+        // isn't. AUDIT.md #294 — refetch from the server instead of
+        // reinserting a captured `removed` snapshot, so a stale pre-delete
+        // copy can never clobber an edit made to this company in the
+        // meantime.
         const body = await res.json().catch(() => ({}))
-        if (removed) setLocalCompanies(prev => [removed, ...prev])
+        const fresh = await fetchCrmCompanyById(id)
+        if (fresh) setLocalCompanies(prev => [fresh, ...prev])
         toast(body.error || 'Failed to delete company', 'error')
       }
     } catch {
-      if (removed) setLocalCompanies(prev => [removed, ...prev])
+      const fresh = await fetchCrmCompanyById(id)
+      if (fresh) setLocalCompanies(prev => [fresh, ...prev])
       toast('Failed to delete company', 'error')
     }
   }
@@ -1794,17 +1856,30 @@ export default function CompaniesPage() {
     setShowBulkTag(false)
     setBulkTagValue('')
     setSelectedIds(new Set())
-    for (const id of ids) {
+    const failedIds = new Set<string>()
+    await Promise.all(ids.map(async id => {
       const company = localCompanies.find(c => c.id === id)
       if (company && !company.tags.includes(tag)) {
-        fetch(`/api/crm/companies/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tags: [...company.tags, tag] }),
-        }).catch(() => {})
+        try {
+          const res = await fetch(`/api/crm/companies/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: [...company.tags, tag] }),
+          })
+          if (!res.ok) throw new Error('Failed')
+        } catch {
+          failedIds.add(id)
+        }
       }
+    }))
+    if (failedIds.size > 0) {
+      setLocalCompanies(prev => prev.map(c =>
+        failedIds.has(c.id) ? { ...c, tags: c.tags.filter(t => t !== tag) } : c
+      ))
+      toast(`Tag "${tag}" applied to ${ids.length - failedIds.size} companies, ${failedIds.size} failed`, 'error')
+    } else {
+      toast(`Tag "${tag}" applied to ${ids.length} companies`, 'success')
     }
-    toast(`Tag "${tag}" applied to ${ids.length} companies`, 'success')
   }
 
   async function handleBulkReassign() {
@@ -1815,14 +1890,39 @@ export default function CompaniesPage() {
     setShowBulkReassign(false)
     setBulkReassignValue('')
     setSelectedIds(new Set())
-    for (const id of ids) {
-      fetch(`/api/crm/companies/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner }),
-      }).catch(() => {})
+    const failedIds = new Set<string>()
+    await Promise.all(ids.map(async id => {
+      try {
+        const res = await fetch(`/api/crm/companies/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ owner }),
+        })
+        if (!res.ok) throw new Error('Failed')
+      } catch {
+        failedIds.add(id)
+      }
+    }))
+    if (failedIds.size > 0) {
+      // AUDIT.md #294 — reverting each failed company to a pre-captured
+      // `previousOwners` map races the same way a single-record revert
+      // does: if a concurrent edit to one of these companies succeeds
+      // before this failure is handled, reverting to the stale snapshot
+      // would clobber it. Refetch the full list (there's no per-company
+      // GET) and merge in only the companies that actually failed, leaving
+      // every other company — including the ones that succeeded here and
+      // any unrelated concurrent edit — untouched.
+      try {
+        const fresh = await fetchCrmCompanies()
+        const freshById = new Map(fresh.map(c => [c.id, c]))
+        setLocalCompanies(prev => prev.map(c => failedIds.has(c.id) ? (freshById.get(c.id) ?? c) : c))
+      } catch {
+        // Best-effort reconciliation; leave the optimistic state if this fails too.
+      }
+      toast(`${ids.length - failedIds.size} companies reassigned to ${owner}, ${failedIds.size} failed`, 'error')
+    } else {
+      toast(`${ids.length} companies reassigned to ${owner}`, 'success')
     }
-    toast(`${ids.length} companies reassigned to ${owner}`, 'success')
   }
 
   useEffect(() => { queueMicrotask(() => setCurrentPage(1)) }, [search, statusFilter])

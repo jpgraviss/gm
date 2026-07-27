@@ -4,13 +4,13 @@ import { requireWordPressAuth } from '@/lib/wordpress-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 
 export const GET = withErrorHandler('wordpress/seo/settings GET', async (req) => {
-  const denied = await requireWordPressAuth(req)
-  if (denied) return denied
-
   const siteUrl = req.nextUrl.searchParams.get('site')
   if (!siteUrl) {
     return NextResponse.json({ error: 'site query param is required' }, { status: 400 })
   }
+
+  const denied = await requireWordPressAuth(req, siteUrl)
+  if (denied) return denied
 
   const db = createServiceClient()
   const { data, error } = await db
@@ -27,15 +27,15 @@ export const GET = withErrorHandler('wordpress/seo/settings GET', async (req) =>
 })
 
 export const PATCH = withErrorHandler('wordpress/seo/settings PATCH', async (req) => {
-  const denied = await requireWordPressAuth(req)
-  if (denied) return denied
-
   const body = await req.json()
   const { siteUrl, pagePath, metaTitle, metaDescription, ogTitle, ogDescription, ogImage, schemaMarkup } = body
 
   if (!siteUrl || !pagePath) {
     return NextResponse.json({ error: 'siteUrl and pagePath are required' }, { status: 400 })
   }
+
+  const denied = await requireWordPressAuth(req, siteUrl)
+  if (denied) return denied
 
   const db = createServiceClient()
   const { data, error } = await db

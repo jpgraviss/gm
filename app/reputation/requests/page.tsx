@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import Link from 'next/link'
+import { useToast } from '@/components/ui/Toast'
 import {
   Send, X, Plus, Mail, Clock, CheckCircle2, Eye,
-  Star, ChevronLeft, Calendar, Users, FileText,
+  Star, ChevronLeft, Calendar, Users, FileText, AlertTriangle,
 } from 'lucide-react'
 
-type CampaignStatus = 'draft' | 'scheduled' | 'sent' | 'active'
+type CampaignStatus = 'draft' | 'scheduled' | 'sent' | 'active' | 'failed'
 
 interface Campaign {
   id: string
@@ -29,6 +30,11 @@ const STATUS_CONFIG: Record<CampaignStatus, { bg: string; text: string; label: s
   scheduled: { bg: '#eff6ff', text: '#3b82f6', label: 'Scheduled', icon: <Clock size={11} /> },
   sent: { bg: '#f0fdf4', text: '#16a34a', label: 'Sent', icon: <CheckCircle2 size={11} /> },
   active: { bg: '#fefce8', text: '#ca8a04', label: 'Active', icon: <Send size={11} /> },
+  // AUDIT — POST /api/reputation/requests previously marked every
+  // just-dispatched campaign 'sent' even when the resolved audience was
+  // empty or every send failed, showing a green "Sent" badge
+  // indistinguishable from a real success with zero engagement yet.
+  failed: { bg: '#fef2f2', text: '#dc2626', label: 'Failed to send', icon: <AlertTriangle size={11} /> },
 }
 
 const TEMPLATE_NAMES = ['Happy Client Follow-Up', 'Post-Project Review', 'Annual Check-In']
@@ -62,6 +68,7 @@ function formatDateTime(iso: string): string {
 }
 
 export default function ReviewRequestsPage() {
+  const { toast } = useToast()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [templates, setTemplates] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -77,11 +84,12 @@ export default function ReviewRequestsPage() {
 
   useEffect(() => {
     fetch('/api/reputation/requests')
-      .then((r) => r.json())
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error('Failed')))
       .then((data) => {
         setCampaigns(data.campaigns)
         setTemplates(data.templates)
       })
+      .catch(() => toast('Failed to load review campaigns', 'error'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -99,12 +107,17 @@ export default function ReviewRequestsPage() {
           scheduled_at: formSchedule && formScheduleDate ? new Date(formScheduleDate).toISOString() : null,
         }),
       })
-      if (res.ok) {
-        const campaign = await res.json()
-        setCampaigns((prev) => [campaign, ...prev])
-        setCreateOpen(false)
-        resetForm()
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to create campaign', 'error')
+        return
       }
+      setCampaigns((prev) => [data, ...prev])
+      setCreateOpen(false)
+      resetForm()
+      toast('Campaign created', 'success')
+    } catch {
+      toast('Failed to create campaign', 'error')
     } finally {
       setSubmitting(false)
     }

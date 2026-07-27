@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { requireRole, getAuthUser } from '@/lib/rbac'
 
 function slugify(name: string): string {
   return name
@@ -10,12 +10,19 @@ function slugify(name: string): string {
     .replace(/^-|-$/g, '')
 }
 
-export const GET = withErrorHandler('calendar/booking-types GET', async () => {
+export const GET = withErrorHandler('calendar/booking-types GET', async (req) => {
+  // AUDIT #253 — this route is intentionally public (the /go/book/[slug]
+  // page needs it unauthenticated), but a disabled booking type's full
+  // config was still exposed to anyone. The staff-facing calendar/booking
+  // management page reuses this same GET and needs to see inactive types
+  // too (to re-enable them), so only filter for callers without a real
+  // staff session — matches the slot-check/creation endpoints, which
+  // already filter on `active` for the public path.
   const db = createServiceClient()
-  const { data, error } = await db
-    .from('booking_types')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const user = await getAuthUser(req)
+  let query = db.from('booking_types').select('*').order('created_at', { ascending: false })
+  if (!user) query = query.eq('active', true)
+  const { data, error } = await query
 
   if (error) {
     throw new Error(error.message)
@@ -40,11 +47,19 @@ export const POST = withErrorHandler('calendar/booking-types POST', async (req) 
   const db = createServiceClient()
 
   if (id) {
+    // AUDIT — this used to regenerate the slug from the current name on
+    // every edit, with no uniqueness check or redirect (unlike the insert
+    // path below, which checks for collisions). Renaming a booking type to
+    // fix a typo silently 404'd any already-shared/embedded /go/book/{slug}
+    // link, and renaming into another type's existing slug threw a raw DB
+    // unique-constraint error. The slug is now set once at creation and
+    // never changes on a name edit — a public URL a client bookmarked or an
+    // agency embedded on their site keeps working regardless of later
+    // renames.
     const { data, error } = await db
       .from('booking_types')
       .update({
         name: name.trim(),
-        slug: slugify(name.trim()),
         description: description?.trim() || null,
         duration_minutes: duration_minutes ?? 30,
         location: location ?? 'zoom',

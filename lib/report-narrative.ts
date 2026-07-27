@@ -123,12 +123,18 @@ export async function generateGrowthNarrative(
       messages: [{ role: 'user', content: facts.join('\n') }],
       maxTokens: 700,
       timeoutMs: 20_000,
+      feature: 'report_narrative',
     })
 
     if (res.finishReason !== 'stop' || !res.text.trim()) return fallback
 
     const parts = res.text.split(/\n?---\n?/).map(s => s.trim()).filter(Boolean)
-    if (parts.length < 4) return fallback
+    // Exactly 4, not "at least 4" — a stray "---"-like line inside a
+    // section (the model violating its own "no markdown" instruction)
+    // would otherwise produce a 5th+ fragment, silently shifting which
+    // fragment lands under which heading in the email sent to a real
+    // client with no human review gate.
+    if (parts.length !== 4) return fallback
 
     return {
       monthInOneLine: parts[0],

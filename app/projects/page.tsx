@@ -8,7 +8,7 @@ import CompanySelect from '@/components/ui/CompanySelect'
 import { projectStatusColors, formatDate } from '@/lib/utils'
 import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import StatusBadge from '@/components/ui/StatusBadge'
-import type { Project, ProjectStatus } from '@/lib/types'
+import type { Project, ProjectStatus, AppTask } from '@/lib/types'
 import {
   X, CheckCircle, Calendar, ChevronRight, LayoutList, LayoutGrid,
   TrendingUp, Globe, BarChart2,
@@ -17,10 +17,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
-import FileUpload from '@/components/ui/FileUpload'
 import LoadingScreen from '@/components/ui/LoadingScreen'
-
-const DEPARTMENTS = [...SERVICE_NAMES]
 
 const statusOrder: ProjectStatus[] = [
   'Not Started', 'In Progress', 'Awaiting Client', 'Completed', 'Launched', 'In Maintenance',
@@ -56,9 +53,7 @@ const serviceTypeIcons: Partial<Record<string, React.ReactNode>> = {
   Custom: <Wrench size={14} />,
 }
 
-function ProjectGridCard({ project, onClick }: { project: Project; onClick: () => void }) {
-  const today = new Date().toISOString().split('T')[0]
-  const overdueTasks = project.tasks.filter(t => !t.completed && t.dueDate < today).length
+function ProjectGridCard({ project, onClick, overdueTasks }: { project: Project; onClick: () => void; overdueTasks: number }) {
 
   return (
     <div
@@ -127,52 +122,11 @@ function ProjectGridCard({ project, onClick }: { project: Project; onClick: () =
   )
 }
 
-interface ProjectFile {
-  name: string
-  size: number
-  url: string
-  path: string
-  type: string
-  createdAt?: string
-}
-
-function ProjectFilesTab({ company }: { company: string }) {
-  const [files, setFiles] = useState<ProjectFile[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    fetch(`/api/files?company=${encodeURIComponent(company)}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setFiles(data.map((f: ProjectFile) => ({ ...f, type: f.type ?? '' }))) })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [company])
-
-  if (loading) return <div className="py-12 text-center text-sm text-gray-400">Loading files...</div>
-
-  return (
-    <div className="flex flex-col gap-4">
-      <FileUpload
-        company={company}
-        files={files}
-        onUpload={file => setFiles(prev => [file, ...prev])}
-        onRemove={file => {
-          fetch('/api/files', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: file.path }),
-          })
-          setFiles(prev => prev.filter(f => f.path !== file.path))
-        }}
-      />
-    </div>
-  )
-}
-
 function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p: Project) => void }) {
   const { toast } = useToast()
   const OWNERS = useTeamMembers()
   const [company, setCompany] = useState('')
+  const [companyId, setCompanyId] = useState<string | undefined>(undefined)
   const [serviceType, setServiceType] = useState<Project['serviceType']>('Website Build')
   const [startDate, setStartDate] = useState('')
   const [launchDate, setLaunchDate] = useState('')
@@ -188,6 +142,7 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
     const payload = {
       contractId: '',
       company: company.trim(),
+      companyId: companyId ?? null,
       serviceType,
       status: projectStatus,
       startDate,
@@ -230,7 +185,7 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
         <div className="p-5 flex flex-col gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company Name *</label>
-            <CompanySelect value={company} onChange={(name) => setCompany(name)} />
+            <CompanySelect value={company} onChange={(name, id) => { setCompany(name); setCompanyId(id) }} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
@@ -272,17 +227,6 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
                 </label>
               ))}
             </div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Departments</label>
-            <div className="flex flex-wrap gap-2">
-              {DEPARTMENTS.map(d => (
-                <label key={d} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border cursor-pointer transition-colors ${selectedTeam.includes(d) ? 'bg-green-50 border-green-600 text-green-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                  <input type="checkbox" checked={selectedTeam.includes(d)}
-                    onChange={e => setSelectedTeam(prev => e.target.checked ? [...prev, d] : prev.filter(x => x !== d))}
-                    className="hidden" />
-                  {d}
-                </label>
-              ))}
-            </div>
           </div>
         </div>
         <div className="px-5 pb-5 flex gap-2">
@@ -306,6 +250,7 @@ export default function ProjectsPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [localProjects, setLocalProjects] = useState<Project[]>([])
+  const [tasks, setTasks] = useState<AppTask[]>([])
   const [creatingProject, setCreatingProject] = useState(false)
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [filterTab, setFilterTab] = useState<FilterTab>('All')
@@ -319,9 +264,23 @@ export default function ProjectsPage() {
       .then(setLocalProjects)
       .catch(() => toast('Failed to load projects', 'error'))
       .finally(() => setLoading(false))
+    // AUDIT #227 — the "X overdue" badge used to read the projects.tasks
+    // JSONB column, which is set to [] at creation and never written to
+    // again now that real task management lives in app_tasks (#117). Pull
+    // the real tasks so the badge reflects actual overdue app_tasks.
+    fetchAllPages<AppTask>('/api/tasks').then(setTasks).catch(() => {})
   }, [])
 
   const today = new Date().toISOString().split('T')[0]
+
+  const overdueByProject = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const t of tasks) {
+      if (!t.projectId || t.status === 'Completed' || !t.dueDate || t.dueDate >= today) continue
+      map.set(t.projectId, (map.get(t.projectId) ?? 0) + 1)
+    }
+    return map
+  }, [tasks, today])
 
   const totalProjects = localProjects.length
   const activeProjects = localProjects.filter(p => ['In Progress', 'Not Started'].includes(p.status))
@@ -455,7 +414,7 @@ export default function ProjectsPage() {
         ) : view === 'grid' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(p => (
-              <ProjectGridCard key={p.id} project={p} onClick={() => router.push(`/projects/${p.id}`)} />
+              <ProjectGridCard key={p.id} project={p} onClick={() => router.push(`/projects/${p.id}`)} overdueTasks={overdueByProject.get(p.id) ?? 0} />
             ))}
           </div>
         ) : (
@@ -515,7 +474,7 @@ export default function ProjectsPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filtered.map(p => {
-                  const overdueTasks = p.tasks.filter(t => !t.completed && t.dueDate < today).length
+                  const overdueTasks = overdueByProject.get(p.id) ?? 0
                   return (
                     <tr
                       key={p.id}

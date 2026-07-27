@@ -9,9 +9,13 @@ import { mapPost } from '@/lib/social-media'
 // company_name can be null on older/malformed rows — requirePortalClient
 // requires a real string, and a null company has no legitimate portal
 // client to scope against, so treat it as staff-only.
-async function requirePostAccess(req: NextRequest, companyName: string | null) {
+// AUDIT.md #469 — companyId (the post's own company_id column) is threaded
+// through so requirePortalClient can do the collision-proof company_id
+// comparison instead of only a name match when the caller's own
+// portal_clients row is linked.
+async function requirePostAccess(req: NextRequest, companyName: string | null, companyId?: string | null) {
   if (!companyName) return await requireRole(req, 'Team Member')
-  return await requirePortalClient(req, companyName)
+  return await requirePortalClient(req, companyName, companyId)
 }
 
 // Fields the real portal approval UI ever sends (app/client/page.tsx
@@ -27,7 +31,7 @@ export const GET = withErrorHandler('social-posts/[id] GET', async (req, { param
   const { data } = await db.from('social_posts').select('*').eq('id', id).single()
   if (!data) return NextResponse.json({ error: 'Social post not found' }, { status: 404 })
 
-  const denied = await requirePostAccess(req, data.company_name)
+  const denied = await requirePostAccess(req, data.company_name, data.company_id)
   if (denied) return denied
 
   return NextResponse.json(mapPost(data))
@@ -40,14 +44,14 @@ export const PATCH = withErrorHandler('social-posts/[id] PATCH', async (req, { p
 
   const { data: current, error: fetchErr } = await db
     .from('social_posts')
-    .select('company_name')
+    .select('*')
     .eq('id', id)
     .single()
   if (fetchErr || !current) {
     return NextResponse.json({ error: 'Social post not found' }, { status: 404 })
   }
 
-  const denied = await requirePostAccess(req, current.company_name)
+  const denied = await requirePostAccess(req, current.company_name, current.company_id)
   if (denied) return denied
 
   if (!(await isStaffCaller(req))) {
@@ -72,6 +76,38 @@ export const PATCH = withErrorHandler('social-posts/[id] PATCH', async (req, { p
   // Auto-set approved_at when approval status changes to 'approved'
   if (body.approvalStatus === 'approved') {
     update.approved_at = new Date().toISOString()
+  }
+
+  // Auto-transition draft/pending_approval posts to 'scheduled' once a
+  // future scheduled_at is in effect and the post doesn't need further
+  // approval — 'draft' never goes through client approval (self-approve
+  // it here), while 'pending_approval' only qualifies once approved.
+  // Without this, status: 'scheduled' was never written by any code path
+  // and the cron job's `.eq('status', 'scheduled')` query could never
+  // match a row. publishSocialPost also requires approval_status ===
+  // 'approved' regardless of status, so both must land together for the
+  // cron job to actually publish the row once scheduled_at arrives.
+  // AUDIT — found by an adversarial review of this same fix: only run this
+  // when the caller ISN'T explicitly setting `status` themselves. Both real
+  // callers (the composer saving a future date, and the Approve action,
+  // which only ever sends `approvalStatus`) never send `status` directly —
+  // gating on that means a hypothetical future "revert to draft" caller
+  // that explicitly sends `status: 'draft'` is respected instead of being
+  // silently flipped straight back to 'scheduled' just because the row
+  // still has an old future scheduled_at that wasn't also cleared.
+  if (body.status === undefined) {
+    const nextScheduledAt = (update.scheduled_at !== undefined ? update.scheduled_at : current.scheduled_at) as string | null
+    const nextStatus = current.status as string
+    const nextApprovalStatus = (update.approval_status !== undefined ? update.approval_status : current.approval_status) as string
+    const isFutureScheduled = !!nextScheduledAt && new Date(nextScheduledAt) > new Date()
+
+    if (isFutureScheduled && nextStatus === 'draft') {
+      update.status = 'scheduled'
+      update.approval_status = 'approved'
+      if (update.approved_at === undefined) update.approved_at = new Date().toISOString()
+    } else if (isFutureScheduled && nextStatus === 'pending_approval' && nextApprovalStatus === 'approved') {
+      update.status = 'scheduled'
+    }
   }
 
   if (Object.keys(update).length === 1) {

@@ -3,12 +3,12 @@
  * segmenting CRM contacts. Translated into a Supabase query at send time.
  */
 
+import { sendEmail } from '@/lib/email'
+
 export interface AudienceFilter {
   lifecycleStage?: string
   tags?: string[]
   owner?: string
-  hasEmail?: boolean
-  companyStatus?: string
   createdAfter?: string
   createdBefore?: string
   lastActivityAfter?: string
@@ -158,4 +158,129 @@ export function wrapWithFooter(html: string, unsubscribeUrl: string, footerNote 
     </p>
   </td></tr>
 </table>`
+}
+
+const CHUNK_SIZE = 50 // Resend allows batches — we throttle to 50 per batch
+
+/**
+ * Send a broadcast to its matched audience. Extracted from the manual-send
+ * route so a cron-triggered scheduled dispatch (see app/api/cron/route.ts)
+ * can reuse the exact same sending logic instead of duplicating it —
+ * matches the dispatchReviewCampaign() shared-function pattern. Assumes
+ * the caller has already validated the broadcast is sendable and claimed
+ * it (status transitioned away from its prior state) to prevent a double
+ * send.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function sendBroadcastNow(db: any, broadcast: any): Promise<{ sent: number; skipped: number; failed: number; total: number }> {
+  const id = broadcast.id
+
+  // Fetch all contacts matching the audience filter
+  const audienceFilter = broadcast.audience_filter ?? {}
+  let query = db
+    .from('crm_contacts')
+    .select('id, first_name, last_name, full_name, emails, company_name')
+    .not('emails', 'is', null)
+  query = applyAudienceFilter(query, audienceFilter)
+
+  const { data: rawContacts, error: contactErr } = await query
+  if (contactErr) {
+    await db.from('broadcasts').update({ status: 'failed' }).eq('id', id)
+    throw new Error(contactErr.message)
+  }
+
+  const { includeContactIds, excludeContactIds } = await resolveEngagementFilters(db, audienceFilter)
+  const contacts = (rawContacts ?? []).filter((c: { id: string }) => {
+    if (includeContactIds !== null && !includeContactIds.has(c.id)) return false
+    if (excludeContactIds.has(c.id)) return false
+    return true
+  })
+
+  // Suppression list
+  const allEmails = (contacts ?? [])
+    .flatMap((c: { emails: string[] | null }) => (c.emails ?? []))
+    .map((e: string) => e.toLowerCase())
+  const { data: suppressedRows } = await db
+    .from('sequence_suppression_list')
+    .select('email')
+    .in('email', allEmails)
+  const suppressedSet = new Set((suppressedRows ?? []).map((s: { email: string }) => s.email))
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+  let sent = 0
+  let skipped = 0
+  let failed = 0
+
+  type ContactRow = { id: string; first_name: string | null; last_name: string | null; full_name: string | null; emails: string[] | null; company_name: string | null }
+  const contactList = (contacts ?? []) as ContactRow[]
+  for (let i = 0; i < contactList.length; i += CHUNK_SIZE) {
+    const chunk = contactList.slice(i, i + CHUNK_SIZE)
+    await Promise.all(
+      chunk.map(async (contact) => {
+        const email = contact.emails?.[0]?.toLowerCase()
+        if (!email || suppressedSet.has(email)) {
+          skipped++
+          return
+        }
+
+        const renderedHtml = renderMergeFields(broadcast.html_body ?? '', {
+          firstName:   contact.first_name ?? undefined,
+          lastName:    contact.last_name ?? undefined,
+          fullName:    contact.full_name ?? undefined,
+          companyName: contact.company_name ?? undefined,
+        })
+        const unsubUrl = `${appUrl}/api/sequences/unsubscribe?email=${encodeURIComponent(email)}`
+        const finalHtml = wrapWithFooter(renderedHtml, unsubUrl, `Graviss Marketing`)
+
+        const recipientId = `br-${id}-${contact.id}`
+
+        try {
+          const sendResult = await sendEmail({
+            to: email,
+            from: `${broadcast.from_name} <${broadcast.from_email}>`,
+            replyTo: broadcast.reply_to ?? undefined,
+            subject: broadcast.subject,
+            html: finalHtml,
+            headers: {
+              'X-Broadcast-Id':   id,
+              'X-Recipient-Id':   recipientId,
+              'List-Unsubscribe': `<${unsubUrl}>`,
+            },
+          })
+
+          if (!sendResult.success) {
+            failed++
+            await db.from('broadcast_recipients').insert({
+              id: recipientId,
+              broadcast_id: id,
+              contact_id: contact.id,
+              email,
+              status: 'failed',
+            })
+          } else {
+            sent++
+            await db.from('broadcast_recipients').insert({
+              id: recipientId,
+              broadcast_id: id,
+              contact_id: contact.id,
+              email,
+              status: 'sent',
+              sent_at: new Date().toISOString(),
+              resend_message_id: sendResult.id ?? null,
+            })
+          }
+        } catch (err) {
+          failed++
+          console.error('[broadcast send] error', err)
+        }
+      }),
+    )
+  }
+
+  await db
+    .from('broadcasts')
+    .update({ status: 'sent', total_sent: sent })
+    .eq('id', id)
+
+  return { sent, skipped, failed, total: contactList.length }
 }

@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { X, Mail, Edit2, Phone, CheckCircle, Linkedin, ChevronLeft, Wand2, Sparkles } from 'lucide-react'
 import type { SequenceStep, SequenceStepType, SequenceHtmlTemplate, TaskPriority } from '@/lib/types'
+import { aiSourceLabel } from '@/lib/utils'
 
 // Merge-field tokens the executor (app/api/sequences/execute/route.ts,
 // replaceMergeFields) actually substitutes. Keep these in sync — inserting
@@ -290,7 +291,7 @@ export default function SequenceStepEditor({
                         <div className="flex items-center gap-1.5">
                           <Sparkles size={11} className="text-purple-600" />
                           <span className="text-[11px] font-semibold text-purple-700">
-                            Draft {aiDraft.source === 'ollama' ? '(local AI)' : aiDraft.source === 'groq' ? '(AI)' : '(template — no AI provider configured)'}
+                            Draft {aiSourceLabel(aiDraft.source)}
                           </span>
                         </div>
                         <button type="button" onClick={() => setAiDraft(null)} className="text-purple-400 hover:text-purple-600">

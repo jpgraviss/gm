@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GravHub SEO
  * Description: Enterprise SEO management plugin by Graviss Marketing. Full on-page SEO analysis, focus keywords, XML sitemaps, meta management, and centralized reporting via GravHub.
- * Version: 1.5.2
+ * Version: 1.5.4
  * Author: Graviss Marketing
  * Author URI: https://gravissmarketing.com
  * License: Proprietary
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GRAVHUB_SEO_VERSION', '1.5.2' );
+define( 'GRAVHUB_SEO_VERSION', '1.5.4' );
 define( 'GRAVHUB_SEO_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_FILE', __FILE__ );
@@ -419,6 +419,19 @@ final class GravHub_SEO {
 		}
 
 		update_option( $option, $value );
+
+		// Toggling the sitemap on/off (or changing which post types it
+		// covers) changes which rewrite rules should exist for
+		// /sitemap*.xml, but add_rewrite_rule() only affects the CURRENT
+		// request's in-memory rule set — WordPress actually routes incoming
+		// requests against the persisted `rewrite_rules` option, which is
+		// only rebuilt by flush_rewrite_rules(). Without this, re-enabling
+		// the sitemap here updated the option but /sitemap.xml kept 404ing
+		// until something unrelated (e.g. re-saving Permalinks) happened to
+		// flush the rules.
+		if ( 'gravhub_sitemap_enabled' === $option || 'gravhub_sitemap_post_types' === $option ) {
+			GravHub_Sitemap::flush_rules();
+		}
 
 		return new WP_REST_Response( array( 'success' => true ), 200 );
 	}

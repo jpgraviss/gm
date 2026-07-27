@@ -10,6 +10,36 @@ interface Block {
   data: Record<string, unknown>
 }
 
+// AUDIT — buttonUrl/imageUrl/videoUrl/footer-link URLs are staff-entered
+// strings rendered straight into href/src on a public, unauthenticated
+// page. A `javascript:` URI here would execute in a real visitor's
+// browser on click; unrecognized schemes on <iframe src> can be similarly
+// abused. Only known-safe schemes (or a scheme-less relative path/anchor)
+// pass through — anything else is dropped.
+function isSafeUrl(url: unknown, allowed: Set<string>): url is string {
+  if (typeof url !== 'string') return false
+  const trimmed = url.trim()
+  if (!trimmed) return false
+  if (trimmed.startsWith('#') || trimmed.startsWith('/')) return true
+  try {
+    return allowed.has(new URL(trimmed).protocol)
+  } catch {
+    // Not a valid absolute URL (e.g. a bare relative path like "pricing")
+    return true
+  }
+}
+
+const LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:'])
+const MEDIA_PROTOCOLS = new Set(['http:', 'https:'])
+
+function safeLinkUrl(url: unknown): string | undefined {
+  return isSafeUrl(url, LINK_PROTOCOLS) ? url : undefined
+}
+
+function safeMediaUrl(url: unknown): string | undefined {
+  return isSafeUrl(url, MEDIA_PROTOCOLS) ? url : undefined
+}
+
 function FaqAccordion({ question, answer }: { question: string; answer: string }) {
   const [open, setOpen] = useState(false)
   return (
@@ -124,14 +154,14 @@ function PublicBlock({ block, funnelSlug, pageId }: { block: Block; funnelSlug: 
     case 'hero':
       return (
         <section style={{ background: bgColor, color: textColor, padding }} className="text-center">
-          {(d.imageUrl as string) && (
-            <img src={d.imageUrl as string} alt="" className="max-h-48 mx-auto mb-6 rounded-lg object-cover" />
+          {safeMediaUrl(d.imageUrl) && (
+            <img src={safeMediaUrl(d.imageUrl)} alt="" className="max-h-48 mx-auto mb-6 rounded-lg object-cover" />
           )}
           <h1 className="text-3xl md:text-5xl font-bold mb-4" style={{ fontFamily: 'var(--font-heading)' }}>{d.headline as string}</h1>
           <p className="text-lg md:text-xl opacity-80 mb-8 max-w-2xl mx-auto">{d.subheadline as string}</p>
           {(d.buttonText as string) && (
             <a
-              href={d.buttonUrl as string}
+              href={safeLinkUrl(d.buttonUrl) ?? '#'}
               className="inline-block px-8 py-4 rounded-lg font-semibold text-lg transition-transform hover:scale-105"
               style={{ background: textColor === '#ffffff' ? 'rgba(255,255,255,0.2)' : '#015035', color: '#ffffff' }}
             >
@@ -182,7 +212,7 @@ function PublicBlock({ block, funnelSlug, pageId }: { block: Block; funnelSlug: 
           <h2 className="text-2xl md:text-3xl font-bold mb-3" style={{ fontFamily: 'var(--font-heading)' }}>{d.headline as string}</h2>
           <p className="text-lg opacity-80 mb-8 max-w-xl mx-auto">{d.subheadline as string}</p>
           <a
-            href={d.buttonUrl as string}
+            href={safeLinkUrl(d.buttonUrl) ?? '#'}
             className="inline-block px-8 py-4 rounded-lg font-semibold text-lg transition-transform hover:scale-105"
             style={{ background: textColor === '#ffffff' ? 'rgba(255,255,255,0.2)' : '#015035', color: '#ffffff' }}
           >
@@ -197,9 +227,9 @@ function PublicBlock({ block, funnelSlug, pageId }: { block: Block; funnelSlug: 
         <section style={{ background: bgColor, color: textColor, padding }}>
           <h2 className="text-2xl md:text-3xl font-bold text-center mb-8" style={{ fontFamily: 'var(--font-heading)' }}>{d.heading as string}</h2>
           <div className="max-w-3xl mx-auto aspect-video rounded-2xl overflow-hidden">
-            {(d.videoUrl as string) ? (
+            {safeMediaUrl(d.videoUrl) ? (
               <iframe
-                src={d.videoUrl as string}
+                src={safeMediaUrl(d.videoUrl)}
                 className="w-full h-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
@@ -232,7 +262,7 @@ function PublicBlock({ block, funnelSlug, pageId }: { block: Block; funnelSlug: 
           <p className="font-medium mb-4">{d.companyName as string}</p>
           <div className="flex justify-center gap-6 text-sm mb-6">
             {links.map((l, i) => (
-              <a key={i} href={l.url} className="opacity-60 hover:opacity-100 transition-opacity">{l.label}</a>
+              <a key={i} href={safeLinkUrl(l.url) ?? '#'} className="opacity-60 hover:opacity-100 transition-opacity">{l.label}</a>
             ))}
           </div>
           <p className="text-xs opacity-40">&copy; {new Date().getFullYear()} {d.companyName as string}. All rights reserved.</p>

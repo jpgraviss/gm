@@ -30,10 +30,14 @@ vi.mock('@/lib/supabase', () => ({
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }))
 vi.mock('@/lib/portal-auth', () => ({ requirePortalClient: vi.fn().mockResolvedValue(null), isStaffCaller: vi.fn().mockResolvedValue(true) }))
 vi.mock('@/lib/automations-engine', () => ({ fireAutomations: vi.fn() }))
-vi.mock('@/lib/rbac', () => ({ requireRole: vi.fn().mockResolvedValue(null), getAuthUser: vi.fn().mockResolvedValue(null) }))
+vi.mock('@/lib/rbac', () => ({
+  requireRole: vi.fn().mockResolvedValue(null),
+  getAuthUser: vi.fn().mockResolvedValue({ name: 'Jamie Rivera', email: 'jamie@gravissmarketing.com' }),
+}))
 
 import { GET, POST } from '@/app/api/contracts/route'
-import { PATCH } from '@/app/api/contracts/[id]/route'
+import { PATCH, DELETE } from '@/app/api/contracts/[id]/route'
+import { logAudit } from '@/lib/audit'
 
 describe('GET /api/contracts', () => {
   it('returns mapped contracts', async () => {
@@ -130,5 +134,22 @@ describe('PATCH /api/contracts/[id]', () => {
 
     const res = await PATCH(req, { params: Promise.resolve({ id: 'c-123' }) })
     expect(res.status).toBe(400)
+  })
+
+})
+
+describe('DELETE /api/contracts/[id]', () => {
+  // AUDIT #272 — the ~62-site logAudit real-attribution fix (#177) had no
+  // regression test asserting the resulting logAudit call's userName; a
+  // future refactor could silently reintroduce fake/hardcoded attribution
+  // with nothing catching it.
+  it('logs the deletion under the real authenticated caller, not a hardcoded name', async () => {
+    const req = new NextRequest(new URL('http://localhost/api/contracts/c-123'), { method: 'DELETE' })
+
+    await DELETE(req, { params: Promise.resolve({ id: 'c-123' }) })
+
+    expect(logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ userName: 'Jamie Rivera', action: 'deleted_contract' }),
+    )
   })
 })

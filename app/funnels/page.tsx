@@ -143,14 +143,20 @@ export default function FunnelsPage() {
       if (res.ok) {
         const funnel = await res.json()
         const funnelId = funnel.id || funnel.funnelId
+        let created = 0
         for (let i = 0; i < template.steps.length; i++) {
-          await fetch(`/api/funnels/${funnelId}/pages`, {
+          const pageRes = await fetch(`/api/funnels/${funnelId}/pages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: template.steps[i] }),
           })
+          if (pageRes.ok) created++
         }
-        addToast(`"${template.name}" funnel created with ${template.steps.length} pages`, 'success')
+        if (created === template.steps.length) {
+          addToast(`"${template.name}" funnel created with ${created} pages`, 'success')
+        } else {
+          addToast(`"${template.name}" funnel created with ${created} of ${template.steps.length} pages — some pages failed to create`, 'error')
+        }
         loadFunnels()
       } else {
         addToast('Failed to create funnel from template', 'error')
@@ -294,6 +300,9 @@ export default function FunnelsPage() {
         const detailRes = await fetch(`/api/funnels/${funnelId}`)
         if (detailRes.ok) setDetail(await detailRes.json())
         loadFunnels()
+      } else {
+        const err = await res.json().catch(() => ({}))
+        addToast(err.error || 'Failed to add page', 'error')
       }
     } catch {
       addToast('Failed to add page', 'error')

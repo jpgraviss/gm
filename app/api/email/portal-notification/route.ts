@@ -16,7 +16,9 @@ export const POST = withErrorHandler('email/portal-notification POST', async (re
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
-  const portalLink = link || `${appUrl}/portal`
+  // AUDIT #154 / Batch 5 — default landing for a client notification email
+  // is now /client, not the deleted /portal.
+  const portalLink = link || `${appUrl}/client`
 
   const result = await sendEmail({
     to,

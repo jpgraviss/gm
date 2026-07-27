@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chatCompletion } from '@/lib/ai-client'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { getBrandVoice, brandVoicePromptAddendum } from '@/lib/brand-kit'
 
 type GenerationType = 'email_draft' | 'proposal_summary' | 'report_summary' | 'social_post' | 'follow_up' | 'sequence_email'
 
@@ -26,11 +27,25 @@ export const POST = withErrorHandler('ai/generate POST', async (req) => {
 
     const userPrompt = buildUserPrompt(type, context)
 
+    // AUDIT.md #320 — Brand Kits previously had no consumer anywhere in the
+    // app. social_post and proposal_summary are the two generation types
+    // that carry a company name in their context (social_post's "topic"
+    // field is actually set to the selected client's company name by
+    // app/social/page.tsx's caller, so both are checked), so look up a
+    // matching brand kit and fold its tone/hashtags into the system prompt.
+    // Silently a no-op if no brand kit exists for that company.
+    let system = SYSTEM_PROMPTS[type]
+    if (type === 'social_post' || type === 'proposal_summary') {
+      const brand = await getBrandVoice(context.company || context.topic)
+      system += brandVoicePromptAddendum(brand)
+    }
+
     const result = await chatCompletion({
-      system: SYSTEM_PROMPTS[type],
+      system,
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens: 1500,
       timeoutMs: 30_000,
+      feature: `ai_generate:${type}`,
     })
 
     if (result.source === 'none') {

@@ -20,7 +20,10 @@ export const POST = withErrorHandler('invoices/[id]/checkout POST', async (req, 
     return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
   }
 
-  const denied = await requirePortalClient(req, invoice.company)
+  // AUDIT.md #469 — pass the invoice's own company_id so requirePortalClient
+  // can do the collision-proof company_id comparison instead of only a name
+  // match when the caller's own portal_clients row is linked.
+  const denied = await requirePortalClient(req, invoice.company, invoice.company_id)
   if (denied) return denied
 
   if (invoice.status === 'Paid') {

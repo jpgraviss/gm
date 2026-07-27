@@ -56,6 +56,7 @@ export default function CalendarSettingsPage() {
 
   const [loading, setSaving]      = useState(false)
   const [saved, setSaved]         = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [settings, setSettings]   = useState<Record<string, unknown> | null>(null)
   const [gcalLink, setGcalLink]   = useState('')
@@ -95,7 +96,7 @@ export default function CalendarSettingsPage() {
     ? `${window.location.origin}/api/calendar/feed/${calendarId}`
     : ''
 
-  const googleConnected = Boolean((settings as { google_refresh_token?: string | null } | null)?.google_refresh_token)
+  const googleConnected = Boolean((settings as { googleConnected?: boolean } | null)?.googleConnected)
 
   function copyFeedUrl() {
     if (!feedUrl) return
@@ -140,35 +141,65 @@ export default function CalendarSettingsPage() {
   async function handleSave() {
     if (!user?.email) return
     setSaving(true)
+    setSaveError(null)
     const updatedLinks = { ...allGcalLinks, [user.email]: gcalLink }
-    await Promise.all([
-      fetch('/api/calendar/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userEmail:      user.email,
-          userName:       user.name,
-          slug:           slug || defaultSlug,
-          title,
-          description:    description || null,
-          duration,
-          buffer,
-          timezone,
-          availableDays,
-          availableStart,
-          availableEnd,
+    // AUDIT #479 — this used to fire both POSTs via Promise.all with no
+    // res.ok check on either, unconditionally showing "Saved!" — a real
+    // 403 (ownership check) or 500 (slug collision, since the slug field
+    // is user-editable with a live unique constraint) silently discarded
+    // every edited field while reporting success. Now both responses are
+    // checked; local form state is left untouched on failure (so nothing
+    // typed is lost) and the real error is surfaced instead.
+    try {
+      const [calendarRes, settingsRes] = await Promise.all([
+        fetch('/api/calendar/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userEmail:      user.email,
+            userName:       user.name,
+            slug:           slug || defaultSlug,
+            title,
+            description:    description || null,
+            duration,
+            buffer,
+            timezone,
+            availableDays,
+            availableStart,
+            availableEnd,
+          }),
         }),
-      }),
-      fetch('/api/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gcalLinks: updatedLinks }),
-      }),
-    ])
-    setAllGcalLinks(updatedLinks)
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+        fetch('/api/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gcalLinks: updatedLinks }),
+        }),
+      ])
+
+      if (!calendarRes.ok) {
+        const err = await calendarRes.json().catch(() => null)
+        throw new Error(
+          err?.error ||
+          (calendarRes.status === 409 || calendarRes.status === 500
+            ? 'That link slug is already taken. Choose a different one and save again.'
+            : calendarRes.status === 403
+            ? 'You do not have permission to save these calendar settings.'
+            : 'Failed to save calendar settings.')
+        )
+      }
+      if (!settingsRes.ok) {
+        const err = await settingsRes.json().catch(() => null)
+        throw new Error(err?.error || 'Failed to save your Google appointment link.')
+      }
+
+      setAllGcalLinks(updatedLinks)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save settings.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleConnectGoogle() {
@@ -749,6 +780,14 @@ export default function CalendarSettingsPage() {
         </div>
 
         {/* ── Save ── */}
+        {/* AUDIT #479 — surface a real save error instead of silently
+            discarding the user's edits while reporting "Saved!" */}
+        {saveError && (
+          <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+            <span className="text-sm text-red-600">{saveError}</span>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <a href="/calendar" className="text-sm text-gray-500 hover:text-gray-800">
             ← View Bookings

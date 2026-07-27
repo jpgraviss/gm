@@ -5,6 +5,7 @@ import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   TrendingUp, TrendingDown, Minus, X, Trash2, Search, RefreshCw,
   Target, ArrowUp, ArrowDown, ChevronDown, ChevronUp, Download,
@@ -118,6 +119,12 @@ const TAG_PRESETS = ['branded', 'non-branded', 'long-tail', 'local', 'commercial
 
 export default function RankTrackerPage() {
   const { toast } = useToast()
+  const { user } = useAuth()
+  // /api/tracked-keywords/check requires Leadership (or Super Admin/isAdmin)
+  // server-side via requireRole(). The Refresh button used to render
+  // unconditionally for anyone who could load this page, so a Team Member
+  // or Dept Manager saw a working-looking button that always 403s.
+  const canRefresh = !!user?.isAdmin || user?.role === 'Leadership' || user?.role === 'Super Admin'
   const [rows, setRows] = useState<TrackedKeyword[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -300,16 +307,24 @@ export default function RankTrackerPage() {
     if (selectedIds.size === 0) return
     if (!confirm(`Delete ${selectedIds.size} keywords and their history?`)) return
     const ids = Array.from(selectedIds)
-    let ok = 0
+    // Only remove ids whose DELETE actually succeeded — previously removed
+    // every selected id from local state unconditionally, so a mid-batch
+    // failure showed a correctly-lower success toast while the UI still
+    // displayed every selected keyword as gone until the next reload.
+    const deleted = new Set<string>()
     for (const id of ids) {
       try {
         const res = await fetch(`/api/rank-tracker/keywords/${id}`, { method: 'DELETE' })
-        if (res.ok) ok++
+        if (res.ok) deleted.add(id)
       } catch { /* skip */ }
     }
-    setRows(prev => prev.filter(r => !selectedIds.has(r.id)))
-    setSelectedIds(new Set())
-    toast(`Deleted ${ok} keywords`, 'success')
+    setRows(prev => prev.filter(r => !deleted.has(r.id)))
+    setSelectedIds(prev => { const next = new Set(prev); for (const id of deleted) next.delete(id); return next })
+    if (deleted.size < ids.length) {
+      toast(`Deleted ${deleted.size} of ${ids.length} keywords — some failed`, 'error')
+    } else {
+      toast(`Deleted ${deleted.size} keywords`, 'success')
+    }
   }
 
   async function bulkTagApply(tag: string) {
@@ -337,6 +352,7 @@ export default function RankTrackerPage() {
   }
 
   async function refreshAll() {
+    if (!canRefresh) return
     setRefreshing(true)
     try {
       const res = await fetch('/api/tracked-keywords/check', { method: 'POST' })
@@ -345,7 +361,16 @@ export default function RankTrackerPage() {
         toast(body?.error || 'Refresh failed', 'error')
         return
       }
-      toast('Rank check queued', 'success')
+      // AUDIT #347 — `total` now reflects the real tracked-keyword count,
+      // not just this batch's size, so a workspace tracking more than one
+      // batch's worth gets an honest "not everything refreshed" signal
+      // instead of a blanket success toast.
+      const result = await res.json().catch(() => null) as { checked?: number; total?: number } | null
+      if (result && typeof result.checked === 'number' && typeof result.total === 'number' && result.checked < result.total) {
+        toast(`Refreshed ${result.checked} of ${result.total} keywords (oldest first) — the rest will refresh automatically`, 'success')
+      } else {
+        toast('Rank check queued', 'success')
+      }
       await load()
     } catch { toast('Refresh failed', 'error') }
     finally { setRefreshing(false) }
@@ -474,10 +499,12 @@ export default function RankTrackerPage() {
                 <button onClick={exportCSV} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50">
                   <Download size={13} className="inline -mt-0.5 mr-1" />Export
                 </button>
-                <button onClick={refreshAll} disabled={refreshing} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
-                  <RefreshCw size={13} className={`inline -mt-0.5 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-                  {refreshing ? 'Checking...' : 'Refresh'}
-                </button>
+                {canRefresh && (
+                  <button onClick={refreshAll} disabled={refreshing} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                    <RefreshCw size={13} className={`inline -mt-0.5 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+                    {refreshing ? 'Checking...' : 'Refresh'}
+                  </button>
+                )}
                 <button onClick={() => setShowGscSync(true)} disabled={gscSyncing} className="px-3 py-2 rounded-xl border border-blue-200 text-blue-700 text-xs font-medium hover:bg-blue-50 disabled:opacity-50">
                   <Globe size={13} className="inline -mt-0.5 mr-1" />
                   {gscSyncing ? 'Syncing...' : 'Sync from GSC'}

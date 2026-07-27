@@ -17,6 +17,7 @@ interface ProposalData {
   company: string
   value: number
   items: ProposalLineItem[]
+  pdfUrl: string | null
   serviceType: string
   status: string
   notes: string | null
@@ -226,6 +227,36 @@ export default function ProposalViewPage() {
             </div>
           </div>
         </section>
+
+        {/* ── Full Proposal PDF ── */}
+        {proposal.pdfUrl && (
+          <section style={{
+            background: COLORS.forestGreen, borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+            padding: '28px 36px', marginBottom: 20,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16,
+          }}>
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>
+                Your Full Proposal
+              </p>
+              <p style={{ fontSize: 15, fontWeight: 600, color: '#ffffff' }}>
+                Scope, timeline, terms, and investment details
+              </p>
+            </div>
+            <a
+              href={proposal.pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: '12px 24px', borderRadius: 10, background: '#ffffff', color: COLORS.forestGreen,
+                fontSize: 14, fontWeight: 700, fontFamily: "'Montserrat', sans-serif", textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              View PDF
+            </a>
+          </section>
+        )}
 
         {/* ── Executive Summary ── */}
         <section style={{

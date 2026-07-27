@@ -198,9 +198,18 @@ export default function SOPsPage() {
     fetch('/api/settings')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (data?.sops && Array.isArray(data.sops) && data.sops.length > 0) {
-          setSections(data.sops)
-          setActiveSection(data.sops[0]?.id || '')
+        // A user can deliberately delete every SOP section and save
+        // `sops: []` — that's a genuine, intentional empty state and must
+        // be preserved, not silently overwritten with the 8 hardcoded
+        // defaults. `sops` defaults to `[]` at the DB level (not
+        // null/undefined), so an untouched row and a deliberately-emptied
+        // one are otherwise indistinguishable — `sops_configured` is a
+        // real flag set only on an actual save (see
+        // app/api/settings/route.ts's PATCH), so it's the only reliable
+        // signal for "was this ever actually saved."
+        if (data?.sops_configured) {
+          setSections(Array.isArray(data.sops) ? data.sops : [])
+          setActiveSection(data.sops?.[0]?.id || '')
         } else {
           setSections(DEFAULT_SOPS)
           setActiveSection(DEFAULT_SOPS[0].id)

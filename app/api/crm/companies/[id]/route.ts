@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getCompanyRelatedCounts, hasBlockingRelatedRecords, describeRelatedCounts, deleteCompanyActivities } from '@/lib/crm-cascade'
+import { validateCustomFieldValues } from '@/lib/custom-fields'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCompany(row: any) {
@@ -52,6 +53,10 @@ export const PUT = withErrorHandler('crm/companies/[id] PUT', async (
   if (!result.valid) return validationError(result.error)
 
   const db = createServiceClient()
+  const { data: existing } = await db.from('crm_companies').select('custom_fields').eq('id', id).single()
+  const customFieldsError = await validateCustomFieldValues('companies', body.customFields, existing?.custom_fields)
+  if (customFieldsError) return validationError(customFieldsError)
+
   const { data, error } = await db
     .from('crm_companies')
     .update({
@@ -101,6 +106,10 @@ export const PATCH = withErrorHandler('crm/companies/[id] PATCH', async (
   if (!result.valid) return validationError(result.error)
 
   const db = createServiceClient()
+  const { data: existing } = await db.from('crm_companies').select('custom_fields').eq('id', id).single()
+  const customFieldsError = await validateCustomFieldValues('companies', body.customFields, existing?.custom_fields)
+  if (customFieldsError) return validationError(customFieldsError)
+
   const updates: Record<string, unknown> = {}
   if (body.tags !== undefined) updates.tags = body.tags
   if (body.status !== undefined) updates.status = body.status

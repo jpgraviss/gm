@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
+import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
-import { SlidersHorizontal, Plus, Trash2, Loader2 } from 'lucide-react'
+import { SlidersHorizontal, Plus, Pencil, Trash2, Loader2 } from 'lucide-react'
 import type { CustomFieldDefinition, CustomFieldEntityType, CustomFieldType } from '@/lib/types'
 
 const ENTITY_TABS: { value: CustomFieldEntityType; label: string }[] = [
@@ -22,16 +24,36 @@ const FIELD_TYPES: { value: CustomFieldType; label: string }[] = [
 ]
 
 export default function CustomFieldsAdminPage() {
+  const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const [definitions, setDefinitions] = useState<CustomFieldDefinition[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<CustomFieldEntityType>('contacts')
   const [showAdd, setShowAdd] = useState(false)
   const [saving, setSaving] = useState(false)
+  // AUDIT — the only way to change a field's label/type used to be
+  // delete-then-recreate, but recreation re-derives field_key by slugifying
+  // whatever label you type — any label edit big enough to change the slug
+  // (e.g. fixing a typo) silently orphaned every value already stored under
+  // the old key, despite PATCH already safely preserving field_key on a
+  // real edit. This just exposes that already-safe PATCH from the UI.
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const [label, setLabel] = useState('')
   const [fieldType, setFieldType] = useState<CustomFieldType>('text')
   const [optionsText, setOptionsText] = useState('')
+
+  // AUDIT #241 — this page had no useAuth()/admin gate at all, unlike every
+  // sibling /admin/* page (per #163's precedent) — and unlike #163's own
+  // finding, the backend here genuinely doesn't require admin either (fixed
+  // separately in app/api/custom-field-definitions/route.ts), so this gap
+  // was a real access-control hole, not a cosmetic one.
+  useEffect(() => {
+    if (!authLoading && (!user || !user.isAdmin)) {
+      router.replace('/admin')
+    }
+  }, [user, authLoading, router])
 
   useEffect(() => {
     fetch('/api/custom-field-definitions')
@@ -51,6 +73,15 @@ export default function CustomFieldsAdminPage() {
     setFieldType('text')
     setOptionsText('')
     setShowAdd(false)
+    setEditingId(null)
+  }
+
+  function startEdit(def: CustomFieldDefinition) {
+    setEditingId(def.id)
+    setLabel(def.label)
+    setFieldType(def.fieldType)
+    setOptionsText(def.options.join(', '))
+    setShowAdd(true)
   }
 
   async function handleAdd() {
@@ -60,21 +91,29 @@ export default function CustomFieldsAdminPage() {
       const options = fieldType === 'select'
         ? optionsText.split(',').map(o => o.trim()).filter(Boolean)
         : []
-      const res = await fetch('/api/custom-field-definitions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: label.trim(), entityType: activeTab, fieldType, options }),
-      })
+      const res = await fetch(
+        editingId ? `/api/custom-field-definitions/${editingId}` : '/api/custom-field-definitions',
+        {
+          method: editingId ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label: label.trim(), entityType: activeTab, fieldType, options }),
+        },
+      )
       const data = await res.json()
       if (!res.ok) {
-        toast(data.error || 'Failed to create field', 'error')
+        toast(data.error || `Failed to ${editingId ? 'update' : 'create'} field`, 'error')
         return
       }
-      setDefinitions(prev => [...prev, data])
-      toast(`Field "${data.label}" added`, 'success')
+      if (editingId) {
+        setDefinitions(prev => prev.map(d => d.id === editingId ? data : d))
+        toast(`Field "${data.label}" updated`, 'success')
+      } else {
+        setDefinitions(prev => [...prev, data])
+        toast(`Field "${data.label}" added`, 'success')
+      }
       resetForm()
     } catch {
-      toast('Failed to create field', 'error')
+      toast(`Failed to ${editingId ? 'update' : 'create'} field`, 'error')
     } finally {
       setSaving(false)
     }
@@ -165,7 +204,7 @@ export default function CustomFieldsAdminPage() {
                 style={{ background: '#015035' }}
               >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-                Add Field
+                {editingId ? 'Save Changes' : 'Add Field'}
               </button>
               <button onClick={resetForm} className="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
                 Cancel
@@ -194,6 +233,13 @@ export default function CustomFieldsAdminPage() {
                 <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-full bg-gray-100 text-gray-500">
                   {FIELD_TYPES.find(t => t.value === def.fieldType)?.label ?? def.fieldType}
                 </span>
+                <button
+                  onClick={() => startEdit(def)}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Edit field"
+                >
+                  <Pencil size={14} />
+                </button>
                 <button
                   onClick={() => handleDelete(def.id, def.label)}
                   className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"

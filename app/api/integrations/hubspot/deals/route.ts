@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 import { normalizeServiceType } from '@/lib/services'
+import { decrypt } from '@/lib/encryption'
 
 const HUBSPOT_DEALS_URL = 'https://api.hubapi.com/crm/v3/objects/deals'
 
@@ -40,7 +41,8 @@ async function getApiKey(): Promise<string | null> {
       .select('hubspot')
       .eq('id', 'global')
       .maybeSingle()
-    return (data?.hubspot as { apiKey?: string })?.apiKey || null
+    const apiKey = (data?.hubspot as { apiKey?: string })?.apiKey
+    return apiKey ? decrypt(apiKey) : null
   } catch {
     return null
   }
@@ -184,11 +186,32 @@ export const POST = withErrorHandler('integrations/hubspot/deals POST', async (r
     if (ct.company_name) contactByCompany.set(ct.company_name.toLowerCase(), entry)
   }
 
-  const { data: existing } = await db.from('deals').select('id, company, stage, value')
+  // AUDIT #482 — used to key update-detection off a composite of mutable
+  // fields (`company|stage|value`), so any real deal progression (stage
+  // change, amount change — the entire point of syncing a pipeline)
+  // recomputed a key that no longer matched the stored one and inserted a
+  // duplicate row instead of updating. Mirrors the stable-id pattern #415
+  // established for crm_activities/hs_last_modified: look up by the new
+  // `hubspot_deal_id` column (see add_deals_hubspot_deal_id.sql) first.
+  //
+  // Every row imported before this fix has hubspot_deal_id = NULL — that's
+  // "unknown, not yet linked" rather than "definitely a new deal", so for
+  // rows still missing the id we fall back to the old composite-key match
+  // ONCE to find the correct existing row and backfill hubspot_deal_id
+  // onto it below, instead of creating a duplicate. Rows that already have
+  // hubspot_deal_id are excluded from the fallback map so a stale
+  // composite match can never steal a deal already linked to a different
+  // HubSpot id.
+  const { data: existing } = await db.from('deals').select('id, company, stage, value, hubspot_deal_id')
+  const existingByHubspotId = new Map<string, string>()
   const existingByKey = new Map<string, string>()
   for (const d of existing ?? []) {
-    const key = `${(d.company ?? '').toLowerCase()}|${(d.stage ?? '').toLowerCase()}|${d.value}`
-    existingByKey.set(key, d.id)
+    if (d.hubspot_deal_id) {
+      existingByHubspotId.set(d.hubspot_deal_id, d.id)
+    } else {
+      const key = `${(d.company ?? '').toLowerCase()}|${(d.stage ?? '').toLowerCase()}|${d.value}`
+      existingByKey.set(key, d.id)
+    }
   }
 
   let inserted = 0
@@ -238,12 +261,21 @@ export const POST = withErrorHandler('integrations/hubspot/deals POST', async (r
       const lastActivity = p.notes_last_activity_date || new Date().toISOString().split('T')[0]
       const notes = p.description ? [p.description] : []
 
+      // Primary lookup: stable HubSpot deal id. Fallback (only reached for
+      // rows never yet linked): the old mutable composite key, used solely
+      // to find-and-backfill the correct row this one time.
       const key = `${company.toLowerCase()}|${stage.toLowerCase()}|${value}`
-      const existingId = existingByKey.get(key)
+      const existingId = existingByHubspotId.get(d.id) ?? existingByKey.get(key)
 
       if (existingId) {
         // ── Update existing deal ──────────────────────────────────────
+        // hubspot_deal_id is written on every update (not just inserts) so
+        // a pre-fix row matched via the composite-key fallback above gets
+        // backfilled and uses the stable id on every subsequent sync.
         const { error } = await db.from('deals').update({
+          hubspot_deal_id: d.id,
+          stage,
+          value,
           contact: contactMatch,
           company_id: companyId,
           service_type: serviceType,
@@ -257,12 +289,15 @@ export const POST = withErrorHandler('integrations/hubspot/deals POST', async (r
           errors.push(`Update deal "${dealName}": ${error.message}`)
         } else {
           updated++
+          existingByHubspotId.set(d.id, existingId)
         }
         continue
       }
 
+      const newId = `deal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
       const { error } = await db.from('deals').insert({
-        id: `deal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: newId,
+        hubspot_deal_id: d.id,
         company,
         company_id: companyId,
         contact: contactMatch,
@@ -281,7 +316,7 @@ export const POST = withErrorHandler('integrations/hubspot/deals POST', async (r
         errors.push(`Insert deal "${dealName}": ${error.message}`)
       } else {
         inserted++
-        existingByKey.set(key, '')
+        existingByHubspotId.set(d.id, newId)
       }
     }
 

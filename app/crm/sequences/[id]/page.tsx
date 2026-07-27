@@ -457,22 +457,51 @@ export default function SequenceDetailPage() {
     }
   }
 
+  // No dedicated single-sequence GET route exists — the list route is the
+  // only way to refetch this sequence's real server state, matching how
+  // loadData() itself already resolves this sequence.
+  async function refetchSequence(): Promise<EmailSequence | null> {
+    try {
+      const res = await fetch('/api/sequences')
+      if (!res.ok) return null
+      const seqs = await res.json()
+      const found = Array.isArray(seqs) ? seqs.find((s: EmailSequence) => s.id === sequenceId) : null
+      if (found) setSequence(found)
+      return found ?? null
+    } catch {
+      return null
+    }
+  }
+
   async function toggleStatus() {
     if (!sequence) return
     const newStatus = sequence.status === 'Active' ? 'Paused' : 'Active'
+    const previousStatus = sequence.status
     setSequence({ ...sequence, status: newStatus })
-    await fetch(`/api/sequences/${sequenceId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
-    })
-    toast(`Sequence ${newStatus === 'Active' ? 'activated' : 'paused'}`, 'success')
+    try {
+      const res = await fetch(`/api/sequences/${sequenceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      toast(`Sequence ${newStatus === 'Active' ? 'activated' : 'paused'}`, 'success')
+    } catch {
+      toast('Failed to update sequence status', 'error')
+      const fresh = await refetchSequence()
+      if (!fresh) setSequence(prev => prev ? { ...prev, status: previousStatus } : prev)
+    }
   }
 
   async function deleteSequence() {
-    await fetch(`/api/sequences/${sequenceId}`, { method: 'DELETE' })
-    toast('Sequence deleted', 'success')
-    router.push('/crm/sequences')
+    try {
+      const res = await fetch(`/api/sequences/${sequenceId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed')
+      toast('Sequence deleted', 'success')
+      router.push('/crm/sequences')
+    } catch {
+      toast('Failed to delete sequence', 'error')
+    }
   }
 
   // Reordering/deleting/cloning can leave `day` (cumulative offset from
@@ -503,7 +532,11 @@ export default function SequenceDetailPage() {
       if (!res.ok) throw new Error('Failed')
     } catch {
       toast('Failed to save steps — reverted', 'error')
-      setSequence(prev => prev ? { ...prev, steps: previous } : prev)
+      // Refetch instead of reverting to the closure-captured `previous`
+      // snapshot — a late-arriving failure here could otherwise clobber a
+      // since-succeeded second edit (AUDIT #294's race, same fix pattern).
+      const fresh = await refetchSequence()
+      if (!fresh) setSequence(prev => prev ? { ...prev, steps: previous } : prev)
     } finally {
       setSavingSteps(false)
     }

@@ -14,11 +14,16 @@ export const GET = withErrorHandler('calendar/settings GET', async (req) => {
 
   const email = req.nextUrl.searchParams.get('email')
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
+  if (!isOwnerOrAdmin(user, email)) {
+    return NextResponse.json({ error: 'Cannot view another team member\'s calendar settings' }, { status: 403 })
+  }
 
   const db = createServiceClient()
+  // Never select the raw OAuth token columns for the response — only
+  // google_refresh_token is fetched, and solely to derive the boolean below.
   const { data, error } = await db
     .from('calendar_settings')
-    .select('*')
+    .select('id, user_email, user_name, slug, title, description, duration, buffer, timezone, available_days, available_start, available_end, active, created_at, updated_at, google_refresh_token')
     .eq('user_email', email)
     .single()
 
@@ -26,7 +31,9 @@ export const GET = withErrorHandler('calendar/settings GET', async (req) => {
   if (error) {
     throw new Error(error?.message || 'Failed to fetch calendar settings')
   }
-  return NextResponse.json(data)
+
+  const { google_refresh_token, ...safeData } = data
+  return NextResponse.json({ ...safeData, googleConnected: Boolean(google_refresh_token) })
 })
 
 // POST /api/calendar/settings — create or update calendar settings

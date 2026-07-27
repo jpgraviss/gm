@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
+import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
@@ -159,12 +161,25 @@ function EditorPanel({
 }
 
 export default function DocumentTemplatesPage() {
+  const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<DocumentTemplate | null>(null)
   const [typeFilter, setTypeFilter] = useState<'all' | DocumentTemplate['type']>('all')
+
+  // AUDIT #241 — this page had no useAuth()/admin gate at all, unlike every
+  // sibling /admin/* page (per #163's precedent), and the backend write
+  // routes genuinely don't require admin either (fixed separately in
+  // app/api/document-templates/**), so this gap was a real access-control
+  // hole, not a cosmetic one.
+  useEffect(() => {
+    if (!authLoading && (!user || !user.isAdmin)) {
+      router.replace('/admin')
+    }
+  }, [user, authLoading, router])
 
   useEffect(() => {
     fetch('/api/document-templates')

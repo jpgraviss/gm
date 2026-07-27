@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { fetchGmailMessages, extractEmailAddress, extractFirstOtherAddress } from '@/lib/gmail-fetch'
 
 /**
@@ -34,6 +35,7 @@ import { fetchGmailMessages, extractEmailAddress, extractFirstOtherAddress } fro
 
 interface UnifiedThread {
   contactEmail: string
+  contactId?: string
   contactName: string
   company?: string
   lastMessage: {
@@ -48,15 +50,34 @@ interface UnifiedThread {
   sources: string[]
 }
 
-export const GET = withErrorHandler('inbox/unified GET', async (req) => {
+// AUDIT — was GET with gmailToken/gmailEmail as query-string params. Query
+// strings land in server logs, browser history, and (via
+// lib/api-handler.ts's withErrorHandler → Sentry.captureException) get
+// forwarded to Sentry on any unrelated route error — all real Gmail OAuth
+// token leak paths a POST body avoids. Also added a check that gmailEmail
+// actually belongs to the authenticated caller, matching the pattern every
+// sibling Gmail route (gmail/send, gmail/token) already enforces.
+export const POST = withErrorHandler('inbox/unified POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
   const db = createServiceClient()
-  const { searchParams } = new URL(req.url)
-  const limit = Math.min(parseInt(searchParams.get('limit') ?? '100', 10), 200)
-  const gmailToken = searchParams.get('gmailToken')
-  const gmailEmail = searchParams.get('gmailEmail')
+  const body = await req.json().catch(() => ({}) as Record<string, unknown>)
+  const limit = Math.min(parseInt(String(body.limit ?? '100'), 10) || 100, 200)
+  const rawGmailToken = typeof body.gmailToken === 'string' ? body.gmailToken : null
+  const rawGmailEmail = typeof body.gmailEmail === 'string' ? body.gmailEmail : null
+
+  let gmailToken: string | null = null
+  let gmailEmail: string | null = null
+  if (rawGmailToken && rawGmailEmail) {
+    const callerEmail = await getAuthenticatedEmail(req)
+    if (callerEmail && callerEmail.toLowerCase() === rawGmailEmail.toLowerCase()) {
+      gmailToken = rawGmailToken
+      gmailEmail = rawGmailEmail
+    }
+    // Mismatch: silently skip the Gmail source (same behavior as "caller
+    // hasn't connected Gmail") rather than erroring the whole request.
+  }
 
   // 1. Tickets
   const { data: tickets } = await db
@@ -272,6 +293,28 @@ export const GET = withErrorHandler('inbox/unified GET', async (req) => {
   const result = Array.from(threads.values()).sort(
     (a, b) => new Date(b.lastMessage.timestamp).getTime() - new Date(a.lastMessage.timestamp).getTime(),
   )
+  const page = result.slice(0, limit)
 
-  return NextResponse.json(result.slice(0, limit))
+  // AUDIT #257 — "View CRM contact" linked with ?email=, but
+  // app/crm/contacts/page.tsx only ever reads ?open=<id>, so clicking
+  // through always landed on the plain unfiltered contacts list. Resolve
+  // real contact ids here so the frontend can link correctly.
+  const emails = Array.from(new Set(page.map(t => t.contactEmail.toLowerCase()).filter(Boolean)))
+  const contactIdByEmail = new Map<string, string>()
+  if (emails.length > 0) {
+    const { data: contacts } = await db
+      .from('crm_contacts')
+      .select('id, emails')
+      .overlaps('emails', emails)
+    for (const c of contacts ?? []) {
+      for (const e of (c.emails as string[] | null) ?? []) {
+        if (emails.includes(e.toLowerCase())) contactIdByEmail.set(e.toLowerCase(), c.id)
+      }
+    }
+  }
+
+  return NextResponse.json(page.map(t => ({
+    ...t,
+    contactId: contactIdByEmail.get(t.contactEmail.toLowerCase()),
+  })))
 })

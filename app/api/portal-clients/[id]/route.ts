@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
-import { getAuthenticatedEmail } from '@/lib/admin-auth'
-import { requireRole } from '@/lib/rbac'
+import { getAuthenticatedEmail, requireAdmin } from '@/lib/admin-auth'
 
 // Fields a portal client is allowed to set on their OWN record without
 // staff privileges — matches the one legitimate self-service call site
@@ -56,6 +55,13 @@ export const PATCH = withErrorHandler('portal-clients/[id] PATCH', async (req, {
     if (disallowed.length > 0) {
       return NextResponse.json({ error: `Cannot self-update: ${disallowed.join(', ')}` }, { status: 403 })
     }
+  } else {
+    // AUDIT #235 — any active staff member (no role-tier floor) could
+    // reassign a portal client's company/portal_role/services, inconsistent
+    // with this page's sibling actions (invite, company-config, list GET),
+    // which all correctly require requireAdmin.
+    const denied = await requireAdmin(req)
+    if (denied) return denied
   }
 
   const result = validate(body, {
@@ -92,7 +98,11 @@ export const PATCH = withErrorHandler('portal-clients/[id] PATCH', async (req, {
 })
 
 export const DELETE = withErrorHandler('portal-clients/[id] DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
-  const denied = await requireRole(req, 'Team Member')
+  // AUDIT #237 — removeMember (app/admin/portal-management/page.tsx) is the
+  // only caller of this route, and every sibling action on that admin-only
+  // page requires requireAdmin; this one only required the lowest staff
+  // tier, letting any non-admin staff member remove a client's portal access.
+  const denied = await requireAdmin(req)
   if (denied) return denied
 
   const { id } = await params

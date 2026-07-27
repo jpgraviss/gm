@@ -5,16 +5,19 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { fetchInvoices, fetchProjects, fetchProposals } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, contractStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
 import NewAddendumPanel, { type NewAddendumFormData } from '@/components/crm/NewAddendumPanel'
+import { ConvertToProjectModal, LinkExistingProjectModal } from '@/components/crm/ConvertOrLinkProjectPanel'
 import type { Contract, ContractStatus, Invoice, Project, Proposal, SignatureRequest } from '@/lib/types'
 import { computeMRR } from '@/lib/metrics'
 import {
   X, CheckCircle, Clock, AlertCircle, ScrollText, Calendar, DollarSign, User,
   ExternalLink, FileText, FolderKanban, Send, RefreshCw, Shield, Plus, FilePlus2,
   PenTool, Mail, Search, Eye, Pencil, FileSignature, TrendingUp, Trash2, Download,
+  MessageSquare,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
@@ -41,12 +44,16 @@ interface Addendum {
   scopeAdded?: string
   scopeRemoved?: string
   effectiveDate?: string
+  // AUDIT.md #168 — true once this addendum's value/term delta has been
+  // applied to the parent contract (set by the addendums PATCH route on
+  // Accept; see apply_addendum_delta_to_contract).
+  deltaApplied?: boolean
 }
 
 function ContractPanel({
   contract, onClose, onEdit, onUpdateStatus, addendums, onAddAddendum, onUpdateAddendumStatus,
   invoices, projects, proposals, signatures, onRequestSignature, onSignInternally,
-  onTerminate, onUpdateInvoice,
+  onTerminate, onUpdateInvoice, onConvertToProject, onLinkProject,
 }: {
   contract: Contract
   onClose: () => void
@@ -63,6 +70,8 @@ function ContractPanel({
   onSignInternally: (contractId: string) => void
   onTerminate: (id: string, reason: string) => void
   onUpdateInvoice: (id: string, updates: Partial<Invoice>) => void
+  onConvertToProject: (contract: Contract) => void
+  onLinkProject: (contract: Contract) => void
 }) {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'project' | 'addendums'>('overview')
@@ -199,6 +208,20 @@ function ContractPanel({
             {contract.terminatedReason && (
               <p className="text-[11px] text-red-700 leading-relaxed ml-[22px]">{contract.terminatedReason}</p>
             )}
+          </div>
+        )}
+
+        {/* AUDIT #470 — client feedback banner. Set by a portal client's
+            "Request Changes" action (app/client/approvals/page.tsx), which
+            reverts the contract to Draft and stores their typed feedback in
+            clientNotes so it's visible here instead of silently dropped. */}
+        {contract.status === 'Draft' && contract.clientNotes && (
+          <div className="flex-shrink-0 px-5 py-3 bg-amber-50 border-b border-amber-100">
+            <div className="flex items-center gap-2 mb-1">
+              <MessageSquare size={14} className="text-amber-600 flex-shrink-0" />
+              <span className="text-xs font-bold text-amber-800">Client Requested Changes</span>
+            </div>
+            <p className="text-[11px] text-amber-700 leading-relaxed ml-[22px]">{contract.clientNotes}</p>
           </div>
         )}
 
@@ -426,7 +449,28 @@ function ContractPanel({
                 <div className="py-12 text-center">
                   <FolderKanban size={28} className="text-gray-200 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">No project linked</p>
-                  <p className="text-xs text-gray-300 mt-1">A project will appear here once created</p>
+                  <p className="text-xs text-gray-300 mt-1">
+                    {contract.status === 'Fully Executed'
+                      ? 'Create a project from this contract, or link one that already exists'
+                      : 'A project can be created or linked once the contract is fully executed'}
+                  </p>
+                  {contract.status === 'Fully Executed' && (
+                    <div className="flex items-center justify-center gap-2 mt-4">
+                      <button
+                        onClick={() => onConvertToProject(contract)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-2 rounded-xl transition-opacity hover:opacity-90"
+                        style={{ background: '#015035' }}
+                      >
+                        <FolderKanban size={13} /> Convert to Project
+                      </button>
+                      <button
+                        onClick={() => onLinkProject(contract)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors"
+                      >
+                        <ExternalLink size={13} /> Link Existing Project
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
@@ -620,6 +664,11 @@ function ContractPanel({
                         {a.status === 'Accepted' && (
                           <span className="flex items-center gap-1 text-[11px] text-emerald-600">
                             <CheckCircle size={11} /> Client accepted
+                            {(a.valueDelta != null || a.termDeltaMonths != null) && (
+                              a.deltaApplied
+                                ? ' · applied to contract'
+                                : ' · not yet applied to contract'
+                            )}
                           </span>
                         )}
                         {a.status === 'Declined' && (
@@ -828,6 +877,10 @@ export default function ContractsPage() {
   const [showTerminateModal, setShowTerminateModal] = useState(false)
   const [terminateReason, setTerminateReason] = useState('')
   const [generateFromProposalId, setGenerateFromProposalId] = useState<string | undefined>(undefined)
+  // AUDIT.md #400/#137 — "Convert to Project" / "Link Existing Project"
+  // affordances, opened from ContractPanel's project tab.
+  const [convertingContract, setConvertingContract] = useState<Contract | null>(null)
+  const [linkingContract, setLinkingContract] = useState<Contract | null>(null)
 
   // Proposals not yet converted into a contract — same eligibility rule as
   // NewContractPanel's own proposal picker (exclude declined).
@@ -836,9 +889,10 @@ export default function ContractsPage() {
   )
 
   useEffect(() => {
-    fetch('/api/contracts')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalContracts(data) })
+    // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+    // rows silently truncated the contract list/MRR KPIs past that.
+    fetchAllPages<Contract>('/api/contracts')
+      .then(setLocalContracts)
       .catch(() => toast('Failed to load contracts', 'error'))
       .finally(() => setLoading(false))
     fetchInvoices().then(setInvoices)
@@ -966,7 +1020,18 @@ export default function ContractsPage() {
         toast(data.error || 'Failed to update addendum', 'error')
         return
       }
-      setLocalAddendums(prev => prev.map(a => a.id === id ? data : a))
+      // AUDIT.md #168 — when Accepting flips value_delta/term_delta_months
+      // onto the parent contract, the PATCH response includes the fresh
+      // contract row (see app/api/contracts/[id]/addendums/route.ts) so the
+      // panel's value/duration/renewal date reflect it immediately instead
+      // of only after a full reload.
+      const { contract: updatedContract, ...addendum } = data as Addendum & { contract?: Contract }
+      setLocalAddendums(prev => prev.map(a => a.id === id ? addendum : a))
+      if (updatedContract) {
+        setLocalContracts(prev => prev.map(c => c.id === updatedContract.id ? updatedContract : c))
+        setSelected(s => s && s.id === updatedContract.id ? updatedContract : s)
+        toast('Addendum accepted — applied to contract', 'success')
+      }
     } catch {
       toast('Failed to update addendum', 'error')
     }
@@ -1516,6 +1581,29 @@ export default function ContractsPage() {
           onTerminate={terminateContract}
           onUpdateInvoice={(id, updates) => {
             setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, ...updates } : inv))
+          }}
+          onConvertToProject={c => setConvertingContract(c)}
+          onLinkProject={c => setLinkingContract(c)}
+        />
+      )}
+      {convertingContract && (
+        <ConvertToProjectModal
+          contract={convertingContract}
+          onClose={() => setConvertingContract(null)}
+          onCreated={project => {
+            setProjects(prev => [project, ...prev])
+            setConvertingContract(null)
+          }}
+        />
+      )}
+      {linkingContract && (
+        <LinkExistingProjectModal
+          contract={linkingContract}
+          projects={projects}
+          onClose={() => setLinkingContract(null)}
+          onLinked={project => {
+            setProjects(prev => prev.map(p => p.id === project.id ? project : p))
+            setLinkingContract(null)
           }}
         />
       )}

@@ -86,21 +86,12 @@ class GravHub_SEO_Metabox {
 			return;
 		}
 
-		wp_enqueue_style(
-			'gravhub-seo-metabox',
-			GRAVHUB_SEO_PLUGIN_URL . 'assets/metabox.css',
-			array(),
-			GRAVHUB_SEO_VERSION
-		);
-
-		wp_enqueue_script(
-			'gravhub-seo-metabox',
-			GRAVHUB_SEO_PLUGIN_URL . 'assets/metabox.js',
-			array( 'jquery' ),
-			GRAVHUB_SEO_VERSION,
-			true
-		);
-
+		// AUDIT #269 — assets/metabox.js and assets/metabox.css implemented
+		// an earlier version of this metabox UI (different id/class scheme
+		// than render_metabox() below actually outputs) and were still
+		// enqueued here despite ~90% of their functions silently no-op'ing
+		// against selectors that no longer exist. The working inline
+		// <script> at the bottom of render_metabox() fully replaced them.
 		// Enqueue WordPress media library scripts for OG image picker.
 		wp_enqueue_media();
 	}

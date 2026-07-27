@@ -339,7 +339,15 @@ export async function checkAllRanks(batchSize = 25): Promise<{
     }
   }
 
-  return { checked: data?.length ?? 0, updated, failed, total: data?.length ?? 0 }
+  // AUDIT #347 — this previously just echoed back the batch size
+  // (data?.length) as `total`, which reads as "total tracked keywords" but
+  // was actually always <= batchSize — a manual refresh always looked like
+  // it covered everything even when hundreds more keywords existed.
+  const { count: total } = await db
+    .from('tracked_keywords')
+    .select('id', { count: 'exact', head: true })
+
+  return { checked: data?.length ?? 0, updated, failed, total: total ?? data?.length ?? 0 }
 }
 
 export async function getKeywordHistory(

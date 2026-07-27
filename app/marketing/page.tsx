@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
-import { formatDate } from '@/lib/utils'
+import { formatDate, aiSourceLabel } from '@/lib/utils'
 import EmailBlockEditor from '@/components/email/EmailBlockEditor'
 import EmailPreview from '@/components/email/EmailPreview'
 import TemplatePicker from '@/components/email/TemplatePicker'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { type EmailBlock, renderEmailHTML } from '@/lib/email-builder'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   Mail, Send, Users, Trash2, Eye, Edit, X, Sparkles, CheckCircle,
   AlertCircle, Clock, BarChart3, ChevronLeft, Palette, Layout, FlaskConical,
@@ -16,12 +17,14 @@ import {
   Wand2, Loader2,
 } from 'lucide-react'
 
+// AUDIT #289 — hasEmail/companyStatus were declared here and in
+// lib/broadcasts.ts but applyAudienceFilter() (the single function shared
+// by both the send route and the audience-preview route) never applied
+// either, and no form control ever set them. Removed as dead/misleading.
 interface AudienceFilter {
   lifecycleStage?: string
   tags?: string[]
   owner?: string
-  hasEmail?: boolean
-  companyStatus?: string
   createdAfter?: string
   createdBefore?: string
   lastActivityAfter?: string
@@ -88,11 +91,12 @@ export default function MarketingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+  // rows silently truncated the broadcast list + its own KPI cards.
   function load() {
     setLoading(true)
-    fetch('/api/broadcasts')
-      .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (Array.isArray(data)) setBroadcasts(data) })
+    fetchAllPages<Broadcast>('/api/broadcasts')
+      .then(setBroadcasts)
       .catch(() => toast('Failed to load broadcasts', 'error'))
       .finally(() => setLoading(false))
   }
@@ -549,6 +553,12 @@ function BroadcastEditor({
                             if (subjectMatch) {
                               setDraft(d => ({ ...d, subject: subjectMatch[1].trim() }))
                             }
+                            // AUDIT — the response's `source` (ollama/groq/gemini/
+                            // cerebras/template) was discarded, so a template
+                            // fallback (no AI provider reachable) looked
+                            // identical to a real AI draft, violating the app's
+                            // established "always label AI vs template" convention.
+                            toast(`Subject drafted ${aiSourceLabel(data.source)}`, data.source === 'template' ? 'info' : 'success')
                           }
                         } catch { /* ignore */ }
                         setAiDraftLoading(false)

@@ -70,13 +70,15 @@ export const PATCH = withErrorHandler('funnels/[id]/pages PATCH', async (req: Ne
   }
 
   const db = createServiceClient()
+  // AUDIT #250 — views/conversions were writable by any Team Member-role
+  // caller, not just the fields the real UI actually sends
+  // (name/slug/blocks/sort_order) — funnel analytics weren't tamper-proof
+  // against a malicious/buggy authenticated client.
   const update: Record<string, unknown> = {}
   if (body.name !== undefined) update.name = body.name
   if (body.slug !== undefined) update.slug = body.slug
   if (body.blocks !== undefined) update.blocks = body.blocks
   if (body.sort_order !== undefined) update.sort_order = body.sort_order
-  if (body.views !== undefined) update.views = body.views
-  if (body.conversions !== undefined) update.conversions = body.conversions
 
   const { data, error } = await db
     .from('funnel_pages')

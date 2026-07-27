@@ -1,12 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuthUser, requireRole } from '@/lib/rbac'
-import { sendEmail } from '@/lib/email'
-import { applyAudienceFilter, renderMergeFields, wrapWithFooter, resolveEngagementFilters } from '@/lib/broadcasts'
+import { sendBroadcastNow } from '@/lib/broadcasts'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
-const CHUNK_SIZE = 50 // Resend allows batches — we throttle to 50 per batch
+// AUDIT — this route had no declared maxDuration despite sequentially
+// emailing the full matched audience in chunks of 50; a large-enough
+// audience could outrun the platform's undeclared default, getting
+// hard-killed mid-send with the broadcast stuck at status: 'sending'
+// forever (marketing/page.tsx treats 'sending' as already-sent for
+// re-send purposes, so there's no way to retry from the UI either).
+// Declaring this doesn't fix the "stuck forever" recovery gap for an
+// audience that genuinely exceeds even this budget — that needs a real
+// resume/retry mechanism, tracked as a separate, larger follow-up — but
+// it meaningfully raises the audience size that can complete cleanly.
+export const maxDuration = 300
 
 /**
  * Send a broadcast to its audience. Paginated through the matched contacts,
@@ -21,143 +30,44 @@ export const POST = withErrorHandler('broadcasts/[id]/send POST', async (req, { 
   const { id } = await params
   const db = createServiceClient()
 
-  const { data: broadcast } = await db
+  const { data: existing } = await db
     .from('broadcasts')
-    .select('*')
+    .select('status')
     .eq('id', id)
     .single()
 
-  if (!broadcast) return NextResponse.json({ error: 'Broadcast not found' }, { status: 404 })
-  if (broadcast.status === 'sent' || broadcast.status === 'sending') {
-    return NextResponse.json({ error: `Broadcast is already ${broadcast.status}` }, { status: 400 })
+  if (!existing) return NextResponse.json({ error: 'Broadcast not found' }, { status: 404 })
+  if (existing.status === 'sent' || existing.status === 'sending') {
+    return NextResponse.json({ error: `Broadcast is already ${existing.status}` }, { status: 400 })
   }
 
-  // Mark as sending
-  await db.from('broadcasts').update({ status: 'sending', sent_at: new Date().toISOString() }).eq('id', id)
-
-  // Fetch all contacts matching the audience filter
-  const audienceFilter = broadcast.audience_filter ?? {}
-  let query = db
-    .from('crm_contacts')
-    .select('id, first_name, last_name, full_name, emails, company_name')
-    .not('emails', 'is', null)
-  query = applyAudienceFilter(query, audienceFilter)
-
-  const { data: rawContacts, error: contactErr } = await query
-  if (contactErr) {
-    await db.from('broadcasts').update({ status: 'failed' }).eq('id', id)
-    throw new Error(contactErr.message)
-  }
-
-  // hasOpenedPrevious/hasClickedPrevious/excludeRecentRecipientsDays can't be
-  // expressed as a column filter — apply the same lookup-based logic the
-  // audience-preview endpoint uses, or a broadcast configured to skip
-  // recently-emailed contacts would silently send to the full list anyway.
-  const { includeContactIds, excludeContactIds } = await resolveEngagementFilters(db, audienceFilter)
-  const contacts = (rawContacts ?? []).filter((c: { id: string }) => {
-    if (includeContactIds !== null && !includeContactIds.has(c.id)) return false
-    if (excludeContactIds.has(c.id)) return false
-    return true
-  })
-
-  // Suppression list
-  const allEmails = (contacts ?? [])
-    .flatMap((c: { emails: string[] | null }) => (c.emails ?? []))
-    .map(e => e.toLowerCase())
-  const { data: suppressedRows } = await db
-    .from('sequence_suppression_list')
-    .select('email')
-    .in('email', allEmails)
-  const suppressedSet = new Set((suppressedRows ?? []).map((s: { email: string }) => s.email))
-
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
-  let sent = 0
-  let skipped = 0
-  let failed = 0
-
-  // Chunk the sends so we don't overwhelm the API
-  type ContactRow = { id: string; first_name: string | null; last_name: string | null; full_name: string | null; emails: string[] | null; company_name: string | null }
-  const contactList = (contacts ?? []) as ContactRow[]
-  for (let i = 0; i < contactList.length; i += CHUNK_SIZE) {
-    const chunk = contactList.slice(i, i + CHUNK_SIZE)
-    await Promise.all(
-      chunk.map(async (contact) => {
-        const email = contact.emails?.[0]?.toLowerCase()
-        if (!email || suppressedSet.has(email)) {
-          skipped++
-          return
-        }
-
-        const renderedHtml = renderMergeFields(broadcast.html_body ?? '', {
-          firstName:   contact.first_name ?? undefined,
-          lastName:    contact.last_name ?? undefined,
-          fullName:    contact.full_name ?? undefined,
-          companyName: contact.company_name ?? undefined,
-        })
-        const unsubUrl = `${appUrl}/api/sequences/unsubscribe?email=${encodeURIComponent(email)}`
-        const finalHtml = wrapWithFooter(renderedHtml, unsubUrl, `Graviss Marketing`)
-
-        const recipientId = `br-${id}-${contact.id}`
-
-        try {
-          const sendResult = await sendEmail({
-            to: email,
-            from: `${broadcast.from_name} <${broadcast.from_email}>`,
-            replyTo: broadcast.reply_to ?? undefined,
-            subject: broadcast.subject,
-            html: finalHtml,
-            headers: {
-              'X-Broadcast-Id':   id,
-              'X-Recipient-Id':   recipientId,
-              'List-Unsubscribe': `<${unsubUrl}>`,
-            },
-          })
-
-          if (!sendResult.success) {
-            failed++
-            await db.from('broadcast_recipients').insert({
-              id: recipientId,
-              broadcast_id: id,
-              contact_id: contact.id,
-              email,
-              status: 'failed',
-            })
-          } else {
-            sent++
-            await db.from('broadcast_recipients').insert({
-              id: recipientId,
-              broadcast_id: id,
-              contact_id: contact.id,
-              email,
-              status: 'sent',
-              sent_at: new Date().toISOString(),
-              resend_message_id: sendResult.id ?? null,
-            })
-          }
-        } catch (err) {
-          failed++
-          console.error('[broadcast send] error', err)
-        }
-      }),
-    )
-  }
-
-  // Final status
-  await db
+  // Atomically claim the broadcast (only proceeding if the update actually
+  // returned a row) instead of a read-then-write "mark as sending" — the
+  // cron dispatcher (dispatchScheduledBroadcasts in app/api/cron/route.ts)
+  // can independently pick up the same scheduled broadcast at the same
+  // moment a staff member clicks "Send Now"; without this guard both paths
+  // would call sendBroadcastNow and email the full audience twice.
+  const { data: broadcast } = await db
     .from('broadcasts')
-    .update({
-      status: 'sent',
-      total_sent: sent,
-    })
+    .update({ status: 'sending', sent_at: new Date().toISOString() })
     .eq('id', id)
+    .in('status', ['draft', 'scheduled'])
+    .select('*')
+    .maybeSingle()
+
+  if (!broadcast) {
+    return NextResponse.json({ error: 'Broadcast is already being sent' }, { status: 409 })
+  }
+
+  const { sent, skipped, failed, total } = await sendBroadcastNow(db, broadcast)
 
   logAudit({
     userName: actor?.name || actor?.email || 'system',
     action: 'broadcast_sent',
     module: 'email_marketing',
     type: 'warning',
-    metadata: { broadcastId: id, sent, skipped, failed, total: contactList.length },
+    metadata: { broadcastId: id, sent, skipped, failed, total },
   })
 
-  return NextResponse.json({ sent, skipped, failed, total: contactList.length })
+  return NextResponse.json({ sent, skipped, failed, total })
 })

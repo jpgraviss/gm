@@ -17,7 +17,7 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
   ArrowLeft, Plus, X, CheckCircle2, Clock, Circle, LayoutList, Columns3,
   MoreHorizontal, Pencil, Trash2, ChevronDown, ChevronRight, Calendar,
-  Users, Flag, GripVertical, AlertTriangle, CheckSquare, Settings,
+  Users, Flag, AlertTriangle, CheckSquare, Settings,
   Globe, BarChart2, Share2, Mail, Palette, Wrench, StickyNote,
   FolderKanban, Milestone as MilestoneIcon, FileText, Briefcase, TrendingUp,
 } from 'lucide-react'
@@ -72,6 +72,32 @@ interface ProjectFile {
   name: string; size: number; url: string; path: string; type: string; createdAt?: string
 }
 
+// Shared with the initial load effect and with refetchProject() (AUDIT.md
+// #294) so a failed PATCH's reconciliation fetch maps the response the same
+// way the page does on first load.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapProjectResponse(proj: any): Project {
+  return {
+    id: proj.id,
+    contractId: proj.contract_id ?? proj.contractId ?? '',
+    company: proj.company,
+    serviceType: proj.service_type ?? proj.serviceType,
+    status: proj.status,
+    startDate: proj.start_date ?? proj.startDate ?? '',
+    launchDate: proj.launch_date ?? proj.launchDate ?? '',
+    maintenanceStartDate: proj.maintenance_start_date ?? proj.maintenanceStartDate,
+    assignedTeam: proj.assigned_team ?? proj.assignedTeam ?? [],
+    progress: proj.progress ?? 0,
+    milestones: proj.milestones ?? [],
+    tasks: proj.tasks ?? [],
+    notes: proj.notes ?? [],
+    overview: proj.overview ?? '',
+    sections: proj.sections ?? ['To Do', 'In Progress', 'Done'],
+    color: proj.color ?? '#015035',
+    description: proj.description ?? '',
+  }
+}
+
 function TaskRow({
   task,
   onToggle,
@@ -92,9 +118,6 @@ function TaskRow({
       className={`group flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors ${overdue ? 'bg-red-50/30' : ''}`}
       onClick={onSelect}
     >
-      <div className="flex-shrink-0 text-gray-300 opacity-0 group-hover:opacity-100 cursor-grab">
-        <GripVertical size={14} />
-      </div>
       <button
         onClick={e => { e.stopPropagation(); onToggle() }}
         className={`w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
@@ -532,6 +555,7 @@ function ProjectSettingsModal({
 }) {
   const teamMembers = useTeamMembers()
   const [company, setCompany] = useState(project.company)
+  const [companyId, setCompanyId] = useState<string | null | undefined>(project.companyId)
   const [serviceType, setServiceType] = useState(project.serviceType)
   const [status, setStatus] = useState(project.status)
   const [startDate, setStartDate] = useState(project.startDate)
@@ -539,6 +563,7 @@ function ProjectSettingsModal({
   const [color, setColor] = useState(project.color ?? '#015035')
   const [selectedTeam, setSelectedTeam] = useState(project.assignedTeam)
   const [description, setDescription] = useState(project.description ?? '')
+  const [overview, setOverview] = useState(project.overview ?? '')
 
   const colors = ['#015035', '#3b82f6', '#8b5cf6', '#ef4444', '#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1']
 
@@ -553,11 +578,15 @@ function ProjectSettingsModal({
         <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company</label>
-            <CompanySelect value={company} onChange={setCompany} />
+            <CompanySelect value={company} onChange={(name, id) => { setCompany(name); setCompanyId(id ?? null) }} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Description</label>
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-600 resize-none" placeholder="Project description..." />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Overview</label>
+            <textarea value={overview} onChange={e => setOverview(e.target.value.slice(0, 5000))} rows={4} maxLength={5000} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-600 resize-y" placeholder="Longer-form project overview, shown on the Overview tab..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -611,7 +640,7 @@ function ProjectSettingsModal({
         <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
           <button
-            onClick={() => { onUpdate({ company, serviceType, status, startDate, launchDate, color, assignedTeam: selectedTeam, description }); onClose() }}
+            onClick={() => { onUpdate({ company, companyId, serviceType, status, startDate, launchDate, color, assignedTeam: selectedTeam, description, overview }); onClose() }}
             className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold"
             style={{ background: color }}
           >
@@ -653,26 +682,7 @@ export default function ProjectDetailPage() {
       fetch(`/api/tasks?projectId=${id}&limit=500`).then(r => r.ok ? r.json() : []),
     ]).then(([proj, taskData]) => {
       if (proj && !proj.error) {
-        const mapped: Project = {
-          id: proj.id,
-          contractId: proj.contract_id ?? proj.contractId ?? '',
-          company: proj.company,
-          serviceType: proj.service_type ?? proj.serviceType,
-          status: proj.status,
-          startDate: proj.start_date ?? proj.startDate ?? '',
-          launchDate: proj.launch_date ?? proj.launchDate ?? '',
-          maintenanceStartDate: proj.maintenance_start_date ?? proj.maintenanceStartDate,
-          assignedTeam: proj.assigned_team ?? proj.assignedTeam ?? [],
-          progress: proj.progress ?? 0,
-          milestones: proj.milestones ?? [],
-          tasks: proj.tasks ?? [],
-          notes: proj.notes ?? [],
-          overview: proj.overview ?? '',
-          sections: proj.sections ?? ['To Do', 'In Progress', 'Done'],
-          color: proj.color ?? '#015035',
-          description: proj.description ?? '',
-        }
-        setProject(mapped)
+        setProject(mapProjectResponse(proj))
       }
       const list = Array.isArray(taskData) ? taskData : (taskData?.data ?? [])
       setTasks(list)
@@ -706,19 +716,58 @@ export default function ProjectDetailPage() {
   const overdueTasks = tasks.filter(t => t.status !== 'Completed' && t.dueDate && t.dueDate < new Date().toISOString().split('T')[0]).length
   const computedProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : project?.progress ?? 0
 
+  // AUDIT.md #294 — reverting to a `previous` closure snapshot on failure is
+  // itself a race: if two edits to the same task fire back-to-back and the
+  // first request's failure arrives after the second already succeeded,
+  // reverting to the first's stale snapshot would clobber the second's
+  // (already-persisted) result in the UI. There's no single-task GET
+  // endpoint, so on failure these refetch this project's task list (the
+  // same scoped call the page uses on load) and merge only the ONE
+  // affected task's fresh server state back into local state, leaving
+  // every other task (including any other edit that's mid-flight)
+  // untouched.
+  const refetchTask = useCallback(async (taskId: string) => {
+    try {
+      const res = await fetch(`/api/tasks?projectId=${id}&limit=500`)
+      const data = res.ok ? await res.json() : []
+      const list: AppTask[] = Array.isArray(data) ? data : (data?.data ?? [])
+      const match = list.find(t => t.id === taskId)
+      if (match) {
+        // AUDIT — a failed DELETE calls this too, and deleteTask() already
+        // optimistically filtered the id out of `tasks` before the failure
+        // was caught, so it's no longer in `prev` for .map() to find and
+        // replace — the server-confirmed-still-existing task was silently
+        // never restored, contradicting the failure toast. Re-insert when
+        // it's missing instead of assuming it's present.
+        setTasks(prev => prev.some(t => t.id === taskId) ? prev.map(t => t.id === taskId ? match : t) : [match, ...prev])
+        setSelectedTask(prev => prev?.id === taskId ? match : prev)
+      } else {
+        setTasks(prev => prev.filter(t => t.id !== taskId))
+        setSelectedTask(prev => prev?.id === taskId ? null : prev)
+      }
+    } catch {
+      // Best-effort reconciliation; if this also fails we simply leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }, [id])
+
   const toggleTaskStatus = useCallback((taskId: string) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id !== taskId) return t
-      const newStatus: AppTaskStatus = t.status === 'Completed' ? 'Pending' : 'Completed'
-      const completedDate = newStatus === 'Completed' ? new Date().toISOString().split('T')[0] : undefined
-      fetch(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus, completedDate: completedDate ?? null }),
-      }).catch(() => {})
-      return { ...t, status: newStatus, completedDate }
-    }))
-  }, [])
+    const previous = tasks.find(t => t.id === taskId)
+    if (!previous) return
+    const newStatus: AppTaskStatus = previous.status === 'Completed' ? 'Pending' : 'Completed'
+    const completedDate = newStatus === 'Completed' ? new Date().toISOString().split('T')[0] : undefined
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus, completedDate } : t))
+    fetch(`/api/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus, completedDate: completedDate ?? null }),
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      refetchTask(taskId)
+      toast('Failed to update task', 'error')
+    })
+  }, [tasks, toast, refetchTask])
 
   const updateTask = useCallback((taskId: string, updates: Partial<AppTask>) => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t))
@@ -736,13 +785,23 @@ export default function ProjectDetailPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(apiBody),
-    }).catch(() => toast('Failed to update task', 'error'))
-  }, [toast])
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      refetchTask(taskId)
+      toast('Failed to update task', 'error')
+    })
+  }, [toast, refetchTask])
 
   const deleteTask = useCallback((taskId: string) => {
     setTasks(prev => prev.filter(t => t.id !== taskId))
-    fetch(`/api/tasks/${taskId}`, { method: 'DELETE' }).catch(() => toast('Failed to delete task', 'error'))
-  }, [toast])
+    fetch(`/api/tasks/${taskId}`, { method: 'DELETE' }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      refetchTask(taskId)
+      toast('Failed to delete task', 'error')
+    })
+  }, [toast, refetchTask])
 
   const addTask = useCallback((data: { title: string; section: string; assignedTo: string; dueDate: string; priority: TaskPriority }) => {
     const newTask: AppTask = {
@@ -764,17 +823,53 @@ export default function ProjectDetailPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newTask),
-    }).catch(() => toast('Failed to create task', 'error'))
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      setTasks(prev => prev.filter(t => t.id !== newTask.id))
+      toast('Failed to create task', 'error')
+    })
   }, [id, tasks.length, toast])
 
+  // AUDIT.md #294 — reverting to the `previous` ref snapshot on failure is
+  // itself a race: if two updates to the project fire back-to-back and the
+  // first request's failure arrives after the second already succeeded,
+  // reverting to the first's stale snapshot would clobber the second's
+  // (already-persisted) result in the UI. Unlike the tasks/records handlers
+  // elsewhere in this file, a real single-record GET exists for projects
+  // (`/api/projects/[id]`), so on failure we refetch and re-map the
+  // authoritative server state instead of trusting a pre-edit snapshot.
+  const refetchProject = useCallback(async () => {
+    if (!id) return
+    try {
+      const res = await fetch(`/api/projects/${id}`)
+      const proj = res.ok ? await res.json() : null
+      if (proj && !proj.error) setProject(mapProjectResponse(proj))
+    } catch {
+      // Best-effort reconciliation; if this also fails we simply leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }, [id])
+
   const updateProject = useCallback((updates: Partial<Project>) => {
-    setProject(prev => prev ? { ...prev, ...updates } as Project : prev)
+    // AUDIT #293 — this previously fired the PATCH fetch as a side effect
+    // inside the setProject updater callback. React's contract requires
+    // updaters to be pure (it invokes them twice under StrictMode in dev,
+    // and may re-invoke them in other batching scenarios), so that risked
+    // firing the same PATCH request more than once per call. Fire the fetch
+    // as a normal statement instead.
+    setProject(prev => (prev ? { ...prev, ...updates } as Project : prev))
     fetch(`/api/projects/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    }).catch(() => toast('Failed to update project', 'error'))
-  }, [id, toast])
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      refetchProject()
+      toast('Failed to update project', 'error')
+    })
+  }, [id, toast, refetchProject])
 
   const deleteProject = useCallback(async () => {
     if (!id) return
@@ -809,6 +904,13 @@ export default function ProjectDetailPage() {
     setShowAddMilestone(false)
   }, [project, newMilestoneName, newMilestoneDue, updateProject])
 
+  // AUDIT #225 — addMilestone/addNote had no corresponding delete path, so
+  // once created either was permanent short of a DB admin.
+  const deleteMilestone = useCallback((milestoneId: string) => {
+    if (!project) return
+    updateProject({ milestones: project.milestones.filter(m => m.id !== milestoneId) })
+  }, [project, updateProject])
+
   const addNote = useCallback(() => {
     if (!project || !noteText.trim()) return
     const newNote = {
@@ -821,6 +923,11 @@ export default function ProjectDetailPage() {
     setNoteText('')
     setShowNoteForm(false)
   }, [project, noteText, updateProject])
+
+  const deleteNote = useCallback((noteId: string) => {
+    if (!project) return
+    updateProject({ notes: (project.notes ?? []).filter(n => n.id !== noteId) })
+  }, [project, updateProject])
 
   const addSection = useCallback((name: string) => {
     if (!name.trim() || sections.includes(name.trim())) return
@@ -851,10 +958,23 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (!project || !id) return
     if (project.progress !== computedProgress) {
+      // AUDIT — this never updated local project.progress on success, so
+      // the divergence condition above never cleared and re-fired a
+      // redundant PATCH on every subsequent, unrelated project edit
+      // (settings save, note add, section rename). setProject only inside
+      // the .then() callback, not synchronously in the effect body itself
+      // (calling the shared updateProject() helper directly here would
+      // violate the set-state-in-effect rule, since it calls setState
+      // synchronously) — the divergence condition actually resolves once
+      // this lands.
+      const newProgress = computedProgress
       fetch(`/api/projects/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ progress: computedProgress }),
+        body: JSON.stringify({ progress: newProgress }),
+      }).then(res => {
+        if (!res.ok) throw new Error('Failed')
+        setProject(prev => (prev ? { ...prev, progress: newProgress } : prev))
       }).catch(() => {})
     }
   }, [computedProgress, project, id])
@@ -1071,6 +1191,16 @@ export default function ProjectDetailPage() {
 
         {viewMode === 'overview' && (
           <div className="max-w-2xl mx-auto flex flex-col gap-5">
+            {/* AUDIT #252 — project.overview round-tripped through the API
+                and client mapping but was never rendered anywhere, easy to
+                miss given this tab is also named "Overview". */}
+            {project.overview && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Overview</h3>
+                <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{project.overview}</p>
+              </div>
+            )}
+
             {/* Progress */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex justify-between mb-3">
@@ -1138,17 +1268,24 @@ export default function ProjectDetailPage() {
               {project.milestones.length > 0 && (
                 <div className="flex flex-col gap-2 mb-2">
                   {project.milestones.map((m, i) => (
-                    <button
+                    <div
                       key={m.id}
-                      onClick={() => toggleMilestone(m.id)}
-                      className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-colors ${m.completed ? 'bg-emerald-50 border-emerald-100 hover:bg-emerald-100/60' : 'bg-gray-50 border-gray-100 hover:bg-gray-100'}`}
+                      className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${m.completed ? 'bg-emerald-50 border-emerald-100 hover:bg-emerald-100/60' : 'bg-gray-50 border-gray-100 hover:bg-gray-100'}`}
                     >
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${m.completed ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                        {m.completed ? <CheckCircle2 size={12} /> : i + 1}
-                      </div>
-                      <span className={`text-sm flex-1 ${m.completed ? 'text-emerald-700' : 'text-gray-800'}`}>{m.name}</span>
-                      <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.dueDate)}</span>
-                    </button>
+                      <button onClick={() => toggleMilestone(m.id)} className="flex items-center gap-3 flex-1 text-left min-w-0">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${m.completed ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                          {m.completed ? <CheckCircle2 size={12} /> : i + 1}
+                        </div>
+                        <span className={`text-sm flex-1 truncate ${m.completed ? 'text-emerald-700' : 'text-gray-800'}`}>{m.name}</span>
+                        <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.dueDate)}</span>
+                      </button>
+                      <button
+                        onClick={() => deleteMilestone(m.id)}
+                        className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -1193,9 +1330,17 @@ export default function ProjectDetailPage() {
               {(project.notes ?? []).length > 0 && (
                 <div className="flex flex-col gap-2 mb-2">
                   {project.notes!.map(note => (
-                    <div key={note.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{note.text}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">{note.author} · {note.date}</p>
+                    <div key={note.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{note.text}</p>
+                        <p className="text-[10px] text-gray-400 mt-1">{note.author} · {note.date}</p>
+                      </div>
+                      <button
+                        onClick={() => deleteNote(note.id)}
+                        className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -1277,6 +1422,7 @@ export default function ProjectDetailPage() {
 }
 
 function ProjectFilesSection({ company }: { company: string }) {
+  const { toast } = useToast()
   const [files, setFiles] = useState<ProjectFile[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -1296,8 +1442,15 @@ function ProjectFilesSection({ company }: { company: string }) {
       files={files}
       onUpload={file => setFiles(prev => [file, ...prev])}
       onRemove={file => {
-        fetch('/api/files', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: file.path }) })
         setFiles(prev => prev.filter(f => f.path !== file.path))
+        fetch('/api/files', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: file.path }) })
+          .then(res => {
+            if (!res.ok) throw new Error('Failed')
+          })
+          .catch(() => {
+            setFiles(prev => [file, ...prev])
+            toast('Failed to remove file', 'error')
+          })
       }}
     />
   )

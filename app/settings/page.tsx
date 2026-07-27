@@ -38,7 +38,7 @@ const membershipColors: Record<string, string> = {
   Client: 'bg-green-100 text-green-700',
 }
 
-const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Email Templates', 'Email Scheduling', 'Dashboard', 'Navigation', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing'] as const
+const tabs = ['Company', 'Team', 'Permissions', 'Branding', 'Email Defaults', 'Email Templates', 'Email Scheduling', 'Dashboard', 'Navigation', 'Notifications', 'Integrations', 'CRM Setup', 'Engagement', 'Billing', 'AI Usage'] as const
 type Tab = typeof tabs[number]
 
 const tabIcons: Record<Tab, React.ReactNode> = {
@@ -56,6 +56,7 @@ const tabIcons: Record<Tab, React.ReactNode> = {
   'CRM Setup': <Tag size={15} />,
   Engagement: <TrendingUp size={15} />,
   Billing: <DollarSign size={15} />,
+  'AI Usage': <Brain size={15} />,
 }
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange?: () => void }) {
@@ -162,22 +163,22 @@ const DASHBOARD_DEFAULTS = {
     night: 'Burning the midnight oil',
   },
   rotatingMessages: [
-    { message: 'Revenue doesn\'t sleep. Neither does GravHub.', emoji: '🔥' },
-    { message: 'Every deal in your pipeline is a future payday.', emoji: '💰' },
-    { message: 'Outwork yesterday. Outclose tomorrow.', emoji: '🚀' },
-    { message: 'Your pipeline is your paycheck — keep it full.', emoji: '📈' },
-    { message: 'Closed is the only stage that pays.', emoji: '🎯' },
-    { message: 'Speed to lead. Speed to close. Speed to invoice.', emoji: '⚡' },
-    { message: 'The follow-up you skip is the deal you lose.', emoji: '📞' },
-    { message: 'A stale pipeline is a broke pipeline.', emoji: '💀' },
-    { message: 'Renewals are revenue you already earned. Go collect.', emoji: '💎' },
-    { message: 'You\'re not just selling — you\'re building an empire.', emoji: '👑' },
-    { message: 'The difference between good and great? One more follow-up.', emoji: '💪' },
-    { message: 'Opportunities don\'t expire — but your competitors don\'t wait.', emoji: '⏳' },
-    { message: 'Today\'s proposal is next month\'s revenue.', emoji: '📝' },
-    { message: 'Track everything. Miss nothing. Close more.', emoji: '🔒' },
-    { message: 'Your CRM is only as strong as the reps using it.', emoji: '🏋️' },
-  ] as { message: string; emoji: string }[],
+    { sub: 'Revenue doesn\'t sleep. Neither does GravHub.', emoji: '🔥' },
+    { sub: 'Every deal in your pipeline is a future payday.', emoji: '💰' },
+    { sub: 'Outwork yesterday. Outclose tomorrow.', emoji: '🚀' },
+    { sub: 'Your pipeline is your paycheck — keep it full.', emoji: '📈' },
+    { sub: 'Closed is the only stage that pays.', emoji: '🎯' },
+    { sub: 'Speed to lead. Speed to close. Speed to invoice.', emoji: '⚡' },
+    { sub: 'The follow-up you skip is the deal you lose.', emoji: '📞' },
+    { sub: 'A stale pipeline is a broke pipeline.', emoji: '💀' },
+    { sub: 'Renewals are revenue you already earned. Go collect.', emoji: '💎' },
+    { sub: 'You\'re not just selling — you\'re building an empire.', emoji: '👑' },
+    { sub: 'The difference between good and great? One more follow-up.', emoji: '💪' },
+    { sub: 'Opportunities don\'t expire — but your competitors don\'t wait.', emoji: '⏳' },
+    { sub: 'Today\'s proposal is next month\'s revenue.', emoji: '📝' },
+    { sub: 'Track everything. Miss nothing. Close more.', emoji: '🔒' },
+    { sub: 'Your CRM is only as strong as the reps using it.', emoji: '🏋️' },
+  ] as { sub: string; emoji: string }[],
 }
 
 const INVOICE_DEFAULTS = {
@@ -266,9 +267,10 @@ function EmailSchedulingSection() {
           <p className="text-xs font-semibold text-gray-700">Queue processing</p>
         </div>
         <p className="text-xs text-gray-500">
-          Scheduled emails are processed via cron at <span className="font-semibold text-gray-700">/api/email/scheduled/process</span>.
-          Configure your cron provider (Vercel Cron, Railway, etc.) to call this endpoint at your desired interval (e.g. every 5 minutes).
-          The endpoint is protected by the <code className="bg-gray-200 px-1 rounded text-[11px]">CRON_SECRET</code> environment variable.
+          Scheduled emails are processed automatically — a GitHub Actions workflow (<span className="font-semibold text-gray-700">.github/workflows/cron-ping.yml</span>) already pings
+          <span className="font-semibold text-gray-700"> /api/cron</span> every 5 minutes, which in turn runs the scheduled-email queue along with the app&apos;s other periodic jobs.
+          No additional cron setup is needed; pointing a separate cron job directly at <span className="font-semibold text-gray-700">/api/email/scheduled/process</span> would just be a redundant second caller.
+          That workflow reads the <code className="bg-gray-200 px-1 rounded text-[11px]">CRON_TARGET_URL</code> and <code className="bg-gray-200 px-1 rounded text-[11px]">CRON_SECRET</code> repo secrets — see the workflow file to reconfigure.
         </p>
       </div>
       <button onClick={save} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#015035' }}>
@@ -297,6 +299,38 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState<string | null>(null)
 
   useEffect(() => { setLoading(false) }, [])
+
+  // AI Usage — Ollama/Groq expose no usage-query API this app can call, so
+  // this reads the local ai_usage_log every chatCompletion() call writes to
+  // (lib/ai-client.ts), the only real visibility into call volume/provider
+  // split/quota proximity. Fetched lazily, only once the tab is opened.
+  interface AiUsageData {
+    callsLast24h: number
+    callsLast7d: number
+    callsLast30d: number
+    totalTokens30d: number
+    failures30d: number
+    bySource: Record<string, number>
+    byFeature: Record<string, number>
+    noProviderConfigured: boolean
+    alertThreshold24h: number
+    alertLevel: 'normal' | 'approaching' | 'over'
+  }
+  const [aiUsage, setAiUsage] = useState<AiUsageData | null>(null)
+  const [aiUsageLoading, setAiUsageLoading] = useState(false)
+  const [aiUsageError, setAiUsageError] = useState('')
+
+  useEffect(() => {
+    if (activeTab !== 'AI Usage' || aiUsage || aiUsageLoading) return
+    setAiUsageLoading(true)
+    setAiUsageError('')
+    fetch('/api/ai/usage')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to load')))
+      .then(setAiUsage)
+      .catch(() => setAiUsageError('Could not load AI usage data.'))
+      .finally(() => setAiUsageLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
 
   // Company
   const [company, setCompany] = useState(COMPANY_DEFAULTS)
@@ -473,13 +507,21 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(null), 2500)
   }
 
+  // AUDIT — this only caught a network-level rejection; fetch() does NOT
+  // reject on a non-2xx HTTP status, so a real save failure (validation
+  // error, DB error) still ran flash(label) unconditionally, showing a
+  // false "Saved" confirmation for every one of this helper's 11 callers
+  // (Company, Notifications, Billing, CRM Setup, Branding, Email Defaults,
+  // Dashboard, Engagement, Email Templates, Navigation).
   function patchSettings(payload: Record<string, unknown>, label: string) {
     fetch('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    }).catch(() => toast('Failed to save settings', 'error'))
-    flash(label)
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+      flash(label)
+    }).catch(() => toast(`Failed to save ${label}`, 'error'))
   }
 
   function saveCompany() {
@@ -716,7 +758,18 @@ export default function SettingsPage() {
         {/* Top tab bar */}
         <div className="bg-white rounded-xl border border-gray-200 mb-5 overflow-x-auto">
           <div className="flex min-w-max">
-            {tabs.filter(tab => (tab !== 'Navigation' && tab !== 'Team') || user?.isAdmin).map(tab => (
+            {tabs.filter(tab => {
+              if (tab === 'Navigation' || tab === 'Team') return !!user?.isAdmin
+              // AUDIT — the API route (GET /api/ai/usage) is already
+              // correctly gated to Leadership/Super Admin, but the tab
+              // itself was visible to everyone, so a non-Leadership user
+              // could see the tab exists and click into a generic load
+              // error — needlessly revealing the feature to unauthorized
+              // users instead of just not showing it, unlike every other
+              // admin-only tab in this file.
+              if (tab === 'AI Usage') return user?.role === 'Leadership' || user?.role === 'Super Admin'
+              return true
+            }).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1545,8 +1598,8 @@ export default function SettingsPage() {
                 {dashboardConfig.rotatingMessages.map((msg, i) => (
                   <div key={i} className="flex items-center gap-3">
                     <input
-                      value={msg.message}
-                      onChange={e => setDashboardConfig(p => ({ ...p, rotatingMessages: p.rotatingMessages.map((m, j) => j === i ? { ...m, message: e.target.value } : m) }))}
+                      value={msg.sub}
+                      onChange={e => setDashboardConfig(p => ({ ...p, rotatingMessages: p.rotatingMessages.map((m, j) => j === i ? { ...m, sub: e.target.value } : m) }))}
                       placeholder="Message text"
                       className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
                     />
@@ -1566,7 +1619,7 @@ export default function SettingsPage() {
                 ))}
               </div>
               <button
-                onClick={() => setDashboardConfig(p => ({ ...p, rotatingMessages: [...p.rotatingMessages, { message: '', emoji: '' }] }))}
+                onClick={() => setDashboardConfig(p => ({ ...p, rotatingMessages: [...p.rotatingMessages, { sub: '', emoji: '' }] }))}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-white text-xs font-medium"
                 style={{ background: '#015035' }}
               >
@@ -2234,6 +2287,116 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {activeTab === 'AI Usage' && (
+          <div className="flex flex-col gap-4">
+            {aiUsageLoading && !aiUsage && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5 text-sm text-gray-400">Loading AI usage…</div>
+            )}
+            {aiUsageError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700 flex items-center gap-2">
+                <AlertTriangle size={14} /> {aiUsageError}
+              </div>
+            )}
+            {aiUsage && (
+              <>
+                {aiUsage.noProviderConfigured && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 flex items-start gap-2">
+                    <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold">No AI provider is reachable</p>
+                      <p className="text-amber-700 mt-0.5">Every recent AI call fell through to the template fallback. Confirm at least one of GROQ_API_KEY, GEMINI_API_KEY, or CEREBRAS_API_KEY is set and working in this environment.</p>
+                    </div>
+                  </div>
+                )}
+                {(() => {
+                  const level = aiUsage.alertLevel
+                  const pct = Math.min(100, Math.round((aiUsage.callsLast24h / aiUsage.alertThreshold24h) * 100))
+                  const style = level === 'over'
+                    ? { wrap: 'bg-red-50 border-red-200', bar: 'bg-red-500', text: 'text-red-800', badge: 'bg-red-600 text-white', label: 'Over threshold' }
+                    : level === 'approaching'
+                    ? { wrap: 'bg-amber-50 border-amber-200', bar: 'bg-amber-500', text: 'text-amber-800', badge: 'bg-amber-500 text-white', label: 'Approaching threshold' }
+                    : { wrap: 'bg-emerald-50 border-emerald-200', bar: 'bg-emerald-500', text: 'text-emerald-800', badge: 'bg-emerald-600 text-white', label: 'Normal' }
+                  return (
+                    <div className={`rounded-xl border p-5 ${style.wrap}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-bold uppercase tracking-wide flex items-center gap-1.5" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
+                          <Bell size={14} /> Usage Alert
+                        </h3>
+                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${style.badge}`}>{style.label}</span>
+                      </div>
+                      <p className={`text-sm font-medium ${style.text}`}>
+                        {aiUsage.callsLast24h.toLocaleString()} of {aiUsage.alertThreshold24h.toLocaleString()} calls used in the last 24 hours ({pct}%)
+                      </p>
+                      <div className="mt-3 h-2 w-full rounded-full bg-white/70 overflow-hidden">
+                        <div className={`h-full rounded-full ${style.bar}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <p className="text-xs text-gray-400 mt-2.5">
+                        Informational only — this is call volume tracked locally, not a live provider quota. The 1,000/24h threshold is a conservative round number based on typical free-tier daily request caps for Groq (tried first among the cloud providers); it isn&apos;t billed cost, since real per-provider pricing isn&apos;t tracked here.
+                      </p>
+                    </div>
+                  )
+                })()}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Calls (24h)', value: aiUsage.callsLast24h },
+                    { label: 'Calls (7d)', value: aiUsage.callsLast7d },
+                    { label: 'Calls (30d)', value: aiUsage.callsLast30d },
+                    { label: 'Tokens (30d)', value: aiUsage.totalTokens30d.toLocaleString() },
+                  ].map(stat => (
+                    <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-4">
+                      <p className="text-2xl font-bold text-gray-800">{stat.value}</p>
+                      <p className="text-xs text-gray-400 mt-1">{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-4" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Provider Split (30d)</h3>
+                  <div className="flex flex-col gap-2">
+                    {(['groq', 'gemini', 'cerebras', 'ollama', 'none'] as const).map(source => {
+                      const count = aiUsage.bySource[source] ?? 0
+                      const pct = aiUsage.callsLast30d > 0 ? Math.round((count / aiUsage.callsLast30d) * 100) : 0
+                      const label = source === 'groq' ? 'Groq (cloud)' : source === 'gemini' ? 'Gemini (cloud)' : source === 'cerebras' ? 'Cerebras (cloud)' : source === 'ollama' ? 'Ollama (local)' : 'No provider / fallback'
+                      const color = source === 'groq' ? '#015035' : source === 'gemini' ? '#8b5cf6' : source === 'cerebras' ? '#f97316' : source === 'ollama' ? '#3b82f6' : '#d97706'
+                      return (
+                        <div key={source} className="flex items-center gap-3">
+                          <div className="w-32 text-xs text-gray-600 flex-shrink-0">{label}</div>
+                          <div className="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+                          </div>
+                          <div className="w-20 text-right text-xs font-semibold text-gray-700 flex-shrink-0">{count} ({pct}%)</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {aiUsage.failures30d > 0 && (
+                    <p className="text-xs text-gray-400 mt-3">{aiUsage.failures30d} failed call{aiUsage.failures30d === 1 ? '' : 's'} in the last 30 days.</p>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-4" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>By Feature (30d)</h3>
+                  <div className="flex flex-col gap-2">
+                    {Object.entries(aiUsage.byFeature).sort(([, a], [, b]) => b - a).map(([feature, count]) => (
+                      <div key={feature} className="flex items-center justify-between text-xs py-1.5 border-b border-gray-50 last:border-0">
+                        <span className="text-gray-600 font-mono">{feature}</span>
+                        <span className="text-gray-800 font-semibold">{count}</span>
+                      </div>
+                    ))}
+                    {Object.keys(aiUsage.byFeature).length === 0 && (
+                      <p className="text-xs text-gray-400">No AI calls recorded yet.</p>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-400">
+                  Groq and Ollama don&apos;t expose a usage/quota API, so this is call volume tracked locally by GravHub — not a live quota reading from Groq itself. If you&apos;re hitting Groq rate limits, this at least shows what&apos;s driving the volume.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         {activeTab === 'Navigation' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <div className="lg:col-span-2 flex flex-col gap-4">
@@ -2534,6 +2697,7 @@ const GOOGLE_PRODUCT_META: Record<MarketingStatus['product'], { name: string; de
 }
 
 function MarketingIntegrationsSection() {
+  const { toast } = useToast()
   const [statuses, setStatuses] = useState<MarketingStatus[]>([])
   const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null)
   const [gscSiteUrl, setGscSiteUrl] = useState('')
@@ -2674,12 +2838,16 @@ function MarketingIntegrationsSection() {
               onClick={async () => {
                 setGscSaving(true)
                 try {
-                  await fetch('/api/settings', {
+                  const res = await fetch('/api/settings', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ gsc_site_url: gscSiteUrl.trim() }),
                   })
-                } catch {/* ignore */}
+                  if (!res.ok) throw new Error('Failed')
+                  toast('Search Console site saved', 'success')
+                } catch {
+                  toast('Failed to save Search Console site', 'error')
+                }
                 setGscSaving(false)
               }}
               disabled={gscSaving}
@@ -2750,6 +2918,7 @@ function MarketingIntegrationsSection() {
 }
 
 function HubSpotIntegrationSection() {
+  const { toast } = useToast()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
@@ -2795,12 +2964,16 @@ function HubSpotIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hubspot: { apiKey: apiKey.trim() } }),
       })
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error('Failed')
+      toast('HubSpot API key saved', 'success')
+    } catch {
+      toast('Failed to save HubSpot API key', 'error')
+    }
     setSaving(false)
   }
 
@@ -2879,6 +3052,7 @@ function HubSpotIntegrationSection() {
 }
 
 function GranolaIntegrationSection() {
+  const { toast } = useToast()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
@@ -2927,12 +3101,16 @@ function GranolaIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ granola: { apiKey: apiKey.trim(), lastSyncedAt } }),
       })
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error('Failed')
+      toast('Granola API key saved', 'success')
+    } catch {
+      toast('Failed to save Granola API key', 'error')
+    }
     setSaving(false)
   }
 
@@ -2943,7 +3121,8 @@ function GranolaIntegrationSection() {
       const res = await fetch('/api/integrations/granola/sync', { method: 'POST' })
       const data = await res.json()
       if (res.ok) {
-        setSyncResult(`Synced ${data.imported} new note${data.imported === 1 ? '' : 's'} (${data.matched} matched to a contact)`)
+        const updatedPart = data.updated > 0 ? `, ${data.updated} updated` : ''
+        setSyncResult(`Synced ${data.imported} new note${data.imported === 1 ? '' : 's'}${updatedPart} (${data.matched} matched to a contact)`)
         setLastSyncedAt(new Date().toISOString())
         setStatus('connected')
       } else {
@@ -3056,6 +3235,7 @@ function GranolaIntegrationSection() {
 }
 
 function StripeIntegrationSection() {
+  const { toast } = useToast()
   const [secretKey, setSecretKey] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
   const [showKey, setShowKey] = useState(false)
@@ -3103,12 +3283,16 @@ function StripeIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stripe: { secretKey: secretKey.trim(), webhookSecret: webhookSecret.trim() } }),
       })
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error('Failed')
+      toast('Stripe settings saved', 'success')
+    } catch {
+      toast('Failed to save Stripe settings', 'error')
+    }
     setSaving(false)
   }
 
@@ -3358,6 +3542,7 @@ function EmailTrackingSection() {
 }
 
 function GoogleReviewsIntegrationSection() {
+  const { toast } = useToast()
   const [locationName, setLocationName] = useState('')
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
   const [gbpStatus, setGbpStatus] = useState<'idle' | 'testing' | 'connected' | 'syncing' | 'error'>('idle')
@@ -3401,12 +3586,16 @@ function GoogleReviewsIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ google_reviews: { locationName: locationName.trim(), lastSyncAt } }),
       })
-    } catch {}
+      if (!res.ok) throw new Error('Failed')
+      toast('Google Reviews settings saved', 'success')
+    } catch {
+      toast('Failed to save Google Reviews settings', 'error')
+    }
     setSaving(false)
   }
 
@@ -3519,6 +3708,7 @@ function GoogleReviewsIntegrationSection() {
 }
 
 function MaverickIntegrationSection() {
+  const { toast } = useToast()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
@@ -3554,12 +3744,16 @@ function MaverickIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ maverick: { apiKey: apiKey.trim() } }),
       })
-    } catch {}
+      if (!res.ok) throw new Error('Failed')
+      toast('Maverick API key saved', 'success')
+    } catch {
+      toast('Failed to save Maverick API key', 'error')
+    }
     setSaving(false)
   }
 
@@ -3620,6 +3814,7 @@ function MaverickIntegrationSection() {
 }
 
 function ResendIntegrationSection() {
+  const { toast } = useToast()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
@@ -3655,12 +3850,16 @@ function ResendIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resend: { apiKey: apiKey.trim() } }),
       })
-    } catch {}
+      if (!res.ok) throw new Error('Failed')
+      toast('Resend API key saved', 'success')
+    } catch {
+      toast('Failed to save Resend API key', 'error')
+    }
     setSaving(false)
   }
 
@@ -3721,6 +3920,7 @@ function ResendIntegrationSection() {
 }
 
 function ApolloIntegrationSection() {
+  const { toast } = useToast()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [status, setStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle')
@@ -3765,12 +3965,16 @@ function ApolloIntegrationSection() {
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apollo: { apiKey: apiKey.trim() } }),
       })
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error('Failed')
+      toast('Apollo API key saved', 'success')
+    } catch {
+      toast('Failed to save Apollo API key', 'error')
+    }
     setSaving(false)
   }
 

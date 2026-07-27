@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { getSettings } from '@/lib/settings'
 import { requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getOrCreateProposalToken } from '@/lib/proposal-share'
 
 export const POST = withErrorHandler('email/send-proposal POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
@@ -42,8 +43,23 @@ export const POST = withErrorHandler('email/send-proposal POST', async (req) => 
     }
 
     const contactName = contact.full_name || `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim() || 'there'
-    const portalUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
     const items = proposal.items ?? []
+
+    // AUDIT.md #153 — the CTA previously linked to the bare app root (a
+    // dead end for any prospect who isn't yet a portal client — the normal
+    // case, since proposals typically precede becoming one) even though a
+    // working public token-based viewer already exists at /proposal/[token]
+    // via POST /api/proposals/[id]/share. Reuses that same route's token
+    // logic (see lib/proposal-share.ts) rather than invoking the /share
+    // endpoint itself — /share also sends its own (differently-styled)
+    // email as a side effect, which would mean double-emailing the client
+    // on every "mark as Sent" here. Reusing just the token-reuse logic
+    // keeps a single source of truth for "does this proposal already have
+    // a live link" while still sending the one branded email below.
+    const token = await getOrCreateProposalToken(db, proposal)
+    await db.from('proposals').update({ client_email: recipientEmail }).eq('id', proposalId)
+    const portalUrl = `${appUrl}/proposal/${token}`
 
     const result = await sendEmail({
       to: recipientEmail,

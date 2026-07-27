@@ -1,5 +1,32 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 
+const HREF_RE = /href="([^"]+)"/gi
+
+/**
+ * Server-side equivalent of the browser extension's injectTracking() (see
+ * browser-extension/content.js) — same unsigned {trackedEmailId, url}
+ * base64url token, so both funnel through the same public redirect
+ * (/api/track/click/ext/[token]). Used by app/api/gmail/send/route.ts,
+ * which (unlike the extension) controls the outgoing HTML directly on the
+ * server and can rewrite links before the Gmail API call instead of
+ * mutating Gmail's compose DOM.
+ */
+export function rewriteLinksForExtensionTracking(html: string, trackedEmailId: string, baseUrl: string): string {
+  return html.replace(HREF_RE, (_match, url: string) => {
+    const trimmed = url.trim()
+    if (trimmed.startsWith('mailto:') || trimmed.startsWith('#') || trimmed.startsWith(`${baseUrl}/api/track/`)) {
+      return `href="${url}"`
+    }
+    const token = Buffer.from(JSON.stringify({ trackedEmailId, url: trimmed })).toString('base64url')
+    return `href="${baseUrl}/api/track/click/ext/${token}"`
+  })
+}
+
+/** Same 1x1 tracking pixel the extension injects into the compose body — see browser-extension/content.js's injectTracking(). */
+export function trackingPixelTag(trackedEmailId: string, baseUrl: string): string {
+  return `<img src="${baseUrl}/api/track/open/${trackedEmailId}" width="1" height="1" alt="" style="display:none !important;width:1px;height:1px;border:0;" />`
+}
+
 /**
  * Mirrors a Gmail-extension tracked-email open/click onto the CRM contact's
  * activity timeline — same integration point sequence/broadcast tracking

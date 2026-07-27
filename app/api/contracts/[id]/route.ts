@@ -14,7 +14,11 @@ import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 // record's CURRENT company, not what a portal client is trying to change
 // it TO, so an unrestricted field set would let a portal client reassign
 // their own contract to an arbitrary different company.
-const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['status', 'clientSigned'])
+// AUDIT #155 — signatureData/signatureType added so the client Approvals
+// Accept flow (app/client/approvals/page.tsx) can actually persist the
+// e-signature it captures, instead of discarding it like the old
+// app/portal/approvals/page.tsx did.
+const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['status', 'clientSigned', 'signatureData', 'signatureType', 'clientNotes'])
 
 // VALID_TRANSITIONS below governs which transitions are legal at all, for
 // any caller — it does NOT distinguish who is allowed to make a given
@@ -27,8 +31,8 @@ const PORTAL_CLIENT_ALLOWED_STATUSES = new Set(['Signed by Client', 'Expired', '
 // Valid status transitions — keys are current status, values are allowed next statuses
 const VALID_TRANSITIONS: Record<string, string[]> = {
   'Draft':              ['Sent', 'Expired', 'Terminated'],
-  'Sent':               ['Viewed', 'Signed by Client', 'Expired', 'Terminated'],
-  'Viewed':             ['Signed by Client', 'Expired', 'Terminated'],
+  'Sent':               ['Viewed', 'Signed by Client', 'Expired', 'Terminated', 'Draft'],
+  'Viewed':             ['Signed by Client', 'Expired', 'Terminated', 'Draft'],
   'Signed by Client':   ['Countersign Needed', 'Fully Executed', 'Expired', 'Terminated'],
   'Countersign Needed': ['Fully Executed', 'Expired', 'Terminated'],
   'Fully Executed':     ['Expired', 'Terminated'],
@@ -52,8 +56,11 @@ function mapContract(row: any) {
     serviceType:      row.service_type,
     clientSigned:     row.client_signed ?? undefined,
     internalSigned:   row.internal_signed ?? undefined,
+    signatureData:    row.signature_data ?? undefined,
+    signatureType:    row.signature_type ?? undefined,
     terminatedReason: row.terminated_reason ?? undefined,
     terminatedDate:   row.terminated_date ?? undefined,
+    clientNotes:      row.client_notes ?? undefined,
   }
 }
 
@@ -73,9 +80,16 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
     billingStructure: { type: 'string', enum: ['Monthly', 'Quarterly', 'Annual', 'One-time', 'Custom'] },
     clientSigned:     { type: 'string', maxLength: 30 },
     internalSigned:   { type: 'string', maxLength: 30 },
+    // signatureData is either a typed cursive name (short) or a drawn
+    // canvas.toDataURL() PNG data URI (can run tens of KB) — mirrors
+    // signature_requests.signature_data (app/api/signatures/[token]/route.ts),
+    // which stores the same drawn-PNG-data-URI shape unbounded.
+    signatureData:    { type: 'string', maxLength: 500_000 },
+    signatureType:    { type: 'string', enum: ['typed', 'drawn'] },
     renewalDate:      { type: 'string', maxLength: 30 },
     terminatedReason: { type: 'string', maxLength: 1000 },
     terminatedDate:   { type: 'string', maxLength: 30 },
+    clientNotes:      { type: 'string', maxLength: 1000 },
     company:          { type: 'string', maxLength: 200 },
     companyId:        { type: 'string', maxLength: 100 },
     serviceType:      { type: 'string', maxLength: 100 },
@@ -94,7 +108,7 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
   // client for a different company) could otherwise PATCH any contract.
   const { data: current, error: fetchErr } = await db
     .from('contracts')
-    .select('status, company')
+    .select('status, company, company_id')
     .eq('id', id)
     .single()
 
@@ -102,7 +116,10 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
     return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
   }
 
-  const denied = await requirePortalClient(req, current.company)
+  // AUDIT.md #469 — pass the contract's own company_id so requirePortalClient
+  // can do the collision-proof company_id comparison instead of only a name
+  // match when the caller's own portal_clients row is linked.
+  const denied = await requirePortalClient(req, current.company, current.company_id)
   if (denied) return denied
   const actor = await getAuthUser(req)
 
@@ -139,11 +156,14 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
   if (body.value !== undefined)             update.value = body.value
   if (body.clientSigned !== undefined)      update.client_signed = body.clientSigned
   if (body.internalSigned !== undefined)    update.internal_signed = body.internalSigned
+  if (body.signatureData !== undefined)     update.signature_data = body.signatureData
+  if (body.signatureType !== undefined)     update.signature_type = body.signatureType
   if (body.assignedRep !== undefined)       update.assigned_rep = body.assignedRep
   if (body.billingStructure !== undefined)  update.billing_structure = body.billingStructure
   if (body.renewalDate !== undefined)       update.renewal_date = body.renewalDate
   if (body.terminatedReason !== undefined)  update.terminated_reason = body.terminatedReason
   if (body.terminatedDate !== undefined)    update.terminated_date = body.terminatedDate
+  if (body.clientNotes !== undefined)       update.client_notes = body.clientNotes
   if (body.companyId !== undefined)         update.company_id = body.companyId
   // Renaming a contract's company is a legitimate correction (e.g. wrong
   // company selected at creation), but app/crm/pipeline/page.tsx and

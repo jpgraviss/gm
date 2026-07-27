@@ -9,14 +9,15 @@ export interface AuditSectionResult {
   grade: string
   findings: string[]
   recommendations: string[]
+  unavailable?: boolean
 }
 
 export interface AuditPdfData {
   website_url: string
   company_name?: string
   audit_type: string
-  overall_score: number
-  overall_grade: string
+  overall_score: number | null
+  overall_grade: string | null
   summary: string
   sections: AuditSectionResult[]
   created_at: string
@@ -46,16 +47,29 @@ export async function generateAuditPdf(audit: AuditPdfData): Promise<Blob> {
   checkPageBreak(pdf, cursor, 30)
   const badgeX = marginLeft + 12
   const badgeY = cursor.y + 10
-  drawScoreBadge(pdf, badgeX, badgeY, 12, audit.overall_score, audit.overall_grade)
-
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(9)
-  pdf.setTextColor(...gradeColorRgb(audit.overall_grade))
-  pdf.text(`Grade ${audit.overall_grade}`, badgeX + 20, badgeY - 2)
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(8)
-  pdf.setTextColor(...PDF_COLORS.gray)
-  pdf.text(`Overall Score · ${dateStr}`, badgeX + 20, badgeY + 4)
+  if (audit.overall_score === null || audit.overall_grade === null) {
+    // AI analysis couldn't run at all — a fabricated 0/F badge here would
+    // read as a genuine failing grade, not an infrastructure gap.
+    pdf.setFillColor(...PDF_COLORS.border)
+    pdf.circle(badgeX, badgeY, 12, 'F')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.setTextColor(...PDF_COLORS.gray)
+    pdf.text('Score Unavailable', badgeX + 20, badgeY - 2)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8)
+    pdf.text(`AI analysis could not run · ${dateStr}`, badgeX + 20, badgeY + 4)
+  } else {
+    drawScoreBadge(pdf, badgeX, badgeY, 12, audit.overall_score, audit.overall_grade)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.setTextColor(...gradeColorRgb(audit.overall_grade))
+    pdf.text(`Grade ${audit.overall_grade}`, badgeX + 20, badgeY - 2)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8)
+    pdf.setTextColor(...PDF_COLORS.gray)
+    pdf.text(`Overall Score · ${dateStr}`, badgeX + 20, badgeY + 4)
+  }
   cursor.y += 28
 
   // ── Executive Summary ─────────────────────────────────────────────────
@@ -83,16 +97,22 @@ export async function generateAuditPdf(audit: AuditPdfData): Promise<Blob> {
       pdf.setTextColor(...PDF_COLORS.ink)
       pdf.text(s.name, marginLeft, cursor.y)
 
-      const barX = marginLeft + 60
-      const barWidth = contentWidth - 60 - 22
-      pdf.setFillColor(...PDF_COLORS.border)
-      pdf.roundedRect(barX, cursor.y - 3, barWidth, 3, 1, 1, 'F')
-      pdf.setFillColor(...gradeColorRgb(s.grade))
-      pdf.roundedRect(barX, cursor.y - 3, barWidth * Math.max(0.03, s.score / 100), 3, 1, 1, 'F')
+      if (s.unavailable) {
+        pdf.setFont('helvetica', 'italic')
+        pdf.setTextColor(...PDF_COLORS.gray)
+        pdf.text('AI analysis unavailable', marginLeft + contentWidth, cursor.y, { align: 'right' })
+      } else {
+        const barX = marginLeft + 60
+        const barWidth = contentWidth - 60 - 22
+        pdf.setFillColor(...PDF_COLORS.border)
+        pdf.roundedRect(barX, cursor.y - 3, barWidth, 3, 1, 1, 'F')
+        pdf.setFillColor(...gradeColorRgb(s.grade))
+        pdf.roundedRect(barX, cursor.y - 3, barWidth * Math.max(0.03, s.score / 100), 3, 1, 1, 'F')
 
-      pdf.setFont('helvetica', 'bold')
-      pdf.setTextColor(...gradeColorRgb(s.grade))
-      pdf.text(`${s.grade} (${s.score})`, marginLeft + contentWidth, cursor.y, { align: 'right' })
+        pdf.setFont('helvetica', 'bold')
+        pdf.setTextColor(...gradeColorRgb(s.grade))
+        pdf.text(`${s.grade} (${s.score})`, marginLeft + contentWidth, cursor.y, { align: 'right' })
+      }
       cursor.y += 7
     }
     cursor.y += 6
@@ -104,12 +124,12 @@ export async function generateAuditPdf(audit: AuditPdfData): Promise<Blob> {
     drawSectionTitle(pdf, cursor, section.name)
 
     // Score chip
-    pdf.setFillColor(...gradeColorRgb(section.grade))
+    pdf.setFillColor(...(section.unavailable ? PDF_COLORS.border : gradeColorRgb(section.grade)))
     pdf.roundedRect(marginLeft, cursor.y - 8, 34, 7, 1.5, 1.5, 'F')
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(7.5)
-    pdf.setTextColor(...PDF_COLORS.white)
-    pdf.text(`${section.grade} · ${section.score}/100`, marginLeft + 17, cursor.y - 3.3, { align: 'center' })
+    pdf.setTextColor(...(section.unavailable ? PDF_COLORS.gray : PDF_COLORS.white))
+    pdf.text(section.unavailable ? 'Unavailable' : `${section.grade} · ${section.score}/100`, marginLeft + 17, cursor.y - 3.3, { align: 'center' })
     cursor.y += 4
 
     if (section.findings?.length > 0) {

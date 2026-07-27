@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Building2, ChevronDown, Loader2, Plus, Search, X } from 'lucide-react'
 import { useEnrichment } from '@/lib/useEnrichment'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
+import { useToast } from '@/components/ui/Toast'
 
 const INDUSTRIES = [
   'Technology', 'Healthcare', 'Finance', 'Retail', 'Manufacturing',
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export default function CompanySelect({ value, onChange, placeholder = 'Select a company...', disabled, required, className }: Props) {
+  const { toast } = useToast()
   const [companies, setCompanies] = useState<Company[]>([])
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -106,13 +108,17 @@ export default function CompanySelect({ value, onChange, placeholder = 'Select a
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName.trim(), industry: newIndustry || undefined, website: newWebsite.trim() || undefined }),
       })
-      if (!res.ok) throw new Error('Failed to create company')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to create company')
+      }
       const created: Company = await res.json()
       setCompanies(prev => [...prev, created])
       onChange(created.name, created.id)
       setOpen(false)
-    } catch {
+    } catch (err) {
       // keep form open on error
+      toast(err instanceof Error ? err.message : 'Failed to create company', 'error')
     } finally {
       setCreateLoading(false)
     }

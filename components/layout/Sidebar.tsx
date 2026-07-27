@@ -13,7 +13,7 @@ import {
   BookOpen, Star, Megaphone, Bot, ChevronDown,
   ScrollText, GraduationCap, Share2, Mail, ClipboardList, Layers,
   CheckSquare, Clock, CalendarDays, CalendarCheck, Wrench, RefreshCw, PackageCheck, Zap,
-  BarChart3, Plug, Search, Activity, FileSearch, Radar, Compass, SlidersHorizontal,
+  BarChart3, Plug, Search, Activity, FileSearch, Radar, Compass, SlidersHorizontal, Palette,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -121,7 +121,17 @@ export const defaultNavigation: NavSection[] = [
   {
     section: 'Clients',
     items: [
-      { label: 'Portal',         href: '/portal',         icon: <Globe size={16} />,          billingVisible: true },
+      // AUDIT #154 / Batch 5 — /portal (the dual-purpose staff tool) is deleted;
+      // its real staff functionality now lives at /admin/portal-management
+      // (also linked from the Admin section below as "Portal Management",
+      // adminOnly). This entry stays under Clients for billingVisible staff
+      // discoverability, but note: portal-management's own auth check
+      // requires isAdmin, stricter than this item's old unit-only gate — a
+      // non-admin Billing/Finance user who could reach the old /portal tool
+      // will now be bounced to /admin after clicking through. Flagged in
+      // the batch report; not silently loosened here since that's a
+      // security-relevant call this batch wasn't authorized to make.
+      { label: 'Portal',         href: '/admin/portal-management', icon: <Globe size={16} />,          billingVisible: true },
       { label: 'Tickets',        href: '/tickets',        icon: <MessageSquare size={16} />,  contractorVisible: true, billingVisible: true },
       { label: 'Reputation',     href: '/reputation',     icon: <Star size={16} />,           allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
       { label: 'Client Reports', href: '/reports/client', icon: <FileText size={16} />,       allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
@@ -139,6 +149,7 @@ export const defaultNavigation: NavSection[] = [
       { label: 'SOPs',             href: '/admin/sops',                icon: <FileText size={16} />,    adminOnly: true },
       { label: 'Document Templates', href: '/admin/document-templates', icon: <FileText size={16} />,   allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
       { label: 'Custom Fields',    href: '/admin/custom-fields',       icon: <SlidersHorizontal size={16} />, allowedUnits: ['Leadership/Admin', 'Sales'] },
+      { label: 'Brand Kits',       href: '/admin/brand-kits',          icon: <Palette size={16} />,       allowedUnits: ['Leadership/Admin', 'Sales', 'Delivery/Operations'] },
     ],
   },
 ]

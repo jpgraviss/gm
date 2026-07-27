@@ -8,6 +8,7 @@ import {
   CheckSquare, HelpCircle, Pencil, Layers,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -708,12 +709,16 @@ export default function SalesEnablementPage() {
     }
   }
 
+  // AUDIT.md #212 — this was worse than a pagination cap: `/api/playbooks`/
+  // `/api/sales-templates` both return a bare JSON array (`paginatedJson`),
+  // not `{data: [...]}` — `json.data` was always `undefined` on a real
+  // array, so `?? []` silently won every time regardless of what existed in
+  // the DB. Playbooks/Templates rendered empty unconditionally, not just
+  // past 200 rows. `fetchAllPages()` reads the response correctly AND
+  // removes the row cap in one fix.
   async function fetchPlaybooks() {
     try {
-      const res = await fetch('/api/playbooks?limit=200')
-      if (!res.ok) throw new Error('Failed to fetch playbooks')
-      const json = await res.json()
-      setPlaybooks(json.data ?? [])
+      setPlaybooks(await fetchAllPages<Playbook>('/api/playbooks'))
     } catch (e) {
       toast((e as Error).message, 'error')
     } finally {
@@ -723,10 +728,7 @@ export default function SalesEnablementPage() {
 
   async function fetchTemplates() {
     try {
-      const res = await fetch('/api/sales-templates?limit=200')
-      if (!res.ok) throw new Error('Failed to fetch templates')
-      const json = await res.json()
-      setTemplates(json.data ?? [])
+      setTemplates(await fetchAllPages<SalesTemplate>('/api/sales-templates'))
     } catch (e) {
       toast((e as Error).message, 'error')
     } finally {

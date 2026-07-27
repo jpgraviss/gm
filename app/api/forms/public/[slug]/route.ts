@@ -5,6 +5,9 @@ import { getResend } from '@/lib/resend'
 import { fireTrigger } from '@/lib/automation-triggers'
 import { withErrorHandler } from '@/lib/api-handler'
 import { extractUtmFromBody } from '@/lib/attribution'
+import { getFirstPipelineStageName } from '@/lib/pipelines'
+import { resolveSafeIp, createPinnedDispatcher } from '@/lib/ssrf-guard'
+import type { Agent } from 'undici'
 
 // CORS — forms get embedded on external websites
 const corsHeaders = {
@@ -96,12 +99,15 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
   const userAgent = req.headers.get('user-agent') ?? null
 
   let contactId: string | null = null
+  // Computed unconditionally (it's a pure field-mapping helper) so both the
+  // create_contact and create_deal blocks below can share the same mapped
+  // values — a deal's name/company needs the same contact/company info a
+  // contact would've been built from.
+  const contactFields = submissionToContact({ fields: form.fields ?? [] }, body)
+  const email = contactFields.email?.toLowerCase().trim()
 
   // Optionally create/match a CRM contact
   if (form.create_contact) {
-    const contactFields = submissionToContact({ fields: form.fields ?? [] }, body)
-    const email = contactFields.email?.toLowerCase().trim()
-
     if (email) {
       // Upsert contact by email
       const { data: existing } = await db
@@ -135,6 +141,48 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
     }
   }
 
+  // Optionally auto-create a CRM deal for this submission (AUDIT.md #296 —
+  // `create_deal` was a persisted, editable form config field nothing ever
+  // read). A deal here is always linked to a contact, so if create_contact
+  // is off, or it's on but no contact was actually created/matched (e.g. the
+  // submission had no email to key off of), there's no real contact/company
+  // to attach the deal to — skip rather than create an orphaned deal with a
+  // blank company and no contact_id.
+  let dealId: string | null = null
+  if (form.create_deal && contactId) {
+    const dealCompany = contactFields.company
+      || `${contactFields.firstName} ${contactFields.lastName}`.trim()
+      || email
+      || ''
+    // "Deal for {company}" matches the naming convention the "Create Deal"
+    // automation action already uses (lib/automations-engine.ts) for
+    // deals auto-created from a form/funnel submission trigger.
+    const dealName = `Deal for ${dealCompany || 'New Inquiry'}`
+    // Defaults per product decision on AUDIT.md #296: name from the
+    // contact/company, blank ($0) value, first pipeline stage (the form's
+    // own configured deal_stage wins if the admin set one), unassigned
+    // (empty) owner.
+    const stage = form.deal_stage || await getFirstPipelineStageName(db)
+    const newDealId = `deal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const { error: dealErr } = await db.from('deals').insert({
+      id:           newDealId,
+      company:      dealCompany,
+      contact_id:   contactId,
+      pipeline_id:  'client-acquisition',
+      stage,
+      value:        0,
+      assigned_rep: '',
+      probability:  0,
+      notes:        [dealName],
+      last_activity: new Date().toISOString().split('T')[0],
+    })
+    if (dealErr) {
+      console.error('[forms create_deal]', dealErr)
+    } else {
+      dealId = newDealId
+    }
+  }
+
   // Write the submission row
   const { error: insertErr } = await db.from('form_submissions').insert({
     id:          submissionId,
@@ -162,6 +210,7 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
     formName: form.name,
     submissionId,
     contactId,
+    dealId,
     data: body,
     // Public, unauthenticated endpoint — see the matching comment in
     // funnel-submit/route.ts (AUDIT.md #46).
@@ -170,7 +219,7 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
 
   if (Array.isArray(form.notify_emails) && form.notify_emails.length > 0) {
     const summary = Object.entries(body)
-      .map(([k, v]) => `<strong>${k}:</strong> ${String(v)}`)
+      .map(([k, v]) => `<strong>${escapeHtml(k)}:</strong> ${escapeHtml(String(v))}`)
       .join('<br/>')
     getResend().then(r => r.emails.send({
       from: 'GravHub <noreply@app.gravissmarketing.com>',
@@ -196,7 +245,7 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
           <div style="width:48px;height:48px;border-radius:12px;background:#015035;display:flex;align-items:center;justify-content:center;margin-bottom:20px">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
-          <h1 style="font-size:20px;font-weight:700;color:#1B211D;margin:0 0 8px">${firstName ? `Thanks, ${firstName}!` : 'Thank you!'}</h1>
+          <h1 style="font-size:20px;font-weight:700;color:#1B211D;margin:0 0 8px">${firstName ? `Thanks, ${escapeHtml(firstName)}!` : 'Thank you!'}</h1>
           <p style="font-size:14px;color:#4b5563;line-height:1.6;margin:0 0 24px">${message}</p>
           <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
           <p style="font-size:11px;color:#9ca3af">&copy; Graviss Marketing</p>
@@ -205,20 +254,26 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
     }
   }
 
-  // Webhook
+  // Webhook — AUDIT #500 — form.webhook_url is staff-set (any Team Member,
+  // via PATCH /api/forms/[id]) and was fetched here with a bare fetch(): no
+  // protocol check, no private/loopback/link-local/metadata-IP block. Same
+  // risk class already hardened for monitored-sites/uptime/WordPress checks
+  // (AUDIT #260/#292/#414) via lib/ssrf-guard.ts. sendFormWebhook() below
+  // validates the exact address before connecting and pins the fetch to it
+  // (never letting fetch() re-resolve the hostname itself, which would
+  // reopen the DNS-rebinding TOCTOU gap #414 closed). A blocked or failed
+  // webhook must never fail the visitor's actual form submission, so this
+  // stays fire-and-forget with errors only logged server-side.
   if (form.webhook_url) {
-    fetch(form.webhook_url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event: 'form_submitted',
-        formId: form.id,
-        formName: form.name,
-        submissionId,
-        contactId,
-        data: body,
-        submittedAt: new Date().toISOString(),
-      }),
+    sendFormWebhook(form.webhook_url, {
+      event: 'form_submitted',
+      formId: form.id,
+      formName: form.name,
+      submissionId,
+      contactId,
+      dealId,
+      data: body,
+      submittedAt: new Date().toISOString(),
     }).catch((err) => console.error('[forms webhook]', err))
   }
 
@@ -231,3 +286,50 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
     { status: 201, headers: corsHeaders },
   )
 })
+
+const WEBHOOK_TIMEOUT_MS = 10_000
+
+// AUDIT #500 — mirrors the pinned-fetch pattern lib/uptime.ts's checkSite()
+// and lib/wordpress.ts's fetchWithTimeout() use (AUDIT #414): resolve the
+// hostname once via resolveSafeIp(), then pin the actual connection to that
+// exact validated address via createPinnedDispatcher() rather than letting
+// fetch() perform its own, independent (re-bindable) DNS lookup. Redirects
+// are not followed — a webhook target 302-ing to an internal/metadata
+// address would otherwise bypass validation entirely, and nothing here
+// needs the redirect response body.
+async function sendFormWebhook(url: string, payload: unknown): Promise<void> {
+  const resolution = await resolveSafeIp(url)
+  if (!resolution.safe) {
+    console.error('[forms webhook] blocked — URL resolves to a private or internal address:', url)
+    return
+  }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS)
+  const dispatcher = createPinnedDispatcher(resolution.ip, resolution.family)
+  const requestInit: RequestInit & { dispatcher: Agent } = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    redirect: 'manual',
+    signal: controller.signal,
+    dispatcher,
+  }
+  try {
+    await fetch(url, requestInit)
+  } finally {
+    clearTimeout(timer)
+    await dispatcher.destroy()
+  }
+}
+
+// Public, unauthenticated endpoint — submitted field values and the
+// respondent's own name are interpolated into HTML emails sent to real
+// staff/client inboxes (the notify-email and confirmation-email below),
+// so they must be escaped before interpolation.
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}

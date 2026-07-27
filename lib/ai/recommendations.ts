@@ -164,11 +164,16 @@ Each item must have: type (follow_up|upsell|at_risk|renewal_reminder|engagement_
     : `Analyze these accounts and provide recommendations:\n\n${contextLines.join('\n\n')}\n\nToday's date: ${new Date().toISOString().split('T')[0]}`
 
   try {
+    // AUDIT — was `fast: true`, but the system prompt itself explicitly
+    // demands non-generic, fact-specific synthesis across several linked
+    // records (deals, contracts, contacts, activity history) — exactly the
+    // kind of multi-fact reasoning where the smaller fast model is more
+    // likely to produce shallow/generic output than the default model.
     const result = await chatCompletion({
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens: 1200,
-      fast: true,
+      feature: 'crm_recommendations',
     })
 
     if (result.source !== 'none' && result.text) {

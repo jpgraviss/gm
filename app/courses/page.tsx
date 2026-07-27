@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Header from '@/components/layout/Header'
+import Link from 'next/link'
 import {
   GraduationCap, Users, Plus, X, Trash2, ChevronUp, ChevronDown,
-  BookOpen, FileText, HelpCircle, DollarSign, Video, Type, Tag,
+  BookOpen, FileText, HelpCircle, DollarSign, Video, Type, Tag, Eye,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -97,10 +99,11 @@ function CoursePanel({
     if (!course) return
     setLoadingEnrollments(true)
     try {
-      const res = await fetch(`/api/courses/${course.id}/enrollments?limit=200`)
-      if (!res.ok) throw new Error('Failed to fetch enrollments')
-      const json = await res.json()
-      setEnrollments(json.data ?? [])
+      // AUDIT #275 — GET /api/courses/[id]/enrollments returns a bare
+      // array via paginatedJson() (X-Next-Cursor header, not {data: [...]}).
+      // Reading .data off it was always undefined, so this always fell
+      // through to an empty roster regardless of real enrollments.
+      setEnrollments(await fetchAllPages<Enrollment>(`/api/courses/${course.id}/enrollments`))
     } catch (e) {
       toast((e as Error).message, 'error')
     } finally {
@@ -492,10 +495,10 @@ export default function CoursesPage() {
 
   async function fetchCourses() {
     try {
-      const res = await fetch('/api/courses?limit=200')
-      if (!res.ok) throw new Error('Failed to fetch courses')
-      const json = await res.json()
-      setCourses(json.data ?? [])
+      // AUDIT #275 — GET /api/courses returns a bare array via
+      // paginatedJson(), not {data: [...]}; reading .data off it was
+      // always undefined, so the staff Courses list was always empty.
+      setCourses(await fetchAllPages<Course>('/api/courses'))
     } catch (e) {
       toast((e as Error).message, 'error')
     } finally {
@@ -586,6 +589,17 @@ export default function CoursesPage() {
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide flex-shrink-0 ml-2 ${statusColors[course.status] ?? statusColors['Draft']}`}>
                     {course.status}
                   </span>
+                  {/* AUDIT #239 — app/courses/[id]/page.tsx had no link
+                      pointing to it anywhere in the live UI; reachable only
+                      by hand-typing the URL. */}
+                  <Link
+                    href={`/courses/${course.id}`}
+                    onClick={e => e.stopPropagation()}
+                    className="flex-shrink-0 ml-2 p-1 rounded-lg text-gray-300 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                    title="Preview course"
+                  >
+                    <Eye size={14} />
+                  </Link>
                 </div>
 
                 {course.description && (

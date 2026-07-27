@@ -71,4 +71,10 @@ export const CONTRACT_STATUSES = ['Draft', 'Sent', 'Viewed', 'Signed by Client',
 export const INVOICE_STATUSES = ['Pending', 'Sent', 'Paid', 'Overdue', 'Cancelled'] as const
 export const PROJECT_STATUSES = ['Not Started', 'In Progress', 'Awaiting Client', 'Completed', 'Launched', 'In Maintenance'] as const
 export const TASK_PRIORITIES = ['High', 'Medium', 'Low'] as const
+// Separate from TASK_PRIORITIES — tickets support 'Urgent' (NewTicketPanel
+// and app/client/page.tsx both offer it), tasks intentionally do not.
+// AUDIT.md #483 — the two routes below previously reused TASK_PRIORITIES
+// unmodified, so any Urgent ticket 400'd on creation/update.
+export const TICKET_PRIORITIES = ['Urgent', 'High', 'Medium', 'Low'] as const
 export const TICKET_STATUSES = ['Open', 'In Progress', 'Waiting', 'Resolved', 'Closed'] as const
+export const RENEWAL_STATUSES = ['Upcoming', 'In Progress', 'Renewed', 'Churned'] as const

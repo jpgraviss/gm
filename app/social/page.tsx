@@ -3,8 +3,9 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
-import { formatDate } from '@/lib/utils'
+import { formatDate, aiSourceLabel } from '@/lib/utils'
 import { PLATFORM_META, type SocialPlatform, type PostStatus } from '@/lib/social-media'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   Calendar, List, ChevronLeft, ChevronRight, X, Send, Clock, Check,
   AlertTriangle, Trash2, Eye, Pencil, Plus, Loader2, Wand2, Link2,
@@ -75,14 +76,15 @@ export default function SocialMediaPage() {
   const [calYear, setCalYear] = useState(now.getFullYear())
   const [calMonth, setCalMonth] = useState(now.getMonth())
 
+  // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+  // rows silently truncated the post list past that.
   const loadPosts = useCallback(() => {
     setLoading(true)
     const params = new URLSearchParams()
     if (clientFilter) params.set('company', clientFilter)
     if (statusFilter !== 'all') params.set('status', statusFilter)
-    fetch(`/api/social-posts?${params}`)
-      .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (Array.isArray(data)) setPosts(data) })
+    fetchAllPages<SocialPost>(`/api/social-posts?${params}`)
+      .then(setPosts)
       .catch(() => toast('Failed to load posts', 'error'))
       .finally(() => setLoading(false))
   }, [clientFilter, statusFilter, toast])
@@ -457,6 +459,7 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
   onDelete: (id: string) => void
   onPublish: (id: string) => void
 }) {
+  const { toast } = useToast()
   const [company, setCompany] = useState(post?.companyName ?? '')
   const [content, setContent] = useState(post?.content ?? '')
   const [platforms, setPlatforms] = useState<SocialPlatform[]>(post?.platforms ?? ['facebook', 'instagram'])
@@ -521,6 +524,7 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
                           type: 'social_post',
                           context: {
                             topic: company || 'marketing',
+                            company,
                             platform: platforms[0] || 'LinkedIn',
                             url: linkUrl || '',
                             additionalContext: content || '',
@@ -530,6 +534,7 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
                       if (res.ok) {
                         const data = await res.json()
                         setContent(data.content)
+                        toast(`Post drafted ${aiSourceLabel(data.source)}`, data.source === 'template' ? 'info' : 'success')
                       }
                     } catch { /* ignore */ }
                     setAiLoading(false)
@@ -597,7 +602,7 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
           {isEditing ? (
             <>
               <button onClick={() => handleSave()} disabled={!canSave} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#015035' }}>Save</button>
-              {post.status === 'draft' || post.status === 'approved' ? (
+              {post.status === 'draft' || (post.status === 'pending_approval' && post.approvalStatus === 'approved') ? (
                 <button onClick={() => onPublish(post.id)} className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 flex items-center gap-1.5"><Send size={13} /> Publish</button>
               ) : null}
               <button onClick={() => onDelete(post.id)} className="p-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>

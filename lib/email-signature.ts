@@ -18,6 +18,13 @@ export const DEFAULT_SIGNATURE: EmailSignatureData = {
   photoUrl: '',
 }
 
+// Marker present in every generated signature's HTML — lets a server-side
+// auto-insertion point (app/api/gmail/send/route.ts, gated by gmail_settings
+// .insertSignature) detect a signature the caller already appended (e.g. the
+// Inbox compose UI's manual "Signature" button, app/inbox/page.tsx) and skip
+// adding a second one.
+export const SIGNATURE_MARKER = '<!--gravhub:signature-->'
+
 export function generateSignatureHtml(sig: EmailSignatureData): string {
   const FOREST = '#015035'
   const CREAM = '#FFF3EA'
@@ -56,7 +63,7 @@ export function generateSignatureHtml(sig: EmailSignatureData): string {
       </td></tr>`
     : ''
 
-  return `<table cellpadding="0" cellspacing="0" border="0" style="font-family:'Montserrat',Arial,sans-serif;max-width:480px;">
+  return `${SIGNATURE_MARKER}<table cellpadding="0" cellspacing="0" border="0" style="font-family:'Montserrat',Arial,sans-serif;max-width:480px;">
   <tr>
     <td style="padding:16px 0 12px 0;">
       <table cellpadding="0" cellspacing="0" border="0" style="border-top:3px solid ${FOREST};padding-top:14px;">

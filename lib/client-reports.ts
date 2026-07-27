@@ -66,6 +66,13 @@ export interface ClientReportData {
     incidents: number
   }
   wordpressSeo?: WordPressSeoReport
+  // Populated only when a data source WAS configured (e.g. a gscSiteUrl was
+  // supplied) but the live call threw — as opposed to a source simply never
+  // being configured, which is expected and omitted silently. Lets staff
+  // notice a broken integration (expired OAuth token, bad site URL, API
+  // quota, etc.) before sending this report to a real client, without
+  // changing what data ends up in the report body itself.
+  warnings?: string[]
 }
 
 function daysBetween(start: string, end: string): number {
@@ -94,6 +101,7 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
       label: monthLabel(config.startDate, config.endDate),
     },
   }
+  const warnings: string[] = []
 
   // ── SEO via Search Console ─────────────────────────────────────────────
   if (config.gscSiteUrl) {
@@ -124,6 +132,7 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
       }
     } catch (err) {
       console.error('[client-report] GSC pull failed', err)
+      warnings.push(`Search Console data unavailable: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -150,6 +159,7 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
       }
     } catch (err) {
       console.error('[client-report] GA4 pull failed', err)
+      warnings.push(`GA4 data unavailable: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -164,6 +174,7 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
       }
     } catch (err) {
       console.error('[client-report] GBP pull failed', err)
+      warnings.push(`Business Profile data unavailable: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -226,6 +237,12 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
     }
   } catch (err) {
     console.error('[client-report] uptime read failed', err)
+    // Unlike GSC/GA4/GBP, uptime isn't gated behind an explicit config
+    // field — it's looked up by company name, and an empty result (no
+    // monitored_sites rows) is a normal, silent "not configured" case that
+    // never reaches this catch. Landing here means the read itself threw,
+    // which is a genuine failure worth surfacing.
+    warnings.push(`Uptime data unavailable: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   // ── WordPress SEO (site health + on-page scores, if a WP site is linked) ──
@@ -245,6 +262,8 @@ export async function buildClientReport(config: ClientReportConfig): Promise<Cli
       console.error('[client-report] WordPress SEO read failed', err)
     }
   }
+
+  if (warnings.length > 0) result.warnings = warnings
 
   return result
 }

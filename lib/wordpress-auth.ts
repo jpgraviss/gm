@@ -3,7 +3,33 @@ import { createServiceClient } from '@/lib/supabase'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { isStaffCaller } from '@/lib/portal-auth'
 
-export async function requireWordPressAuth(req: NextRequest): Promise<NextResponse | null> {
+type StoredApiKey = string | { key: string; siteUrl?: string }
+
+function hostnameOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * AUDIT #344 — API keys were validated as a flat pool with no binding to
+ * the site they were issued for, so any one valid key could read/overwrite
+ * SEO data (meta tags, OG/schema markup, scores) for ANY siteUrl a caller
+ * named, not just the site it was meant for. Keys generated going forward
+ * carry an optional `siteUrl`; when present, the caller's own `siteUrl`
+ * (every route in app/api/wordpress/seo/* already requires one) must match
+ * by hostname. Keys with no `siteUrl` — every key issued before this fix,
+ * already embedded in live client plugin installs — stay unscoped rather
+ * than breaking on deploy; the Settings UI flags them so staff can migrate
+ * to scoped keys over time.
+ *
+ * `expectedSiteUrl` is optional so routes that don't yet pass it (or the
+ * session-cookie fallback path, which isn't key-based at all) keep working
+ * exactly as before.
+ */
+export async function requireWordPressAuth(req: NextRequest, expectedSiteUrl?: string | null): Promise<NextResponse | null> {
   const key = req.headers.get('x-gravhub-key')
 
   if (key) {
@@ -15,10 +41,20 @@ export async function requireWordPressAuth(req: NextRequest): Promise<NextRespon
       .maybeSingle()
 
     if (data) {
-      const wp = data.wordpress as { apiKeys?: Array<string | { key: string }> } | null
+      const wp = data.wordpress as { apiKeys?: StoredApiKey[] } | null
       if (wp && Array.isArray(wp.apiKeys)) {
-        const match = wp.apiKeys.some(k => (typeof k === 'string' ? k : k.key) === key)
-        if (match) return null
+        const matched = wp.apiKeys.find(k => (typeof k === 'string' ? k : k.key) === key)
+        if (matched) {
+          const boundSite = typeof matched === 'string' ? undefined : matched.siteUrl
+          if (boundSite && expectedSiteUrl) {
+            const boundHost = hostnameOf(boundSite)
+            const requestHost = hostnameOf(expectedSiteUrl)
+            if (!boundHost || !requestHost || boundHost !== requestHost) {
+              return NextResponse.json({ error: 'This API key is not authorized for this site' }, { status: 403 })
+            }
+          }
+          return null
+        }
       }
     }
 

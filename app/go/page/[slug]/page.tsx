@@ -32,10 +32,9 @@ export default async function FunnelPublicPage({ params, searchParams }: Props) 
   const stepSlug = step ?? pages[0].slug
   const currentPage = pages.find((p) => p.slug === stepSlug) ?? pages[0]
 
-  await db
-    .from('funnel_pages')
-    .update({ views: (currentPage.views ?? 0) + 1 })
-    .eq('id', currentPage.id)
+  // AUDIT — atomic RPC instead of a read-then-write increment, which could
+  // lose a count under concurrent visits to the same page.
+  await db.rpc('increment_funnel_page_views', { p_id: currentPage.id })
 
   const blocks = (currentPage.blocks ?? []) as Array<{
     id: string

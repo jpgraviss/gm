@@ -18,9 +18,12 @@ export const POST = withErrorHandler('rank-tracker/competitors POST', async (req
   const actor = await getAuthUser(req)
 
   const body = await req.json()
+  // AUDIT #266 — this validated a `name` field the frontend never sends
+  // (it sends `label`, read correctly below) — harmless since `name` isn't
+  // required, just dead/confusing. Validate the field actually used.
   const v = validate(body, {
     domain: { required: true, type: 'string', maxLength: 500 },
-    name:   { type: 'string', maxLength: 200 },
+    label:  { type: 'string', maxLength: 200 },
   })
   if (!v.valid) return validationError(v.error)
 

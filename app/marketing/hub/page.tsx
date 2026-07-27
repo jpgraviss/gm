@@ -28,28 +28,27 @@ export default function MarketingHub() {
   async function loadKPIs() {
     setRefreshing(true)
     try {
-      const [broadcastsRes, formsRes, kws, postsRes] = await Promise.all([
-        fetch('/api/broadcasts').then(r => r.ok ? r.json() : { data: [] }),
-        fetch('/api/forms').then(r => r.ok ? r.json() : { data: [] }),
+      // AUDIT.md #212 — 3 of these 4 tiles used a raw fetch() against
+      // routes cursor-paginated at 100 rows, silently undercounting past
+      // that; only the keywords tile (below) already used fetchAllPages().
+      const [broadcasts, forms, kws, posts] = await Promise.all([
+        fetchAllPages<{ status: string; totalSent?: number }>('/api/broadcasts'),
+        fetchAllPages<{ submissionsCount?: number }>('/api/forms'),
         // /api/rank-tracker/keywords is cursor-paginated (100/page) — fetch
         // the complete count instead of just the first page's length.
         fetchAllPages<unknown>('/api/rank-tracker/keywords'),
-        fetch('/api/social-posts').then(r => r.ok ? r.json() : { data: [] }),
+        fetchAllPages<unknown>('/api/social-posts'),
       ])
 
-      const broadcasts = Array.isArray(broadcastsRes) ? broadcastsRes : (broadcastsRes.data ?? [])
       const sent = broadcasts
-        .filter((b: { status: string }) => b.status === 'sent')
-        .reduce((s: number, b: { totalSent?: number }) => s + (b.totalSent ?? 0), 0)
+        .filter(b => b.status === 'sent')
+        .reduce((s, b) => s + (b.totalSent ?? 0), 0)
       setEmailsSent(sent)
 
-      const forms = Array.isArray(formsRes) ? formsRes : (formsRes.data ?? [])
-      const subs = forms.reduce((s: number, f: { submissionsCount?: number }) => s + (f.submissionsCount ?? 0), 0)
+      const subs = forms.reduce((s, f) => s + (f.submissionsCount ?? 0), 0)
       setFormSubs(subs)
 
       setKeywords(kws.length)
-
-      const posts = Array.isArray(postsRes) ? postsRes : (postsRes.data ?? [])
       setSocialPosts(posts.length)
     } catch { /* non-fatal */ }
     setRefreshing(false)

@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import Header from '@/components/layout/Header'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { useToast } from '@/components/ui/Toast'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, aiSourceLabel } from '@/lib/utils'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { Wand2, Loader2, X, RefreshCw } from 'lucide-react'
 
 type DateRange = '30D' | '90D' | '12M' | 'Custom'
@@ -157,8 +158,8 @@ export default function MarketingAnalyticsPage() {
   function loadData() {
     setLoading(true)
     Promise.all([
-      fetch('/api/broadcasts').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
-      fetch('/api/forms').then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) ? d : d?.data ?? []),
+      fetchAllPages<Broadcast>('/api/broadcasts'),
+      fetchAllPages<FormDef>('/api/forms'),
     ]).then(([b, f]) => {
       if (Array.isArray(b)) setBroadcasts(b)
       if (Array.isArray(f)) setForms(f)
@@ -249,6 +250,7 @@ export default function MarketingAnalyticsPage() {
   const totalFormSubmissions = formStats.reduce((s, f) => s + f.submissions, 0)
 
   const [aiNarrative, setAiNarrative] = useState<string | null>(null)
+  const [aiNarrativeSource, setAiNarrativeSource] = useState<string | undefined>(undefined)
   const [aiNarrativeLoading, setAiNarrativeLoading] = useState(false)
 
   if (loading) return <LoadingScreen />
@@ -397,6 +399,7 @@ export default function MarketingAnalyticsPage() {
                   if (res.ok) {
                     const data = await res.json()
                     setAiNarrative(data.content)
+                    setAiNarrativeSource(data.source)
                   }
                 } catch { /* ignore */ }
                 setAiNarrativeLoading(false)
@@ -410,6 +413,7 @@ export default function MarketingAnalyticsPage() {
           {aiNarrative ? (
             <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg relative">
               <button onClick={() => setAiNarrative(null)} className="absolute top-2 right-2 text-purple-400 hover:text-purple-600"><X size={12} /></button>
+              <p className="text-[11px] font-semibold text-purple-700 mb-1.5">{aiSourceLabel(aiNarrativeSource)}</p>
               <pre className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-sans">{aiNarrative}</pre>
             </div>
           ) : (

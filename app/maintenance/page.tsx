@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { fetchCrmContacts, fetchContracts, fetchInvoices } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, formatDate, getDaysUntil } from '@/lib/utils'
 import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import StatusBadge from '@/components/ui/StatusBadge'
@@ -220,7 +221,7 @@ function MaintenancePanel({
 }: {
   record: MaintenanceRecord
   onClose: () => void
-  onConfirmCancellation: (id: string) => void
+  onConfirmCancellation: (id: string, effectiveDate: string) => void
   onUpdateBilling: (id: string, fee: number, nextDate: string) => void
   onUpdateDocuments: (id: string, documents: MaintenanceRecord['documents']) => void
   onEdit: (record: MaintenanceRecord) => void
@@ -234,8 +235,19 @@ function MaintenancePanel({
   const [newFee, setNewFee] = useState(record.monthlyFee.toString())
   const [newBillingDate, setNewBillingDate] = useState(record.nextBillingDate)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [cancelEffectiveDate, setCancelEffectiveDate] = useState(new Date().toISOString().split('T')[0])
   const [documents, setDocuments] = useState(record.documents ?? [])
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // AUDIT.md #467 — "notice window" is measured against how much advance
+  // notice is actually given: the gap between today (when staff confirm
+  // the cancellation) and the effective date they pick for it, compared to
+  // the record's own `cancellationWindow` days. Falling short of the
+  // window means the client is cancelling with insufficient notice, which
+  // is what the configured `cancellationFee` exists to cover.
+  const cancelNoticeDays = getDaysUntil(cancelEffectiveDate)
+  const cancelFeeAmount = record.cancellationFee ?? record.monthlyFee * 3
+  const cancelFeeApplies = cancelNoticeDays < record.cancellationWindow && cancelFeeAmount > 0
 
   const contact = crmContacts.find(c => c.companyName === record.company && c.isPrimary)
   const contract = contracts.find(c => c.company === record.company && c.serviceType === record.serviceType)
@@ -435,16 +447,40 @@ function MaintenancePanel({
                         </button>
                       )}
                       {showCancelConfirm && (
-                        <div className="mt-2 flex gap-2">
-                          <button
-                            onClick={() => { onConfirmCancellation(record.id); setShowCancelConfirm(false); onClose() }}
-                            className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700"
-                          >
-                            Yes, Cancel Contract
-                          </button>
-                          <button onClick={() => setShowCancelConfirm(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
-                            Keep Active
-                          </button>
+                        <div className="mt-3 flex flex-col gap-2">
+                          <div>
+                            <label className="block text-[10px] text-red-500 uppercase tracking-wide font-semibold mb-1">
+                              Cancellation Effective Date
+                            </label>
+                            <input
+                              type="date"
+                              value={cancelEffectiveDate}
+                              onChange={e => setCancelEffectiveDate(e.target.value)}
+                              className="w-full px-2.5 py-1.5 border border-red-200 rounded-lg text-xs bg-white focus:outline-none focus:border-red-400"
+                            />
+                          </div>
+                          <p className="text-[11px] leading-relaxed">
+                            {cancelFeeApplies ? (
+                              <span className="text-red-700 font-medium">
+                                Only {cancelNoticeDays}d notice given ({record.cancellationWindow}d required) — a {formatCurrency(cancelFeeAmount)} cancellation fee invoice will be created automatically.
+                              </span>
+                            ) : (
+                              <span className="text-red-600">
+                                {cancelNoticeDays}d notice given meets the {record.cancellationWindow}d window — no cancellation fee due.
+                              </span>
+                            )}
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => { onConfirmCancellation(record.id, cancelEffectiveDate); setShowCancelConfirm(false); onClose() }}
+                              className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700"
+                            >
+                              Yes, Cancel Contract
+                            </button>
+                            <button onClick={() => setShowCancelConfirm(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+                              Keep Active
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -625,9 +661,10 @@ export default function MaintenancePage() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
 
   useEffect(() => {
-    fetch('/api/maintenance')
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setRecords(data) })
+    // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+    // rows silently truncated "MRR from Maintenance" past that.
+    fetchAllPages<MaintenanceRecord>('/api/maintenance')
+      .then(setRecords)
       .catch(() => toast('Failed to load maintenance records', 'error'))
       .finally(() => setLoading(false))
     fetchCrmContacts().then(setCrmContacts)
@@ -664,60 +701,203 @@ export default function MaintenancePage() {
   }, [records, tabFilter, searchQuery, activeRecords, expiringIn30, cancelledRecords])
 
   async function handleAddRecord(data: Omit<MaintenanceRecord, 'id'>) {
+    // AUDIT #287 — the 6th handler in this file, missed by #213's fix
+    // batch (which covered edit/cancel/updateBilling/updateDocuments/
+    // delete). On a non-2xx response this pushed the parsed {error: ...}
+    // body into `records` as if it were a real record (crashing at render
+    // when `rec.company[0]` hit undefined); on a thrown/network exception
+    // it fabricated a fake "successfully added" record purely in local
+    // state that was never persisted and silently vanished on reload.
     try {
       const res = await fetch('/api/maintenance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
+      if (!res.ok) throw new Error('Failed')
       const saved = await res.json()
       setRecords(prev => [saved, ...prev])
+      setAddingRecord(false)
     } catch {
-      setRecords(prev => [{ ...data, id: `mr-${Date.now()}` }, ...prev])
+      toast('Failed to add record', 'error')
     }
-    setAddingRecord(false)
   }
 
-  function handleEditRecord(data: Omit<MaintenanceRecord, 'id'>) {
+  // AUDIT.md #213 — all 5 handlers below previously applied their optimistic
+  // update unconditionally and only caught network-level failures, never
+  // checking res.ok — a rejected write (e.g. a 403) showed a false success
+  // while the record was unchanged server-side. Each now reverts the
+  // optimistic state on a non-OK response, matching the pattern
+  // `handleDeleteRecord` already used correctly for its own catch branch.
+  //
+  // AUDIT.md #294 — reverting to a `previous` closure snapshot is itself a
+  // race: if two edits to the same record fire back-to-back and the first
+  // request's failure arrives after the second request already succeeded,
+  // reverting to the first's stale snapshot would clobber the second's
+  // (already-persisted) result in the UI. There's no single-record GET
+  // endpoint for maintenance records, so we fall back to the same
+  // paginated list fetch the page uses on load, but only merge the ONE
+  // affected record's fresh server state back into local state — leaving
+  // every other record (including any other edit that's mid-flight)
+  // untouched, rather than blanket-replacing the array.
+  async function refetchRecord(id: string) {
+    try {
+      const fresh = await fetchAllPages<MaintenanceRecord>('/api/maintenance')
+      const match = fresh.find(r => r.id === id)
+      if (match) {
+        // AUDIT — a failed DELETE calls this too, and the delete handler
+        // already optimistically filtered the id out of `records` before
+        // the failure was caught, so it's no longer in `prev` for .map()
+        // to find and replace — the server-confirmed-still-existing record
+        // was silently never restored, contradicting the failure toast.
+        // Re-insert when it's missing instead of assuming it's present.
+        setRecords(prev => prev.some(r => r.id === id) ? prev.map(r => r.id === id ? match : r) : [match, ...prev])
+        setSelected(prev => prev?.id === id ? match : prev)
+      } else {
+        // No longer exists server-side (e.g. it really was deleted).
+        setRecords(prev => prev.filter(r => r.id !== id))
+        setSelected(prev => prev?.id === id ? null : prev)
+      }
+    } catch {
+      // Best-effort reconciliation; if this also fails we simply leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }
+
+  async function handleEditRecord(data: Omit<MaintenanceRecord, 'id'>) {
     if (!editingRecord) return
+    const previous = editingRecord
     setRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...data } : r))
-    fetch(`/api/maintenance/${editingRecord.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).catch(() => toast('Failed to save maintenance record changes', 'error'))
     setEditingRecord(null)
     setSelected(null)
+    try {
+      const res = await fetch(`/api/maintenance/${previous.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      await refetchRecord(previous.id)
+      toast('Failed to save maintenance record changes', 'error')
+    }
   }
 
-  function confirmCancellation(id: string) {
+  // AUDIT.md #467 — confirming a cancellation previously just PATCHed
+  // status: 'Cancelled' with no check of the record's own Cancellation
+  // Terms (notice-window days + fee) and no invoice ever generated for
+  // that fee. Now: the notice window is measured against the effective
+  // date staff pick in the confirm UI vs. today — falling short of
+  // `cancellationWindow` days auto-creates a real fee invoice via the
+  // same POST /api/invoices endpoint used by the Billing page's
+  // "Create Invoice from Unbilled Time" flow (#421). Sufficient notice
+  // means no fee, cancel proceeds normally either way.
+  async function confirmCancellation(id: string, effectiveDate: string) {
+    const record = records.find(r => r.id === id)
     setRecords(prev => prev.map(r => r.id === id ? { ...r, status: 'Cancelled' } : r))
-    fetch(`/api/maintenance/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'Cancelled' }),
-    }).catch(() => toast('Failed to confirm cancellation', 'error'))
     setSelected(null)
+    try {
+      const res = await fetch(`/api/maintenance/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Cancelled' }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      await refetchRecord(id)
+      toast('Failed to confirm cancellation', 'error')
+      return
+    }
+
+    if (!record) {
+      // Shouldn't happen (the panel can only be opened on a record already
+      // in local state), but without it we have no cancellationWindow/fee
+      // to check against — don't guess at a fee.
+      toast('Cancelled — could not verify cancellation fee terms', 'info')
+      return
+    }
+
+    const noticeDays = getDaysUntil(effectiveDate)
+    const feeAmount = record.cancellationFee ?? record.monthlyFee * 3
+    const feeApplies = noticeDays < record.cancellationWindow && feeAmount > 0
+
+    if (!feeApplies) {
+      toast('Cancelled — no fee due, sufficient notice given', 'success')
+      return
+    }
+
+    // AUDIT.md #418 — manually-created records frequently have a null
+    // companyId (AddRecordPanel only ever captured the company name).
+    // POST /api/invoices already tolerates a null/omitted companyId
+    // (companyId ?? null) — the same tolerance the #421 "Create Invoice
+    // from Unbilled Time" flow relies on, since it never sends companyId
+    // either. We follow that established convention rather than blocking
+    // auto-invoicing outright, but the success toast calls out the gap so
+    // staff know to double-check it lands in the right client's portal.
+    try {
+      const dueDate = (() => {
+        const d = new Date()
+        d.setDate(d.getDate() + 30)
+        return d.toISOString().split('T')[0]
+      })()
+      const invRes = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: record.company,
+          ...(record.companyId ? { companyId: record.companyId } : {}),
+          amount: feeAmount,
+          serviceType: record.serviceType,
+          dueDate,
+        }),
+      })
+      if (!invRes.ok) throw new Error('Failed')
+      const newInvoice = await invRes.json()
+      setInvoices(prev => [newInvoice, ...prev])
+      toast(
+        record.companyId
+          ? `Cancellation fee invoice created — ${formatCurrency(feeAmount)} (only ${noticeDays}d notice given, ${record.cancellationWindow}d required)`
+          : `Cancellation fee invoice created — ${formatCurrency(feeAmount)} (record has no linked company — verify it appears in the right client's billing)`,
+        'success',
+      )
+    } catch {
+      toast(
+        `Cancelled, but failed to auto-create the ${formatCurrency(feeAmount)} cancellation fee invoice (insufficient notice: ${noticeDays}d of ${record.cancellationWindow}d required) — please invoice manually`,
+        'error',
+      )
+    }
   }
 
-  function updateBilling(id: string, fee: number, nextDate: string) {
+  async function updateBilling(id: string, fee: number, nextDate: string) {
     setRecords(prev => prev.map(r => r.id === id ? { ...r, monthlyFee: fee, nextBillingDate: nextDate } : r))
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, monthlyFee: fee, nextBillingDate: nextDate } : prev)
-    fetch(`/api/maintenance/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ monthlyFee: fee, nextBillingDate: nextDate }),
-    }).catch(() => toast('Failed to update billing details', 'error'))
+    try {
+      const res = await fetch(`/api/maintenance/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monthlyFee: fee, nextBillingDate: nextDate }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      await refetchRecord(id)
+      toast('Failed to update billing details', 'error')
+    }
   }
 
-  function updateDocuments(id: string, documents: MaintenanceRecord['documents']) {
+  async function updateDocuments(id: string, documents: MaintenanceRecord['documents']) {
     setRecords(prev => prev.map(r => r.id === id ? { ...r, documents } : r))
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, documents } : prev)
-    fetch(`/api/maintenance/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ documents }),
-    }).catch(() => toast('Failed to save document', 'error'))
+    try {
+      const res = await fetch(`/api/maintenance/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documents }),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      await refetchRecord(id)
+      toast('Failed to save document', 'error')
+    }
   }
 
   async function handleDeleteRecord(id: string) {
@@ -725,9 +905,11 @@ export default function MaintenancePage() {
     setRecords(prev => prev.filter(r => r.id !== id))
     setSelected(null)
     try {
-      await fetch(`/api/maintenance/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/maintenance/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed')
       toast('Maintenance record deleted', 'success')
     } catch {
+      await refetchRecord(id)
       toast('Failed to delete maintenance record', 'error')
     }
   }

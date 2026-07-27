@@ -77,7 +77,7 @@ export const POST = withErrorHandler('portal-clients/approve POST', async (req) 
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
                 <td align="center">
-                  <a href="${appUrl}/portal" style="display:inline-block;background:${settings.branding.primaryColor};color:#ffffff;font-size:14px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
+                  <a href="${appUrl}/client" style="display:inline-block;background:${settings.branding.primaryColor};color:#ffffff;font-size:14px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;">
                     Sign In to Your Portal &rarr;
                   </a>
                 </td>

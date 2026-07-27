@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   ArrowLeft, BookOpen, CheckCircle, Circle, Play, FileText,
   HelpCircle, Award, ChevronLeft, ChevronRight,
@@ -38,10 +39,32 @@ interface Enrollment {
   status: string
 }
 
+// AUDIT.md #491 — the client never receives `correctIndex` anymore (see
+// mapCourse/stripQuizAnswers in app/api/courses/[id]/route.ts), so the
+// pre-submission question shape genuinely doesn't have it.
 interface QuizQuestion {
   question: string
   options: string[]
+}
+
+// The post-submission review shape DOES include correctIndex — it comes
+// back from POST /api/courses/[id]/quiz/[moduleId]/grade only after the
+// server has graded the real answers, never before.
+interface GradedQuestion {
+  question: string
+  options: string[]
   correctIndex: number
+  selected: number | null
+  isCorrect: boolean
+}
+
+interface GradeResult {
+  score: number
+  total: number
+  threshold: number
+  passed: boolean
+  results: GradedQuestion[]
+  enrollment: Enrollment | null
 }
 
 function extractVideoId(url: string): { type: 'youtube' | 'vimeo' | 'unknown'; id: string } {
@@ -106,18 +129,30 @@ function TextContent({ content }: { content: string }) {
 
 function QuizContent({
   content,
+  courseId,
   moduleId,
+  enrollmentId,
   isCompleted,
-  onComplete,
+  onGraded,
 }: {
   content: string
+  courseId: string
   moduleId: string
+  enrollmentId: string | null
   isCompleted: boolean
-  onComplete: () => void
+  onGraded: (enrollment: Enrollment | null) => void
 }) {
+  const { toast } = useToast()
   const [answers, setAnswers] = useState<Record<number, number>>({})
+  // AUDIT.md #491 — grading now happens on the server, which is the only
+  // place the real correctIndex values live. `submitted` starts true when
+  // the enrollment already shows this module complete purely so a
+  // previously-passed quiz renders in its answered state on reload — there
+  // is no locally cached score to show in that case (only the server has
+  // one), so `result` stays null until the student actually re-submits.
   const [submitted, setSubmitted] = useState(isCompleted)
-  const [score, setScore] = useState<{ correct: number; total: number } | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult] = useState<GradeResult | null>(null)
 
   const questions: QuizQuestion[] = useMemo(() => {
     try {
@@ -132,77 +167,96 @@ function QuizContent({
     return <p className="text-sm text-gray-400 text-center py-8">No quiz questions available.</p>
   }
 
-  function handleSubmit() {
-    let correct = 0
-    questions.forEach((q, i) => {
-      if (answers[i] === q.correctIndex) correct++
-    })
-    setScore({ correct, total: questions.length })
-    setSubmitted(true)
-    if (correct >= Math.ceil(questions.length * 0.6)) {
-      onComplete()
+  async function handleSubmit() {
+    setSubmitting(true)
+    try {
+      const res = await fetch(`/api/courses/${courseId}/quiz/${moduleId}/grade`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(enrollmentId ? { enrollmentId } : {}),
+          answers,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to grade quiz')
+      }
+      const graded: GradeResult = await res.json()
+      setResult(graded)
+      setSubmitted(true)
+      onGraded(graded.enrollment)
+    } catch (e) {
+      toast((e as Error).message || 'Failed to submit quiz', 'error')
     }
+    setSubmitting(false)
   }
 
   return (
     <div className="flex flex-col gap-6">
-      {questions.map((q, qi) => (
-        <div key={qi} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-          <p className="text-sm font-semibold text-gray-800 mb-3">
-            {qi + 1}. {q.question}
-          </p>
-          <div className="flex flex-col gap-2">
-            {q.options.map((opt, oi) => {
-              const isSelected = answers[qi] === oi
-              const isCorrect = submitted && oi === q.correctIndex
-              const isWrong = submitted && isSelected && oi !== q.correctIndex
-              return (
-                <label
-                  key={oi}
-                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-all ${
-                    isCorrect ? 'border-green-400 bg-green-50' :
-                    isWrong ? 'border-red-400 bg-red-50' :
-                    isSelected ? 'border-emerald-500 bg-emerald-50' :
-                    'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name={`q-${moduleId}-${qi}`}
-                    checked={isSelected}
-                    onChange={() => !submitted && setAnswers({ ...answers, [qi]: oi })}
-                    disabled={submitted}
-                    className="accent-emerald-600"
-                  />
-                  <span className={`text-sm ${isCorrect ? 'text-green-700 font-medium' : isWrong ? 'text-red-600' : 'text-gray-700'}`}>
-                    {opt}
-                  </span>
-                </label>
-              )
-            })}
+      {questions.map((q, qi) => {
+        const graded = result?.results[qi]
+        return (
+          <div key={qi} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+            <p className="text-sm font-semibold text-gray-800 mb-3">
+              {qi + 1}. {q.question}
+            </p>
+            <div className="flex flex-col gap-2">
+              {q.options.map((opt, oi) => {
+                const isSelected = answers[qi] === oi
+                // Correct/incorrect highlighting only exists once the server
+                // has returned a graded review for this attempt — before
+                // that, the client has no correctIndex to compare against.
+                const isCorrect = !!graded && oi === graded.correctIndex
+                const isWrong = !!graded && isSelected && oi !== graded.correctIndex
+                return (
+                  <label
+                    key={oi}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-all ${
+                      isCorrect ? 'border-green-400 bg-green-50' :
+                      isWrong ? 'border-red-400 bg-red-50' :
+                      isSelected ? 'border-emerald-500 bg-emerald-50' :
+                      'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name={`q-${moduleId}-${qi}`}
+                      checked={isSelected}
+                      onChange={() => !submitted && setAnswers({ ...answers, [qi]: oi })}
+                      disabled={submitted}
+                      className="accent-emerald-600"
+                    />
+                    <span className={`text-sm ${isCorrect ? 'text-green-700 font-medium' : isWrong ? 'text-red-600' : 'text-gray-700'}`}>
+                      {opt}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
       {!submitted ? (
         <button
           onClick={handleSubmit}
-          disabled={Object.keys(answers).length < questions.length}
+          disabled={submitting || Object.keys(answers).length < questions.length}
           className="self-end px-6 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
           style={{ background: '#015035' }}
         >
-          Submit Answers
+          {submitting ? 'Submitting...' : 'Submit Answers'}
         </button>
-      ) : score && (
-        <div className={`p-4 rounded-xl border text-center ${score.correct >= Math.ceil(score.total * 0.6) ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+      ) : result && (
+        <div className={`p-4 rounded-xl border text-center ${result.passed ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
           <p className="text-sm font-semibold">
-            Score: {score.correct}/{score.total} ({Math.round((score.correct / score.total) * 100)}%)
+            Score: {result.score}/{result.total} ({Math.round((result.score / result.total) * 100)}%)
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            {score.correct >= Math.ceil(score.total * 0.6) ? 'Passed! Module marked complete.' : 'You need 60% to pass. Try again.'}
+            {result.passed ? 'Passed! Module marked complete.' : 'You need 60% to pass. Try again.'}
           </p>
-          {score.correct < Math.ceil(score.total * 0.6) && (
+          {!result.passed && (
             <button
-              onClick={() => { setAnswers({}); setSubmitted(false); setScore(null) }}
+              onClick={() => { setAnswers({}); setSubmitted(false); setResult(null) }}
               className="mt-2 text-xs font-medium text-emerald-600 hover:underline"
             >
               Retry Quiz
@@ -235,20 +289,18 @@ export default function CourseViewerPage() {
         const courseData: Course = await courseRes.json()
         setCourse(courseData)
 
+        // AUDIT #275 — GET /api/courses/[id]/enrollments returns a bare
+        // array via paginatedJson(), not {data: [...]}; reading .data off
+        // it was always undefined, so `enrollment` never resolved and
+        // progress tracking/quiz completion were unreachable.
         if (enrollmentId) {
-          const enrRes = await fetch(`/api/courses/${id}/enrollments?limit=200`)
-          if (enrRes.ok) {
-            const enrData = await enrRes.json()
-            const found = (enrData.data ?? []).find((e: Enrollment) => e.id === enrollmentId)
-            if (found) setEnrollment(found)
-          }
+          const enrData = await fetchAllPages<Enrollment>(`/api/courses/${id}/enrollments`).catch(() => [])
+          const found = enrData.find(e => e.id === enrollmentId)
+          if (found) setEnrollment(found)
         } else if (user?.email) {
-          const enrRes = await fetch(`/api/courses/${id}/enrollments?limit=200`)
-          if (enrRes.ok) {
-            const enrData = await enrRes.json()
-            const found = (enrData.data ?? []).find((e: Enrollment) => e.studentEmail === user.email)
-            if (found) setEnrollment(found)
-          }
+          const enrData = await fetchAllPages<Enrollment>(`/api/courses/${id}/enrollments`).catch(() => [])
+          const found = enrData.find(e => e.studentEmail === user.email)
+          if (found) setEnrollment(found)
         }
       } catch {
         toast('Failed to load course', 'error')
@@ -434,9 +486,11 @@ export default function CourseViewerPage() {
                 {activeModule.type === 'quiz' && (
                   <QuizContent
                     content={activeModule.content}
+                    courseId={course.id}
                     moduleId={activeModule.id}
+                    enrollmentId={enrollment?.id ?? null}
                     isCompleted={completedModules.has(activeModule.id)}
-                    onComplete={() => markModuleComplete(activeModule.id)}
+                    onGraded={(updated) => { if (updated) setEnrollment(updated) }}
                   />
                 )}
               </div>

@@ -23,6 +23,12 @@ export const GET = withErrorHandler('rank-tracker/export GET', async (req) => {
   if (clientId) query = query.eq('company_id', clientId)
   if (tag) query = query.contains('tags', [tag])
 
+  // AUDIT — this export had no row cap at all, unlike the sibling
+  // app/api/admin/export/route.ts (.limit(10000)), so a large org could
+  // silently get a truncated CSV (Supabase's own default row cap) with no
+  // indication anything was cut off. Cap explicitly, matching the sibling.
+  query = query.limit(10000)
+
   const { data, error } = await query
   if (error) {
     throw new Error(error?.message || 'Failed to export keywords')

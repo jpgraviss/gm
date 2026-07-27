@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import {
   getValidAccessToken,
+  getGoogleBusySlots,
+  computeAvailableSlots,
   createGoogleEvent,
   type CalendarSettings,
 } from '@/lib/google-calendar'
@@ -103,15 +105,66 @@ export const POST = withErrorHandler('bookings POST', async (req) => {
     return NextResponse.json({ error: 'Cannot book a time in the past' }, { status: 400 })
   }
 
-  // Double-check slot is still available (prevent race conditions)
+  // AUDIT #480 — this route never re-validated the submitted time against
+  // available_days/business hours or live Google Calendar busy slots at
+  // write time; it only checked conflicts against other rows in its own
+  // table (the block below). The newer /go/book flow was hardened for
+  // exactly this (#196/#228), but this legacy route wasn't, so a caller
+  // bypassing the UI's slot picker (GET /api/calendar/slots, which
+  // already uses computeAvailableSlots) could create a confirmed booking
+  // — a real Google Calendar event, Meet link, and email — outside
+  // business hours or already-busy on the connected calendar. Reuses the
+  // exact same computeAvailableSlots helper the slot picker itself calls
+  // (rather than duplicating the day/hour/busy-slot logic here), so this
+  // can't drift from what a guest is actually shown as bookable.
+  const accessToken = await getValidAccessToken(settings as CalendarSettings)
+  let googleBusySlots: { start: string; end: string }[] = []
+  if (accessToken) {
+    try {
+      googleBusySlots = await getGoogleBusySlots(accessToken, date, settings.timezone)
+    } catch (e) {
+      console.error('[bookings POST] Google Calendar busy check failed:', e)
+    }
+  }
+
+  const { data: existingBookingsForDate } = await db
+    .from('bookings')
+    .select('start_time, end_time')
+    .eq('calendar_slug', calendarSlug)
+    .eq('date', date)
+    .eq('status', 'confirmed')
+
+  const availableSlots = computeAvailableSlots(
+    date,
+    settings as CalendarSettings,
+    googleBusySlots,
+    existingBookingsForDate ?? [],
+  )
+  const requestedSlotIsAvailable = availableSlots.some(
+    s => s.start === startTime && s.end === endTime,
+  )
+  if (!requestedSlotIsAvailable) {
+    return NextResponse.json(
+      { error: 'This time is outside available hours or no longer available. Please choose another.' },
+      { status: 409 },
+    )
+  }
+
+  // Double-check slot is still available (prevent race conditions).
+  // AUDIT — this used inclusive lte/gte boundaries, but the slot picker a
+  // guest actually sees (computeAvailableSlots / the GET handlers below)
+  // uses strict less-than/greater-than to decide overlap — a slot picked
+  // immediately back-to-back with another confirmed booking (any type with
+  // buffer_minutes: 0) showed as free but this write-time check falsely
+  // flagged it as a conflict every time. lt/gt matches the read side.
   const { data: conflict } = await db
     .from('bookings')
     .select('id')
     .eq('calendar_slug', calendarSlug)
     .eq('date', date)
     .eq('status', 'confirmed')
-    .lte('start_time', endTime)
-    .gte('end_time', startTime)
+    .lt('start_time', endTime)
+    .gt('end_time', startTime)
     .limit(1)
 
   if (conflict && conflict.length > 0) {
@@ -122,10 +175,10 @@ export const POST = withErrorHandler('bookings POST', async (req) => {
   }
 
   // Create Google Calendar event if connected
+  // (accessToken already fetched above for the availability re-check)
   let googleEventId: string | null = null
   let meetLink: string | null = null
 
-  const accessToken = await getValidAccessToken(settings as CalendarSettings)
   if (accessToken) {
     try {
       const result = await createGoogleEvent(accessToken, {

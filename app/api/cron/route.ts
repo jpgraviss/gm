@@ -5,10 +5,24 @@ import { fireAutomations } from '@/lib/automations-engine'
 import { checkSite, recordCheck, computeUptime30d, type MonitoredSiteRow } from '@/lib/uptime'
 import { checkAllRanks, sendDueScheduledReports } from '@/lib/rank-tracker'
 import { publishSocialPost } from '@/lib/social-publish'
-import { processScheduledEmails } from '@/lib/email-scheduler'
+import { processScheduledEmails, rescueStuckSendingEmails } from '@/lib/email-scheduler'
 import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender'
 import { syncGranolaNotes, isGranolaConfigured } from '@/lib/granola'
 import { dispatchReviewCampaign } from '@/lib/review-campaigns'
+import { sendBroadcastNow } from '@/lib/broadcasts'
+
+// AUDIT — dispatchScheduledBroadcasts (added below) runs the same
+// sequentially-chunked email-sending workload that app/api/broadcasts/
+// [id]/send/route.ts declares its own 300s maxDuration for, but as the
+// 12th of 12 jobs already running in this single request. Declaring the
+// same budget here doesn't guarantee every job fits, but it stops the
+// platform's undeclared default from being the limiting factor —
+// combined with dispatchScheduledBroadcasts's own small per-tick limit
+// and this endpoint's every-5-minutes real cadence (.github/workflows/
+// cron-ping.yml), a broadcast that doesn't finish this tick is picked up
+// again shortly, same bounded-batch pattern already used by
+// checkAllRanks()/rankCheckDue() below.
+export const maxDuration = 300
 
 /**
  * Cron endpoint — called on a schedule (e.g. every 6 hours via Vercel Cron).
@@ -137,6 +151,23 @@ export const GET = withErrorHandler('cron GET', async (req) => {
     results.rankTracker = { error: 'Failed' }
   }
 
+  // 6b. Rescue scheduled_emails rows left stuck in 'sending' — the pending
+  //     -> sending claim in processScheduledEmails has no corresponding
+  //     recovery if the request/serverless function is killed mid-loop
+  //     (a real risk chained as one of 12+ jobs in this same invocation);
+  //     those rows would otherwise be permanently excluded from future
+  //     claims (which only ever look at status='pending') and invisible in
+  //     the UI. Mirrors dispatchScheduledBroadcasts's stuck-'sending'
+  //     recovery below. Run before processScheduledEmails so a rescued row
+  //     is immediately eligible for (re)claim in the same tick instead of
+  //     waiting for the next one.
+  try {
+    results.rescuedScheduledEmails = await rescueStuckSendingEmails()
+  } catch (err) {
+    console.error('[cron] Rescue of stuck scheduled emails failed:', err)
+    results.rescuedScheduledEmails = { error: 'Failed' }
+  }
+
   // 7. Process scheduled/recurring emails that are due.
   try {
     results.scheduledEmails = await processScheduledEmails()
@@ -186,6 +217,14 @@ export const GET = withErrorHandler('cron GET', async (req) => {
     results.rankTrackerReports = { error: 'Failed' }
   }
 
+  // 12. Dispatch scheduled broadcasts whose scheduled_at has passed.
+  try {
+    results.broadcasts = await dispatchScheduledBroadcasts()
+  } catch (err) {
+    console.error('[cron] Scheduled broadcast dispatch failed:', err)
+    results.broadcasts = { error: 'Failed' }
+  }
+
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })
 })
 
@@ -225,7 +264,11 @@ async function dispatchScheduledReviewCampaigns(): Promise<{ dispatched: number;
       const result = await dispatchReviewCampaign(db, claimed)
       sent += result.sent
       failed += result.failed
-      await db.from('review_campaigns').update({ status: 'sent' }).eq('id', claimed.id)
+      // AUDIT — same bug as the manual-dispatch path in
+      // app/api/reputation/requests/route.ts (#335): dispatchReviewCampaign
+      // catches per-recipient failures internally and just returns counts,
+      // so an empty audience or every send failing still marked 'sent'.
+      await db.from('review_campaigns').update({ status: result.sent > 0 ? 'sent' : 'failed' }).eq('id', claimed.id)
     } catch (err) {
       console.error('[cron] Failed to dispatch review campaign', claimed.id, err)
       // Leave it claimable again rather than stuck 'active' forever.
@@ -238,34 +281,102 @@ async function dispatchScheduledReviewCampaigns(): Promise<{ dispatched: number;
 }
 
 /**
- * Determine if we should run the daily rank-tracking job on this cron tick.
- * Returns true when the most recently-checked tracked keyword was checked
- * before the start of today (UTC) — i.e., we have not yet run today.
+ * Send broadcasts whose scheduled_at has arrived. `app/marketing/page.tsx`'s
+ * scheduleSend() sets status: 'scheduled' and shows a "Scheduled for..."
+ * success toast implying real, automated delivery, but nothing anywhere
+ * ever transitioned a broadcast out of 'scheduled' — it sat forever with no
+ * error surfaced. Same dead-feature pattern already fixed for Rank
+ * Tracker's Scheduled Reports (#112) and Review Campaigns (#111) above;
+ * this sibling instance was missed. Each row is claimed atomically
+ * (status 'scheduled' -> 'sending', only proceeding if the update actually
+ * returned a row) so two overlapping cron ticks can't both send it twice.
+ */
+async function dispatchScheduledBroadcasts(): Promise<{ dispatched: number; sent: number; failed: number }> {
+  const db = createServiceClient()
+  const now = new Date().toISOString()
+
+  // Kept small — this runs as the last of 12 sequential jobs in one cron
+  // tick with no per-job time budget, and each broadcast here can itself
+  // be a full chunked audience send. A small per-tick cap plus the
+  // every-5-minute real cadence (.github/workflows/cron-ping.yml) works
+  // through a backlog the same way checkAllRanks()/rankCheckDue() below
+  // does, instead of risking one tick running long enough to hit the
+  // platform's hard timeout mid-send.
+  const { data: due } = await db
+    .from('broadcasts')
+    .select('id')
+    .eq('status', 'scheduled')
+    .lte('scheduled_at', now)
+    .limit(3)
+
+  let dispatched = 0
+  let sent = 0
+  let failed = 0
+
+  for (const row of due ?? []) {
+    const { data: claimed } = await db
+      .from('broadcasts')
+      .update({ status: 'sending', sent_at: now })
+      .eq('id', row.id)
+      .eq('status', 'scheduled')
+      .select('*')
+      .maybeSingle()
+    if (!claimed) continue
+
+    dispatched++
+    try {
+      const result = await sendBroadcastNow(db, claimed)
+      sent += result.sent
+      if (result.sent === 0 && result.total > 0) failed++
+    } catch (err) {
+      console.error('[cron] Failed to send scheduled broadcast', claimed.id, err)
+      // sendBroadcastNow already sets status: 'failed' itself for a
+      // deterministic error (e.g. the contact query erroring) before
+      // re-throwing — resetting to 'scheduled' unconditionally here would
+      // clobber that and silently retry the same permanent failure forever.
+      // Only reclaim it if it's still sitting in 'sending' (a genuinely
+      // transient failure — a thrown network/timeout error mid-send that
+      // never got to set any status of its own).
+      await db.from('broadcasts').update({ status: 'scheduled' }).eq('id', claimed.id).eq('status', 'sending')
+      failed++
+    }
+  }
+
+  return { dispatched, sent, failed }
+}
+
+/**
+ * Determine if we should run the rank-tracking job on this cron tick.
+ *
+ * AUDIT #347 — this previously checked only whether the single MOST
+ * RECENTLY checked keyword ran today, which meant one batch of 25 (however
+ * many keywords a workspace tracks) made this return false for the rest of
+ * the day: the 25 just-checked keywords sort newest, so the "most recent"
+ * check always looked satisfied even with hundreds of other keywords still
+ * stale from days ago. checkAllRanks() itself is intentionally batched
+ * (bounded per tick so a single cron invocation can't run too long or
+ * hammer GSC), so the "due" check has to ask "does ANY keyword still need
+ * checking today", not "did the job run at all today" — cron fires every 5
+ * minutes (.github/workflows/cron-ping.yml), so this now runs another
+ * batch on every tick until every tracked keyword has been refreshed for
+ * the day, then correctly goes quiet (avoiding wasted GSC quota) for the
+ * rest of it.
  */
 async function rankCheckDue(): Promise<boolean> {
   const db = createServiceClient()
-  const { data, error } = await db
+  const startOfUtcDay = new Date()
+  startOfUtcDay.setUTCHours(0, 0, 0, 0)
+
+  const { count, error } = await db
     .from('tracked_keywords')
-    .select('last_checked_at')
-    .order('last_checked_at', { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle()
+    .select('id', { count: 'exact', head: true })
+    .or(`last_checked_at.is.null,last_checked_at.lt.${startOfUtcDay.toISOString()}`)
 
   if (error) {
     console.error('[cron] rankCheckDue query failed:', error)
     return false
   }
-  // No tracked keywords yet — nothing to do, but still "due" is fine; the
-  // job is a cheap no-op.
-  if (!data?.last_checked_at) return true
-
-  const last = new Date(data.last_checked_at)
-  const now = new Date()
-  const sameUtcDay =
-    last.getUTCFullYear() === now.getUTCFullYear() &&
-    last.getUTCMonth() === now.getUTCMonth() &&
-    last.getUTCDate() === now.getUTCDate()
-  return !sameUtcDay
+  return (count ?? 0) > 0
 }
 
 /**
@@ -286,6 +397,7 @@ async function runUptimeChecks(): Promise<{ checked: number; skipped: number; er
   }
 
   const now = Date.now()
+  const nowIso = new Date(now).toISOString()
   let checked = 0
   let skipped = 0
   let errors = 0
@@ -298,6 +410,22 @@ async function runUptimeChecks(): Promise<{ checked: number; skipped: number; er
         skipped++
         continue
       }
+    }
+
+    // Atomic claim, conditioned on last_check_at still matching what we just
+    // read — matches the claim-before-work pattern already used elsewhere in
+    // this file (resumePendingAutomationSteps, dispatchScheduledReviewCampaigns).
+    // Without it, an overlapping cron tick (GH Actions pings every 5 min with
+    // its own retry, no execution-time guard) can read the same stale
+    // last_check_at and double-check the same site, sending a duplicate down
+    // alert and writing a duplicate uptime_checks row.
+    const claimQuery = db.from('monitored_sites').update({ last_check_at: nowIso }).eq('id', site.id)
+    const { data: claimed } = await (
+      site.last_check_at ? claimQuery.eq('last_check_at', site.last_check_at) : claimQuery.is('last_check_at', null)
+    ).select('id').maybeSingle()
+    if (!claimed) {
+      skipped++
+      continue
     }
 
     try {

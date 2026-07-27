@@ -2,54 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
-
-const DEFAULT_PIPELINES = [
-  {
-    id: 'client-acquisition',
-    name: 'Client Acquisition',
-    stages: [
-      { id: 'ca-0', name: 'Lead', color: '#9ca3af', probability: 10 },
-      { id: 'ca-1', name: 'Qualified', color: '#3b82f6', probability: 25 },
-      { id: 'ca-2', name: 'Proposal Sent', color: '#f59e0b', probability: 50 },
-      { id: 'ca-3', name: 'Contract Sent', color: '#f97316', probability: 75 },
-      { id: 'ca-4', name: 'Closed Won', color: '#22c55e', probability: 100 },
-      { id: 'ca-5', name: 'Closed Lost', color: '#ef4444', probability: 0 },
-    ],
-  },
-  {
-    id: 'clients',
-    name: 'Clients',
-    stages: [
-      { id: 'cl-0', name: 'Onboarding', color: '#3b82f6', probability: 100 },
-      { id: 'cl-1', name: 'Active', color: '#22c55e', probability: 100 },
-      { id: 'cl-2', name: 'At Risk', color: '#f59e0b', probability: 50 },
-      { id: 'cl-3', name: 'Churned', color: '#ef4444', probability: 0 },
-    ],
-  },
-  {
-    id: 'contract-archive',
-    name: 'Contract Archive',
-    stages: [
-      { id: 'ar-0', name: 'Draft', color: '#9ca3af', probability: 0 },
-      { id: 'ar-1', name: 'Sent', color: '#3b82f6', probability: 0 },
-      { id: 'ar-2', name: 'Signed', color: '#22c55e', probability: 100 },
-      { id: 'ar-3', name: 'Expired', color: '#ef4444', probability: 0 },
-    ],
-  },
-]
-
-interface PipelineStage {
-  id: string
-  name: string
-  color: string
-  probability?: number
-}
-
-interface Pipeline {
-  id: string
-  name: string
-  stages: PipelineStage[]
-}
+import { DEFAULT_PIPELINES, type Pipeline } from '@/lib/pipelines'
 
 export const GET = withErrorHandler('pipelines GET', async (req) => {
   const denied = await requireRole(req, 'Team Member')

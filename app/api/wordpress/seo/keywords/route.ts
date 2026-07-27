@@ -35,13 +35,13 @@ interface TrackedKeywordRow {
  * client-side (no shared server function existed to call instead).
  */
 export const GET = withErrorHandler('wordpress/seo/keywords GET', async (req) => {
-  const denied = await requireWordPressAuth(req)
-  if (denied) return denied
-
   const siteUrl = req.nextUrl.searchParams.get('site')
   if (!siteUrl) {
     return NextResponse.json({ error: 'site query param is required' }, { status: 400 })
   }
+
+  const denied = await requireWordPressAuth(req, siteUrl)
+  if (denied) return denied
 
   const db = createServiceClient()
 

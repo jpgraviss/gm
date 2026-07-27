@@ -50,6 +50,7 @@ export async function analyzeSocialPresence(
       }],
       maxTokens: 600,
       fast: true,
+      feature: 'social_analysis',
     })
 
     if (result.source !== 'none' && result.text) {

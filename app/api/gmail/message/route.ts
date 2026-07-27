@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
+import { createServiceClient } from '@/lib/supabase'
+import { resolveGmailSettings } from '@/lib/gmail-settings'
+import { extractEmailAddress } from '@/lib/gmail-fetch'
+import { sendPushNotification } from '@/lib/push-notifications'
 
 function decodeBase64Url(str: string): string {
   try {
@@ -60,6 +65,22 @@ interface GmailPayload {
 }
 
 export const POST = withErrorHandler('gmail/message POST', async (req) => {
+  // AUDIT #254 — same identity-check gap as gmail/messages POST.
+  const callerEmail = await getAuthenticatedEmail(req)
+  if (!callerEmail) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  // AUDIT #284 — same suspended-status gap as gmail/messages POST.
+  const db = createServiceClient()
+  const { data: member } = await db
+    .from('team_members')
+    .select('id, name, status, gmail_email, gmail_settings')
+    .eq('email', callerEmail)
+    .maybeSingle()
+  if (member && member.status !== 'active') {
+    return NextResponse.json({ error: 'Account is not active' }, { status: 403 })
+  }
+
   try {
     const { accessToken, id } = await req.json()
 
@@ -93,6 +114,71 @@ export const POST = withErrorHandler('gmail/message POST', async (req) => {
     }
 
     const { text, html } = extractBody(msg.payload ?? {})
+
+    // ── AUDIT.md #407 — autoLogInbound / notifyOnReply enforcement. Opening
+    // a message here (full headers + threadId available) is the real
+    // "inbound" checkpoint for the native Gmail-connected inbox — there's no
+    // background sync/webhook for it (app/inbox/page.tsx always fetches
+    // live from the Gmail API on demand, never mirrors into Postgres), so
+    // this fires once per message the user actually opens, not the instant
+    // it arrives. Best-effort throughout: a failure here must never turn a
+    // successful message-detail fetch into an error response.
+    if (member) {
+      const selfEmail = (member.gmail_email ?? callerEmail).toLowerCase()
+      const senderEmail = extractEmailAddress(headers['from'] ?? '')
+      if (senderEmail && senderEmail !== selfEmail) {
+        const gmailSettings = resolveGmailSettings(member.gmail_settings)
+        try {
+          if (gmailSettings.autoLogInbound || gmailSettings.notifyOnReply) {
+            const { data: contact } = await db
+              .from('crm_contacts')
+              .select('id, company_id, full_name')
+              .contains('emails', [senderEmail])
+              .maybeSingle()
+
+            if (gmailSettings.autoLogInbound && contact?.id) {
+              const { error: logErr } = await db.from('crm_activities').insert({
+                id: `gmail_${msg.id}`,
+                type: 'email',
+                title: `Email: ${headers['subject'] ?? '(no subject)'}`,
+                company_id: contact.company_id,
+                contact_id: contact.id,
+                contact_name: contact.full_name ?? null,
+                user_name: member.name ?? 'System',
+                timestamp: new Date().toISOString(),
+              })
+              // 23505 = already logged (manually via the Inbox "Log as
+              // Activity" button, or a previous auto-log pass) — not a
+              // real failure.
+              if (logErr && logErr.code !== '23505') {
+                console.error('[gmail/message] auto-log-inbound failed:', logErr)
+              }
+            }
+
+            if (gmailSettings.notifyOnReply) {
+              const { data: threadSend } = await db
+                .from('tracked_emails')
+                .select('id')
+                .eq('team_member_id', member.id)
+                .eq('thread_id', msg.threadId)
+                .is('replied_at', null)
+                .maybeSingle()
+              if (threadSend) {
+                await db.from('tracked_emails').update({ replied_at: new Date().toISOString() }).eq('id', threadSend.id)
+                await sendPushNotification({
+                  userId: member.id,
+                  title: 'Reply received',
+                  body: `${senderEmail} replied: ${headers['subject'] ?? '(no subject)'}`,
+                  url: '/inbox',
+                }).catch(() => {})
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[gmail/message] autoLogInbound/notifyOnReply enforcement failed:', err)
+        }
+      }
+    }
 
     return NextResponse.json({
       id: msg.id,

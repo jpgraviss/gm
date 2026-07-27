@@ -17,7 +17,6 @@ function mapEnrollment(row: any) {
     studentEmail:  row.student_email,
     progress:      row.progress ?? {},
     completedAt:   row.completed_at ?? undefined,
-    certificateId: row.certificate_id ?? undefined,
     status:        row.status,
     createdAt:     row.created_at,
     updatedAt:     row.updated_at,
@@ -106,11 +105,8 @@ export const POST = withErrorHandler('courses/[id]/enrollments POST', async (
     throw new Error(error.message)
   }
 
-  // Increment enrolled_count on the course
-  const { data: course } = await db.from('courses').select('enrolled_count').eq('id', id).single()
-  if (course) {
-    await db.from('courses').update({ enrolled_count: (course.enrolled_count ?? 0) + 1 }).eq('id', id)
-  }
+  // AUDIT #276 — atomic RPC instead of a read-then-write increment.
+  await db.rpc('adjust_course_enrolled_count', { p_id: id, p_delta: 1 })
 
   logAudit({ userName: actor?.name || actor?.email || 'system', action: 'enrolled_student', module: 'courses', type: 'action', metadata: { courseId: id, enrollmentId: data.id, studentEmail: body.studentEmail } })
   return NextResponse.json(mapEnrollment(data), { status: 201 })

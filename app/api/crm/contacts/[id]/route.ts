@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
+import { validateCustomFieldValues } from '@/lib/custom-fields'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {
@@ -53,6 +54,10 @@ export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) =>
   if (!result.valid) return validationError(result.error)
 
   const db = createServiceClient()
+  const { data: existing } = await db.from('crm_contacts').select('custom_fields').eq('id', id).single()
+  const customFieldsError = await validateCustomFieldValues('contacts', body.customFields, existing?.custom_fields)
+  if (customFieldsError) return validationError(customFieldsError)
+
   const { data, error } = await db
     .from('crm_contacts')
     .update({
@@ -108,6 +113,10 @@ export const PATCH = withErrorHandler('crm/contacts/[id] PATCH', async (req, ctx
   if (!result.valid) return validationError(result.error)
 
   const db = createServiceClient()
+  const { data: existing } = await db.from('crm_contacts').select('custom_fields').eq('id', id).single()
+  const customFieldsError = await validateCustomFieldValues('contacts', body.customFields, existing?.custom_fields)
+  if (customFieldsError) return validationError(customFieldsError)
+
   const updates: Record<string, unknown> = {}
   if (body.tags !== undefined) updates.tags = body.tags
   if (body.lastActivity !== undefined) updates.last_activity = body.lastActivity

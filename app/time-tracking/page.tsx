@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
 import Header from '@/components/layout/Header'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 function toDecimal(hours: number, minutes: number) {
   return hours + minutes / 60
@@ -58,11 +59,21 @@ interface LogFormProps {
   defaultDate?: string
   teamMembers: TeamMember[]
   projects: Project[]
+  // AUDIT — the server now requires a non-manager caller to submit
+  // teamMember matching their own identity (time-entries ownership check),
+  // but this modal previously defaulted to `teamMembers[0]` (an arbitrary
+  // name, not the current user) and offered a free-choice dropdown to
+  // everyone. A non-manager who didn't happen to manually reselect their
+  // own name got a confusing 403 on a perfectly normal submission.
+  currentUserName: string
+  canManageOthers: boolean
 }
 
-function LogTimeModal({ entry, onSave, onClose, defaultDate, teamMembers, projects }: LogFormProps) {
+function LogTimeModal({ entry, onSave, onClose, defaultDate, teamMembers, projects, currentUserName, canManageOthers }: LogFormProps) {
   const [date, setDate]             = useState(entry?.date ?? defaultDate ?? toIso(new Date()))
-  const [teamMember, setTeamMember] = useState(entry?.teamMember ?? teamMembers[0]?.name ?? '')
+  const [teamMember, setTeamMember] = useState(
+    entry?.teamMember ?? (canManageOthers ? (teamMembers[0]?.name ?? '') : currentUserName)
+  )
   const [projectId, setProjectId]   = useState(entry?.projectId ?? '')
   const [description, setDesc]      = useState(entry?.description ?? '')
   const [serviceType, setService]   = useState<TeamServiceLine>(entry?.serviceType ?? 'General')
@@ -123,15 +134,24 @@ function LogTimeModal({ entry, onSave, onClose, defaultDate, teamMembers, projec
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Team Member</label>
-              <select
-                value={teamMember}
-                onChange={e => setTeamMember(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
-              >
-                {teamMembers.map(m => (
-                  <option key={m.id} value={m.name}>{m.name}</option>
-                ))}
-              </select>
+              {canManageOthers ? (
+                <select
+                  value={teamMember}
+                  onChange={e => setTeamMember(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#015035]/20 focus:border-[#015035]"
+                >
+                  {teamMembers.map(m => (
+                    <option key={m.id} value={m.name}>{m.name}</option>
+                  ))}
+                </select>
+              ) : (
+                // AUDIT — non-managers can only log/edit their own time
+                // (server-enforced); a free-choice dropdown here would just
+                // let them pick a name that always 403s. Lock it to self.
+                <div className="w-full border border-gray-100 bg-gray-50 rounded-xl px-3 py-2.5 text-sm text-gray-600">
+                  {teamMember || currentUserName}
+                </div>
+              )}
             </div>
           </div>
 
@@ -293,6 +313,17 @@ function RejectModal({ onConfirm, onClose }: { onConfirm: (note: string) => void
   )
 }
 
+// AUDIT — matches app/api/time-entries/[id]/route.ts's server-side
+// ownership comparison exactly (trim + lowercase). The client guard had
+// been a raw strict-equality check, stricter than the server — never a
+// security hole (only ever over-restrictive, blocking something the
+// server would actually allow), but a real false-negative UX bug for any
+// entry whose stored name differs from the caller's current name only in
+// case or incidental whitespace.
+function sameOwner(a: string | undefined | null, b: string | undefined | null): boolean {
+  return (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase() && !!(a ?? '').trim()
+}
+
 export default function TimeTrackingPage() {
   const { toast } = useToast()
   const { user } = useAuth()
@@ -306,16 +337,24 @@ export default function TimeTrackingPage() {
   const [viewMode, setViewMode]   = useState<'list' | 'calendar'>('list')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const canApprove = user?.isAdmin || user?.role === 'Department Manager'
+  // AUDIT #286 — only recognized one of the two role-name aliases
+  // ROLE_HIERARCHY treats as equal ('Dept Manager' / 'Department Manager'),
+  // unlike app/page.tsx's dashboard-tab visibility, which is defensive of
+  // both. Not exploitable today (no write path sets the short alias), but
+  // a single point of failure if one ever does.
+  const canApprove = user?.isAdmin || user?.role === 'Department Manager' || user?.role === 'Dept Manager'
   const [activeTab, setActiveTab] = useState<'timesheet' | 'approvals'>('timesheet')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [approvalLoading, setApprovalLoading] = useState(false)
 
   useEffect(() => {
-    fetch('/api/time-entries')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setEntries(data) })
+    // AUDIT #285 — raw fetch() against a route cursor-paginated at 100
+    // rows silently truncated past that: past weeks could render empty,
+    // the Approvals queue could hide older pending entries, and the
+    // Hours/Billable/Avg-Daily KPI tiles were computed off a partial set.
+    fetchAllPages<TimeEntry>('/api/time-entries')
+      .then(setEntries)
       .catch(() => toast('Failed to load time entries', 'error'))
       .finally(() => setLoading(false))
     fetchTeamMembers().then(setTeamMembers)
@@ -379,6 +418,39 @@ export default function TimeTrackingPage() {
     return Object.entries(map).sort(([a], [b]) => b.localeCompare(a))
   }, [weekEntries])
 
+  // AUDIT #294 — reverting to a `previous` closure snapshot on failure is
+  // itself a race: if two edits to the same entry fire back-to-back and
+  // the first request's failure arrives after the second already
+  // succeeded, reverting to the first's stale snapshot would clobber the
+  // second's (already-persisted) result in the UI. There's no
+  // single-entry GET endpoint for time entries, so we fall back to the
+  // same paginated list fetch the page uses on load, but only merge the
+  // ONE affected entry's fresh server state back into local state —
+  // leaving every other entry (including any other edit that's
+  // mid-flight) untouched. Mirrors the fix applied to
+  // app/maintenance/page.tsx and app/tasks/page.tsx.
+  async function refetchEntry(id: string) {
+    try {
+      const fresh = await fetchAllPages<TimeEntry>('/api/time-entries')
+      const match = fresh.find(e => e.id === id)
+      if (match) {
+        // AUDIT — a failed DELETE calls this too, and handleDelete already
+        // optimistically filtered the id out of `entries` before the
+        // failure was caught, so it's no longer in `prev` for .map() to
+        // find and replace — the server-confirmed-still-existing entry was
+        // silently never restored, contradicting the failure toast.
+        // Re-insert when it's missing instead of assuming it's present.
+        setEntries(prev => prev.some(e => e.id === id) ? prev.map(e => e.id === id ? match : e) : [match, ...prev])
+      } else {
+        // No longer exists server-side (e.g. it really was deleted).
+        setEntries(prev => prev.filter(e => e.id !== id))
+      }
+    } catch {
+      // Best-effort reconciliation; if this also fails leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }
+
   async function handleSave(entry: TimeEntry) {
     const isNew = !entries.find(e => e.id === entry.id)
     if (isNew) {
@@ -396,7 +468,6 @@ export default function TimeTrackingPage() {
         toast('Failed to save time entry', 'error')
       }
     } else {
-      const previous = entries.find(e => e.id === entry.id)
       setEntries(prev => prev.map(e => e.id === entry.id ? entry : e))
       try {
         const res = await fetch(`/api/time-entries/${entry.id}`, {
@@ -407,7 +478,7 @@ export default function TimeTrackingPage() {
         if (!res.ok) throw new Error('Failed')
       } catch {
         toast('Failed to update time entry — reverted', 'error')
-        if (previous) setEntries(prev => prev.map(e => e.id === entry.id ? previous : e))
+        await refetchEntry(entry.id)
       }
     }
     setShowLog(false)
@@ -415,15 +486,19 @@ export default function TimeTrackingPage() {
   }
 
   async function handleDelete(id: string) {
+    const target = entries.find(e => e.id === id)
+    if (!canApprove && target && !sameOwner(target.teamMember, user?.name)) {
+      toast('You can only delete your own time entries', 'error')
+      return
+    }
     if (!confirm('Delete this time entry?')) return
-    const previous = entries.find(e => e.id === id)
     setEntries(prev => prev.filter(e => e.id !== id))
     try {
       const res = await fetch(`/api/time-entries/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed')
     } catch {
       toast('Failed to delete time entry — restored', 'error')
-      if (previous) setEntries(prev => [previous, ...prev])
+      await refetchEntry(id)
     }
   }
 
@@ -441,6 +516,7 @@ export default function TimeTrackingPage() {
           rejectionNote: status === 'rejected' ? rejectionNote : undefined,
         }),
       })
+      if (!res.ok) throw new Error('Failed')
       const updated = await res.json()
       if (Array.isArray(updated)) {
         setEntries(prev => prev.map(e => {
@@ -448,6 +524,8 @@ export default function TimeTrackingPage() {
           return match ?? e
         }))
         toast(`${updated.length} ${updated.length === 1 ? 'entry' : 'entries'} ${status}`, 'success')
+      } else {
+        toast(`Failed to ${status === 'approved' ? 'approve' : 'reject'} entries`, 'error')
       }
     } catch {
       toast(`Failed to ${status === 'approved' ? 'approve' : 'reject'} entries`, 'error')
@@ -482,6 +560,15 @@ export default function TimeTrackingPage() {
   }
 
   function openEdit(entry: TimeEntry) {
+    // AUDIT — the server now rejects a non-manager editing a colleague's
+    // entry (ownership check), but every row's Edit button was still
+    // clickable regardless of whose entry it is — a non-manager could fill
+    // out the whole form only to get a confusing 403 on save. Catch it here
+    // instead, before they waste the effort.
+    if (!canApprove && !sameOwner(entry.teamMember, user?.name)) {
+      toast('You can only edit your own time entries', 'error')
+      return
+    }
     setEditEntry(entry)
     setLogDate(undefined)
     setShowLog(true)
@@ -993,6 +1080,8 @@ export default function TimeTrackingPage() {
           onClose={() => { setShowLog(false); setEditEntry(undefined) }}
           teamMembers={teamMembers}
           projects={projects}
+          currentUserName={user?.name ?? ''}
+          canManageOthers={canApprove}
         />
       )}
     </div>

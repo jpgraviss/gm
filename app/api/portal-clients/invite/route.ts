@@ -59,13 +59,20 @@ export const POST = withErrorHandler('portal-clients/invite POST', async (req) =
   // A caller-supplied portalConfig (e.g. the new-client wizard's
   // showAgreement/showInvoices/showReports toggles) wins over inheriting
   // an existing member's config for this company.
+  // AUDIT #187 — this was matched by `company` name alone; two distinct
+  // companies sharing a display name could inherit each other's
+  // portal_config/service. Scope by company_id when known, matching the
+  // fix applied to app/api/portal-clients/route.ts's POST.
+  const companyId = body.companyId as string | undefined
   let portalConfig = (body.portalConfig as Record<string, unknown> | undefined) ?? null
-  const { data: existingMembers } = await db
+  let existingMembersQuery = db
     .from('portal_clients')
     .select('portal_config, service')
-    .eq('company', company)
     .not('portal_config', 'is', null)
-    .limit(1)
+  existingMembersQuery = companyId
+    ? existingMembersQuery.eq('company_id', companyId)
+    : existingMembersQuery.eq('company', company).is('company_id', null)
+  const { data: existingMembers } = await existingMembersQuery.limit(1)
   if (!portalConfig && existingMembers && existingMembers.length > 0) {
     portalConfig = existingMembers[0].portal_config
   }

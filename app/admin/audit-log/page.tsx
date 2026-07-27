@@ -56,9 +56,10 @@ export default function AuditLogPage() {
     setLoadFailed(false)
     try {
       // A cheap first-page probe so a genuine fetch/auth failure is
-      // distinguishable from "the log is really empty" — fetchAllPages()
-      // itself just returns whatever it accumulated before a failed
-      // request and doesn't surface that a page errored.
+      // distinguishable from "the log is really empty". AUDIT #244 —
+      // fetchAllPages() now throws on any page failure (not just this
+      // probe), so a mid-sequence failure on page 2+ is caught below too,
+      // instead of silently returning a truncated result.
       const probe = await fetch('/api/audit-logs?limit=1')
       if (!probe.ok) throw new Error('Failed')
 

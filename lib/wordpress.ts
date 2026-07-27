@@ -1,5 +1,7 @@
 import { createServiceClient } from '@/lib/supabase'
 import { decrypt } from '@/lib/encryption'
+import { resolveSafeIp, createPinnedDispatcher } from '@/lib/ssrf-guard'
+import type { Agent } from 'undici'
 
 const WP_TIMEOUT = 12_000
 
@@ -31,17 +33,98 @@ export interface WPTheme {
   active: boolean
 }
 
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+// AUDIT #292 — isPrivateOrInternalUrl() (#260) was only ever enforced at
+// monitored-site create/update time. This function previously let fetch's
+// default 'follow' behavior chase a 3xx to wherever it pointed with no
+// re-validation, so a periodic recheck (or a compromised/malicious site
+// 302-ing internally) could reach a private/metadata address — and the
+// authenticated plugin/theme calls below attach a real WordPress
+// Application Password, which a redirect off-site could exfiltrate. Every
+// hop is re-validated before it's fetched; callers that explicitly want the
+// raw redirect response (the wp-login.php exposure check) still get it —
+// only the URL, not the follow behavior, is guarded in that case.
+// Headers that carry credentials/secrets and must never cross an origin
+// change on redirect. Native fetch's 'follow' mode strips Authorization
+// automatically on cross-origin redirects; since this loop hand-rolls
+// redirect-following (to re-validate each hop against SSRF), it has to
+// replicate that stripping itself or a compromised/malicious site could
+// 302 off-origin and walk away with the WordPress Application Password.
+const CREDENTIAL_HEADERS = ['authorization', 'cookie']
+
+function stripCredentialHeadersCrossOrigin(
+  headers: Record<string, string>,
+  fromUrl: string,
+  toUrl: string,
+): Record<string, string> {
+  if (new URL(fromUrl).origin === new URL(toUrl).origin) return headers
+  const stripped: Record<string, string> = {}
+  for (const [key, value] of Object.entries(headers)) {
+    if (CREDENTIAL_HEADERS.includes(key.toLowerCase())) continue
+    stripped[key] = value
+  }
+  return stripped
+}
+
+// AUDIT #414 — this loop used to call isPrivateOrInternalUrl() (a boolean
+// check) per hop and then hand the URL to a plain fetch(), which performs
+// its own, independent DNS resolution to actually connect — the same
+// DNS-rebinding TOCTOU gap #319 fixed in lib/website-fetch.ts. Each hop now
+// uses resolveSafeIp() to get the exact validated address and pins the
+// fetch to it via a per-hop undici Agent (createPinnedDispatcher), the same
+// mechanism lib/website-fetch.ts uses. The original hostname stays in the
+// request URL, so TLS SNI and the Host header sent to the origin are
+// unaffected — only the socket's real destination is pinned.
 async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), WP_TIMEOUT)
-  try {
-    return await fetch(url, {
+  const wantsManual = opts.redirect === 'manual'
+  const originalUrl = url
+  let currentUrl = url
+  let currentHeaders: Record<string, string> = { 'User-Agent': 'GravHub-WPCheck/1.0', ...(opts.headers as Record<string, string> | undefined) }
+  for (let hop = 0; ; hop++) {
+    const resolution = await resolveSafeIp(currentUrl)
+    if (!resolution.safe) {
+      throw new Error('URL resolves to a private or internal address')
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), WP_TIMEOUT)
+    const dispatcher = createPinnedDispatcher(resolution.ip, resolution.family)
+    const requestInit: RequestInit & { dispatcher: Agent } = {
       ...opts,
+      redirect: 'manual',
       signal: controller.signal,
-      headers: { 'User-Agent': 'GravHub-WPCheck/1.0', ...opts.headers },
-    })
-  } finally {
-    clearTimeout(timer)
+      headers: currentHeaders,
+      dispatcher,
+    }
+    let res: Response
+    try {
+      res = await fetch(currentUrl, requestInit)
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!wantsManual && res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+      // Body isn't needed for a redirect hop — safe to tear this
+      // connection down immediately rather than following it.
+      await dispatcher.destroy()
+      if (hop >= 5) throw new Error('Too many redirects')
+      const nextUrl = new URL(res.headers.get('location')!, currentUrl).toString()
+      currentHeaders = stripCredentialHeadersCrossOrigin(currentHeaders, originalUrl, nextUrl)
+      currentUrl = nextUrl
+      continue
+    }
+    // Terminal response — the caller still needs to read its body
+    // (res.json()/res.text()), so the dispatcher can't be destroyed here.
+    // It's left to undici's own keep-alive timeout to close the idle
+    // connection once the caller is done with it.
+    return res
   }
 }
 
@@ -89,6 +172,21 @@ export async function checkWordPress(
     const match = html.match(/<meta name="generator" content="WordPress ([\d.]+)"/)
     if (match) result.wpVersion = match[1]
   } catch { /* non-fatal */ }
+
+  // 2b. AUDIT #258 — coreUpdateAvailable was initialized to false and never
+  // actually computed; persisted/exposed as if real. Compare the detected
+  // version against WordPress.org's own public version-check API (the same
+  // one wp-admin itself calls) to make this a real check.
+  if (result.wpVersion) {
+    try {
+      const res = await fetchWithTimeout('https://api.wordpress.org/core/version-check/1.7/?version=1.0')
+      if (res.ok) {
+        const data = await res.json()
+        const latest = data?.offers?.[0]?.version as string | undefined
+        if (latest) result.coreUpdateAvailable = compareVersions(latest, result.wpVersion) > 0
+      }
+    } catch { /* non-fatal */ }
+  }
 
   // 3. Login page exposure
   try {

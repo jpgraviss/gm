@@ -1,21 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { verifyToken } from '@/lib/signed-token'
 
 interface TokenPayload {
   contactId: string
   email: string
 }
 
+// AUDIT — previously plain base64(JSON), no signature. Combined with
+// crm_contacts ids being a guessable `ct-${Date.now()}` millisecond
+// timestamp, anyone who knew a contact's email and roughly when they were
+// created could construct a valid-looking token offline and
+// unsubscribe/resubscribe them without consent. Now rejects anything not
+// signed by this server.
 function decodeToken(token: string): TokenPayload | null {
-  try {
-    const json = Buffer.from(token, 'base64').toString('utf-8')
-    const parsed = JSON.parse(json)
-    if (parsed.contactId && parsed.email) return parsed as TokenPayload
-    return null
-  } catch {
-    return null
-  }
+  const parsed = verifyToken<TokenPayload>(token)
+  if (parsed && parsed.contactId && parsed.email) return parsed
+  return null
 }
 
 export const GET = withErrorHandler('unsubscribe/[token] GET', async (_req, { params }: { params: Promise<{ token: string }> }) => {
@@ -66,6 +68,26 @@ export const POST = withErrorHandler('unsubscribe/[token] POST', async (req, { p
   }
 
   const db = createServiceClient()
+
+  // AUDIT — GET already re-verifies the token's email against the contact's
+  // real emails; POST (the handler that actually writes the opt-in state)
+  // never did, so a token whose payload didn't match its own contactId
+  // could still flip that contact's subscription state.
+  const { data: contact } = await db
+    .from('crm_contacts')
+    .select('id, emails')
+    .eq('id', payload.contactId)
+    .single()
+  if (!contact) {
+    return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
+  }
+  const emailMatch = (contact.emails ?? []).some(
+    (e: string) => e.toLowerCase() === payload.email.toLowerCase(),
+  )
+  if (!emailMatch) {
+    return NextResponse.json({ error: 'Email does not match contact' }, { status: 400 })
+  }
+
   const email = payload.email.toLowerCase()
 
   if (body.action === 'unsubscribe') {

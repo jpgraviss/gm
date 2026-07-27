@@ -32,6 +32,21 @@ jobs:
       - name: Tests
         run: npm run test
 
+      - name: WordPress plugin zip is up to date
+        # AUDIT #345 — the distributable zip (served by
+        # /api/wordpress/plugin/download) had drifted from wordpress/gravhub-seo/
+        # source and silently reshipped 3 already-fixed bugs to every new
+        # client onboarded. Rebuilds into a temp file and fails CI if it
+        # doesn't match the committed zip, so source and shipped artifact
+        # can never silently diverge again.
+        run: |
+          node scripts/build-plugin-zip.js
+          if ! git diff --quiet -- public/downloads/gravhub-seo.zip; then
+            echo "::error::public/downloads/gravhub-seo.zip is out of date — run 'npm run build:plugin' and commit the result."
+            git diff --stat -- public/downloads/gravhub-seo.zip
+            exit 1
+          fi
+
       - name: Build
         run: npm run build
         env:

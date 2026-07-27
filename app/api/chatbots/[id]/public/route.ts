@@ -17,12 +17,29 @@ export const GET = withErrorHandler('chatbots/[id]/public GET', async (req, { pa
   const db = createServiceClient()
   const { data, error } = await db
     .from('chatbots')
-    .select('welcome_message, brand_color, active, name')
+    .select('welcome_message, brand_color, active, name, website_url')
     .eq('id', id)
     .single()
 
   if (error || !data || !data.active) {
     return NextResponse.json({ error: 'Chatbot not found' }, { status: 404 })
+  }
+
+  // AUDIT — same origin-binding gap as /chat: without this, any site could
+  // discover and embed another tenant's chatbot config off-domain.
+  if (data.website_url) {
+    const origin = req.headers.get('origin') || req.headers.get('referer')
+    if (origin) {
+      try {
+        const originHost = new URL(origin).hostname
+        const allowedHost = new URL(data.website_url).hostname
+        if (originHost !== allowedHost) {
+          return NextResponse.json({ error: 'Chatbot not found' }, { status: 404 })
+        }
+      } catch {
+        // Malformed Origin/Referer header — fall through rather than block
+      }
+    }
   }
 
   return NextResponse.json({

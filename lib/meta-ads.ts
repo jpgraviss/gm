@@ -287,6 +287,48 @@ async function metaGet<T>(path: string, accessToken: string, params: Record<stri
   return (await res.json()) as T
 }
 
+interface MetaPagedResponse<Row> {
+  data?: Row[]
+  paging?: { next?: string }
+}
+
+// Safety cap on pagination loops so a pathological / misbehaving response
+// (e.g. a paging.next cursor that never terminates) can't hang a request.
+const MAX_META_PAGES = 10
+
+/**
+ * Like `metaGet`, but follows the Graph API's `paging.next` cursor (a full
+ * URL, already carrying the access token and query params) until there's no
+ * more next page or MAX_META_PAGES is hit. Meta's default page size is ~25,
+ * so anything with more results than that would otherwise be silently
+ * truncated to page 1.
+ */
+async function metaGetAllPages<Row>(
+  path: string,
+  accessToken: string,
+  params: Record<string, string> = {},
+): Promise<Row[]> {
+  const qs = new URLSearchParams({ ...params, access_token: accessToken })
+  let url: string | undefined = `${META_GRAPH_BASE}${path}?${qs.toString()}`
+
+  const rows: Row[] = []
+  let pages = 0
+
+  while (url && pages < MAX_META_PAGES) {
+    const res: Response = await fetch(url, { method: 'GET' })
+    if (!res.ok) {
+      const body = await res.text()
+      throw new Error(`Meta Graph API ${path} failed: ${res.status} ${body}`)
+    }
+    const data = (await res.json()) as MetaPagedResponse<Row>
+    rows.push(...(data.data ?? []))
+    url = data.paging?.next
+    pages++
+  }
+
+  return rows
+}
+
 export interface MetaAdAccount {
   id: string
   name: string
@@ -308,13 +350,13 @@ export async function listMetaAdAccounts(): Promise<MetaAdAccount[]> {
   const auth = await getValidMetaToken()
   if (!auth) throw new Error('Meta Ads not connected')
 
-  const data = await metaGet<{ data?: RawAdAccount[] }>(
+  const rows = await metaGetAllPages<RawAdAccount>(
     '/me/adaccounts',
     auth.accessToken,
     { fields: 'id,name,currency,timezone_name' },
   )
 
-  return (data.data ?? []).map((row) => ({
+  return rows.map((row) => ({
     id: row.id,
     name: row.name ?? row.id,
     currency: row.currency ?? '',
@@ -346,13 +388,13 @@ export async function listMetaPages(): Promise<MetaPage[]> {
   const auth = await getValidMetaToken()
   if (!auth) throw new Error('Meta not connected')
 
-  const data = await metaGet<{ data?: RawMetaPage[] }>(
+  const rows = await metaGetAllPages<RawMetaPage>(
     '/me/accounts',
     auth.accessToken,
     { fields: 'id,name,access_token,instagram_business_account{id,username}' },
   )
 
-  return (data.data ?? []).map((row) => ({
+  return rows.map((row) => ({
     id: row.id,
     name: row.name ?? row.id,
     accessToken: row.access_token ?? '',
@@ -460,7 +502,7 @@ export async function getMetaCampaigns(adAccountId: string, days = 28): Promise<
 
   const id = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`
 
-  const data = await metaGet<{ data?: RawInsightRow[] }>(
+  const insightRows = await metaGetAllPages<RawInsightRow>(
     `/${id}/insights`,
     auth.accessToken,
     {
@@ -470,7 +512,7 @@ export async function getMetaCampaigns(adAccountId: string, days = 28): Promise<
     },
   )
 
-  const rows: MetaCampaignRow[] = (data.data ?? []).map((row) => ({
+  const rows: MetaCampaignRow[] = insightRows.map((row) => ({
     id: String(row.campaign_id ?? ''),
     name: row.campaign_name ?? `Campaign ${row.campaign_id ?? ''}`,
     spend: Number(row.spend ?? 0),

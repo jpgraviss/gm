@@ -46,7 +46,14 @@ export const GET = withErrorHandler('broadcasts/[id]/audience GET', async (req: 
     }
   }
 
-  const { data: contacts, count, error } = await query.limit(100)
+  // Previously capped at 100 rows, then the suppression check further
+  // sliced to just the first 10 of those emails — `estimated` subtracted a
+  // suppression count computed from at most 10 contacts out of a
+  // potentially much larger real audience, understating true suppression
+  // (and overstating real recipients) for any audience where more than
+  // ~10 contacts are actually unsubscribed. Raised to the same 5000-row
+  // cap already used for other full-audience aggregation queries.
+  const { data: contacts, count, error } = await query.limit(5000)
   if (error) {
     throw new Error(error.message)
   }
@@ -59,10 +66,10 @@ export const GET = withErrorHandler('broadcasts/[id]/audience GET', async (req: 
     )
   }
 
-  // Filter out contacts who are suppressed
+  // Filter out contacts who are suppressed — checked against the full
+  // filtered audience, not just a small sample.
   const emails = filteredContacts
     .flatMap((c: { emails: string[] | null; full_name: string | null }) => (c.emails ?? []))
-    .slice(0, 10)
 
   const { data: suppressed } = await db
     .from('sequence_suppression_list')

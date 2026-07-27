@@ -6,9 +6,6 @@ import { validate, validationError } from '@/lib/validation'
 import { requireRole } from '@/lib/rbac'
 
 export const POST = withErrorHandler('wordpress/seo/health POST', async (req) => {
-  const denied = await requireWordPressAuth(req)
-  if (denied) return denied
-
   const body = await req.json()
 
   const siteUrl = body.siteUrl ?? body.site_url
@@ -17,6 +14,15 @@ export const POST = withErrorHandler('wordpress/seo/health POST', async (req) =>
   if (!siteUrl || !companyName) {
     return NextResponse.json({ error: 'siteUrl and companyName are required' }, { status: 400 })
   }
+
+  // AUDIT #344 follow-up — this route was missed from the site-scoping fix
+  // applied to its 4 siblings (analytics/keywords/scores/settings). Without
+  // it, any valid key — even one legitimately issued and site-bound to a
+  // different client — could POST a fabricated health report overwriting
+  // another client's real security posture (WP/PHP versions, plugin
+  // inventory, wp-login/XML-RPC/directory-listing exposure flags).
+  const denied = await requireWordPressAuth(req, siteUrl)
+  if (denied) return denied
 
   const wpVersion = body.wpVersion ?? body.wp_version ?? (body.wordpress?.version ?? null)
   const phpVersion = body.phpVersion ?? body.php_version ?? (body.php?.version ?? null)
@@ -65,17 +71,36 @@ export const POST = withErrorHandler('wordpress/seo/health POST', async (req) =>
 })
 
 export const GET = withErrorHandler('wordpress/seo/health GET', async (req) => {
-  const denied = await requireWordPressAuth(req)
-  if (denied) return denied
-
   const companyId = req.nextUrl.searchParams.get('companyId')
+  const siteUrl = req.nextUrl.searchParams.get('site')
+
+  // AUDIT #344 follow-up — this GET had no scoping param at all, so any
+  // valid key (even a legitimately-issued, site-bound one) could dump
+  // every connected client's full WP/PHP versions, plugin/theme
+  // inventory, and security-exposure flags in one call. The plugin itself
+  // never calls this GET (only POST, to report its own site's health), so
+  // a key-authenticated caller has no legitimate reason to see more than
+  // its own site — require `site` when a key is presented, so the query
+  // is always restricted to one site's row (and, for a site-bound key,
+  // requireWordPressAuth below additionally verifies it's actually THAT
+  // key's own site). Staff session callers (no key header) keep the
+  // existing broader access, consistent with this app's "staff sees every
+  // company" convention used everywhere else.
+  const isKeyAuth = !!req.headers.get('x-gravhub-key')
+  if (isKeyAuth && !siteUrl) {
+    return NextResponse.json({ error: 'site query param is required' }, { status: 400 })
+  }
+
+  const denied = await requireWordPressAuth(req, siteUrl)
+  if (denied) return denied
 
   const db = createServiceClient()
   let query = db
     .from('wordpress_site_health')
     .select('*')
     .order('company_name')
-  if (companyId) query = query.eq('company_id', companyId)
+  if (siteUrl) query = query.eq('site_url', siteUrl)
+  else if (companyId) query = query.eq('company_id', companyId)
   const { data, error } = await query
 
   if (error) {

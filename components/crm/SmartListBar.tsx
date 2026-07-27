@@ -52,12 +52,21 @@ export default function SmartListBar({ entityType, currentCriteria, onApply }: S
   }
 
   async function handleDelete(id: string) {
+    // AUDIT — same optimistic-update-with-no-revert race #294/#351/#360
+    // fixed in several other files this session: previously removed the
+    // chip immediately and only toasted on failure, with no restore — a
+    // failed DELETE left the row still live server-side while the UI
+    // permanently showed it gone (until a full reload), despite the error
+    // toast. Capture it so it can be re-inserted on failure.
+    const removed = filters.find(f => f.id === id)
+    const wasActive = activeId === id
     setFilters(prev => prev.filter(f => f.id !== id))
-    if (activeId === id) apply(null)
+    if (wasActive) apply(null)
     try {
       const res = await fetch(`/api/saved-filters/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error()
     } catch {
+      if (removed) setFilters(prev => prev.some(f => f.id === id) ? prev : [removed, ...prev])
       toast('Failed to delete smart list', 'error')
     }
   }

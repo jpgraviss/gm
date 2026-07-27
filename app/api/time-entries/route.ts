@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapEntry(row: any) {
@@ -116,6 +116,22 @@ export const POST = withErrorHandler('time-entries POST', async (req: NextReques
   if (hours === 0 && minutes === 0) {
     return validationError('Duration must be greater than zero')
   }
+
+  // `body.teamMember` was previously trusted verbatim — any Team Member
+  // could submit hours attributed to a different named colleague. Same
+  // Dept Manager+ override tier as the PATCH/DELETE ownership checks on
+  // /api/time-entries/[id] (legitimate backfill workflow); a plain Team
+  // Member can only log time for themselves.
+  const canManageOthers = (await requireRole(req, 'Dept Manager')) === null
+  if (!canManageOthers) {
+    const caller = await getAuthUser(req)
+    const callerName = (caller?.name ?? '').trim().toLowerCase()
+    const requestedName = String(body.teamMember ?? '').trim().toLowerCase()
+    if (!callerName || requestedName !== callerName) {
+      return NextResponse.json({ error: 'You can only log time for yourself' }, { status: 403 })
+    }
+  }
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('time_entries')

@@ -14,6 +14,7 @@ import {
 
 interface UnifiedThread {
   contactEmail: string
+  contactId?: string
   contactName: string
   company?: string
   lastMessage: {
@@ -48,13 +49,19 @@ export default function UnifiedInboxPage() {
 
   const load = useCallback(() => {
     setLoading(true)
-    const params = new URLSearchParams({ limit: '200' })
+    // AUDIT — gmailToken now goes in the POST body, not a query string
+    // (query strings leak into logs/history/Sentry error reports).
+    const body: Record<string, unknown> = { limit: 200 }
     if (gmailToken && gmailEmail) {
-      params.set('gmailToken', gmailToken)
-      params.set('gmailEmail', gmailEmail)
+      body.gmailToken = gmailToken
+      body.gmailEmail = gmailEmail
     }
-    fetch(`/api/inbox/unified?${params}`)
-      .then(r => (r.ok ? r.json() : []))
+    fetch('/api/inbox/unified', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('Failed to load inbox'))))
       .then(data => { if (Array.isArray(data)) setThreads(data) })
       .catch(() => toast('Failed to load inbox', 'error'))
       .finally(() => setLoading(false))
@@ -268,7 +275,7 @@ export default function UnifiedInboxPage() {
                     </div>
                     <div className="flex flex-col gap-2 mt-2">
                       <Link
-                        href={`/crm/contacts?email=${encodeURIComponent(selected.contactEmail)}`}
+                        href={selected.contactId ? `/crm/contacts?open=${selected.contactId}` : '/crm/contacts'}
                         className="flex items-center justify-between p-3 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                       >
                         <span className="flex items-center gap-2"><Users size={14} /> View CRM contact</span>

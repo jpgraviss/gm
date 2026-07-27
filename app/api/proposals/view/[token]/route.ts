@@ -33,11 +33,25 @@ export const GET = withErrorHandler('proposals/view/[token] GET', async (_req, c
       .eq('id', proposal.id)
   }
 
+  // AUDIT — AI-generated proposals (lib/proposal-generator.ts) always save
+  // items: [] (there's no line-item concept in the AI-drafted structure,
+  // only the branded PDF has the real Investment Summary) and this route
+  // never returned pdf_path at all, so the public client-facing page had
+  // no pricing table (hidden when items is empty) AND no way to see or
+  // download the actual branded PDF that was generated — the entire point
+  // of the proposal was invisible to the person it was sent to.
+  let pdfUrl: string | null = null
+  if (proposal.pdf_path) {
+    const { data: signed } = await db.storage.from('proposal-pdfs').createSignedUrl(proposal.pdf_path, 3600)
+    pdfUrl = signed?.signedUrl ?? null
+  }
+
   return NextResponse.json({
     id: proposal.id,
     company: proposal.company,
     value: proposal.value,
     items: proposal.items ?? [],
+    pdfUrl,
     serviceType: proposal.service_type,
     status: proposal.status,
     notes: proposal.renewal_notes ?? null,

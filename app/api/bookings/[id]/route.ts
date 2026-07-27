@@ -37,7 +37,31 @@ export const PATCH = withErrorHandler('bookings/[id] PATCH', async (req, { param
   // Auth check: get the booking first and verify ownership
   const { data: booking } = await db.from('bookings').select('*, calendar_settings(*)').eq('id', id).single()
   if (!booking) {
-    return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+    // AUDIT #230 — a booking can live in either of two tables depending on
+    // which flow created it (same split DELETE on this route already
+    // handles, per #123): legacy `bookings` rows belong to one staff
+    // member's personal calendar, `booking_type_bookings` rows belong to an
+    // org-wide, not-per-staff booking type. This route previously only ever
+    // looked in `bookings`, so cancelling a new-flow appointment from the
+    // week/day view always 404'd.
+    const { data: typeBooking } = await db.from('booking_type_bookings').select('*').eq('id', id).maybeSingle()
+    if (!typeBooking) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+    }
+    const denied = await requireRole(req, 'Team Member')
+    if (denied) return denied
+
+    const { data, error } = await db
+      .from('booking_type_bookings')
+      .update({ status: body.status })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      throw new Error(error?.message || 'Failed to update booking')
+    }
+    return NextResponse.json(data)
   }
 
   const ownershipDenied = await verifyCalendarOwnership(req, db, booking.calendar_slug)

@@ -5,19 +5,26 @@ import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pa
 import { mapPost } from '@/lib/social-media'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
-import { requirePortalClient } from '@/lib/portal-auth'
+import { requirePortalClient, requireEntitledService } from '@/lib/portal-auth'
 
 export const GET = withErrorHandler('social-posts GET', async (req) => {
   const pag = parsePagination(req)
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   const status = searchParams.get('status')
-
-  // Portal clients (services/social-media page) legitimately call this
-  // scoped to their own company — see matching comment in
-  // app/api/proposals/route.ts.
+  // AUDIT.md #416 — opt-in, not the default for every company-scoped call.
+  // app/client/page.tsx's main dashboard Social tab (approve/reject queue)
+  // calls this same route company-scoped with no `service` param and is
+  // NOT gated by "does this company have the Social Media service" —
+  // approving/rejecting posts staff already scheduled for them is a core
+  // portal feature independent of that marketing-services entitlement, and
+  // gating it here would 403 an already-working, unrelated call site. Only
+  // app/client/services/[slug]/page.tsx's Social Media service-detail page
+  // sends `service=Social Media`, so only that call path gets the stricter
+  // per-service entitlement check.
+  const service = searchParams.get('service')
   const denied = company
-    ? await requirePortalClient(req, company)
+    ? (service ? await requireEntitledService(req, company, service) : await requirePortalClient(req, company))
     : await requireRole(req, 'Team Member')
   if (denied) return denied
 
@@ -56,7 +63,23 @@ export const POST = withErrorHandler('social-posts POST', async (req) => {
   // composer's "Submit for Approval" button sent, so no post could ever
   // reach the client portal's approval queue.
   const CREATABLE_STATUSES = new Set(['draft', 'pending_approval'])
-  const status = CREATABLE_STATUSES.has(body.status) ? body.status : 'draft'
+  let status = CREATABLE_STATUSES.has(body.status) ? body.status : 'draft'
+  const scheduledAt: string | null = body.scheduledAt ?? null
+  const isFutureScheduled = !!scheduledAt && new Date(scheduledAt) > new Date()
+
+  // A 'draft' post never goes through client approval, so a future
+  // scheduledAt on one is self-approved right away and flipped to
+  // 'scheduled' — otherwise status: 'scheduled' was never written by any
+  // code path and the cron job's `.eq('status', 'scheduled')` query in
+  // publishScheduledSocialPosts could structurally never match a row.
+  // publishSocialPost also requires approval_status === 'approved'
+  // regardless of status, so both must be set together for the cron job
+  // to actually publish the row once scheduled_at arrives.
+  let approvalStatus: 'pending' | 'approved' = 'pending'
+  if (status === 'draft' && isFutureScheduled) {
+    status = 'scheduled'
+    approvalStatus = 'approved'
+  }
 
   const db = createServiceClient()
   const id = `sp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
@@ -68,12 +91,13 @@ export const POST = withErrorHandler('social-posts POST', async (req) => {
       company_name:    body.companyName,
       content:         body.content,
       platforms:       body.platforms,
-      scheduled_at:    body.scheduledAt ?? null,
+      scheduled_at:    scheduledAt,
       hashtags:        body.hashtags ?? [],
       link_url:        body.linkUrl ?? null,
       media_urls:      body.mediaUrls ?? [],
       status,
-      approval_status: 'pending',
+      approval_status: approvalStatus,
+      approved_at:     approvalStatus === 'approved' ? new Date().toISOString() : null,
     })
     .select()
     .single()

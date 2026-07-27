@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Link from 'next/link'
 import { Mail, AlertCircle, ArrowRight } from 'lucide-react'
@@ -44,6 +44,7 @@ const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''
 export default function TeamLoginPage() {
   const { loginWithGoogle, verify2FACode, user, loading } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [mode, setMode] = useState<'login' | 'sent' | '2fa'>('login')
   const [email, setEmail] = useState('')
@@ -62,6 +63,26 @@ export default function TeamLoginPage() {
   useEffect(() => {
     if (!loading && user) router.replace('/')
   }, [user, loading, router])
+
+  // AUDIT.md #440 — contexts/AuthContext.tsx's mount-time session restore
+  // redirects here (rather than silently granting full authenticated UI
+  // state) when it finds a live Supabase session for a staff member who
+  // hasn't completed 2FA yet. Land straight in the same code-entry step
+  // the normal Google Sign-In 2FA flow already uses, instead of making
+  // them re-trigger it from the login form.
+  useEffect(() => {
+    if (searchParams.get('requires2FA') === '1') {
+      const qEmail = searchParams.get('email')
+      if (qEmail) {
+        // One-time sync from the URL (an external source, same category as
+        // AuthContext's own localStorage-driven mount effect) into local
+        // component state — not a derived-state anti-pattern.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setTwoFAEmail(qEmail)
+        setMode('2fa')
+      }
+    }
+  }, [searchParams])
 
   // Stable callback ref so the GIS callback doesn't go stale
   const handleGoogleCredential = useCallback(async ({ credential }: { credential: string }) => {

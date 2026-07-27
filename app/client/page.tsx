@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useClientCompany } from '@/lib/useClientCompany'
 import { formatCurrency, projectStatusColors, invoiceStatusColors, formatDate } from '@/lib/utils'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
+import type { Invoice } from '@/lib/types'
 import StatusBadge from '@/components/ui/StatusBadge'
 import {
   Globe, CheckCircle, FolderKanban, FileText, MessageSquare,
-  Download, Upload, Bell, ChevronRight, X, AlertTriangle, LogOut,
-  Search, BarChart3, Star, Activity, TrendingUp, Share2,
+  Download, Upload, ChevronRight, X, AlertTriangle,
+  Search, BarChart3, Star, Activity, TrendingUp, Share2, Calendar,
 } from 'lucide-react'
 
 // AUDIT.md #199 — matches the shape app/tickets/page.tsx's staff viewer
@@ -15,12 +18,24 @@ import {
 // This was previously written as `{from, body, date}`, which crashed the
 // staff ticket viewer (`msg.author.split(' ')`) on any real client-created
 // ticket that included an initial message.
+// Part D (Batch 4) — parity with app/portal/tickets/page.tsx's file
+// attachments, uploaded through the same portal-scoped /api/files POST the
+// Files tab above already uses.
+interface ClientFileAttachment {
+  name: string
+  url: string
+  path: string
+  type: string
+  size: number
+}
+
 interface ClientTicketMessage {
   id: string
   author: string
   isInternal: boolean
   body: string
   timestamp: string
+  attachments?: ClientFileAttachment[]
 }
 
 interface ClientTicket {
@@ -32,11 +47,25 @@ interface ClientTicket {
   messages: ClientTicketMessage[]
 }
 
+// AUDIT.md #483 — this used to omit 'Urgent', which the audit flagged as
+// likely an accidental workaround for the ticket API rejecting it (both
+// routes validated priority against TASK_PRIORITIES, which never included
+// Urgent). Now that lib/validation.ts has a dedicated TICKET_PRIORITIES
+// enum that does include it, portal clients get the same options staff do.
+const TICKET_PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const
+
 const TICKET_STATUS_COLORS: Record<string, string> = {
   Open: 'bg-blue-50 text-blue-700',
   'In Progress': 'bg-amber-50 text-amber-700',
   Resolved: 'bg-emerald-50 text-emerald-700',
   Closed: 'bg-gray-100 text-gray-500',
+}
+
+const TICKET_PRIORITY_COLORS: Record<string, string> = {
+  Low: 'bg-gray-100 text-gray-600',
+  Medium: 'bg-blue-50 text-blue-700',
+  High: 'bg-orange-50 text-orange-700',
+  Urgent: 'bg-red-50 text-red-700',
 }
 
 interface PortalInsights {
@@ -48,23 +77,75 @@ interface PortalInsights {
   ranking?: { tracked: number; top3: number; top10: number; improved: number; declined: number }
   uptime?: { sitesMonitored: number; uptimePercent: number; incidents: number }
 }
+
+// AUDIT.md #185 — app/admin/portal-management/page.tsx's per-service
+// "Strategy Scheduling" panel writes services_config[key].frequency/
+// .last_updated/.strategy for every service the client has enabled, but
+// nothing client-facing ever read it (verified: the panel is genuinely
+// service-agnostic — it renders identically for SEO, PPC, Web Design,
+// Social Media, Email Marketing, Content Creation, Sales Training, and
+// Marketing Strategy — so it doesn't belong solely on the new SEO Strategy
+// page). Surfaced read-only below, in the one tab a client already sees
+// cross-service company data. Also folds in the admin panel's "Client
+// Reports" (manually-uploaded report files) per Part B of this batch — the
+// former app/portal/reports/page.tsx's other content (a client-side
+// synthesized "{service} Progress Report" list with no real file behind
+// it) was materially redundant with the Project tab and wasn't ported.
+interface PortalReportEntry {
+  title: string
+  date: string
+  file_url: string
+}
+
+interface ServiceStrategyConfig {
+  enabled?: boolean
+  frequency: string
+  last_updated: string
+  strategy: string
+}
+
+const STRATEGY_FREQUENCY_LABELS: Record<string, string> = {
+  weekly: 'Weekly',
+  biweekly: 'Biweekly',
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  semiannually: 'Semiannually',
+  annually: 'Annually',
+}
+
+// Mirrors app/admin/portal-management/page.tsx's getNextUpdateDate() so the
+// "Overdue" / next-due computation the client sees matches what staff see.
+function getNextStrategyUpdateDate(lastUpdated: string, frequency: string): string {
+  if (!lastUpdated) return ''
+  const d = new Date(lastUpdated + 'T12:00:00')
+  switch (frequency) {
+    case 'weekly': d.setDate(d.getDate() + 7); break
+    case 'biweekly': d.setDate(d.getDate() + 14); break
+    case 'monthly': d.setMonth(d.getMonth() + 1); break
+    case 'quarterly': d.setMonth(d.getMonth() + 3); break
+    case 'semiannually': d.setMonth(d.getMonth() + 6); break
+    case 'annually': d.setFullYear(d.getFullYear() + 1); break
+    default: d.setMonth(d.getMonth() + 1)
+  }
+  return d.toISOString().split('T')[0]
+}
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 
 export default function ClientPortalPage() {
   const { toast } = useToast()
-  const { user, logout } = useAuth()
-  const company = user?.company ?? ''
-  const contactName = user?.name ?? ''
+  const { user } = useAuth()
+  const { company, contactName } = useClientCompany()
 
   const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files' | 'insights' | 'social'>('overview')
   const [insights, setInsights] = useState<PortalInsights | null>(null)
   const [insightsLoading, setInsightsLoading] = useState(false)
+  // AUDIT.md #185 / Part B — see the comment on ServiceStrategyConfig above.
+  // `null` means "not fetched yet" (distinct from a real empty array), so
+  // the effect below only fetches once per Insights-tab visit.
+  const [portalReports, setPortalReports] = useState<PortalReportEntry[] | null>(null)
+  const [serviceStrategies, setServiceStrategies] = useState<Array<{ key: string; config: ServiceStrategyConfig }> | null>(null)
   const [showWelcome, setShowWelcome] = useState(true)
-
-  // Notifications
-  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; message?: string; link?: string; read: boolean; createdAt: string }>>([])
-  const [showNotifications, setShowNotifications] = useState(false)
 
   // Social posts for approval
   const [pendingPosts, setPendingPosts] = useState<Array<{ id: string; content: string; platforms: string[]; scheduledAt?: string; status: string; approvalStatus: string }>>([])
@@ -72,15 +153,23 @@ export default function ClientPortalPage() {
   const [socialLoading, setSocialLoading] = useState(false)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  // AUDIT — /api/projects?company= can return more than one row for a
+  // company with concurrent engagements; this used to keep only d[0], so
+  // every project but the newest was silently invisible to the client with
+  // no list/selector and no error. Now keeps the full list and derives the
+  // displayed project from a selection, defaulting to the first.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [project, setProject] = useState<any>(null)
+  const [projects, setProjects] = useState<any[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const project = projects.find(p => p.id === selectedProjectId) ?? projects[0] ?? null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [contract, setContract] = useState<any>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [clientInvoices, setClientInvoices] = useState<any[]>([])
-  const [accountInfo, setAccountInfo] = useState<{ service: string } | null>(null)
+  const [clientInvoices, setClientInvoices] = useState<Invoice[]>([])
   const [ticketSubject, setTicketSubject] = useState('')
   const [ticketMessage, setTicketMessage] = useState('')
+  const [ticketPriority, setTicketPriority] = useState<typeof TICKET_PRIORITIES[number]>('Medium')
+  const [ticketAttachments, setTicketAttachments] = useState<ClientFileAttachment[]>([])
+  const [ticketAttachUploading, setTicketAttachUploading] = useState(false)
   const [ticketSubmitting, setTicketSubmitting] = useState(false)
   const [ticketSuccess, setTicketSuccess] = useState(false)
   const [existingTickets, setExistingTickets] = useState<ClientTicket[]>([])
@@ -88,6 +177,8 @@ export default function ClientPortalPage() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
   const [replyText, setReplyText] = useState('')
   const [replySending, setReplySending] = useState(false)
+  const [replyAttachments, setReplyAttachments] = useState<ClientFileAttachment[]>([])
+  const [replyAttachUploading, setReplyAttachUploading] = useState(false)
   const [files, setFiles] = useState<{ name: string; size: number; createdAt: string; url: string | null }[]>([])
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -115,14 +206,13 @@ export default function ClientPortalPage() {
     if (!company) { setLoading(false); return }
     const q = encodeURIComponent(company)
     Promise.all([
-      fetch(`/api/projects?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setProject(d[0] ?? null) }).catch(() => toast('Failed to load project data', 'error')),
+      fetch(`/api/projects?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setProjects(d) }).catch(() => toast('Failed to load project data', 'error')),
       fetch(`/api/contracts?company=${q}`).then(r => r.ok ? r.json() : []).then((d: unknown[]) => { if (Array.isArray(d)) setContract(d[0] ?? null) }).catch(() => toast('Failed to load contract data', 'error')),
-      fetch(`/api/invoices?company=${q}`).then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setClientInvoices(d) }).catch(() => toast('Failed to load invoices', 'error')),
-      fetch(`/api/portal-clients?company=${q}`).then(r => r.ok ? r.json() : []).then((clients: { company: string; service: string }[]) => {
-        if (!Array.isArray(clients)) return
-        const match = clients.find(c => c.company === company)
-        if (match) setAccountInfo({ service: match.service })
-      }).catch(() => toast('Failed to load account info', 'error')),
+      // AUDIT — /api/invoices is cursor-paginated at 100/page; a raw
+      // fetch() silently truncated a long-tenured client's billing view
+      // (and the totals computed from it) to only their newest 100
+      // invoices, same bug class as #206/#212.
+      fetchAllPages<Invoice>(`/api/invoices?company=${q}`).then(d => setClientInvoices(d)).catch(() => toast('Failed to load invoices', 'error')),
       fetch(`/api/files?company=${q}`).then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setFiles(d) }).catch(() => toast('Failed to load files', 'error')),
     ]).finally(() => setLoading(false))
   }, [company])
@@ -141,22 +231,41 @@ export default function ClientPortalPage() {
       .finally(() => setInsightsLoading(false))
   }, [activeTab, company, insights])
 
-  // Fetch notifications on mount
+  // AUDIT.md #185 / Part B — load the admin-configured, per-company/
+  // per-service strategy scheduling data + manually-uploaded reports
+  // alongside Insights. /api/portal/dashboard is already company-scoped via
+  // requirePortalClient, so this can't leak another client's data.
   useEffect(() => {
-    if (!user?.id) return
-    fetch(`/api/portal-clients/notifications?clientId=${encodeURIComponent(user.id)}`)
-      .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (Array.isArray(data)) setNotifications(data) })
+    if (activeTab !== 'insights' || !company || portalReports !== null) return
+    fetch(`/api/portal/dashboard?company=${encodeURIComponent(company)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d) => {
+        const config = (d?.portalConfig ?? {}) as {
+          reports?: PortalReportEntry[]
+          services_config?: Record<string, ServiceStrategyConfig>
+        }
+        const enabledServices: string[] = Array.isArray(d?.services) ? d.services : []
+        const svcConfig = config.services_config ?? {}
+        setPortalReports(Array.isArray(config.reports) ? config.reports : [])
+        setServiceStrategies(
+          enabledServices
+            .map(key => ({ key, config: svcConfig[key] }))
+            .filter((s): s is { key: string; config: ServiceStrategyConfig } =>
+              !!s.config && (!!s.config.strategy?.trim() || !!s.config.last_updated))
+        )
+      })
       .catch(() => {/* non-fatal */})
-  }, [user?.id])
+  }, [activeTab, company, portalReports])
 
   // Load existing tickets when Support tab opens
   useEffect(() => {
     if (activeTab !== 'tickets' || !company) return
     setTicketsLoading(true)
-    fetch(`/api/tickets?company=${encodeURIComponent(company)}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setExistingTickets(data) })
+    // AUDIT — /api/tickets is cursor-paginated at 100/page; a raw fetch()
+    // silently truncated a client with a long support history to only
+    // their newest 100 tickets, same bug class as #206/#212.
+    fetchAllPages<ClientTicket>(`/api/tickets?company=${encodeURIComponent(company)}`)
+      .then(data => setExistingTickets(data))
       .catch(() => {/* non-fatal */})
       .finally(() => setTicketsLoading(false))
   }, [activeTab, company])
@@ -177,15 +286,6 @@ export default function ClientPortalPage() {
       .catch(() => {/* non-fatal */})
       .finally(() => setSocialLoading(false))
   }, [activeTab, company])
-
-  async function markNotificationRead(id: string) {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
-    fetch('/api/portal-clients/notifications', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [id], read: true }),
-    }).catch(() => {/* best-effort */})
-  }
 
   async function handleApprovePost(postId: string) {
     try {
@@ -217,8 +317,37 @@ export default function ClientPortalPage() {
 
   const selectedTicket = existingTickets.find(t => t.id === selectedTicketId) ?? null
 
+  // Part D — same /api/files upload the Files tab already uses, portal-
+  // scoped via requirePortalClient(company). Shared by both the new-ticket
+  // form and the reply box below (parity with app/portal/tickets/page.tsx's
+  // handleFileUpload).
+  async function uploadTicketAttachment(
+    file: File,
+    setAttachments: React.Dispatch<React.SetStateAction<ClientFileAttachment[]>>,
+    setUploading: React.Dispatch<React.SetStateAction<boolean>>,
+  ) {
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('company', company)
+      const res = await fetch('/api/files', { method: 'POST', body: fd })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        toast(err.error || 'Failed to upload file', 'error')
+        return
+      }
+      const data = await res.json()
+      setAttachments(prev => [...prev, { name: data.name, url: data.url, path: data.path, type: file.type, size: file.size }])
+    } catch {
+      toast('Failed to upload file', 'error')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   async function sendTicketReply() {
-    if (!selectedTicket || !replyText.trim()) return
+    if (!selectedTicket || (!replyText.trim() && replyAttachments.length === 0)) return
     setReplySending(true)
     try {
       const newMsg: ClientTicketMessage = {
@@ -227,6 +356,7 @@ export default function ClientPortalPage() {
         isInternal: false,
         body: replyText.trim(),
         timestamp: new Date().toISOString(),
+        ...(replyAttachments.length > 0 ? { attachments: replyAttachments } : {}),
       }
       const updatedMessages = [...selectedTicket.messages, newMsg]
       const res = await fetch(`/api/tickets/${selectedTicket.id}`, {
@@ -237,6 +367,7 @@ export default function ClientPortalPage() {
       if (!res.ok) throw new Error()
       setExistingTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, messages: updatedMessages } : t))
       setReplyText('')
+      setReplyAttachments([])
       toast('Reply sent', 'success')
     } catch {
       toast('Failed to send reply', 'error')
@@ -265,85 +396,13 @@ export default function ClientPortalPage() {
     }
   }
 
-  const unreadCount = notifications.filter(n => !n.read).length
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
 
   if (loading) return <LoadingScreen />
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ background: '#f8fafc' }}>
-
-      {/* Header */}
-      <div className="flex-shrink-0 px-3 py-3 sm:px-6 sm:py-4 flex items-center justify-between shadow-sm" style={{ background: '#012b1e' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
-            {company?.[0] ?? ''}
-          </div>
-          <div>
-            <p className="text-white font-bold text-sm" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{company}</p>
-            <p className="text-white/50 text-[11px]">{accountInfo?.service ?? 'Client Portal'}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <button
-              onClick={() => setShowNotifications(v => !v)}
-              className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
-            >
-              <Bell size={16} className="text-white/60" />
-              {unreadCount > 0 && (
-                <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-            {showNotifications && (
-              <div className="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                  <p className="text-sm font-bold text-gray-900">Notifications</p>
-                  <button onClick={() => setShowNotifications(false)} className="p-1 rounded hover:bg-gray-100"><X size={14} className="text-gray-400" /></button>
-                </div>
-                <div className="max-h-72 overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <p className="text-xs text-gray-400 text-center py-8">No notifications yet</p>
-                  ) : (
-                    notifications.slice(0, 15).map(n => (
-                      <button
-                        key={n.id}
-                        onClick={() => markNotificationRead(n.id)}
-                        className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${!n.read ? 'bg-emerald-50/40' : ''}`}
-                      >
-                        <div className="flex items-start gap-2">
-                          {!n.read && <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 mt-1.5" />}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-gray-900 truncate">{n.title}</p>
-                            {n.message && <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>}
-                            <p className="text-[10px] text-gray-400 mt-1">{formatDate(n.createdAt)}</p>
-                          </div>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10">
-            <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-[10px] font-bold text-white">
-              {contactName.split(' ').map(n => n[0]).join('')}
-            </div>
-            <span className="text-white/80 text-xs font-medium hidden sm:block">{contactName}</span>
-          </div>
-          <button
-            onClick={logout}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white text-xs font-medium"
-          >
-            <LogOut size={14} /> Sign out
-          </button>
-        </div>
-      </div>
-
+    <>
       {/* Nav tabs */}
       <div className="flex-shrink-0 flex gap-1 px-3 sm:px-6 pt-3 pb-0 border-b border-gray-200 bg-white overflow-x-auto">
         {([
@@ -460,6 +519,20 @@ export default function ClientPortalPage() {
         {/* Project */}
         {activeTab === 'project' && (
           <div className="max-w-3xl mx-auto flex flex-col gap-5">
+            {projects.length > 1 && (
+              <div className="flex flex-wrap gap-2">
+                {projects.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelectedProjectId(p.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${p.id === project?.id ? 'text-white' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                    style={p.id === project?.id ? { background: '#015035', borderColor: '#015035' } : undefined}
+                  >
+                    {p.serviceType}
+                  </button>
+                ))}
+              </div>
+            )}
             {project ? (
               <>
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
@@ -604,6 +677,85 @@ export default function ClientPortalPage() {
                 )}
               </>
             )}
+
+            {/* AUDIT.md #185 / Part B — reports folded in from the retired
+                app/portal/reports/page.tsx (manual uploads only — its other
+                content was a client-side-synthesized, file-less "progress
+                report" list redundant with the Project tab, not ported),
+                plus the admin panel's per-service Strategy Scheduling data
+                (#185), both read-only for the client. */}
+            {portalReports && portalReports.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <FileText size={16} className="text-emerald-700" />
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Reports</h3>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {portalReports.map((r, i) => (
+                    <div key={i} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-xl">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{r.title}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                        </p>
+                      </div>
+                      {r.file_url && (
+                        <a
+                          href={r.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white flex-shrink-0"
+                          style={{ background: '#015035' }}
+                        >
+                          <Download size={12} /> Download
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {serviceStrategies && serviceStrategies.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Calendar size={16} className="text-emerald-700" />
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Strategy & Scheduling</h3>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {serviceStrategies.map(({ key, config }) => {
+                    const nextUpdate = config.last_updated ? getNextStrategyUpdateDate(config.last_updated, config.frequency) : ''
+                    const isOverdue = !!nextUpdate && new Date(nextUpdate + 'T12:00:00') < new Date()
+                    return (
+                      <div key={key} className="border border-gray-100 rounded-xl p-4">
+                        <div className="flex items-center gap-2 flex-wrap mb-2.5">
+                          <span className="text-sm font-bold text-gray-800">{key}</span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                            {STRATEGY_FREQUENCY_LABELS[config.frequency] ?? config.frequency}
+                          </span>
+                          {isOverdue && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600">Overdue</span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mb-2.5 text-xs">
+                          <div>
+                            <span className="text-gray-400">Last Updated </span>
+                            <span className="font-medium text-gray-700">{config.last_updated || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400">Next Due </span>
+                            <span className={`font-medium ${isOverdue ? 'text-red-600' : 'text-gray-700'}`}>{nextUpdate || 'N/A'}</span>
+                          </div>
+                        </div>
+                        {config.strategy && (
+                          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{config.strategy}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -670,7 +822,7 @@ export default function ClientPortalPage() {
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-3">
                   <button
-                    onClick={() => { setSelectedTicketId(null); setReplyText('') }}
+                    onClick={() => { setSelectedTicketId(null); setReplyText(''); setReplyAttachments([]) }}
                     className="text-xs text-gray-500 hover:text-gray-700 font-medium flex-shrink-0"
                   >
                     ← Back
@@ -678,6 +830,9 @@ export default function ClientPortalPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-800 truncate">{selectedTicket.subject}</p>
                   </div>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${TICKET_PRIORITY_COLORS[selectedTicket.priority] ?? 'bg-gray-100 text-gray-500'}`}>
+                    {selectedTicket.priority}
+                  </span>
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${TICKET_STATUS_COLORS[selectedTicket.status] ?? 'bg-gray-100 text-gray-500'}`}>
                     {selectedTicket.status}
                   </span>
@@ -692,6 +847,22 @@ export default function ClientPortalPage() {
                         <div key={m.id} className={`max-w-[85%] rounded-xl px-3.5 py-2.5 ${fromUs ? 'self-start bg-gray-50' : 'self-end text-white'}`} style={!fromUs ? { background: '#015035' } : {}}>
                           <p className="text-[10px] font-semibold mb-1 opacity-70">{m.author}</p>
                           <p className="text-sm whitespace-pre-wrap">{m.body}</p>
+                          {m.attachments && m.attachments.length > 0 && (
+                            <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/10">
+                              {m.attachments.map((att, j) => (
+                                <a
+                                  key={j}
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`flex items-center gap-1.5 text-xs rounded-lg px-2 py-1 w-fit ${fromUs ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-white/10 text-white/90 hover:bg-white/20'} transition-colors`}
+                                >
+                                  <Download size={10} />
+                                  <span className="truncate max-w-[180px]">{att.name}</span>
+                                </a>
+                              ))}
+                            </div>
+                          )}
                           <p className="text-[10px] mt-1 opacity-50">{formatDate(m.timestamp)}</p>
                         </div>
                       )
@@ -706,9 +877,35 @@ export default function ClientPortalPage() {
                     rows={3}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
                   />
-                  <div className="flex justify-end">
+                  {replyAttachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {replyAttachments.map((att, i) => (
+                        <span key={i} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 rounded-lg px-2 py-1">
+                          <FileText size={10} />
+                          <span className="truncate max-w-[120px]">{att.name}</span>
+                          <button onClick={() => setReplyAttachments(prev => prev.filter((_, idx) => idx !== i))} className="ml-0.5 text-gray-400 hover:text-gray-600">
+                            <X size={10} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <label className={`flex items-center gap-1.5 text-xs text-[#015035] cursor-pointer hover:underline ${replyAttachUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <Upload size={12} /> {replyAttachUploading ? 'Uploading…' : 'Attach file'}
+                      <input
+                        type="file"
+                        className="hidden"
+                        disabled={replyAttachUploading}
+                        onChange={e => {
+                          const file = e.target.files?.[0]
+                          e.target.value = ''
+                          if (file) uploadTicketAttachment(file, setReplyAttachments, setReplyAttachUploading)
+                        }}
+                      />
+                    </label>
                     <button
-                      disabled={replySending || !replyText.trim()}
+                      disabled={replySending || (!replyText.trim() && replyAttachments.length === 0)}
                       onClick={sendTicketReply}
                       className="px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
                       style={{ background: '#015035' }}
@@ -728,7 +925,7 @@ export default function ClientPortalPage() {
                       <CheckCircle size={24} className="mx-auto mb-2 text-emerald-600" />
                       <p className="text-sm font-semibold text-emerald-800">Request submitted!</p>
                       <p className="text-xs text-emerald-600 mt-1">Our team will get back to you shortly.</p>
-                      <button onClick={() => { setTicketSuccess(false); setTicketSubject(''); setTicketMessage('') }} className="mt-3 text-xs text-emerald-700 underline">Submit another</button>
+                      <button onClick={() => { setTicketSuccess(false); setTicketSubject(''); setTicketMessage(''); setTicketPriority('Medium'); setTicketAttachments([]) }} className="mt-3 text-xs text-emerald-700 underline">Submit another</button>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-3">
@@ -745,6 +942,44 @@ export default function ClientPortalPage() {
                         rows={4}
                         className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
                       />
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-semibold text-gray-600">Priority</label>
+                        <select
+                          value={ticketPriority}
+                          onChange={e => setTicketPriority(e.target.value as typeof TICKET_PRIORITIES[number])}
+                          className="w-full sm:w-48 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                        >
+                          {TICKET_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={`flex items-center gap-1.5 text-xs text-[#015035] cursor-pointer hover:underline ${ticketAttachUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                          <Upload size={12} /> {ticketAttachUploading ? 'Uploading…' : 'Attach file'}
+                          <input
+                            type="file"
+                            className="hidden"
+                            disabled={ticketAttachUploading}
+                            onChange={e => {
+                              const file = e.target.files?.[0]
+                              e.target.value = ''
+                              if (file) uploadTicketAttachment(file, setTicketAttachments, setTicketAttachUploading)
+                            }}
+                          />
+                        </label>
+                        {ticketAttachments.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {ticketAttachments.map((att, i) => (
+                              <span key={i} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 rounded-lg px-2 py-1">
+                                <FileText size={10} />
+                                <span className="truncate max-w-[120px]">{att.name}</span>
+                                <button onClick={() => setTicketAttachments(prev => prev.filter((_, idx) => idx !== i))} className="ml-0.5 text-gray-400 hover:text-gray-600">
+                                  <X size={10} />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <div className="flex items-center justify-end">
                         <button
                           disabled={ticketSubmitting || !ticketSubject.trim()}
@@ -756,26 +991,37 @@ export default function ClientPortalPage() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
                                   subject: ticketSubject.trim(),
+                                  priority: ticketPriority,
                                   company,
                                   contactName,
                                   contactEmail: user?.email ?? '',
                                   source: 'Portal',
-                                  messages: ticketMessage.trim() ? [{
+                                  messages: (ticketMessage.trim() || ticketAttachments.length > 0) ? [{
                                     id: `m-${Date.now()}`,
                                     author: contactName,
                                     isInternal: false,
                                     body: ticketMessage.trim(),
                                     timestamp: new Date().toISOString(),
+                                    ...(ticketAttachments.length > 0 ? { attachments: ticketAttachments } : {}),
                                   }] : [],
                                 }),
                               })
+                              // AUDIT #282 — this only handled the success
+                              // branch; a failed submission just stopped
+                              // the spinner with zero indication anything
+                              // went wrong.
                               if (res.ok) {
                                 setTicketSuccess(true)
-                                fetch(`/api/tickets?company=${encodeURIComponent(company)}`)
-                                  .then(r => r.ok ? r.json() : [])
-                                  .then(data => { if (Array.isArray(data)) setExistingTickets(data) })
+                                setTicketPriority('Medium')
+                                setTicketAttachments([])
+                                fetchAllPages<ClientTicket>(`/api/tickets?company=${encodeURIComponent(company)}`)
+                                  .then(data => setExistingTickets(data))
                                   .catch(() => {})
+                              } else {
+                                toast('Failed to submit your request. Please try again.', 'error')
                               }
+                            } catch {
+                              toast('Failed to submit your request. Please try again.', 'error')
                             } finally {
                               setTicketSubmitting(false)
                             }
@@ -815,6 +1061,9 @@ export default function ClientPortalPage() {
                                 {t.messages && t.messages.length > 0 ? ` · ${t.messages.length} message${t.messages.length > 1 ? 's' : ''}` : ''}
                               </p>
                             </div>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${TICKET_PRIORITY_COLORS[t.priority] ?? 'bg-gray-100 text-gray-500'}`}>
+                              {t.priority}
+                            </span>
                             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${TICKET_STATUS_COLORS[t.status] ?? 'bg-gray-100 text-gray-500'}`}>
                               {t.status}
                             </span>
@@ -944,10 +1193,19 @@ export default function ClientPortalPage() {
                         formData.append('file', file)
                         formData.append('company', company)
                         const res = await fetch('/api/files', { method: 'POST', body: formData })
+                        // AUDIT #283 — this only handled the success
+                        // branch; a rejected upload (415 wrong MIME type,
+                        // 413 too large) just reverted the "Uploading…"
+                        // label with zero explanation.
                         if (res.ok) {
                           const saved = await res.json()
                           setFiles(prev => [{ name: saved.name, size: saved.size, createdAt: new Date().toISOString(), url: saved.url }, ...prev])
+                        } else {
+                          const err = await res.json().catch(() => ({}))
+                          toast(err.error || 'Failed to upload file', 'error')
                         }
+                      } catch {
+                        toast('Failed to upload file', 'error')
                       } finally {
                         setUploading(false)
                         e.target.value = ''
@@ -985,7 +1243,7 @@ export default function ClientPortalPage() {
           </div>
         )}
       </div>
-    </div>
+    </>
   )
 }
 

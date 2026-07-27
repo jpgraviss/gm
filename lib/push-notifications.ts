@@ -27,11 +27,18 @@ export async function subscribeToPush(): Promise<PushSubscription | null> {
     applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
   })
 
-  await fetch('/api/push/subscribe', {
+  const res = await fetch('/api/push/subscribe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(subscription.toJSON()),
   })
+  if (!res.ok) {
+    // AUDIT #256 — a failed server call previously left the browser holding
+    // a live Push subscription with no corresponding push_subscriptions
+    // row, silently defeating future sendPushNotification() calls.
+    await subscription.unsubscribe().catch(() => {})
+    throw new Error('Failed to register push subscription')
+  }
 
   return subscription
 }

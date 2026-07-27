@@ -26,7 +26,16 @@ export const GET = withErrorHandler('tracked-keywords GET', async (req) => {
 
   let query = db.from('tracked_keywords').select('*')
 
-  if (company) query = query.eq('company_name', company)
+  if (company) {
+    query = query.eq('company_name', company)
+    // portal_visible exists specifically so staff can hide certain
+    // keywords from a client — this was only ever enforced client-side
+    // (app/portal/services/seo/page.tsx's own .filter), so a portal client
+    // inspecting the network response could see every tracked keyword,
+    // including ones explicitly marked hidden. Staff callers (no `company`
+    // param) still see everything, including hidden ones.
+    query = query.eq('portal_visible', true)
+  }
   query = applyCursor(query, pag)
 
   const { data, error } = await query

@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { isPrivateOrInternalUrl } from '@/lib/ssrf-guard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSite(row: any) {
@@ -62,6 +63,13 @@ export const POST = withErrorHandler('monitored-sites POST', async (req) => {
     new URL(url)
   } catch {
     return NextResponse.json({ error: 'Invalid url' }, { status: 400 })
+  }
+
+  // AUDIT #260 — reject loopback/private/link-local targets (incl. the
+  // 169.254.169.254 cloud metadata address) before this URL is ever stored
+  // and periodically fetched by the uptime cron.
+  if (await isPrivateOrInternalUrl(url)) {
+    return NextResponse.json({ error: 'URL resolves to a private or internal address and cannot be monitored' }, { status: 400 })
   }
 
   const alertEmails: string[] = Array.isArray(body.alertEmails)

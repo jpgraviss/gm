@@ -3,6 +3,7 @@ import { sendEmail } from '@/lib/email'
 import { sendPushNotification } from '@/lib/push-notifications'
 import { wrapBrandedEmail } from '@/lib/email-template'
 import { getSettings } from '@/lib/settings'
+import { shouldSendPushForEvent } from '@/lib/notification-preferences'
 import { contractMonthlyValue } from '@/lib/metrics'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -77,6 +78,17 @@ const ACTION_CONFIG_ADAPTERS: Record<string, (cfg: Record<string, unknown>) => R
   'Send Notification': (cfg) => ({ notifyTarget: cfg.target, notifyMessage: cfg.message }),
   'Add Tag': (cfg) => ({ tag: cfg.tag }),
   'Remove Tag': (cfg) => ({ tag: cfg.tag }),
+  // AUDIT.md #295 — previously had no adapter at all, so the visual builder
+  // (app/automation/builder/page.tsx) had no way to actually reach the
+  // engine's `context.unit` read in the 'Rotate Contact Owner' case below —
+  // the action was only ever reachable via SequenceAutomateTab's bespoke
+  // automation-level config.unit, and only against the Form Submitted
+  // trigger, which the action's own _publicSource gate always blocks. Kept
+  // unprefixed (`unit`, not e.g. `rotateUnit`) to match the engine's
+  // existing read — safe here since this action is only meaningful against
+  // the Contact Created trigger, whose trigger data (a crm_contacts row)
+  // has no `unit` column to collide with.
+  'Rotate Contact Owner': (cfg) => ({ unit: cfg.unit }),
 }
 
 function translateActionConfig(actionType: string, cfg: Record<string, unknown>): Record<string, unknown> {
@@ -260,7 +272,7 @@ export async function executeWorkflow(
         const resumeContext = { ...automation.config, ...triggerData }
         const context = { ...automation.config, ...translateActionConfig(actionType, actionConfig), ...triggerData }
         const remainingActions = automation.actions.slice(i + 1)
-        const result = await executeAction(actionType, context, supabase, automation.id, runId, indexOffset + i, resumeContext)
+        const result = await executeAction(actionType, context, supabase, automation.id, runId, indexOffset + i, resumeContext, triggerType)
         steps.push({
           name: actionType,
           status: 'success',
@@ -351,6 +363,25 @@ async function resolveContactId(context: Record<string, unknown>, company: strin
   return contacts?.[0]?.id ?? null
 }
 
+// `assigned_rep_user_id` is never set anywhere in the app — every trigger
+// only ever spreads a DB row's `assigned_rep`, which is plain text (a
+// name), not a user id. Without this fallback, "Assigned Rep" notification
+// targeting (both the Send Notification action and the standalone Notify
+// Assigned Rep action) silently resolved zero recipients on every run.
+async function resolveAssignedRepUserId(context: Record<string, unknown>, db: SupabaseClient): Promise<string | null> {
+  const direct = (context.assigned_rep_user_id as string) ?? null
+  if (direct) return direct
+  const repName = (context.assigned_rep as string) ?? ''
+  if (!repName) return null
+  const { data: member } = await db
+    .from('team_members')
+    .select('id')
+    .eq('name', repName)
+    .eq('status', 'active')
+    .maybeSingle()
+  return member?.id ?? null
+}
+
 async function executeAction(
   action: string,
   context: Record<string, unknown>,
@@ -359,6 +390,11 @@ async function executeAction(
   runId?: string,
   actionIndex = 0,
   resumeContext: Record<string, unknown> = {},
+  // The raw event key passed to fireAutomations() (e.g. 'deal_stage_changed')
+  // that caused this action to run — the only place in this flow where the
+  // notification's event type is actually known. Used to gate real push
+  // sends below against Settings > Notifications (AUDIT.md #406).
+  triggerType?: string,
 ): Promise<{ paused?: boolean; skipRemaining?: boolean } | void> {
   const company = (context.company as string) ?? ''
   const today = new Date().toISOString().split('T')[0]
@@ -367,18 +403,23 @@ async function executeAction(
     case 'Send Email':
     case 'Send Email Reminder':
     case 'Send Follow-up Email': {
-      if (!company) break
-      const { data: contacts } = await db
+      // form_submitted (and other contact-only triggers) never populate
+      // `company` in context — only requiring it meant Send Email was
+      // structurally dead on the most intuitive builder combo ("Form
+      // Submitted" -> "Send Email"). resolveContactId already falls back
+      // from a direct contactId to a company-name lookup; do the same here
+      // instead of requiring company up front.
+      const contactId = await resolveContactId(context, company, db)
+      if (!contactId) break
+      const { data: contact } = await db
         .from('crm_contacts')
         .select('emails, full_name')
-        .eq('company_name', company)
-        .order('is_primary', { ascending: false })
-        .limit(1)
-      const contact = contacts?.[0]
+        .eq('id', contactId)
+        .maybeSingle()
       if (!contact?.emails?.[0]) break
 
       const subject = (context.emailSubject as string) ?? `Update from GravHub — ${action}`
-      const rawHtml = (context.emailBody as string) ?? `<p>Hi ${contact.full_name ?? 'there'},</p><p>This is an automated message regarding ${company}.</p>`
+      const rawHtml = (context.emailBody as string) ?? `<p>Hi ${contact.full_name ?? 'there'},</p><p>This is an automated message regarding ${company || 'your account'}.</p>`
       const html = await wrapBrandedEmail(rawHtml, 'AUTOMATED NOTIFICATION')
       const fromName = context.fromName as string | undefined
       const from = fromName ? `${fromName} <${(await getSettings()).email.fromEmail}>` : undefined
@@ -452,17 +493,31 @@ async function executeAction(
     }
 
     case 'Create Deal': {
-      const dealName = (context.dealName as string) ?? `Deal for ${company}`
+      let dealCompany = company
+      let dealCompanyId = (context.companyId as string) ?? (context.company_id as string) ?? null
+      const dealContactId = (context.contactId as string) ?? (context.contact_id as string) ?? null
+      // form_submitted/funnel_submitted never populate `company` in context
+      // (only contactId) — without this fallback, a deal auto-created from
+      // a form had a blank company name and no company_id, invisible on
+      // that company's Deals tab despite contact_id correctly resolving.
+      if (!dealCompany && dealContactId) {
+        const { data: contactRow } = await db.from('crm_contacts').select('company_name, company_id').eq('id', dealContactId).maybeSingle()
+        if (contactRow) {
+          dealCompany = contactRow.company_name ?? ''
+          dealCompanyId = dealCompanyId ?? contactRow.company_id ?? null
+        }
+      }
+      const dealName = (context.dealName as string) ?? `Deal for ${dealCompany}`
       const stage = (context.dealStage as string) ?? 'Lead'
       await db.from('deals').insert({
         id: `deal-auto-${uid()}`,
-        company,
+        company: dealCompany,
         // Previously unset on every automation-created deal — a deal
         // spawned from a form/funnel submission had no way back to the
         // contact it came from, which silently broke any join meant to
         // trace revenue back to how that contact was originally sourced.
-        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
-        contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
+        company_id: dealCompanyId,
+        contact_id: dealContactId,
         stage,
         value: (context.value as number) ?? 0,
         service_type: (context.service_type as string) ?? 'General',
@@ -478,7 +533,7 @@ async function executeAction(
       const note = (context.activityNote as string) ?? `[Auto] ${context.trigger ?? 'Automation'} for ${company}`
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'Note',
+        type: 'note',
         title: note,
         company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
@@ -494,7 +549,7 @@ async function executeAction(
 
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'Notification',
+        type: 'note',
         title: `[Auto] ${message}`,
         company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
@@ -504,7 +559,7 @@ async function executeAction(
 
       const targetUserIds: string[] = []
       if (target === 'assigned_rep') {
-        const userId = (context.assigned_rep_user_id as string) ?? ''
+        const userId = await resolveAssignedRepUserId(context, db)
         if (userId) targetUserIds.push(userId)
       } else {
         const unitMap: Record<string, string> = {
@@ -519,18 +574,20 @@ async function executeAction(
             .from('team_members')
             .select('id')
             .eq('unit', unit)
-            .eq('status', 'Active')
+            .eq('status', 'active')
           for (const m of members ?? []) targetUserIds.push(m.id)
         }
       }
 
-      for (const userId of targetUserIds) {
-        sendPushNotification({
-          userId,
-          title: 'Automation Notification',
-          body: message,
-          url: '/automation',
-        }).catch(() => {})
+      if (targetUserIds.length > 0 && await shouldSendPushForEvent(triggerType)) {
+        for (const userId of targetUserIds) {
+          sendPushNotification({
+            userId,
+            title: 'Automation Notification',
+            body: message,
+            url: '/automation',
+          }).catch(() => {})
+        }
       }
       break
     }
@@ -592,6 +649,76 @@ async function executeAction(
         // check — this flag had never propagated in production).
         return { skipRemaining: true }
       }
+      break
+    }
+
+    case 'Generate Proposal': {
+      // AUDIT — every early `break` below (except the 2 explicitly marked
+      // "not applicable") used to make a genuine failure (AI generation
+      // erroring, the PDF upload failing, or — previously not even
+      // checked — the DB insert failing) look identical to a real success
+      // in the automation's Runs tab, since executeWorkflow only marks a
+      // step 'failed' on a THROWN error, not a normal return. Throwing
+      // now means a broken run (e.g. Chromium failing to launch) is
+      // actually visible instead of silently reporting success forever.
+
+      // Not a Form Submitted trigger, or a public/spoofable trigger — this
+      // is the single most expensive action in the engine (a real AI API
+      // call, a headless Chromium render, a storage upload, a DB insert),
+      // so it gets the same public-source guard #46 gave Rotate Contact
+      // Owner: anyone who knows a form's public slug could otherwise spam
+      // submissions to burn AI-provider spend and flood the CRM with junk
+      // Draft proposals, fully unauthenticated.
+      const formId = context.formId as string | undefined
+      if (!formId) break // not applicable — this automation isn't form-triggered
+      if (context._publicSource) break // not applicable — refuse to run from a public, unauthenticated submission
+
+      const data = (context.data as Record<string, string | number | boolean>) ?? {}
+
+      const { data: formRow } = await db.from('forms').select('name, fields').eq('id', formId).maybeSingle()
+      if (!formRow) throw new Error(`Generate Proposal: form ${formId} not found`)
+
+      const fields = (formRow.fields ?? []) as { name: string; label: string; mapsTo?: string }[]
+      const { buildIntakeTextFromSubmission, generateProposal, parsePriceLabel } = await import('@/lib/proposal-generator')
+      const intakeText = buildIntakeTextFromSubmission(fields, data)
+      if (!intakeText.trim()) break // not applicable — submission had no usable fields to draft from
+
+      let clientName = ''
+      for (const f of fields) {
+        if (f.mapsTo === 'company' && data[f.name]) { clientName = String(data[f.name]); break }
+      }
+      if (!clientName) {
+        const contactId = await resolveContactId(context, company, db)
+        if (contactId) {
+          const { data: contactRow } = await db.from('crm_contacts').select('company_name').eq('id', contactId).maybeSingle()
+          clientName = contactRow?.company_name ?? ''
+        }
+      }
+      if (!clientName) clientName = company || (formRow.name as string)
+
+      const result = await generateProposal({ intakeText, clientName })
+
+      const pdfPath = `${clientName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}/${uid()}.pdf`
+      const { error: uploadErr } = await db.storage.from('proposal-pdfs').upload(pdfPath, result.pdf, { contentType: 'application/pdf' })
+      if (uploadErr) throw new Error(`Generate Proposal: PDF upload failed — ${String(uploadErr)}`)
+
+      const recommended = result.draft.options.find(o => o.recommended) ?? result.draft.options[0]
+      const value = parsePriceLabel(recommended?.priceLabel)
+
+      const { error: insertErr } = await db.from('proposals').insert({
+        id: `prop-auto-${uid()}`,
+        company: clientName,
+        status: 'Draft',
+        value,
+        service_type: 'Custom',
+        assigned_rep: '',
+        items: [],
+        form_submission_id: (context.submissionId as string) ?? null,
+        pdf_path: pdfPath,
+        generation_notes: result.notes || (result.source === 'template' ? 'Generated without an AI provider — placeholder draft, needs manual completion.' : ''),
+        created_date: today,
+      })
+      if (insertErr) throw new Error(`Generate Proposal: failed to save proposal — ${insertErr.message}`)
       break
     }
 
@@ -660,7 +787,7 @@ async function executeAction(
       const notifMessage = `${action}: ${context.trigger ?? 'Automation triggered'} for ${company}`
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'Notification',
+        type: 'note',
         title: `[Auto] ${notifMessage}`,
         company_id: (context.companyId as string) ?? null,
         contact_id: (context.contactId as string) ?? null,
@@ -680,13 +807,15 @@ async function executeAction(
           .from('team_members')
           .select('id')
           .eq('unit', targetUnit)
-          .eq('status', 'Active')
-        for (const m of members ?? []) {
-          sendPushNotification({ userId: m.id, title: action, body: notifMessage, url: '/automation' }).catch(() => {})
+          .eq('status', 'active')
+        if (members && members.length > 0 && await shouldSendPushForEvent(triggerType)) {
+          for (const m of members) {
+            sendPushNotification({ userId: m.id, title: action, body: notifMessage, url: '/automation' }).catch(() => {})
+          }
         }
       } else if (action === 'Notify Assigned Rep') {
-        const repId = (context.assigned_rep_user_id as string) ?? ''
-        if (repId) {
+        const repId = await resolveAssignedRepUserId(context, db)
+        if (repId && await shouldSendPushForEvent(triggerType)) {
           sendPushNotification({ userId: repId, title: action, body: notifMessage, url: '/automation' }).catch(() => {})
         }
       }
@@ -696,7 +825,7 @@ async function executeAction(
     case 'Log Touchpoint': {
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'Touchpoint',
+        type: 'note',
         title: `[Auto] ${context.trigger ?? 'Automation'} for ${company}`,
         company_id: (context.companyId as string) ?? null,
         contact_id: (context.contactId as string) ?? null,
@@ -709,7 +838,7 @@ async function executeAction(
     case 'Flag in Dashboard': {
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'FLAG',
+        type: 'note',
         title: `[Auto] Flagged for attention — ${context.trigger ?? action}`,
         company_id: (context.companyId as string) ?? null,
         timestamp: new Date().toISOString(),
@@ -755,7 +884,7 @@ async function executeAction(
       if (!template) break
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'Template',
+        type: 'note',
         title: `[Auto] Applied service template "${template.name}" to ${company}`,
         company_id: (context.companyId as string) ?? null,
         timestamp: new Date().toISOString(),
@@ -777,7 +906,7 @@ async function executeAction(
           type: 'system',
           title: `Update: ${context.trigger ?? action}`,
           message: (context.message as string) ?? `Your account has an update related to ${context.trigger ?? 'activity'}.`,
-          link: '/portal',
+          link: '/client',
           read: false,
           created_at: new Date().toISOString(),
         })
@@ -967,7 +1096,7 @@ async function executeAction(
         .from('team_members')
         .select('id, name')
         .eq('unit', unit)
-        .eq('status', 'Active')
+        .eq('status', 'active')
         .order('id', { ascending: true })
       if (!members || members.length === 0) break
 

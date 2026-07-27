@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
-import { requireRole } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
+import { logAudit } from '@/lib/audit'
 
 const ADDENDUM_STATUSES = ['Draft', 'Sent', 'Accepted', 'Declined'] as const
 const CHANGE_TYPES = ['Scope Change', 'Value Change', 'Term Extension', 'Termination', 'Other'] as const
@@ -23,6 +24,29 @@ function mapAddendum(row: any) {
     scopeAdded:      row.scope_added ?? undefined,
     scopeRemoved:    row.scope_removed ?? undefined,
     effectiveDate:   row.effective_date ?? undefined,
+    deltaApplied:    row.delta_applied ?? false,
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapContract(row: any) {
+  return {
+    id:               row.id,
+    proposalId:       row.proposal_id ?? undefined,
+    companyId:        row.company_id || null,
+    company:          row.company,
+    status:           row.status,
+    value:            row.value,
+    billingStructure: row.billing_structure,
+    startDate:        row.start_date ?? '',
+    duration:         row.duration,
+    renewalDate:      row.renewal_date ?? '',
+    assignedRep:      row.assigned_rep,
+    serviceType:      row.service_type,
+    clientSigned:     row.client_signed ?? undefined,
+    internalSigned:   row.internal_signed ?? undefined,
+    terminatedReason: row.terminated_reason ?? undefined,
+    terminatedDate:   row.terminated_date ?? undefined,
   }
 }
 
@@ -103,6 +127,7 @@ export const POST = withErrorHandler('contracts/[id]/addendums POST', async (req
 export const PATCH = withErrorHandler('contracts/[id]/addendums PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+  const actor = await getAuthUser(req)
   // This PATCH uses a query param ?addendumId=xxx to identify the addendum
   const { id: contractId } = await params
   const body = await req.json()
@@ -139,5 +164,50 @@ export const PATCH = withErrorHandler('contracts/[id]/addendums PATCH', async (r
     throw new Error(error.message)
   }
 
-  return NextResponse.json(mapAddendum(data))
+  const mapped = mapAddendum(data)
+
+  // AUDIT.md #168 — accepting an addendum flipped its own status but never
+  // pushed its value_delta/term_delta_months onto the parent contract, so
+  // the contract's real value/duration/renewal_date (used everywhere else —
+  // dashboards, MRR math, renewals) never reflected it. Apply on Accept via
+  // the atomic RPC (supabase/migrations/add_addendum_delta_application.sql)
+  // rather than a JS select-then-write here, so concurrent accepts and
+  // multiple stacked addendums can't race or double-apply — the RPC claims
+  // delta_applied on the addendum row itself as its compare-and-set guard.
+  let updatedContract: ReturnType<typeof mapContract> | undefined
+  if (body.status === 'Accepted' && (mapped.valueDelta != null || mapped.termDeltaMonths != null)) {
+    const { data: applied, error: rpcError } = await db.rpc('apply_addendum_delta_to_contract', {
+      p_addendum_id: addendumId,
+      p_contract_id: contractId,
+      p_value_delta: mapped.valueDelta ?? null,
+      p_term_delta_months: mapped.termDeltaMonths ?? null,
+    })
+    if (rpcError) {
+      throw new Error(rpcError.message)
+    }
+    if (applied) {
+      mapped.deltaApplied = true
+      const { data: contractRow } = await db.from('contracts').select('*').eq('id', contractId).single()
+      if (contractRow) {
+        updatedContract = mapContract(contractRow)
+      }
+      logAudit({
+        userName: actor?.name || actor?.email || 'system',
+        action: 'addendum_delta_applied',
+        module: 'contracts',
+        type: 'action',
+        metadata: {
+          contractId,
+          addendumId,
+          valueDelta: mapped.valueDelta ?? null,
+          termDeltaMonths: mapped.termDeltaMonths ?? null,
+          newContractValue: updatedContract?.value ?? null,
+          newContractDuration: updatedContract?.duration ?? null,
+          newRenewalDate: updatedContract?.renewalDate ?? null,
+        },
+      })
+    }
+  }
+
+  return NextResponse.json(updatedContract ? { ...mapped, contract: updatedContract } : mapped)
 })

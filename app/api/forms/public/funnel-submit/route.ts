@@ -107,6 +107,17 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
     }
   }
 
+  // NOTE on AUDIT.md #296 (`forms.create_deal`): that toggle — and the
+  // `deal_stage` override it can carry — lives only on the `forms` table
+  // (wired up in ../[slug]/route.ts). Funnels have no equivalent config —
+  // neither the `funnels` row nor a page's `form` block (defaultBlockData
+  // in app/funnels/editor/page.tsx) carries a createDeal/createContact
+  // flag; funnel submissions unconditionally upsert a contact whenever an
+  // email is present, with no toggle to read here. Auto-creating a deal for
+  // every funnel submission would be a new, undecided behavior change (and
+  // a likely flood of throwaway deals), not a fix for #296, so it's left
+  // alone pending an actual product decision to add that config to funnels.
+
   await db.from('form_submissions').insert({
     id: submissionId,
     form_id: `funnel:${funnel.id}`,
@@ -135,11 +146,11 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
   // Credit the page the form was actually submitted from. Falls back to the
   // funnel's first page only if the caller didn't send pageId (e.g. a stale
   // cached embed) or sent one that doesn't belong to this funnel.
-  let targetPage: { id: string; conversions: number | null } | null = null
+  let targetPage: { id: string } | null = null
   if (pageId) {
     const { data: page } = await db
       .from('funnel_pages')
-      .select('id, conversions')
+      .select('id')
       .eq('id', pageId)
       .eq('funnel_id', funnel.id)
       .maybeSingle()
@@ -148,7 +159,7 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
   if (!targetPage) {
     const { data: firstPage } = await db
       .from('funnel_pages')
-      .select('id, conversions')
+      .select('id')
       .eq('funnel_id', funnel.id)
       .order('sort_order', { ascending: true })
       .limit(1)
@@ -157,10 +168,9 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
   }
 
   if (targetPage) {
-    await db
-      .from('funnel_pages')
-      .update({ conversions: (targetPage.conversions ?? 0) + 1 })
-      .eq('id', targetPage.id)
+    // AUDIT — atomic RPC instead of a read-then-write increment, which
+    // could lose a count under concurrent submissions to the same page.
+    await db.rpc('increment_funnel_page_conversions', { p_id: targetPage.id })
   }
 
   return NextResponse.json({ success: true, id: submissionId }, { status: 201, headers: corsHeaders })

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { fetchContracts, fetchCrmContacts, fetchProposals } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, renewalStatusColors, formatDate } from '@/lib/utils'
 import { contractMonthlyValue } from '@/lib/metrics'
 import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
@@ -675,9 +676,10 @@ export default function RenewalsPage() {
   const [renewalAutomationActive, setRenewalAutomationActive] = useState<boolean | null>(null)
 
   useEffect(() => {
-    fetch('/api/renewals')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setLocalRenewals(data) })
+    // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
+    // rows silently truncated due30/due60/overdue KPIs past that.
+    fetchAllPages<Renewal>('/api/renewals')
+      .then(setLocalRenewals)
       .catch(() => toast('Failed to load renewals', 'error'))
       .finally(() => setLoading(false))
     fetchContracts().then(setContracts)
@@ -749,8 +751,29 @@ export default function RenewalsPage() {
     all: localRenewals.length,
   }), [localRenewals])
 
+  // AUDIT — startRenewal/archiveRenewal/RenewalProposalSidebar's onSave all
+  // captured a `previous` snapshot and reverted to it on failure — the same
+  // race #294/#351 fixed elsewhere: if this PATCH's failure arrives after a
+  // second edit to the same renewal already succeeded, reverting to the
+  // stale snapshot clobbers the second edit in the UI. No single-record GET
+  // exists for renewals, so fall back to the same list fetch the page uses
+  // on load and merge only the ONE affected renewal back into local state.
+  async function refetchRenewal(id: string) {
+    try {
+      const fresh = await fetchAllPages<Renewal>('/api/renewals')
+      const match = fresh.find(r => r.id === id)
+      if (match) {
+        setLocalRenewals(prev => prev.some(r => r.id === id) ? prev.map(r => r.id === id ? match : r) : [match, ...prev])
+      } else {
+        setLocalRenewals(prev => prev.filter(r => r.id !== id))
+      }
+    } catch {
+      // Best-effort reconciliation; if this also fails leave the
+      // (already-optimistic) local state as-is rather than guessing.
+    }
+  }
+
   function startRenewal(id: string) {
-    const prevStatus = localRenewals.find(r => r.id === id)?.status
     setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: 'In Progress' as const } : r))
     fetch(`/api/renewals/${id}`, {
       method: 'PATCH',
@@ -759,18 +782,17 @@ export default function RenewalsPage() {
     })
       .then(res => {
         if (!res.ok) {
-          setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: prevStatus ?? r.status } : r))
+          refetchRenewal(id)
           toast('Failed to start renewal', 'error')
         }
       })
       .catch(() => {
-        setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: prevStatus ?? r.status } : r))
+        refetchRenewal(id)
         toast('Failed to start renewal', 'error')
       })
   }
 
   function archiveRenewal(id: string) {
-    const prevStatus = localRenewals.find(r => r.id === id)?.status
     setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: 'Renewed' as const } : r))
     fetch(`/api/renewals/${id}`, {
       method: 'PATCH',
@@ -781,12 +803,12 @@ export default function RenewalsPage() {
         if (res.ok) {
           toast('Renewal archived', 'success')
         } else {
-          setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: prevStatus ?? r.status } : r))
+          refetchRenewal(id)
           toast('Failed to archive renewal', 'error')
         }
       })
       .catch(() => {
-        setLocalRenewals(prev => prev.map(r => r.id === id ? { ...r, status: prevStatus ?? r.status } : r))
+        refetchRenewal(id)
         toast('Failed to archive renewal', 'error')
       })
   }
@@ -1123,7 +1145,6 @@ export default function RenewalsPage() {
           renewal={renewalProposalFor}
           onClose={() => setRenewalProposalFor(null)}
           onSave={(renewalId, proposalData) => {
-            const prevRenewal = localRenewals.find(r => r.id === renewalId)
             setLocalRenewals(prev => prev.map(r => r.id === renewalId ? { ...r, status: 'In Progress' as const, proposalData } : r))
             fetch(`/api/renewals/${renewalId}`, {
               method: 'PATCH',
@@ -1134,12 +1155,12 @@ export default function RenewalsPage() {
                 if (res.ok) {
                   toast('Renewal proposal saved', 'success')
                 } else {
-                  if (prevRenewal) setLocalRenewals(prev => prev.map(r => r.id === renewalId ? prevRenewal : r))
+                  refetchRenewal(renewalId)
                   toast('Failed to save renewal proposal', 'error')
                 }
               })
               .catch(() => {
-                if (prevRenewal) setLocalRenewals(prev => prev.map(r => r.id === renewalId ? prevRenewal : r))
+                refetchRenewal(renewalId)
                 toast('Failed to save renewal proposal', 'error')
               })
             setRenewalProposalFor(null)

@@ -4,13 +4,15 @@ async function getApiKey(): Promise<string | null> {
   if (process.env.MERCURY_API_KEY) return process.env.MERCURY_API_KEY
   try {
     const { createServiceClient } = await import('@/lib/supabase')
+    const { decrypt } = await import('@/lib/encryption')
     const db = createServiceClient()
     const { data } = await db
       .from('app_settings')
       .select('mercury')
       .eq('id', 'global')
       .maybeSingle()
-    return (data?.mercury as { apiKey?: string })?.apiKey || null
+    const apiKey = (data?.mercury as { apiKey?: string })?.apiKey
+    return apiKey ? decrypt(apiKey) : null
   } catch {
     return null
   }

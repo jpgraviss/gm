@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { decrypt } from '@/lib/encryption'
 
 const HUBSPOT_CONTACTS_URL = 'https://api.hubapi.com/crm/v3/objects/contacts'
 
@@ -66,7 +67,8 @@ async function getApiKey(): Promise<string | null> {
       .select('hubspot')
       .eq('id', 'global')
       .maybeSingle()
-    return (data?.hubspot as { apiKey?: string })?.apiKey || null
+    const apiKey = (data?.hubspot as { apiKey?: string })?.apiKey
+    return apiKey ? decrypt(apiKey) : null
   } catch {
     return null
   }

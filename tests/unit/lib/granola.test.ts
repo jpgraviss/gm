@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 function createChain(result: { data: unknown; error: unknown }) {
   const chain: Record<string, unknown> = {}
-  const methods = ['select', 'insert', 'update', 'eq', 'overlaps', 'limit', 'maybeSingle']
+  const methods = ['select', 'insert', 'upsert', 'update', 'eq', 'overlaps', 'limit', 'maybeSingle']
   for (const m of methods) chain[m] = vi.fn().mockImplementation(() => chain)
   chain.then = (resolve: (v: unknown) => void, reject?: (e: unknown) => void) =>
     Promise.resolve(result).then(resolve, reject)
@@ -12,8 +12,17 @@ function createChain(result: { data: unknown; error: unknown }) {
 let appSettingsResult: { data: unknown; error: unknown }
 let existingNoteResult: { data: unknown; error: unknown }
 let contactResult: { data: unknown; error: unknown }
-const insertCalls: Record<string, unknown[]> = {}
+const upsertCalls: Record<string, unknown[]> = {}
 const updateCalls: Record<string, unknown[]> = {}
+
+function trackUpsert(chain: Record<string, unknown>, table: string) {
+  const origUpsert = chain.upsert as (data: unknown) => unknown
+  chain.upsert = vi.fn().mockImplementation((data: unknown) => {
+    if (!upsertCalls[table]) upsertCalls[table] = []
+    upsertCalls[table].push(data)
+    return origUpsert(data)
+  })
+}
 
 const mockDb = {
   from: vi.fn((table: string) => {
@@ -29,12 +38,7 @@ const mockDb = {
     }
     if (table === 'granola_meeting_notes') {
       const chain = createChain(existingNoteResult)
-      const origInsert = chain.insert as (data: unknown) => unknown
-      chain.insert = vi.fn().mockImplementation((data: unknown) => {
-        if (!insertCalls[table]) insertCalls[table] = []
-        insertCalls[table].push(data)
-        return origInsert(data)
-      })
+      trackUpsert(chain, table)
       return chain
     }
     if (table === 'crm_contacts') {
@@ -42,12 +46,7 @@ const mockDb = {
     }
     if (table === 'crm_activities') {
       const chain = createChain({ data: null, error: null })
-      const origInsert = chain.insert as (data: unknown) => unknown
-      chain.insert = vi.fn().mockImplementation((data: unknown) => {
-        if (!insertCalls[table]) insertCalls[table] = []
-        insertCalls[table].push(data)
-        return origInsert(data)
-      })
+      trackUpsert(chain, table)
       return chain
     }
     return createChain({ data: null, error: null })
@@ -67,7 +66,7 @@ describe('lib/granola', () => {
     appSettingsResult = { data: { granola: {} }, error: null }
     existingNoteResult = { data: null, error: null }
     contactResult = { data: null, error: null }
-    for (const key of Object.keys(insertCalls)) delete insertCalls[key]
+    for (const key of Object.keys(upsertCalls)) delete upsertCalls[key]
     for (const key of Object.keys(updateCalls)) delete updateCalls[key]
   })
 
@@ -117,11 +116,12 @@ describe('lib/granola', () => {
 
     expect(result.fetched).toBe(1)
     expect(result.imported).toBe(1)
+    expect(result.updated).toBe(0)
     expect(result.matched).toBe(1)
     expect(result.skipped).toBe(0)
 
-    expect(insertCalls['granola_meeting_notes']).toBeDefined()
-    expect(insertCalls['granola_meeting_notes'][0]).toEqual(
+    expect(upsertCalls['granola_meeting_notes']).toBeDefined()
+    expect(upsertCalls['granola_meeting_notes'][0]).toEqual(
       expect.objectContaining({
         granola_document_id: 'doc-1',
         contact_id: 'contact-1',
@@ -129,8 +129,8 @@ describe('lib/granola', () => {
       }),
     )
 
-    expect(insertCalls['crm_activities']).toBeDefined()
-    expect(insertCalls['crm_activities'][0]).toEqual(
+    expect(upsertCalls['crm_activities']).toBeDefined()
+    expect(upsertCalls['crm_activities'][0]).toEqual(
       expect.objectContaining({
         type: 'meeting',
         title: 'Kickoff call',
@@ -162,15 +162,17 @@ describe('lib/granola', () => {
 
     expect(result.imported).toBe(1)
     expect(result.matched).toBe(0)
-    expect(insertCalls['granola_meeting_notes'][0]).toEqual(
+    expect(upsertCalls['granola_meeting_notes'][0]).toEqual(
       expect.objectContaining({ contact_id: null, activity_id: null }),
     )
-    expect(insertCalls['crm_activities']).toBeUndefined()
+    expect(upsertCalls['crm_activities']).toBeUndefined()
   })
 
-  it('skips a document that was already synced instead of re-inserting or re-logging it', async () => {
+  it('skips a document that was already synced and has not changed since', async () => {
     appSettingsResult = { data: { granola: { apiKey: 'grn_test123' } }, error: null }
-    existingNoteResult = { data: { id: 'granola-doc-3' }, error: null } // already synced
+    // Already synced, and its stored occurred_at is >= the incoming doc's
+    // updated_at — nothing new to re-process.
+    existingNoteResult = { data: { id: 'granola-doc-3', occurred_at: '2026-07-10T14:00:00Z', activity_id: null }, error: null }
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -181,6 +183,48 @@ describe('lib/granola', () => {
 
     expect(result.skipped).toBe(1)
     expect(result.imported).toBe(0)
-    expect(insertCalls['granola_meeting_notes']).toBeUndefined()
+    expect(result.updated).toBe(0)
+    expect(upsertCalls['granola_meeting_notes']).toBeUndefined()
+  })
+
+  it('re-processes an already-synced document whose Granola note was regenerated since', async () => {
+    appSettingsResult = { data: { granola: { apiKey: 'grn_test123' } }, error: null }
+    // Previously synced with an older updated_at and no contact match yet.
+    existingNoteResult = {
+      data: { id: 'granola-doc-4', occurred_at: '2026-07-10T14:00:00Z', activity_id: null },
+      error: null,
+    }
+    contactResult = { data: { id: 'contact-9', company_id: 'company-9' }, error: null }
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ([{
+        id: 'doc-4',
+        title: 'Kickoff call (revised)',
+        summary_markdown: 'Updated summary after Granola re-processed the recording.',
+        attendees: [{ name: 'Jane Client', email: 'jane@client.com' }],
+        updated_at: '2026-07-10T15:00:00Z', // newer than existing.occurred_at
+      }]),
+    }))
+
+    const result = await syncGranolaNotes(mockDb as never)
+
+    expect(result.imported).toBe(0)
+    expect(result.updated).toBe(1)
+    expect(result.skipped).toBe(0)
+    expect(result.matched).toBe(1)
+
+    expect(upsertCalls['granola_meeting_notes'][0]).toEqual(
+      expect.objectContaining({
+        granola_document_id: 'doc-4',
+        summary: 'Updated summary after Granola re-processed the recording.',
+        contact_id: 'contact-9',
+      }),
+    )
+    // A newly-found contact match on an update should still log a real
+    // CRM activity, not skip logging just because this doc was seen before.
+    expect(upsertCalls['crm_activities'][0]).toEqual(
+      expect.objectContaining({ id: 'act-granola-doc-4', contact_id: 'contact-9' }),
+    )
   })
 })

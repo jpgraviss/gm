@@ -140,6 +140,10 @@ export interface Proposal {
   isRenewal?: boolean
   internalOnly?: boolean
   renewalNotes?: string
+  // AI-generated proposals (Generate Proposal pipeline)
+  pdfPath?: string
+  formSubmissionId?: string
+  generationNotes?: string
 }
 
 export interface Contract {
@@ -159,6 +163,10 @@ export interface Contract {
   terminatedReason?: string
   terminatedDate?: string
   companyId?: string | null
+  // AUDIT.md #470 — feedback text a portal client submits with "Request
+  // Changes" (app/client/approvals/page.tsx), persisted so it isn't
+  // silently discarded once the status flips back to Draft.
+  clientNotes?: string
 }
 
 export interface Invoice {
@@ -172,6 +180,9 @@ export interface Invoice {
   paidDate?: string
   serviceType: ServiceType
   companyId?: string | null
+  // Populated by the Stripe webhook on payment — see AUDIT.md.
+  amountPaid?: number
+  stripePaymentIntentId?: string
 }
 
 export interface Milestone {
@@ -557,6 +568,10 @@ export interface AuditSectionResult {
   grade: 'A' | 'B' | 'C' | 'D' | 'F'
   findings: string[]
   recommendations: string[]
+  // AUDIT — true when no AI provider was reachable for this section after
+  // retries. score/grade are 0/F placeholders only so downstream math
+  // doesn't crash on undefined; never render them as a real finding.
+  unavailable?: boolean
 }
 
 export interface AuditResult {

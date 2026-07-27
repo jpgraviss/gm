@@ -20,8 +20,9 @@ type TriggerType =
 
 type ActionType =
   | 'send_email'
-  | 'update_contact' | 'create_deal' | 'add_tag' | 'remove_tag'
+  | 'update_contact' | 'create_deal' | 'add_tag' | 'remove_tag' | 'rotate_owner'
   | 'create_task' | 'log_activity' | 'send_notification'
+  | 'generate_proposal'
   | 'wait' | 'if_else'
 
 interface WorkflowNode {
@@ -58,6 +59,13 @@ const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: s
       { value: 'create_deal',    label: 'Create Deal',      icon: <Briefcase size={18} />,  description: 'Create a new deal record' },
       { value: 'add_tag',        label: 'Add Tag',          icon: <Tag size={18} />,        description: 'Add a tag to the contact' },
       { value: 'remove_tag',     label: 'Remove Tag',       icon: <Tag size={18} />,        description: 'Remove a tag from the contact' },
+      { value: 'rotate_owner',   label: 'Rotate Contact Owner', icon: <RefreshCw size={18} />, description: 'Reassign the contact to the next rep in a unit’s round-robin rotation' },
+    ],
+  },
+  {
+    label: 'Proposals',
+    actions: [
+      { value: 'generate_proposal', label: 'Generate Proposal', icon: <FileText size={18} />, description: 'Draft a branded proposal PDF from the form submission and save it as a draft' },
     ],
   },
   {
@@ -105,9 +113,11 @@ const ACTION_TO_DB: Record<ActionType, string> = {
   create_deal:       'Create Deal',
   add_tag:           'Add Tag',
   remove_tag:        'Remove Tag',
+  rotate_owner:      'Rotate Contact Owner',
   create_task:       'Create Task',
   log_activity:      'Log Activity',
   send_notification: 'Send Notification',
+  generate_proposal: 'Generate Proposal',
   wait:              'Wait',
   if_else:           'If/Else',
 }
@@ -239,6 +249,39 @@ function WebhookTriggerConfig({ token, onRegenerate }: { token: string | undefin
   )
 }
 
+// "Form Submitted" fires for every form by default — nothing scoped it to
+// one form before this, so a client-specific automation (e.g. Generate
+// Proposal on one client's intake form) would have fired for every form in
+// the app. automations-engine.ts's executeWorkflow() already reads
+// config.formScope/formId — this was just missing from the UI.
+function FormTriggerConfig({ formScope, formId, onChange }: {
+  formScope: string
+  formId: string | undefined
+  onChange: (formScope: string, formId: string | undefined) => void
+}) {
+  const [forms, setForms] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    fetch('/api/forms')
+      .then(r => r.ok ? r.json() : { items: [] })
+      .then(data => setForms((Array.isArray(data) ? data : (data.items ?? [])).map((f: { id: string; name: string }) => ({ id: f.id, name: f.name }))))
+      .catch(() => {})
+  }, [])
+
+  return (
+    <FieldLabel label="Which Form">
+      <select
+        value={formScope === 'specific' ? (formId ?? '') : ''}
+        onChange={e => onChange(e.target.value ? 'specific' : 'any', e.target.value || undefined)}
+        className="cfg-input"
+      >
+        <option value="">Any form (fires for every form submission)</option>
+        {forms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+      </select>
+    </FieldLabel>
+  )
+}
+
 // ─── Node Config Panel ───────────────────────────────────────────────────────
 
 function NodeConfigPanel({ node, onChange, onClose }: {
@@ -285,6 +328,8 @@ function NodeConfigPanel({ node, onChange, onClose }: {
           )
         case 'webhook_received':
           return <WebhookTriggerConfig token={config.webhookToken as string | undefined} onRegenerate={() => update('webhookToken', generateWebhookToken())} />
+        case 'form_submitted':
+          return <FormTriggerConfig formScope={(config.formScope as string) ?? 'any'} formId={config.formId as string | undefined} onChange={(formScope, formId) => onChange({ ...config, formScope, formId })} />
         default:
           return <p className="text-xs text-gray-500 italic">No additional configuration needed.</p>
       }
@@ -368,6 +413,16 @@ function NodeConfigPanel({ node, onChange, onClose }: {
             <input value={(config.tag as string) ?? ''} onChange={e => update('tag', e.target.value)} placeholder="e.g. VIP, Hot Lead" className="cfg-input" />
           </FieldLabel>
         )
+      case 'rotate_owner':
+        return (
+          <FieldLabel label="Rotate Within Unit">
+            <select value={(config.unit as string) ?? 'Sales'} onChange={e => update('unit', e.target.value)} className="cfg-input">
+              {['Sales', 'Delivery/Operations', 'Billing/Finance'].map(u => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
+          </FieldLabel>
+        )
       case 'update_contact':
         return (
           <>
@@ -423,6 +478,8 @@ function NodeConfigPanel({ node, onChange, onClose }: {
             </FieldLabel>
           </>
         )
+      case 'generate_proposal':
+        return <p className="text-xs text-gray-500 italic">Uses this automation&apos;s Form Submitted trigger and its submitted answers as the intake — no additional configuration. Set &quot;Specific Form&quot; on the trigger above so this only fires for the intended intake form.</p>
       default:
         return <p className="text-xs text-gray-500 italic">No configuration options.</p>
     }

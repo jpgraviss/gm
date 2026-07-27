@@ -7,14 +7,37 @@ import { getAuthUser, requireRole } from '@/lib/rbac'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapCourse(row: any) {
+function stripQuizAnswers(modules: any[]): any[] {
+  if (!Array.isArray(modules)) return modules
+  return modules.map((mod) => {
+    if (!mod || mod.type !== 'quiz' || typeof mod.content !== 'string') return mod
+    try {
+      const questions = JSON.parse(mod.content)
+      if (!Array.isArray(questions)) return mod
+      const sanitized = questions.map((q) => {
+        if (q && typeof q === 'object' && !Array.isArray(q)) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { correctIndex, ...rest } = q
+          return rest
+        }
+        return q
+      })
+      return { ...mod, content: JSON.stringify(sanitized) }
+    } catch {
+      return mod
+    }
+  })
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapCourse(row: any, opts: { includeAnswers: boolean }) {
   return {
     id:            row.id,
     workspaceId:   row.workspace_id,
     title:         row.title,
     description:   row.description ?? '',
     thumbnailUrl:  row.thumbnail_url ?? undefined,
-    modules:       row.modules ?? [],
+    modules:       opts.includeAnswers ? (row.modules ?? []) : stripQuizAnswers(row.modules ?? []),
     status:        row.status,
     price:         row.price ?? 0,
     accessType:    row.access_type ?? undefined,
@@ -36,6 +59,13 @@ export const GET = withErrorHandler('courses GET', async (req) => {
   if (!email) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
   }
+  // A portal client passes the auth check above but isn't in team_members,
+  // so getAuthUser resolves null for them — used here to keep unpublished
+  // course content restricted to staff, matching the client-side filter
+  // app/client/services/[slug]/page.tsx already applies. The same
+  // staff/non-staff split also decides whether quiz answer keys are
+  // included (AUDIT.md #491).
+  const staffUser = await getAuthUser(req)
 
   const pag = parsePagination(req)
   const db = createServiceClient()
@@ -43,6 +73,7 @@ export const GET = withErrorHandler('courses GET', async (req) => {
   let query = db
     .from('courses')
     .select('*')
+  if (!staffUser) query = query.eq('status', 'Published')
   query = applyCursor(query, pag)
 
   const { data, error } = await query
@@ -50,7 +81,7 @@ export const GET = withErrorHandler('courses GET', async (req) => {
     throw new Error(error.message)
   }
   const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
-  return paginatedJson(rows.map(mapCourse), nextCursor)
+  return paginatedJson(rows.map((row) => mapCourse(row, { includeAnswers: !!staffUser })), nextCursor)
 })
 
 export const POST = withErrorHandler('courses POST', async (req) => {
@@ -89,5 +120,6 @@ export const POST = withErrorHandler('courses POST', async (req) => {
   }
 
   logAudit({ userName: actor?.name || actor?.email || 'system', action: 'created_course', module: 'courses', type: 'action', metadata: { courseId: data.id, title: data.title } })
-  return NextResponse.json(mapCourse(data), { status: 201 })
+  // requireRole('Leadership') above already gates this to staff.
+  return NextResponse.json(mapCourse(data, { includeAnswers: true }), { status: 201 })
 })

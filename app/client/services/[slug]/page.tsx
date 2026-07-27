@@ -294,6 +294,14 @@ function WebDesignService({ company }: { company: string }) {
 // GET /api/social-posts?company=&limit=20, which is explicitly
 // portal-scoped (requirePortalClient when a company param is present),
 // unlike broadcasts — no leak risk here.
+//
+// AUDIT.md #416 — the `service=Social Media` param opts this call into the
+// stricter requireEntitledService check server-side (403s if Social Media
+// isn't actually in this company's portal_clients.services), matching the
+// entitlement gate this page already enforces in React state above. The
+// main /client dashboard's Social tab calls the same route WITHOUT this
+// param on purpose — that approve/reject queue isn't entitlement-gated and
+// must keep working regardless of this check.
 
 interface SocialPost {
   id: string
@@ -323,7 +331,7 @@ function SocialMediaService({ company }: { company: string }) {
 
   useEffect(() => {
     if (!company) { requestAnimationFrame(() => setLoading(false)); return }
-    fetch(`/api/social-posts?company=${encodeURIComponent(company)}&limit=20`)
+    fetch(`/api/social-posts?company=${encodeURIComponent(company)}&limit=20&service=${encodeURIComponent('Social Media')}`)
       .then(r => r.ok ? r.json() : { data: [] })
       .then(result => {
         const posts: SocialPost[] = (result.data ?? result ?? []).map((p: Record<string, unknown>) => ({

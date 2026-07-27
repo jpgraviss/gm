@@ -5,19 +5,26 @@ import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pa
 import { mapPost } from '@/lib/social-media'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
-import { requirePortalClient } from '@/lib/portal-auth'
+import { requirePortalClient, requireEntitledService } from '@/lib/portal-auth'
 
 export const GET = withErrorHandler('social-posts GET', async (req) => {
   const pag = parsePagination(req)
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   const status = searchParams.get('status')
-
-  // Portal clients (services/social-media page) legitimately call this
-  // scoped to their own company — see matching comment in
-  // app/api/proposals/route.ts.
+  // AUDIT.md #416 — opt-in, not the default for every company-scoped call.
+  // app/client/page.tsx's main dashboard Social tab (approve/reject queue)
+  // calls this same route company-scoped with no `service` param and is
+  // NOT gated by "does this company have the Social Media service" —
+  // approving/rejecting posts staff already scheduled for them is a core
+  // portal feature independent of that marketing-services entitlement, and
+  // gating it here would 403 an already-working, unrelated call site. Only
+  // app/client/services/[slug]/page.tsx's Social Media service-detail page
+  // sends `service=Social Media`, so only that call path gets the stricter
+  // per-service entitlement check.
+  const service = searchParams.get('service')
   const denied = company
-    ? await requirePortalClient(req, company)
+    ? (service ? await requireEntitledService(req, company, service) : await requirePortalClient(req, company))
     : await requireRole(req, 'Team Member')
   if (denied) return denied
 

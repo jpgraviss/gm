@@ -68,6 +68,14 @@ interface AutomationTemplate {
   icon: React.ReactNode
   trigger: string
   actions: string[]
+  // Every other template here defaults to 'Active' via NewAutomationPanel's
+  // own default — deliberate, since a human is hand-picking the trigger/
+  // actions when they use those. This one skips that per-field review (it's
+  // a single fully pre-filled step), so it gets the same "created paused,
+  // needs a human to activate" treatment AiAutomationModal already applies
+  // to AI-drafted automations, rather than going live unattended the moment
+  // it's created.
+  defaultStatus?: AutoStatus
 }
 
 // Four templates were removed here (New Deal Welcome, Project Milestone
@@ -108,6 +116,20 @@ const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     trigger: 'Proposal Accepted',
     actions: ['Create Draft Contract', 'Notify Finance Team'],
   },
+  {
+    id: 'intake_form_generate_proposal',
+    name: 'Intake Form → Auto-Draft Proposal',
+    description: 'AI-draft a proposal PDF the moment a client submits an intake form. Pin it to your intake form and review before activating.',
+    icon: <Sparkles size={20} />,
+    trigger: 'Form Submitted',
+    actions: ['Generate Proposal'],
+    // "Form Submitted" fires for every form in the app unless pinned to one
+    // (see the "Which Form" picker below) — starting Active would mean this
+    // burns AI-provider spend and creates a Draft proposal on literally any
+    // form submission (a newsletter signup, a contact form) the instant it's
+    // created, before a human has picked the right form or reviewed it.
+    defaultStatus: 'Paused',
+  },
 ]
 
 function formatRelative(iso: string): string {
@@ -125,16 +147,18 @@ function formatRelative(iso: string): string {
 
 // ─── New Automation Panel ─────────────────────────────────────────────────────
 
-function NewAutomationPanel({ onSave, onClose, initialName, initialTrigger, initialActions }: {
+function NewAutomationPanel({ onSave, onClose, initialName, initialTrigger, initialActions, initialStatus }: {
   onSave: (a: Automation) => void
   onClose: () => void
   initialName?: string
   initialTrigger?: string
   initialActions?: string[]
+  initialStatus?: AutoStatus
 }) {
   const [name, setName] = useState(initialName ?? '')
   const [trigger, setTrigger] = useState(initialTrigger ?? '')
   const [actions, setActions] = useState<string[]>(initialActions && initialActions.length > 0 ? initialActions : [''])
+  const [status] = useState<AutoStatus>(initialStatus ?? 'Active')
   // "Form Submitted" fires for every form in the app by default (nothing
   // scopes it otherwise) — a client-specific automation like Generate
   // Proposal needs to be pinned to the one intake form it's meant for, not
@@ -166,7 +190,7 @@ function NewAutomationPanel({ onSave, onClose, initialName, initialTrigger, init
       trigger,
       actions: actions.filter(a => a.trim()).map(type => ({ type, config: {} })),
       config: trigger === 'Form Submitted' && formId ? { formScope: 'specific', formId } : {},
-      status: 'Active',
+      status,
       runs: 0,
       lastRun: 'Never',
       successRate: null,
@@ -183,6 +207,9 @@ function NewAutomationPanel({ onSave, onClose, initialName, initialTrigger, init
           <div>
             <h2 className="text-white font-bold text-base">New Automation</h2>
             <p className="text-white/50 text-xs mt-0.5">Define a trigger and one or more actions</p>
+            {status === 'Paused' && (
+              <p className="text-amber-300 text-[11px] mt-1 font-medium">Will be created paused — review and activate when ready.</p>
+            )}
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10">
             <X size={16} className="text-white/70" />
@@ -764,6 +791,7 @@ export default function AutomationPage() {
           initialName={activeTemplate?.name}
           initialTrigger={activeTemplate?.trigger}
           initialActions={activeTemplate?.actions}
+          initialStatus={activeTemplate?.defaultStatus}
         />
       )}
 

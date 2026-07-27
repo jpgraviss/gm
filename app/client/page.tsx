@@ -17,12 +17,24 @@ import {
 // This was previously written as `{from, body, date}`, which crashed the
 // staff ticket viewer (`msg.author.split(' ')`) on any real client-created
 // ticket that included an initial message.
+// Part D (Batch 4) — parity with app/portal/tickets/page.tsx's file
+// attachments, uploaded through the same portal-scoped /api/files POST the
+// Files tab above already uses.
+interface ClientFileAttachment {
+  name: string
+  url: string
+  path: string
+  type: string
+  size: number
+}
+
 interface ClientTicketMessage {
   id: string
   author: string
   isInternal: boolean
   body: string
   timestamp: string
+  attachments?: ClientFileAttachment[]
 }
 
 interface ClientTicket {
@@ -34,11 +46,19 @@ interface ClientTicket {
   messages: ClientTicketMessage[]
 }
 
+const TICKET_PRIORITIES = ['Low', 'Medium', 'High'] as const
+
 const TICKET_STATUS_COLORS: Record<string, string> = {
   Open: 'bg-blue-50 text-blue-700',
   'In Progress': 'bg-amber-50 text-amber-700',
   Resolved: 'bg-emerald-50 text-emerald-700',
   Closed: 'bg-gray-100 text-gray-500',
+}
+
+const TICKET_PRIORITY_COLORS: Record<string, string> = {
+  Low: 'bg-gray-100 text-gray-600',
+  Medium: 'bg-blue-50 text-blue-700',
+  High: 'bg-orange-50 text-orange-700',
 }
 
 interface PortalInsights {
@@ -141,6 +161,9 @@ export default function ClientPortalPage() {
   const [clientInvoices, setClientInvoices] = useState<Invoice[]>([])
   const [ticketSubject, setTicketSubject] = useState('')
   const [ticketMessage, setTicketMessage] = useState('')
+  const [ticketPriority, setTicketPriority] = useState<typeof TICKET_PRIORITIES[number]>('Medium')
+  const [ticketAttachments, setTicketAttachments] = useState<ClientFileAttachment[]>([])
+  const [ticketAttachUploading, setTicketAttachUploading] = useState(false)
   const [ticketSubmitting, setTicketSubmitting] = useState(false)
   const [ticketSuccess, setTicketSuccess] = useState(false)
   const [existingTickets, setExistingTickets] = useState<ClientTicket[]>([])
@@ -148,6 +171,8 @@ export default function ClientPortalPage() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
   const [replyText, setReplyText] = useState('')
   const [replySending, setReplySending] = useState(false)
+  const [replyAttachments, setReplyAttachments] = useState<ClientFileAttachment[]>([])
+  const [replyAttachUploading, setReplyAttachUploading] = useState(false)
   const [files, setFiles] = useState<{ name: string; size: number; createdAt: string; url: string | null }[]>([])
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -286,8 +311,37 @@ export default function ClientPortalPage() {
 
   const selectedTicket = existingTickets.find(t => t.id === selectedTicketId) ?? null
 
+  // Part D — same /api/files upload the Files tab already uses, portal-
+  // scoped via requirePortalClient(company). Shared by both the new-ticket
+  // form and the reply box below (parity with app/portal/tickets/page.tsx's
+  // handleFileUpload).
+  async function uploadTicketAttachment(
+    file: File,
+    setAttachments: React.Dispatch<React.SetStateAction<ClientFileAttachment[]>>,
+    setUploading: React.Dispatch<React.SetStateAction<boolean>>,
+  ) {
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('company', company)
+      const res = await fetch('/api/files', { method: 'POST', body: fd })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        toast(err.error || 'Failed to upload file', 'error')
+        return
+      }
+      const data = await res.json()
+      setAttachments(prev => [...prev, { name: data.name, url: data.url, path: data.path, type: file.type, size: file.size }])
+    } catch {
+      toast('Failed to upload file', 'error')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   async function sendTicketReply() {
-    if (!selectedTicket || !replyText.trim()) return
+    if (!selectedTicket || (!replyText.trim() && replyAttachments.length === 0)) return
     setReplySending(true)
     try {
       const newMsg: ClientTicketMessage = {
@@ -296,6 +350,7 @@ export default function ClientPortalPage() {
         isInternal: false,
         body: replyText.trim(),
         timestamp: new Date().toISOString(),
+        ...(replyAttachments.length > 0 ? { attachments: replyAttachments } : {}),
       }
       const updatedMessages = [...selectedTicket.messages, newMsg]
       const res = await fetch(`/api/tickets/${selectedTicket.id}`, {
@@ -306,6 +361,7 @@ export default function ClientPortalPage() {
       if (!res.ok) throw new Error()
       setExistingTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, messages: updatedMessages } : t))
       setReplyText('')
+      setReplyAttachments([])
       toast('Reply sent', 'success')
     } catch {
       toast('Failed to send reply', 'error')
@@ -760,7 +816,7 @@ export default function ClientPortalPage() {
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-3">
                   <button
-                    onClick={() => { setSelectedTicketId(null); setReplyText('') }}
+                    onClick={() => { setSelectedTicketId(null); setReplyText(''); setReplyAttachments([]) }}
                     className="text-xs text-gray-500 hover:text-gray-700 font-medium flex-shrink-0"
                   >
                     ← Back
@@ -768,6 +824,9 @@ export default function ClientPortalPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-800 truncate">{selectedTicket.subject}</p>
                   </div>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${TICKET_PRIORITY_COLORS[selectedTicket.priority] ?? 'bg-gray-100 text-gray-500'}`}>
+                    {selectedTicket.priority}
+                  </span>
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${TICKET_STATUS_COLORS[selectedTicket.status] ?? 'bg-gray-100 text-gray-500'}`}>
                     {selectedTicket.status}
                   </span>
@@ -782,6 +841,22 @@ export default function ClientPortalPage() {
                         <div key={m.id} className={`max-w-[85%] rounded-xl px-3.5 py-2.5 ${fromUs ? 'self-start bg-gray-50' : 'self-end text-white'}`} style={!fromUs ? { background: '#015035' } : {}}>
                           <p className="text-[10px] font-semibold mb-1 opacity-70">{m.author}</p>
                           <p className="text-sm whitespace-pre-wrap">{m.body}</p>
+                          {m.attachments && m.attachments.length > 0 && (
+                            <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/10">
+                              {m.attachments.map((att, j) => (
+                                <a
+                                  key={j}
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`flex items-center gap-1.5 text-xs rounded-lg px-2 py-1 w-fit ${fromUs ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-white/10 text-white/90 hover:bg-white/20'} transition-colors`}
+                                >
+                                  <Download size={10} />
+                                  <span className="truncate max-w-[180px]">{att.name}</span>
+                                </a>
+                              ))}
+                            </div>
+                          )}
                           <p className="text-[10px] mt-1 opacity-50">{formatDate(m.timestamp)}</p>
                         </div>
                       )
@@ -796,9 +871,35 @@ export default function ClientPortalPage() {
                     rows={3}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
                   />
-                  <div className="flex justify-end">
+                  {replyAttachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {replyAttachments.map((att, i) => (
+                        <span key={i} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 rounded-lg px-2 py-1">
+                          <FileText size={10} />
+                          <span className="truncate max-w-[120px]">{att.name}</span>
+                          <button onClick={() => setReplyAttachments(prev => prev.filter((_, idx) => idx !== i))} className="ml-0.5 text-gray-400 hover:text-gray-600">
+                            <X size={10} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <label className={`flex items-center gap-1.5 text-xs text-[#015035] cursor-pointer hover:underline ${replyAttachUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <Upload size={12} /> {replyAttachUploading ? 'Uploading…' : 'Attach file'}
+                      <input
+                        type="file"
+                        className="hidden"
+                        disabled={replyAttachUploading}
+                        onChange={e => {
+                          const file = e.target.files?.[0]
+                          e.target.value = ''
+                          if (file) uploadTicketAttachment(file, setReplyAttachments, setReplyAttachUploading)
+                        }}
+                      />
+                    </label>
                     <button
-                      disabled={replySending || !replyText.trim()}
+                      disabled={replySending || (!replyText.trim() && replyAttachments.length === 0)}
                       onClick={sendTicketReply}
                       className="px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
                       style={{ background: '#015035' }}
@@ -818,7 +919,7 @@ export default function ClientPortalPage() {
                       <CheckCircle size={24} className="mx-auto mb-2 text-emerald-600" />
                       <p className="text-sm font-semibold text-emerald-800">Request submitted!</p>
                       <p className="text-xs text-emerald-600 mt-1">Our team will get back to you shortly.</p>
-                      <button onClick={() => { setTicketSuccess(false); setTicketSubject(''); setTicketMessage('') }} className="mt-3 text-xs text-emerald-700 underline">Submit another</button>
+                      <button onClick={() => { setTicketSuccess(false); setTicketSubject(''); setTicketMessage(''); setTicketPriority('Medium'); setTicketAttachments([]) }} className="mt-3 text-xs text-emerald-700 underline">Submit another</button>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-3">
@@ -835,6 +936,44 @@ export default function ClientPortalPage() {
                         rows={4}
                         className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
                       />
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-semibold text-gray-600">Priority</label>
+                        <select
+                          value={ticketPriority}
+                          onChange={e => setTicketPriority(e.target.value as typeof TICKET_PRIORITIES[number])}
+                          className="w-full sm:w-48 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                        >
+                          {TICKET_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={`flex items-center gap-1.5 text-xs text-[#015035] cursor-pointer hover:underline ${ticketAttachUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                          <Upload size={12} /> {ticketAttachUploading ? 'Uploading…' : 'Attach file'}
+                          <input
+                            type="file"
+                            className="hidden"
+                            disabled={ticketAttachUploading}
+                            onChange={e => {
+                              const file = e.target.files?.[0]
+                              e.target.value = ''
+                              if (file) uploadTicketAttachment(file, setTicketAttachments, setTicketAttachUploading)
+                            }}
+                          />
+                        </label>
+                        {ticketAttachments.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {ticketAttachments.map((att, i) => (
+                              <span key={i} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 rounded-lg px-2 py-1">
+                                <FileText size={10} />
+                                <span className="truncate max-w-[120px]">{att.name}</span>
+                                <button onClick={() => setTicketAttachments(prev => prev.filter((_, idx) => idx !== i))} className="ml-0.5 text-gray-400 hover:text-gray-600">
+                                  <X size={10} />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <div className="flex items-center justify-end">
                         <button
                           disabled={ticketSubmitting || !ticketSubject.trim()}
@@ -846,16 +985,18 @@ export default function ClientPortalPage() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
                                   subject: ticketSubject.trim(),
+                                  priority: ticketPriority,
                                   company,
                                   contactName,
                                   contactEmail: user?.email ?? '',
                                   source: 'Portal',
-                                  messages: ticketMessage.trim() ? [{
+                                  messages: (ticketMessage.trim() || ticketAttachments.length > 0) ? [{
                                     id: `m-${Date.now()}`,
                                     author: contactName,
                                     isInternal: false,
                                     body: ticketMessage.trim(),
                                     timestamp: new Date().toISOString(),
+                                    ...(ticketAttachments.length > 0 ? { attachments: ticketAttachments } : {}),
                                   }] : [],
                                 }),
                               })
@@ -865,6 +1006,8 @@ export default function ClientPortalPage() {
                               // went wrong.
                               if (res.ok) {
                                 setTicketSuccess(true)
+                                setTicketPriority('Medium')
+                                setTicketAttachments([])
                                 fetchAllPages<ClientTicket>(`/api/tickets?company=${encodeURIComponent(company)}`)
                                   .then(data => setExistingTickets(data))
                                   .catch(() => {})
@@ -912,6 +1055,9 @@ export default function ClientPortalPage() {
                                 {t.messages && t.messages.length > 0 ? ` · ${t.messages.length} message${t.messages.length > 1 ? 's' : ''}` : ''}
                               </p>
                             </div>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${TICKET_PRIORITY_COLORS[t.priority] ?? 'bg-gray-100 text-gray-500'}`}>
+                              {t.priority}
+                            </span>
                             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${TICKET_STATUS_COLORS[t.status] ?? 'bg-gray-100 text-gray-500'}`}>
                               {t.status}
                             </span>

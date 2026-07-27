@@ -21,6 +21,11 @@ import { Bell, X, LogOut } from 'lucide-react'
 // the captured e-signature is now actually persisted, not discarded).
 // Batch 3 added app/client/seo/page.tsx and app/client/workflow/page.tsx
 // (SEO Strategy, Delivery Timeline — labels match each page's own <h1>).
+// Batch 4 added app/client/services/page.tsx (Services hub) + the dynamic
+// app/client/services/[slug]/page.tsx per-service pages. Gated to each
+// client's own contracted services — see the audit notes in
+// app/client/services/page.tsx for what's real, what's dead, and why
+// Email Marketing was deliberately not ported (cross-tenant leak risk).
 interface ClientRouteLink {
   href: string
   label: string
@@ -28,6 +33,7 @@ interface ClientRouteLink {
 const CLIENT_ROUTES: ClientRouteLink[] = [
   { href: '/client/agreement', label: 'Agreement' },
   { href: '/client/approvals', label: 'Approvals' },
+  { href: '/client/services', label: 'Services' },
   { href: '/client/seo', label: 'SEO Strategy' },
   { href: '/client/workflow', label: 'Delivery Timeline' },
   { href: '/client/help', label: 'Help Center' },

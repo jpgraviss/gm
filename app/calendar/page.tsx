@@ -119,22 +119,48 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month')
 
-  // Derive booking link from user's name (slug format)
-  const userSlug = user?.name
+  // AUDIT #477 — this used to derive the booking-link slug purely by
+  // lowercasing/hyphenating user.name client-side, never checking the
+  // real saved calendar_settings.slug (fully customizable, with a DB
+  // unique constraint that can force a value that diverges from the
+  // name-derived default). A diverged real slug meant "Copy Link" copied
+  // a broken URL and the bookings-list fetch below filtered against the
+  // wrong slug, silently showing an empty/wrong list. Fall back to the
+  // name-derived slug only as a last resort before the real slug loads,
+  // or when the user has no saved calendar_settings row yet.
+  const fallbackSlug = user?.name
     ? user.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
     : null
+
+  const [realSlug, setRealSlug] = useState<string | null>(null)
+  const [slugLoaded, setSlugLoaded] = useState(false)
+
+  const userSlug = realSlug ?? fallbackSlug
 
   const bookingLink = userSlug
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/book/${userSlug}`
     : null
 
   useEffect(() => {
+    if (!user?.email) { setSlugLoaded(true); return }
+    fetch(`/api/calendar/settings?email=${encodeURIComponent(user.email)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setRealSlug(typeof d?.slug === 'string' ? d.slug : null))
+      .catch(() => toast('Failed to load your booking calendar settings', 'error'))
+      .finally(() => setSlugLoaded(true))
+  }, [user?.email])
+
+  useEffect(() => {
+    // Wait until the real slug has been resolved (or confirmed absent) so
+    // this doesn't fetch bookings for the name-derived fallback slug and
+    // then have to silently redo it once the real slug arrives.
+    if (!slugLoaded) return
     const params = userSlug ? `?slug=${userSlug}` : ''
     fetch(`/api/bookings${params}`)
       .then(r => r.ok ? r.json() : [])
       .then(d => { setBookings(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(() => { toast('Failed to load bookings', 'error'); setLoading(false) })
-  }, [userSlug])
+  }, [slugLoaded, userSlug])
 
   useEffect(() => {
     fetch('/api/settings')
@@ -156,7 +182,44 @@ export default function CalendarPage() {
       .catch(() => {})
   }, [])
 
-  const filteredByTab = bookings.filter(b => {
+  // AUDIT #478 — map a new-flow (booking_type_bookings) row into the same
+  // shape as a legacy Booking, identical to what getBookingsForDate()
+  // already does for the Week/Day grid view. Shared here so the KPI cards
+  // and main bookings list stop undercounting/omitting confirmed
+  // new-flow appointments the way the grid view never did.
+  function mapTypeBooking(tb: BookingTypeBooking): Booking {
+    return {
+      id: tb.id,
+      calendar_slug: tb.booking_types?.slug ?? '',
+      client_name: tb.guest_name,
+      client_email: tb.guest_email,
+      client_company: tb.guest_company,
+      client_phone: null,
+      notes: tb.notes,
+      date: tb.date,
+      start_time: tb.start_time,
+      end_time: tb.end_time,
+      timezone: tb.timezone,
+      status: tb.status,
+      meet_link: (tb as unknown as { meet_link?: string | null }).meet_link ?? null,
+      subscription_id: null,
+      created_at: tb.created_at,
+      // AUDIT #229 — intake_answers was persisted but no staff-facing
+      // surface ever read it, so guests could be required to answer
+      // questions that were then permanently invisible to staff.
+      intakeAnswers: (tb.booking_types?.intake_questions ?? [])
+        .filter(q => tb.intake_answers?.[q.id])
+        .map(q => ({ label: q.label, answer: tb.intake_answers![q.id] })),
+    }
+  }
+
+  // AUDIT #478 — merged source of truth for KPI cards + main bookings list,
+  // combining legacy `bookings` with mapped `typeBookings` the same way the
+  // Week/Day grid view (getBookingsForDate) and month-view dot
+  // (bookingDatesSet) already correctly do.
+  const allBookings: Booking[] = [...bookings, ...typeBookings.map(mapTypeBooking)]
+
+  const filteredByTab = allBookings.filter(b => {
     if (b.status === 'cancelled') return filter === 'past'
     if (filter === 'upcoming') return isUpcoming(b.date, b.start_time)
     if (filter === 'past')     return !isUpcoming(b.date, b.start_time) || b.status === 'cancelled'
@@ -197,7 +260,10 @@ export default function CalendarPage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   })()
 
-  const upcoming = bookings.filter(b => b.status === 'confirmed' && isUpcoming(b.date, b.start_time))
+  // AUDIT #478 — was `bookings.filter(...)` only, undercounting the
+  // "Upcoming Bookings" / "This Week" KPI cards by omitting every
+  // confirmed new-flow (/go/book) appointment.
+  const upcoming = allBookings.filter(b => b.status === 'confirmed' && isUpcoming(b.date, b.start_time))
 
   async function handleCancel(id: string) {
     if (!confirm('Cancel this booking? The client will need to rebook.')) return
@@ -401,29 +467,7 @@ export default function CalendarPage() {
     const base = bookings.filter(b => b.date === dateStr && b.status !== 'cancelled')
     const fromTypes: Booking[] = typeBookings
       .filter(tb => tb.date === dateStr && tb.status !== 'cancelled')
-      .map(tb => ({
-        id: tb.id,
-        calendar_slug: tb.booking_types?.slug ?? '',
-        client_name: tb.guest_name,
-        client_email: tb.guest_email,
-        client_company: tb.guest_company,
-        client_phone: null,
-        notes: tb.notes,
-        date: tb.date,
-        start_time: tb.start_time,
-        end_time: tb.end_time,
-        timezone: tb.timezone,
-        status: tb.status,
-        meet_link: (tb as unknown as { meet_link?: string | null }).meet_link ?? null,
-        subscription_id: null,
-        created_at: tb.created_at,
-        // AUDIT #229 — intake_answers was persisted but no staff-facing
-        // surface ever read it, so guests could be required to answer
-        // questions that were then permanently invisible to staff.
-        intakeAnswers: (tb.booking_types?.intake_questions ?? [])
-          .filter(q => tb.intake_answers?.[q.id])
-          .map(q => ({ label: q.label, answer: tb.intake_answers![q.id] })),
-      }))
+      .map(mapTypeBooking)
     return [...base, ...fromTypes]
   }
 
@@ -570,7 +614,9 @@ export default function CalendarPage() {
             },
             {
               label: 'Total Booked',
-              value: bookings.filter(b => b.status === 'confirmed').length,
+              // AUDIT #478 — was `bookings.filter(...)` only, same
+              // undercount bug as `upcoming` above.
+              value: allBookings.filter(b => b.status === 'confirmed').length,
               icon: User,
               color: 'text-purple-600',
               bg: 'bg-purple-50',

@@ -72,6 +72,7 @@ export const POST = withErrorHandler('projects POST', async (req) => {
     serviceType: { type: 'string', maxLength: 100 },
     status: { type: 'string', enum: [...PROJECT_STATUSES] },
     overview: { type: 'string', maxLength: 5000 },
+    contractId: { type: 'string', maxLength: 100 },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -79,6 +80,17 @@ export const POST = withErrorHandler('projects POST', async (req) => {
     ? body.serviceTypes
     : body.serviceType ? [body.serviceType] : ['General']
   const db = createServiceClient()
+
+  // AUDIT.md #400 — "Convert to Project" (app/contracts/page.tsx) sends a
+  // real contractId here; confirm it exists rather than letting a typo or
+  // stale id silently create an unlinked project that looks linked.
+  if (body.contractId) {
+    const { data: contract, error: cErr } = await db.from('contracts').select('id').eq('id', body.contractId).single()
+    if (cErr || !contract) {
+      return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
+    }
+  }
+
   const { data, error } = await db
     .from('projects')
     .insert({

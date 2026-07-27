@@ -221,7 +221,7 @@ function MaintenancePanel({
 }: {
   record: MaintenanceRecord
   onClose: () => void
-  onConfirmCancellation: (id: string) => void
+  onConfirmCancellation: (id: string, effectiveDate: string) => void
   onUpdateBilling: (id: string, fee: number, nextDate: string) => void
   onUpdateDocuments: (id: string, documents: MaintenanceRecord['documents']) => void
   onEdit: (record: MaintenanceRecord) => void
@@ -235,8 +235,19 @@ function MaintenancePanel({
   const [newFee, setNewFee] = useState(record.monthlyFee.toString())
   const [newBillingDate, setNewBillingDate] = useState(record.nextBillingDate)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [cancelEffectiveDate, setCancelEffectiveDate] = useState(new Date().toISOString().split('T')[0])
   const [documents, setDocuments] = useState(record.documents ?? [])
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // AUDIT.md #467 — "notice window" is measured against how much advance
+  // notice is actually given: the gap between today (when staff confirm
+  // the cancellation) and the effective date they pick for it, compared to
+  // the record's own `cancellationWindow` days. Falling short of the
+  // window means the client is cancelling with insufficient notice, which
+  // is what the configured `cancellationFee` exists to cover.
+  const cancelNoticeDays = getDaysUntil(cancelEffectiveDate)
+  const cancelFeeAmount = record.cancellationFee ?? record.monthlyFee * 3
+  const cancelFeeApplies = cancelNoticeDays < record.cancellationWindow && cancelFeeAmount > 0
 
   const contact = crmContacts.find(c => c.companyName === record.company && c.isPrimary)
   const contract = contracts.find(c => c.company === record.company && c.serviceType === record.serviceType)
@@ -436,16 +447,40 @@ function MaintenancePanel({
                         </button>
                       )}
                       {showCancelConfirm && (
-                        <div className="mt-2 flex gap-2">
-                          <button
-                            onClick={() => { onConfirmCancellation(record.id); setShowCancelConfirm(false); onClose() }}
-                            className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700"
-                          >
-                            Yes, Cancel Contract
-                          </button>
-                          <button onClick={() => setShowCancelConfirm(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
-                            Keep Active
-                          </button>
+                        <div className="mt-3 flex flex-col gap-2">
+                          <div>
+                            <label className="block text-[10px] text-red-500 uppercase tracking-wide font-semibold mb-1">
+                              Cancellation Effective Date
+                            </label>
+                            <input
+                              type="date"
+                              value={cancelEffectiveDate}
+                              onChange={e => setCancelEffectiveDate(e.target.value)}
+                              className="w-full px-2.5 py-1.5 border border-red-200 rounded-lg text-xs bg-white focus:outline-none focus:border-red-400"
+                            />
+                          </div>
+                          <p className="text-[11px] leading-relaxed">
+                            {cancelFeeApplies ? (
+                              <span className="text-red-700 font-medium">
+                                Only {cancelNoticeDays}d notice given ({record.cancellationWindow}d required) — a {formatCurrency(cancelFeeAmount)} cancellation fee invoice will be created automatically.
+                              </span>
+                            ) : (
+                              <span className="text-red-600">
+                                {cancelNoticeDays}d notice given meets the {record.cancellationWindow}d window — no cancellation fee due.
+                              </span>
+                            )}
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => { onConfirmCancellation(record.id, cancelEffectiveDate); setShowCancelConfirm(false); onClose() }}
+                              className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700"
+                            >
+                              Yes, Cancel Contract
+                            </button>
+                            <button onClick={() => setShowCancelConfirm(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+                              Keep Active
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -748,7 +783,17 @@ export default function MaintenancePage() {
     }
   }
 
-  async function confirmCancellation(id: string) {
+  // AUDIT.md #467 — confirming a cancellation previously just PATCHed
+  // status: 'Cancelled' with no check of the record's own Cancellation
+  // Terms (notice-window days + fee) and no invoice ever generated for
+  // that fee. Now: the notice window is measured against the effective
+  // date staff pick in the confirm UI vs. today — falling short of
+  // `cancellationWindow` days auto-creates a real fee invoice via the
+  // same POST /api/invoices endpoint used by the Billing page's
+  // "Create Invoice from Unbilled Time" flow (#421). Sufficient notice
+  // means no fee, cancel proceeds normally either way.
+  async function confirmCancellation(id: string, effectiveDate: string) {
+    const record = records.find(r => r.id === id)
     setRecords(prev => prev.map(r => r.id === id ? { ...r, status: 'Cancelled' } : r))
     setSelected(null)
     try {
@@ -761,6 +806,65 @@ export default function MaintenancePage() {
     } catch {
       await refetchRecord(id)
       toast('Failed to confirm cancellation', 'error')
+      return
+    }
+
+    if (!record) {
+      // Shouldn't happen (the panel can only be opened on a record already
+      // in local state), but without it we have no cancellationWindow/fee
+      // to check against — don't guess at a fee.
+      toast('Cancelled — could not verify cancellation fee terms', 'info')
+      return
+    }
+
+    const noticeDays = getDaysUntil(effectiveDate)
+    const feeAmount = record.cancellationFee ?? record.monthlyFee * 3
+    const feeApplies = noticeDays < record.cancellationWindow && feeAmount > 0
+
+    if (!feeApplies) {
+      toast('Cancelled — no fee due, sufficient notice given', 'success')
+      return
+    }
+
+    // AUDIT.md #418 — manually-created records frequently have a null
+    // companyId (AddRecordPanel only ever captured the company name).
+    // POST /api/invoices already tolerates a null/omitted companyId
+    // (companyId ?? null) — the same tolerance the #421 "Create Invoice
+    // from Unbilled Time" flow relies on, since it never sends companyId
+    // either. We follow that established convention rather than blocking
+    // auto-invoicing outright, but the success toast calls out the gap so
+    // staff know to double-check it lands in the right client's portal.
+    try {
+      const dueDate = (() => {
+        const d = new Date()
+        d.setDate(d.getDate() + 30)
+        return d.toISOString().split('T')[0]
+      })()
+      const invRes = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: record.company,
+          ...(record.companyId ? { companyId: record.companyId } : {}),
+          amount: feeAmount,
+          serviceType: record.serviceType,
+          dueDate,
+        }),
+      })
+      if (!invRes.ok) throw new Error('Failed')
+      const newInvoice = await invRes.json()
+      setInvoices(prev => [newInvoice, ...prev])
+      toast(
+        record.companyId
+          ? `Cancellation fee invoice created — ${formatCurrency(feeAmount)} (only ${noticeDays}d notice given, ${record.cancellationWindow}d required)`
+          : `Cancellation fee invoice created — ${formatCurrency(feeAmount)} (record has no linked company — verify it appears in the right client's billing)`,
+        'success',
+      )
+    } catch {
+      toast(
+        `Cancelled, but failed to auto-create the ${formatCurrency(feeAmount)} cancellation fee invoice (insufficient notice: ${noticeDays}d of ${record.cancellationWindow}d required) — please invoice manually`,
+        'error',
+      )
     }
   }
 

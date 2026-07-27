@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import Header from '@/components/layout/Header'
+import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { formatDate, aiSourceLabel } from '@/lib/utils'
 import { PLATFORM_META, type SocialPlatform, type PostStatus } from '@/lib/social-media'
@@ -62,6 +63,13 @@ function startDayOfWeek(year: number, month: number): number {
 
 export default function SocialMediaPage() {
   const { toast } = useToast()
+  const { user } = useAuth()
+  // AUDIT #426 — DELETE /api/social-posts/[id] requires 'Leadership'
+  // server-side (see app/api/social-posts/[id]/route.ts), but nothing here
+  // gated the delete button by role, matching the pattern used elsewhere
+  // (e.g. app/rank-tracker/page.tsx's canRefresh) for other Leadership-only
+  // actions.
+  const canDeletePost = !!user?.isAdmin || user?.role === 'Leadership' || user?.role === 'Super Admin'
   const [posts, setPosts] = useState<SocialPost[]>([])
   const [clients, setClients] = useState<ClientBinding[]>([])
   const [loading, setLoading] = useState(true)
@@ -168,9 +176,17 @@ export default function SocialMediaPage() {
   }
 
   async function deletePost(id: string) {
+    // AUDIT #426 — this never checked res.ok, so a Team Member (blocked
+    // server-side by requireRole 'Leadership') got a false "Deleted"
+    // success toast and watched the post vanish from local state, only for
+    // it to reappear on next reload since the server never touched it.
+    // Matches the res.ok pattern already used by createPost/updatePost/
+    // publishPost in this same file.
+    if (!canDeletePost) { toast('Only Leadership can delete posts', 'error'); return }
     if (!confirm('Delete this post?')) return
     try {
-      await fetch(`/api/social-posts/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/social-posts/${id}`, { method: 'DELETE' })
+      if (!res.ok) { toast('Failed to delete post', 'error'); return }
       setPosts(prev => prev.filter(p => p.id !== id))
       setComposing(null)
       toast('Deleted', 'success')
@@ -312,6 +328,7 @@ export default function SocialMediaPage() {
         <PostComposer
           post={composing === 'new' ? null : composing}
           clients={clients.map(c => c.companyName)}
+          canDelete={canDeletePost}
           onClose={() => setComposing(null)}
           onCreate={createPost}
           onUpdate={updatePost}
@@ -450,9 +467,10 @@ function SocialConnectionsModal({ onClose }: { onClose: () => void }) {
 
 // ─── Post composer side panel ──────────────────────────────────────────────
 
-function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, onPublish }: {
+function PostComposer({ post, clients, canDelete, onClose, onCreate, onUpdate, onDelete, onPublish }: {
   post: SocialPost | null
   clients: string[]
+  canDelete: boolean
   onClose: () => void
   onCreate: (data: { companyName: string; content: string; platforms: SocialPlatform[]; scheduledAt?: string; hashtags?: string[]; linkUrl?: string; status?: PostStatus }) => void
   onUpdate: (id: string, patch: Partial<SocialPost>) => void
@@ -605,7 +623,9 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
               {post.status === 'draft' || (post.status === 'pending_approval' && post.approvalStatus === 'approved') ? (
                 <button onClick={() => onPublish(post.id)} className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 flex items-center gap-1.5"><Send size={13} /> Publish</button>
               ) : null}
-              <button onClick={() => onDelete(post.id)} className="p-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>
+              {canDelete && (
+                <button onClick={() => onDelete(post.id)} className="p-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>
+              )}
             </>
           ) : (
             <>

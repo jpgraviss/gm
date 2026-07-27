@@ -53,14 +53,30 @@ export const GET = withErrorHandler('broadcasts/[id] GET', async (req: NextReque
 })
 
 export const PATCH = withErrorHandler('broadcasts/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
-  // Matches the role level its sibling DELETE/POST-send routes already
-  // require — without it, any authenticated staff member could set
-  // status: 'sent' directly, marking a broadcast sent with nothing emailed.
-  const denied = await requireRole(req, 'Leadership')
+  // AUDIT #422 — this previously required 'Leadership' unconditionally,
+  // matching DELETE/POST-send. But POST (create) only requires 'Team
+  // Member', and Sidebar.tsx gates the Broadcasts nav item by *unit*
+  // (Sales/Delivery/Leadership), not role — so a Sales/Delivery staffer
+  // with role Team Member is expected, by the nav's own design, to be able
+  // to open Broadcasts and use it day to day. With PATCH pinned to
+  // Leadership, that user could create a draft but every Save/Preview
+  // Audience/Schedule Send call 403'd. Lowered the baseline to match POST.
+  // The one thing that guard was actually protecting against — a
+  // non-Leadership user marking a broadcast status: 'sent' directly via a
+  // raw PATCH, bypassing sendBroadcastNow entirely and showing "Sent" with
+  // nothing ever emailed — is preserved below as a targeted elevated check
+  // on that specific transition, rather than gating the whole endpoint.
+  const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
   const { id } = await params
   const body = await req.json()
+
+  if (body.status === 'sent' || body.status === 'sending') {
+    const deniedElevated = await requireRole(req, 'Leadership')
+    if (deniedElevated) return deniedElevated
+  }
+
   const db = createServiceClient()
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }

@@ -424,10 +424,20 @@ function BroadcastEditor({
       audienceFilter: draft.audienceFilter,
     })
     if (updated) setDraft(updated)
+    return updated
   }
 
   async function previewAudience() {
-    await save()
+    // AUDIT #422 — previously called save() without checking its result,
+    // then unconditionally fetched the audience preview anyway. onSave
+    // (updateBroadcast) already toasts its own "Failed to save" error and
+    // returns undefined on failure, but that failure was silently ignored
+    // here — the preview would run against whatever filter is still
+    // persisted server-side (stale, or empty for a brand-new draft), while
+    // the UI displayed it as a confident count for the filter currently on
+    // screen. Bail out before fetching if the save didn't actually land.
+    const updated = await save()
+    if (!updated) return
     const res = await fetch(`/api/broadcasts/${broadcast.id}/audience`)
     if (!res.ok) { toast('Failed to preview audience', 'error'); return }
     const data = await res.json()

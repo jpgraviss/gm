@@ -1523,14 +1523,40 @@ export default function PipelinePage() {
     setShowBulkReassign(false)
     setBulkReassignValue('')
     setSelectedIds(new Set())
-    for (const id of ids) {
-      fetch(`/api/deals/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assignedRep }),
-      }).catch(() => {})
+    // AUDIT #433 — this previously fired fire-and-forget PATCHes with
+    // `.catch(() => {})` and no res.ok check at all, then always toasted
+    // success — the exact bug already fixed on the Companies page (#294)
+    // for its bulk owner-reassignment. Applying the identical pattern:
+    // Promise.all + per-request res.ok, then on any failure refetch the
+    // full list (there's no single-deal GET, same as companies) and merge
+    // in only the ids that actually failed, so a concurrent edit to one of
+    // these deals that succeeded in the meantime isn't clobbered by a
+    // stale local revert.
+    const failedIds = new Set<string>()
+    await Promise.all(ids.map(async id => {
+      try {
+        const res = await fetch(`/api/deals/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assignedRep }),
+        })
+        if (!res.ok) throw new Error('Failed')
+      } catch {
+        failedIds.add(id)
+      }
+    }))
+    if (failedIds.size > 0) {
+      try {
+        const fresh = await fetchAllPages<LocalDeal>('/api/deals')
+        const freshById = new Map(fresh.map(d => [d.id, d]))
+        setLocalDeals(prev => prev.map(d => failedIds.has(d.id) ? (freshById.get(d.id) ?? d) : d))
+      } catch {
+        // Best-effort reconciliation; leave the optimistic state if this fails too.
+      }
+      toast(`${ids.length - failedIds.size} deals reassigned to ${assignedRep}, ${failedIds.size} failed`, 'error')
+    } else {
+      toast(`${ids.length} deals reassigned to ${assignedRep}`, 'success')
     }
-    toast(`${ids.length} deals reassigned to ${assignedRep}`, 'success')
   }
 
   if (loading) return <LoadingScreen />

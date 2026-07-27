@@ -11,20 +11,20 @@ import { Bell, X, LogOut } from 'lucide-react'
 // logout). app/client/page.tsx keeps its own internal tab bar + all 7 tabs'
 // content, since that's Overview-page-specific, not shared chrome.
 //
-// CLIENT_ROUTES — extension point for future portal capabilities becoming
-// real route segments under app/client/* (agreement e-signature, help
-// center, SEO strategy, delivery workflow, per-service pages — see the
-// batch plan). Once a later batch adds e.g. app/client/agreement/page.tsx,
-// add `{ href: '/client/agreement', label: 'Agreement' }` here and it will
-// render as a slim nav strip below the header, above whatever the active
-// route (page.tsx's tabs, or a new sub-route) renders. Deliberately empty
-// for Batch 0 — none of these routes exist yet, so there's nothing to link
-// to and the strip renders nothing.
+// CLIENT_ROUTES — extension point for portal capabilities becoming real
+// route segments under app/client/* (agreement e-signature, help center,
+// SEO strategy, delivery workflow, per-service pages — see the batch plan).
+// Renders as a slim nav strip below the header, above whatever the active
+// route (page.tsx's tabs, or a sub-route) renders. Batch 1 added the first
+// two real routes: app/client/agreement/page.tsx and app/client/help/page.tsx.
 interface ClientRouteLink {
   href: string
   label: string
 }
-const CLIENT_ROUTES: ClientRouteLink[] = []
+const CLIENT_ROUTES: ClientRouteLink[] = [
+  { href: '/client/agreement', label: 'Agreement' },
+  { href: '/client/help', label: 'Help Center' },
+]
 
 interface ClientNotification {
   id: string

@@ -95,7 +95,7 @@ export default function CalendarSettingsPage() {
     ? `${window.location.origin}/api/calendar/feed/${calendarId}`
     : ''
 
-  const googleConnected = Boolean((settings as { google_refresh_token?: string | null } | null)?.google_refresh_token)
+  const googleConnected = Boolean((settings as { googleConnected?: boolean } | null)?.googleConnected)
 
   function copyFeedUrl() {
     if (!feedUrl) return

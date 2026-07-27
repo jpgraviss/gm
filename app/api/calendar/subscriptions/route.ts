@@ -14,14 +14,25 @@ export const GET = withErrorHandler('calendar/subscriptions GET', async (req) =>
 
   const { searchParams } = new URL(req.url)
   const userEmail = searchParams.get('email')
-  const db = createServiceClient()
+  if (userEmail && !isOwnerOrAdmin(user, userEmail)) {
+    return NextResponse.json({ error: 'Cannot view another team member\'s calendar subscriptions' }, { status: 403 })
+  }
 
+  const db = createServiceClient()
   let query = db
     .from('calendar_subscriptions')
     .select('*')
     .order('created_at', { ascending: false })
 
-  if (userEmail) query = query.eq('user_email', userEmail)
+  if (userEmail) {
+    // Already verified above that the caller owns this email or is an admin/leader.
+    query = query.eq('user_email', userEmail)
+  } else if (!user.isAdmin && user.role !== 'Leadership') {
+    // No target specified and the caller isn't an admin/leader — an unscoped
+    // list would leak every team member's ical_url (a secret feed token), so
+    // scope non-privileged callers to their own subscriptions only.
+    query = query.eq('user_email', user.email)
+  }
 
   const { data, error } = await query
   if (error) throw new Error(error.message)

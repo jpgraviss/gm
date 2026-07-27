@@ -324,7 +324,7 @@ function ArticleDetailView({
           {article.category}
         </button>
         <ChevronRight size={12} />
-        <span className="text-gray-900 font-medium truncate max-w-[200px]">{article.title}</span>
+        <span className="text-gray-900 font-medium truncate max-w-[120px] sm:max-w-[220px]">{article.title}</span>
       </nav>
 
       <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#015035] mb-5 transition-colors">

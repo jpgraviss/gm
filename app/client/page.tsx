@@ -638,7 +638,7 @@ export default function ClientPortalPage() {
                       <Star size={16} className="text-emerald-700" />
                       <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Reputation</h3>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                       <InsightMetric label="Average Rating" value={`${insights.reputation.averageRating.toFixed(1)} ★`} />
                       <InsightMetric label="New Reviews" value={insights.reputation.newReviews.toString()} />
                       <InsightMetric label="Total Reviews" value={insights.reputation.totalReviews.toString()} />
@@ -668,7 +668,7 @@ export default function ClientPortalPage() {
                       <Activity size={16} className="text-emerald-700" />
                       <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Website Uptime</h3>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                       <InsightMetric label="Sites" value={insights.uptime.sitesMonitored.toString()} />
                       <InsightMetric label="Uptime (30d)" value={`${insights.uptime.uptimePercent}%`} />
                       <InsightMetric label="Incidents" value={insights.uptime.incidents.toString()} />

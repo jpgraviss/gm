@@ -378,7 +378,7 @@ export default function ClientApprovalsPage() {
           )}
 
           {isPending && !actionMode && (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch gap-3">
               <button
                 onClick={() => setActionMode('accept')}
                 className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-semibold"

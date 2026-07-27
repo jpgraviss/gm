@@ -24,5 +24,13 @@ output.on('close', () => {
 
 archive.on('error', (err) => { throw err })
 archive.pipe(output)
-archive.directory(pluginDir, 'gravhub-seo')
+// Pin every entry's timestamp instead of letting archiver read each
+// source file's real mtime. The CI check (see ci.yml's "WordPress plugin
+// zip is up to date" step) rebuilds this zip fresh from a freshly
+// checked-out working tree and diffs it byte-for-byte against this
+// committed file -- a fresh git checkout resets file mtimes to checkout
+// time, which never matches whatever mtimes happened to be on disk when
+// this zip was originally built, so the byte-for-byte comparison failed
+// on every rebuild regardless of whether the source had actually changed.
+archive.directory(pluginDir, 'gravhub-seo', { date: new Date(0) })
 archive.finalize()

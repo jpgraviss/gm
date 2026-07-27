@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { chatCompletion } from '@/lib/ai-client'
+import { EMAIL_PATTERN } from '@/lib/validation'
 
 interface KnowledgeItem {
   id: string
@@ -24,15 +25,23 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
   const { id } = await params
 
   const body = await req.json()
-  const { message, conversationId, visitorId } = body as {
+  const { message, conversationId, visitorId, visitorName, visitorEmail } = body as {
     message: string
     conversationId?: string
     visitorId?: string
+    visitorName?: string
+    visitorEmail?: string
   }
 
   if (!message || typeof message !== 'string' || !message.trim()) {
     return NextResponse.json({ error: 'Message is required' }, { status: 400 })
   }
+  // Lead capture (AUDIT #492) — the widget's pre-chat form is skippable, so
+  // both fields are optional and best-effort sanitized here rather than
+  // rejecting the whole message over a malformed name/email.
+  const sanitizedVisitorName = sanitizeVisitorField(visitorName, 200)
+  const rawVisitorEmail = sanitizeVisitorField(visitorEmail, 320)
+  const sanitizedVisitorEmail = rawVisitorEmail && EMAIL_PATTERN.test(rawVisitorEmail) ? rawVisitorEmail.toLowerCase() : null
   // AUDIT — no length cap at all meant an attacker could POST arbitrarily
   // large messages (within the per-IP rate limit) to inflate input-token
   // cost, and full conversation history is resent every turn with no cap
@@ -77,11 +86,16 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
 
   let convoId = conversationId
   let existingMessages: ConversationMessage[] = []
+  // Late-capture support: if an ongoing conversation already has a name/email
+  // (e.g. captured earlier in the same thread), don't overwrite it with a
+  // blank value from a turn that didn't resend it.
+  let existingVisitorName: string | null = null
+  let existingVisitorEmail: string | null = null
 
   if (convoId) {
     const { data: convo } = await db
       .from('chatbot_conversations')
-      .select('messages, visitor_id')
+      .select('messages, visitor_id, visitor_name, visitor_email')
       .eq('id', convoId)
       .eq('chatbot_id', id)
       .single()
@@ -93,6 +107,8 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
     // fresh conversation instead of continuing theirs.
     if (convo && (!convo.visitor_id || convo.visitor_id === visitorId)) {
       existingMessages = (convo.messages as ConversationMessage[]) || []
+      existingVisitorName = convo.visitor_name
+      existingVisitorEmail = convo.visitor_email
     } else {
       convoId = undefined
     }
@@ -104,6 +120,8 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
       id: convoId,
       chatbot_id: id,
       visitor_id: visitorId || null,
+      visitor_name: sanitizedVisitorName,
+      visitor_email: sanitizedVisitorEmail,
       messages: [],
       status: 'active',
     })
@@ -146,12 +164,24 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
   }
   existingMessages.push(assistantMsg)
 
+  const updatePayload: Record<string, unknown> = {
+    messages: existingMessages,
+    updated_at: new Date().toISOString(),
+  }
+  // Late-capture: fill in name/email on an already-existing conversation if
+  // it didn't have one yet (e.g. visitor skipped the pre-chat form, then
+  // supplied it later via the inline prompt) — but never clobber a value
+  // that's already set.
+  if (!existingVisitorName && sanitizedVisitorName) {
+    updatePayload.visitor_name = sanitizedVisitorName
+  }
+  if (!existingVisitorEmail && sanitizedVisitorEmail) {
+    updatePayload.visitor_email = sanitizedVisitorEmail
+  }
+
   await db
     .from('chatbot_conversations')
-    .update({
-      messages: existingMessages,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq('id', convoId)
 
   return NextResponse.json({
@@ -160,6 +190,13 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
     source,
   })
 })
+
+function sanitizeVisitorField(value: unknown, maxLength: number): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed.slice(0, maxLength)
+}
 
 function buildSystemPrompt(prompt: string, knowledge: string | null, knowledgeItems?: KnowledgeItem[]): string {
   let full = prompt || 'You are a helpful assistant.'

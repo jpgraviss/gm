@@ -9,9 +9,13 @@ import { mapPost } from '@/lib/social-media'
 // company_name can be null on older/malformed rows — requirePortalClient
 // requires a real string, and a null company has no legitimate portal
 // client to scope against, so treat it as staff-only.
-async function requirePostAccess(req: NextRequest, companyName: string | null) {
+// AUDIT.md #469 — companyId (the post's own company_id column) is threaded
+// through so requirePortalClient can do the collision-proof company_id
+// comparison instead of only a name match when the caller's own
+// portal_clients row is linked.
+async function requirePostAccess(req: NextRequest, companyName: string | null, companyId?: string | null) {
   if (!companyName) return await requireRole(req, 'Team Member')
-  return await requirePortalClient(req, companyName)
+  return await requirePortalClient(req, companyName, companyId)
 }
 
 // Fields the real portal approval UI ever sends (app/client/page.tsx
@@ -27,7 +31,7 @@ export const GET = withErrorHandler('social-posts/[id] GET', async (req, { param
   const { data } = await db.from('social_posts').select('*').eq('id', id).single()
   if (!data) return NextResponse.json({ error: 'Social post not found' }, { status: 404 })
 
-  const denied = await requirePostAccess(req, data.company_name)
+  const denied = await requirePostAccess(req, data.company_name, data.company_id)
   if (denied) return denied
 
   return NextResponse.json(mapPost(data))
@@ -47,7 +51,7 @@ export const PATCH = withErrorHandler('social-posts/[id] PATCH', async (req, { p
     return NextResponse.json({ error: 'Social post not found' }, { status: 404 })
   }
 
-  const denied = await requirePostAccess(req, current.company_name)
+  const denied = await requirePostAccess(req, current.company_name, current.company_id)
   if (denied) return denied
 
   if (!(await isStaffCaller(req))) {

@@ -63,12 +63,18 @@ export const NOTIFICATION_PREFERENCES_DEFAULTS: NotificationPreferences = {
 // e.g. 'deal_stage_changed' — see TRIGGER_MAP in lib/automations-engine.ts) to
 // the Activity Notifications label it corresponds to in Settings > Notifications.
 // Only event keys with a real, unambiguous counterpart in that matrix are
-// listed. Several matrix rows ('New ticket assigned to me', 'Ticket status
-// changed', 'New deal created', 'Task assigned to me', 'Task due today') have
-// no corresponding automations-engine event at all — nothing in the codebase
-// fires a push for those today, so there's nothing to gate; they stay
-// write-only until that push-sending code exists (out of scope for #406,
-// which is specifically about the automations-engine push call sites).
+// listed. Several matrix rows ('Ticket status changed', 'New deal created',
+// 'Task assigned to me', 'Task due today') still have no corresponding
+// event at all — nothing in the codebase fires a push for those today, so
+// there's nothing to gate; they stay write-only until that push-sending
+// code exists (out of scope for #406, which is specifically about the
+// automations-engine push call sites).
+//
+// AUDIT.md #486 — 'ticket_created' is the one exception: POST
+// /api/tickets now calls sendPushNotification() directly (not through
+// fireAutomations()/automations-engine, since ticket auto-assignment isn't
+// an automation) when applyRoutingRules() auto-assigns a new ticket, so
+// 'New ticket assigned to me' has a real send to gate.
 export const EVENT_TO_ACTIVITY_LABEL: Record<string, string> = {
   deal_stage_changed: 'Deal stage changed',
   contract_executed: 'Contract signed',
@@ -78,6 +84,7 @@ export const EVENT_TO_ACTIVITY_LABEL: Record<string, string> = {
   proposal_accepted: 'Proposal accepted/declined',
   proposal_declined: 'Proposal accepted/declined',
   contact_created: 'New contact created',
+  ticket_created: 'New ticket assigned to me',
 }
 
 // Matches lib/settings.ts's own getSecuritySettings() cache tradeoff — a

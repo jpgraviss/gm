@@ -89,7 +89,7 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
   // PATCH any proposal. Staff pass through unconditionally.
   const { data: currentProposal, error: currentErr } = await db
     .from('proposals')
-    .select('company')
+    .select('company, company_id')
     .eq('id', id)
     .single()
 
@@ -97,7 +97,10 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
     return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
   }
 
-  const denied = await requirePortalClient(req, currentProposal.company)
+  // AUDIT.md #469 — pass the proposal's own company_id so requirePortalClient
+  // can do the collision-proof company_id comparison instead of only a name
+  // match when the caller's own portal_clients row is linked.
+  const denied = await requirePortalClient(req, currentProposal.company, currentProposal.company_id)
   if (denied) return denied
   const actor = await getAuthUser(req)
 

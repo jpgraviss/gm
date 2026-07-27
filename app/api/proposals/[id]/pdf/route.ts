@@ -10,12 +10,15 @@ export const GET = withErrorHandler('proposals/[id]/pdf GET', async (req, { para
   const { id } = await params
   const db = createServiceClient()
 
-  const { data: proposal } = await db.from('proposals').select('company, pdf_path').eq('id', id).maybeSingle()
+  const { data: proposal } = await db.from('proposals').select('company, company_id, pdf_path').eq('id', id).maybeSingle()
   if (!proposal) {
     return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
   }
 
-  const denied = await requirePortalClient(req, proposal.company)
+  // AUDIT.md #469 — pass the proposal's own company_id so requirePortalClient
+  // can do the collision-proof company_id comparison instead of only a name
+  // match when the caller's own portal_clients row is linked.
+  const denied = await requirePortalClient(req, proposal.company, proposal.company_id)
   if (denied) return denied
 
   if (!proposal.pdf_path) {

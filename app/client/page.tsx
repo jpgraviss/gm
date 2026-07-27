@@ -47,7 +47,12 @@ interface ClientTicket {
   messages: ClientTicketMessage[]
 }
 
-const TICKET_PRIORITIES = ['Low', 'Medium', 'High'] as const
+// AUDIT.md #483 — this used to omit 'Urgent', which the audit flagged as
+// likely an accidental workaround for the ticket API rejecting it (both
+// routes validated priority against TASK_PRIORITIES, which never included
+// Urgent). Now that lib/validation.ts has a dedicated TICKET_PRIORITIES
+// enum that does include it, portal clients get the same options staff do.
+const TICKET_PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const
 
 const TICKET_STATUS_COLORS: Record<string, string> = {
   Open: 'bg-blue-50 text-blue-700',
@@ -60,6 +65,7 @@ const TICKET_PRIORITY_COLORS: Record<string, string> = {
   Low: 'bg-gray-100 text-gray-600',
   Medium: 'bg-blue-50 text-blue-700',
   High: 'bg-orange-50 text-orange-700',
+  Urgent: 'bg-red-50 text-red-700',
 }
 
 interface PortalInsights {

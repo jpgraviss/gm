@@ -5,6 +5,7 @@ import { getResend } from '@/lib/resend'
 import { fireTrigger } from '@/lib/automation-triggers'
 import { withErrorHandler } from '@/lib/api-handler'
 import { extractUtmFromBody } from '@/lib/attribution'
+import { getFirstPipelineStageName } from '@/lib/pipelines'
 
 // CORS — forms get embedded on external websites
 const corsHeaders = {
@@ -96,12 +97,15 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
   const userAgent = req.headers.get('user-agent') ?? null
 
   let contactId: string | null = null
+  // Computed unconditionally (it's a pure field-mapping helper) so both the
+  // create_contact and create_deal blocks below can share the same mapped
+  // values — a deal's name/company needs the same contact/company info a
+  // contact would've been built from.
+  const contactFields = submissionToContact({ fields: form.fields ?? [] }, body)
+  const email = contactFields.email?.toLowerCase().trim()
 
   // Optionally create/match a CRM contact
   if (form.create_contact) {
-    const contactFields = submissionToContact({ fields: form.fields ?? [] }, body)
-    const email = contactFields.email?.toLowerCase().trim()
-
     if (email) {
       // Upsert contact by email
       const { data: existing } = await db
@@ -135,6 +139,48 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
     }
   }
 
+  // Optionally auto-create a CRM deal for this submission (AUDIT.md #296 —
+  // `create_deal` was a persisted, editable form config field nothing ever
+  // read). A deal here is always linked to a contact, so if create_contact
+  // is off, or it's on but no contact was actually created/matched (e.g. the
+  // submission had no email to key off of), there's no real contact/company
+  // to attach the deal to — skip rather than create an orphaned deal with a
+  // blank company and no contact_id.
+  let dealId: string | null = null
+  if (form.create_deal && contactId) {
+    const dealCompany = contactFields.company
+      || `${contactFields.firstName} ${contactFields.lastName}`.trim()
+      || email
+      || ''
+    // "Deal for {company}" matches the naming convention the "Create Deal"
+    // automation action already uses (lib/automations-engine.ts) for
+    // deals auto-created from a form/funnel submission trigger.
+    const dealName = `Deal for ${dealCompany || 'New Inquiry'}`
+    // Defaults per product decision on AUDIT.md #296: name from the
+    // contact/company, blank ($0) value, first pipeline stage (the form's
+    // own configured deal_stage wins if the admin set one), unassigned
+    // (empty) owner.
+    const stage = form.deal_stage || await getFirstPipelineStageName(db)
+    const newDealId = `deal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const { error: dealErr } = await db.from('deals').insert({
+      id:           newDealId,
+      company:      dealCompany,
+      contact_id:   contactId,
+      pipeline_id:  'client-acquisition',
+      stage,
+      value:        0,
+      assigned_rep: '',
+      probability:  0,
+      notes:        [dealName],
+      last_activity: new Date().toISOString().split('T')[0],
+    })
+    if (dealErr) {
+      console.error('[forms create_deal]', dealErr)
+    } else {
+      dealId = newDealId
+    }
+  }
+
   // Write the submission row
   const { error: insertErr } = await db.from('form_submissions').insert({
     id:          submissionId,
@@ -162,6 +208,7 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
     formName: form.name,
     submissionId,
     contactId,
+    dealId,
     data: body,
     // Public, unauthenticated endpoint — see the matching comment in
     // funnel-submit/route.ts (AUDIT.md #46).
@@ -216,6 +263,7 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
         formName: form.name,
         submissionId,
         contactId,
+        dealId,
         data: body,
         submittedAt: new Date().toISOString(),
       }),

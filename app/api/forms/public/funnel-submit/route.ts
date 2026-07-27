@@ -107,6 +107,17 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
     }
   }
 
+  // NOTE on AUDIT.md #296 (`forms.create_deal`): that toggle — and the
+  // `deal_stage` override it can carry — lives only on the `forms` table
+  // (wired up in ../[slug]/route.ts). Funnels have no equivalent config —
+  // neither the `funnels` row nor a page's `form` block (defaultBlockData
+  // in app/funnels/editor/page.tsx) carries a createDeal/createContact
+  // flag; funnel submissions unconditionally upsert a contact whenever an
+  // email is present, with no toggle to read here. Auto-creating a deal for
+  // every funnel submission would be a new, undecided behavior change (and
+  // a likely flood of throwaway deals), not a fix for #296, so it's left
+  // alone pending an actual product decision to add that config to funnels.
+
   await db.from('form_submissions').insert({
     id: submissionId,
     form_id: `funnel:${funnel.id}`,

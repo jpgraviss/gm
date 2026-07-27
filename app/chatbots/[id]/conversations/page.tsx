@@ -128,7 +128,7 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
           <ArrowLeft size={14} /> Back to Chatbots
         </Link>
 
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -138,7 +138,7 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
               className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm"
             />
           </div>
-          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5 overflow-x-auto">
             {filters.map(f => (
               <button
                 key={f.key}
@@ -152,8 +152,8 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        <div className="flex gap-4">
-          <div className={`flex-1 ${selectedConvo ? 'max-w-sm' : ''}`}>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className={`flex-1 ${selectedConvo ? 'md:max-w-sm' : ''}`}>
             {loading ? (
               <div className="flex items-center justify-center py-20">
                 <div className="w-6 h-6 border-2 border-gray-300 rounded-full animate-spin" style={{ borderTopColor: brandColor }} />

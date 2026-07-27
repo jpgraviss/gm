@@ -412,7 +412,7 @@ export default function ChatbotsPage() {
       <Header title="Chatbots" subtitle="Embeddable AI chatbots for client websites" />
 
       <div className="flex-1 p-6 max-w-6xl mx-auto w-full">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Your Chatbots</h2>
             <p className="text-sm text-gray-500">Create and manage AI chatbots that can be embedded on any website.</p>
@@ -439,7 +439,7 @@ export default function ChatbotsPage() {
           <div className="grid gap-4">
             {bots.map(bot => (
               <div key={bot.id} className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-start justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: bot.brand_color + '18' }}>
                       <Bot size={20} style={{ color: bot.brand_color }} />
@@ -449,7 +449,7 @@ export default function ChatbotsPage() {
                       {bot.website_url ? (
                         <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
                           <Globe size={11} />
-                          <span>{bot.website_url}</span>
+                          <span className="break-all">{bot.website_url}</span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1 text-xs text-amber-600 mt-0.5" title="No website URL set — this bot can be embedded and run from any site">
@@ -457,7 +457,7 @@ export default function ChatbotsPage() {
                           <span>No website URL — embeddable anywhere</span>
                         </div>
                       )}
-                      <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                      <div className="flex items-center flex-wrap gap-3 mt-2 text-xs text-gray-500">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${bot.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                           {bot.active ? 'Active' : 'Inactive'}
                         </span>

@@ -1029,7 +1029,7 @@ export default function ProjectDetailPage() {
           </div>
 
           {/* Stats bar */}
-          <div className="flex items-center gap-4 text-xs text-gray-500">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-500">
             <div className="flex items-center gap-1.5">
               <CheckSquare size={12} />
               <span><b className="text-gray-800">{completedTasks}</b>/{totalTasks} tasks</span>
@@ -1050,26 +1050,28 @@ export default function ProjectDetailPage() {
 
           {/* Tabs */}
           <div className="flex items-center gap-1 mt-4 -mb-[1px]">
-            {([
-              { key: 'list' as ViewMode, icon: <LayoutList size={14} />, label: 'List' },
-              { key: 'board' as ViewMode, icon: <Columns3 size={14} />, label: 'Board' },
-              { key: 'overview' as ViewMode, icon: <FolderKanban size={14} />, label: 'Overview' },
-              { key: 'files' as ViewMode, icon: <FileText size={14} />, label: 'Files' },
-            ]).map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setViewMode(tab.key)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
-                  viewMode === tab.key
-                    ? 'border-current text-gray-900 bg-gray-50'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
-                }`}
-                style={viewMode === tab.key ? { borderColor: projectColor } : {}}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            ))}
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {([
+                { key: 'list' as ViewMode, icon: <LayoutList size={14} />, label: 'List' },
+                { key: 'board' as ViewMode, icon: <Columns3 size={14} />, label: 'Board' },
+                { key: 'overview' as ViewMode, icon: <FolderKanban size={14} />, label: 'Overview' },
+                { key: 'files' as ViewMode, icon: <FileText size={14} />, label: 'Files' },
+              ]).map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setViewMode(tab.key)}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors flex-shrink-0 whitespace-nowrap ${
+                    viewMode === tab.key
+                      ? 'border-current text-gray-900 bg-gray-50'
+                      : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }`}
+                  style={viewMode === tab.key ? { borderColor: projectColor } : {}}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
             <div className="flex-1" />
             {(viewMode === 'list' || viewMode === 'board') && (
               <button
@@ -1078,7 +1080,7 @@ export default function ProjectDetailPage() {
                   setAddingToSection(sec)
                   setViewMode('list')
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-sm font-semibold"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-sm font-semibold flex-shrink-0"
                 style={{ background: projectColor }}
               >
                 <Plus size={14} /> Add Task
@@ -1229,7 +1231,7 @@ export default function ProjectDetailPage() {
             {/* Dates & Info */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">Details</h3>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[
                   { label: 'Start Date', value: project.startDate ? formatDate(project.startDate) : 'Not set' },
                   { label: 'Launch Date', value: project.launchDate ? formatDate(project.launchDate) : 'Not set' },

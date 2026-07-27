@@ -164,7 +164,7 @@ export default function AuditsPage() {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-4">
               <label className="block text-xs font-medium text-gray-600">Audit Type</label>
               <div className="flex gap-2">
                 {(['full', 'seo', 'website'] as const).map(t => (
@@ -224,6 +224,7 @@ export default function AuditsPage() {
           </div>
         ) : (
           <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50/60">
@@ -289,6 +290,7 @@ export default function AuditsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </main>

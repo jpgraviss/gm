@@ -133,6 +133,19 @@ const AUDIT_SECTIONS: { key: string; label: string; prompt: string }[] = [
   },
 ]
 
+// AUDIT.md #452 — this fans out into up to 8 sections, each with up to 3
+// sequential attempts (MAX_RETRIES) capped at 45s per attempt plus backoff,
+// then a final summary call — the most LLM-call-heavy route in the
+// codebase, easily exceeding the platform's undeclared default. Matches
+// the ceiling already used by app/api/broadcasts/[id]/send/route.ts and
+// app/api/cron/route.ts (the other routes here with genuinely open-ended
+// sequential work) rather than ai/chat's single-call 60s or
+// proposals/generate's 180s. See rescueStuckAudits() in app/api/cron/
+// route.ts for the reconciliation this pairs with: if Vercel still kills
+// the function mid-run, the `audits` row is rescued out of 'running' on
+// the next cron tick instead of spinning forever.
+export const maxDuration = 300
+
 function scoreToGrade(score: number): 'A' | 'B' | 'C' | 'D' | 'F' {
   if (score >= 90) return 'A'
   if (score >= 80) return 'B'

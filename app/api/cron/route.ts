@@ -225,8 +225,62 @@ export const GET = withErrorHandler('cron GET', async (req) => {
     results.broadcasts = { error: 'Failed' }
   }
 
+  // 13. Rescue audits stuck in 'running' — AUDIT.md #452. ai/audit/route.ts
+  //     now declares maxDuration=300 but has no reconciliation of its own;
+  //     if Vercel kills the function mid-run (most likely exactly when a
+  //     provider is slow, the scenario its own per-section retry loop
+  //     exists for), the row is left 'running' forever with no other write
+  //     path to it, showing an indefinite spinner in the UI until manually
+  //     deleted. Mirrors rescueStuckSendingEmails (#370) and the broadcasts
+  //     stuck-'sending' recovery above.
+  try {
+    results.rescuedAudits = await rescueStuckAudits()
+  } catch (err) {
+    console.error('[cron] Rescue of stuck audits failed:', err)
+    results.rescuedAudits = { error: 'Failed' }
+  }
+
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...results })
 })
+
+// Threshold is maxDuration (300s) plus a generous buffer for cold starts/
+// queueing delay before the row is genuinely considered abandoned — same
+// 15-minute buffer already used by rescueStuckSendingEmails for the same
+// class of problem (lib/email-scheduler.ts).
+const STUCK_AUDIT_THRESHOLD_MS = 15 * 60 * 1000
+
+/**
+ * Reconciliation for AUDIT.md #452: audits.status is set to 'running' right
+ * before the (uninterruptible, single-request) section-generation loop
+ * starts, and only ever moves to 'completed'/'failed' when that same
+ * request finishes normally. There's no separate claim step to key a
+ * "stuck since" timestamp off (unlike scheduled_emails' sending_at), but
+ * created_at is stamped at insert time immediately before the work begins,
+ * so it doubles as "work started at" here. Unlike rescueStuckSendingEmails
+ * (which resets to 'pending' for an automatic retry on the next claim),
+ * there's no other job that will ever pick an audit back up — this is a
+ * one-shot, user-triggered request — so a stuck row is marked 'failed' with
+ * a clear message instead, matching how the route's own "no AI provider
+ * reachable" path already reports failure to the UI.
+ */
+async function rescueStuckAudits(): Promise<{ rescued: number }> {
+  const db = createServiceClient()
+  const cutoff = new Date(Date.now() - STUCK_AUDIT_THRESHOLD_MS).toISOString()
+
+  const { data: rescued, error } = await db
+    .from('audits')
+    .update({
+      status: 'failed',
+      summary: 'This audit did not finish — the server likely hit a time limit or was restarted mid-run. Please retry the audit.',
+      completed_at: new Date().toISOString(),
+    })
+    .eq('status', 'running')
+    .lt('created_at', cutoff)
+    .select('id')
+
+  if (error) throw new Error(error.message)
+  return { rescued: rescued?.length ?? 0 }
+}
 
 /**
  * Send review campaigns whose scheduled_at has arrived. Each row is claimed

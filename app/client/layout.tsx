@@ -19,6 +19,8 @@ import { Bell, X, LogOut } from 'lucide-react'
 // two real routes: app/client/agreement/page.tsx and app/client/help/page.tsx.
 // Batch 2 added app/client/approvals/page.tsx (also fixes AUDIT #155 —
 // the captured e-signature is now actually persisted, not discarded).
+// Batch 3 added app/client/seo/page.tsx and app/client/workflow/page.tsx
+// (SEO Strategy, Delivery Timeline — labels match each page's own <h1>).
 interface ClientRouteLink {
   href: string
   label: string
@@ -26,6 +28,8 @@ interface ClientRouteLink {
 const CLIENT_ROUTES: ClientRouteLink[] = [
   { href: '/client/agreement', label: 'Agreement' },
   { href: '/client/approvals', label: 'Approvals' },
+  { href: '/client/seo', label: 'SEO Strategy' },
+  { href: '/client/workflow', label: 'Delivery Timeline' },
   { href: '/client/help', label: 'Help Center' },
 ]
 

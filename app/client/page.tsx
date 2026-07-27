@@ -9,7 +9,7 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import {
   Globe, CheckCircle, FolderKanban, FileText, MessageSquare,
   Download, Upload, ChevronRight, X, AlertTriangle,
-  Search, BarChart3, Star, Activity, TrendingUp, Share2,
+  Search, BarChart3, Star, Activity, TrendingUp, Share2, Calendar,
 } from 'lucide-react'
 
 // AUDIT.md #199 — matches the shape app/tickets/page.tsx's staff viewer
@@ -50,6 +50,58 @@ interface PortalInsights {
   ranking?: { tracked: number; top3: number; top10: number; improved: number; declined: number }
   uptime?: { sitesMonitored: number; uptimePercent: number; incidents: number }
 }
+
+// AUDIT.md #185 — app/admin/portal-management/page.tsx's per-service
+// "Strategy Scheduling" panel writes services_config[key].frequency/
+// .last_updated/.strategy for every service the client has enabled, but
+// nothing client-facing ever read it (verified: the panel is genuinely
+// service-agnostic — it renders identically for SEO, PPC, Web Design,
+// Social Media, Email Marketing, Content Creation, Sales Training, and
+// Marketing Strategy — so it doesn't belong solely on the new SEO Strategy
+// page). Surfaced read-only below, in the one tab a client already sees
+// cross-service company data. Also folds in the admin panel's "Client
+// Reports" (manually-uploaded report files) per Part B of this batch — the
+// former app/portal/reports/page.tsx's other content (a client-side
+// synthesized "{service} Progress Report" list with no real file behind
+// it) was materially redundant with the Project tab and wasn't ported.
+interface PortalReportEntry {
+  title: string
+  date: string
+  file_url: string
+}
+
+interface ServiceStrategyConfig {
+  enabled?: boolean
+  frequency: string
+  last_updated: string
+  strategy: string
+}
+
+const STRATEGY_FREQUENCY_LABELS: Record<string, string> = {
+  weekly: 'Weekly',
+  biweekly: 'Biweekly',
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  semiannually: 'Semiannually',
+  annually: 'Annually',
+}
+
+// Mirrors app/admin/portal-management/page.tsx's getNextUpdateDate() so the
+// "Overdue" / next-due computation the client sees matches what staff see.
+function getNextStrategyUpdateDate(lastUpdated: string, frequency: string): string {
+  if (!lastUpdated) return ''
+  const d = new Date(lastUpdated + 'T12:00:00')
+  switch (frequency) {
+    case 'weekly': d.setDate(d.getDate() + 7); break
+    case 'biweekly': d.setDate(d.getDate() + 14); break
+    case 'monthly': d.setMonth(d.getMonth() + 1); break
+    case 'quarterly': d.setMonth(d.getMonth() + 3); break
+    case 'semiannually': d.setMonth(d.getMonth() + 6); break
+    case 'annually': d.setFullYear(d.getFullYear() + 1); break
+    default: d.setMonth(d.getMonth() + 1)
+  }
+  return d.toISOString().split('T')[0]
+}
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 
@@ -62,6 +114,11 @@ export default function ClientPortalPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files' | 'insights' | 'social'>('overview')
   const [insights, setInsights] = useState<PortalInsights | null>(null)
   const [insightsLoading, setInsightsLoading] = useState(false)
+  // AUDIT.md #185 / Part B — see the comment on ServiceStrategyConfig above.
+  // `null` means "not fetched yet" (distinct from a real empty array), so
+  // the effect below only fetches once per Insights-tab visit.
+  const [portalReports, setPortalReports] = useState<PortalReportEntry[] | null>(null)
+  const [serviceStrategies, setServiceStrategies] = useState<Array<{ key: string; config: ServiceStrategyConfig }> | null>(null)
   const [showWelcome, setShowWelcome] = useState(true)
 
   // Social posts for approval
@@ -142,6 +199,32 @@ export default function ClientPortalPage() {
       .catch(() => {/* non-fatal */})
       .finally(() => setInsightsLoading(false))
   }, [activeTab, company, insights])
+
+  // AUDIT.md #185 / Part B — load the admin-configured, per-company/
+  // per-service strategy scheduling data + manually-uploaded reports
+  // alongside Insights. /api/portal/dashboard is already company-scoped via
+  // requirePortalClient, so this can't leak another client's data.
+  useEffect(() => {
+    if (activeTab !== 'insights' || !company || portalReports !== null) return
+    fetch(`/api/portal/dashboard?company=${encodeURIComponent(company)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d) => {
+        const config = (d?.portalConfig ?? {}) as {
+          reports?: PortalReportEntry[]
+          services_config?: Record<string, ServiceStrategyConfig>
+        }
+        const enabledServices: string[] = Array.isArray(d?.services) ? d.services : []
+        const svcConfig = config.services_config ?? {}
+        setPortalReports(Array.isArray(config.reports) ? config.reports : [])
+        setServiceStrategies(
+          enabledServices
+            .map(key => ({ key, config: svcConfig[key] }))
+            .filter((s): s is { key: string; config: ServiceStrategyConfig } =>
+              !!s.config && (!!s.config.strategy?.trim() || !!s.config.last_updated))
+        )
+      })
+      .catch(() => {/* non-fatal */})
+  }, [activeTab, company, portalReports])
 
   // Load existing tickets when Support tab opens
   useEffect(() => {
@@ -531,6 +614,85 @@ export default function ClientPortalPage() {
                   </div>
                 )}
               </>
+            )}
+
+            {/* AUDIT.md #185 / Part B — reports folded in from the retired
+                app/portal/reports/page.tsx (manual uploads only — its other
+                content was a client-side-synthesized, file-less "progress
+                report" list redundant with the Project tab, not ported),
+                plus the admin panel's per-service Strategy Scheduling data
+                (#185), both read-only for the client. */}
+            {portalReports && portalReports.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <FileText size={16} className="text-emerald-700" />
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Reports</h3>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {portalReports.map((r, i) => (
+                    <div key={i} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-xl">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{r.title}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                        </p>
+                      </div>
+                      {r.file_url && (
+                        <a
+                          href={r.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white flex-shrink-0"
+                          style={{ background: '#015035' }}
+                        >
+                          <Download size={12} /> Download
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {serviceStrategies && serviceStrategies.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Calendar size={16} className="text-emerald-700" />
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Strategy & Scheduling</h3>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {serviceStrategies.map(({ key, config }) => {
+                    const nextUpdate = config.last_updated ? getNextStrategyUpdateDate(config.last_updated, config.frequency) : ''
+                    const isOverdue = !!nextUpdate && new Date(nextUpdate + 'T12:00:00') < new Date()
+                    return (
+                      <div key={key} className="border border-gray-100 rounded-xl p-4">
+                        <div className="flex items-center gap-2 flex-wrap mb-2.5">
+                          <span className="text-sm font-bold text-gray-800">{key}</span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                            {STRATEGY_FREQUENCY_LABELS[config.frequency] ?? config.frequency}
+                          </span>
+                          {isOverdue && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600">Overdue</span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mb-2.5 text-xs">
+                          <div>
+                            <span className="text-gray-400">Last Updated </span>
+                            <span className="font-medium text-gray-700">{config.last_updated || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400">Next Due </span>
+                            <span className={`font-medium ${isOverdue ? 'text-red-600' : 'text-gray-700'}`}>{nextUpdate || 'N/A'}</span>
+                          </div>
+                        </div>
+                        {config.strategy && (
+                          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{config.strategy}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             )}
           </div>
         )}

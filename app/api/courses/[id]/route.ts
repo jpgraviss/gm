@@ -5,15 +5,48 @@ import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
+// AUDIT.md #491 — quiz modules store their questions as a JSON-stringified
+// `content` field (see QuizContent in app/courses/[id]/page.tsx), each with a
+// `correctIndex` answer key. This used to pass straight through to every
+// authenticated caller, including enrolled students, who could just read the
+// raw API response to see every correct answer before ever taking the quiz.
+// Grading is now done server-side (POST .../quiz/[moduleId]/grade, which
+// looks up the real correctIndex itself and is the only thing allowed to
+// mark a quiz module complete) — a non-staff caller has no legitimate need
+// for the answer key at all, so it's stripped here rather than merely hidden
+// in the UI.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapCourse(row: any) {
+function stripQuizAnswers(modules: any[]): any[] {
+  if (!Array.isArray(modules)) return modules
+  return modules.map((mod) => {
+    if (!mod || mod.type !== 'quiz' || typeof mod.content !== 'string') return mod
+    try {
+      const questions = JSON.parse(mod.content)
+      if (!Array.isArray(questions)) return mod
+      const sanitized = questions.map((q) => {
+        if (q && typeof q === 'object' && !Array.isArray(q)) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { correctIndex, ...rest } = q
+          return rest
+        }
+        return q
+      })
+      return { ...mod, content: JSON.stringify(sanitized) }
+    } catch {
+      return mod
+    }
+  })
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapCourse(row: any, opts: { includeAnswers: boolean }) {
   return {
     id:            row.id,
     workspaceId:   row.workspace_id,
     title:         row.title,
     description:   row.description ?? '',
     thumbnailUrl:  row.thumbnail_url ?? undefined,
-    modules:       row.modules ?? [],
+    modules:       opts.includeAnswers ? (row.modules ?? []) : stripQuizAnswers(row.modules ?? []),
     status:        row.status,
     price:         row.price ?? 0,
     accessType:    row.access_type ?? undefined,
@@ -40,14 +73,17 @@ export const GET = withErrorHandler('courses/[id] GET', async (
   if (error || !data) {
     return NextResponse.json({ error: 'Course not found' }, { status: 404 })
   }
-  // Unpublished course content (including quiz answer keys, via mapCourse's
-  // modules passthrough) is staff-only — a portal client resolves null from
-  // getAuthUser (not in team_members), matching the same gate in
-  // courses/route.ts's list GET.
-  if (data.status !== 'Published' && !(await getAuthUser(req))) {
+  // Unpublished course content is staff-only — a portal client resolves
+  // null from getAuthUser (not in team_members), matching the same gate in
+  // courses/route.ts's list GET. The same staff/non-staff distinction also
+  // decides whether quiz answer keys are included (AUDIT.md #491) — staff
+  // need `correctIndex` to build/edit quizzes in the course editor, but a
+  // student (staff === null here) never should.
+  const staffUser = await getAuthUser(req)
+  if (data.status !== 'Published' && !staffUser) {
     return NextResponse.json({ error: 'Course not found' }, { status: 404 })
   }
-  return NextResponse.json(mapCourse(data))
+  return NextResponse.json(mapCourse(data, { includeAnswers: !!staffUser }))
 })
 
 export const PATCH = withErrorHandler('courses/[id] PATCH', async (
@@ -75,7 +111,8 @@ export const PATCH = withErrorHandler('courses/[id] PATCH', async (
   if (error || !data) {
     throw new Error(error?.message || 'Failed to update course')
   }
-  return NextResponse.json(mapCourse(data))
+  // requireRole('Leadership') above already gates this to staff.
+  return NextResponse.json(mapCourse(data, { includeAnswers: true }))
 })
 
 export const DELETE = withErrorHandler('courses/[id] DELETE', async (

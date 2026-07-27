@@ -10,7 +10,7 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   ArrowLeft, Globe, Calendar, CheckCircle, Circle, FolderKanban, Clock,
-  Megaphone, Heart, Eye, GraduationCap, BookOpen, Play,
+  Megaphone, GraduationCap, BookOpen, Play,
 } from 'lucide-react'
 
 // Real per-service detail pages ported from app/portal/services/* as part
@@ -310,23 +310,23 @@ interface SocialPost {
   status: string
   scheduledDate?: string
   publishedDate?: string
-  engagement?: {
-    likes: number
-    comments: number
-    shares: number
-    impressions: number
-  }
 }
 
 interface SocialData {
   posts: SocialPost[]
-  totalEngagement: number
-  avgReach: number
 }
 
+// AUDIT.md #428 — this used to show "Total Engagement"/"Avg. Reach" stat
+// tiles and per-post like/comment counts computed from post.likes/comments/
+// shares/impressions, fields that don't exist anywhere: mapPost() in
+// lib/social-media.ts never returns them and social_posts has no such
+// columns. There is no engagement-tracking pipeline in this codebase (no
+// per-platform API pulls), so every client saw permanently-zero numbers
+// that looked real but weren't. User decision: remove the fake tiles
+// rather than build a real tracking pipeline right now.
 function SocialMediaService({ company }: { company: string }) {
   const { toast } = useToast()
-  const [data, setData] = useState<SocialData>({ posts: [], totalEngagement: 0, avgReach: 0 })
+  const [data, setData] = useState<SocialData>({ posts: [] })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -341,20 +341,8 @@ function SocialMediaService({ company }: { company: string }) {
           status: p.status as string ?? 'Draft',
           scheduledDate: p.scheduledDate as string ?? p.scheduled_date as string ?? undefined,
           publishedDate: p.publishedDate as string ?? p.published_date as string ?? undefined,
-          engagement: {
-            likes: (p.likes as number) ?? 0,
-            comments: (p.comments as number) ?? 0,
-            shares: (p.shares as number) ?? 0,
-            impressions: (p.impressions as number) ?? 0,
-          },
         }))
-        const totalEngagement = posts.reduce((s, p) => s + (p.engagement?.likes ?? 0) + (p.engagement?.comments ?? 0) + (p.engagement?.shares ?? 0), 0)
-        const totalImpressions = posts.reduce((s, p) => s + (p.engagement?.impressions ?? 0), 0)
-        setData({
-          posts,
-          totalEngagement,
-          avgReach: posts.length > 0 ? Math.round(totalImpressions / posts.length) : 0,
-        })
+        setData({ posts })
       })
       .catch(() => toast('Failed to load social media data', 'error'))
       .finally(() => setLoading(false))
@@ -370,16 +358,14 @@ function SocialMediaService({ company }: { company: string }) {
     <div className="flex-1 overflow-y-auto" style={{ background: 'var(--page-bg)' }}>
       <div className="px-4 py-4 sm:px-8 sm:py-6 border-b border-gray-200 bg-white">
         <h1 className="text-lg font-bold text-gray-900">Social Media</h1>
-        <p className="text-xs text-gray-500 mt-0.5">Post calendar, engagement metrics, and audience growth</p>
+        <p className="text-xs text-gray-500 mt-0.5">Post calendar and content status</p>
       </div>
 
       <div className="p-4 sm:p-8 max-w-5xl mx-auto flex flex-col gap-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           {[
             { label: 'Published Posts', value: published.length.toString(), icon: Megaphone, color: '#ec4899' },
             { label: 'Scheduled', value: scheduled.length.toString(), icon: Calendar, color: '#2563eb' },
-            { label: 'Total Engagement', value: data.totalEngagement.toLocaleString(), icon: Heart, color: '#015035' },
-            { label: 'Avg. Reach', value: data.avgReach.toLocaleString(), icon: Eye, color: '#7c3aed' },
           ].map(card => {
             const Icon = card.icon
             return (
@@ -440,10 +426,6 @@ function SocialMediaService({ company }: { company: string }) {
                       ))}
                     </div>
                     <p className="text-sm text-gray-700 truncate flex-1">{p.content}</p>
-                    <div className="flex items-center gap-3 text-xs text-gray-400 flex-shrink-0">
-                      <span className="flex items-center gap-0.5"><Heart size={10} />{p.engagement?.likes ?? 0}</span>
-                      <span className="flex items-center gap-0.5"><Megaphone size={10} />{p.engagement?.comments ?? 0}</span>
-                    </div>
                   </div>
                 </div>
               ))}
@@ -601,7 +583,13 @@ function SalesTrainingService({ company, userEmail }: { company: string; userEma
                   ? c.modules.filter(m => enrollment.progress[m.id]).length
                   : 0
                 const progress = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0
-                const href = enrollment ? `/courses/${c.id}?enrollment=${enrollment.id}` : `/courses/${c.id}`
+                // AUDIT.md #471 — these used to point at the internal staff
+                // course viewer (/courses/[id]), which AppShell.tsx's client
+                // redirect bounces any real client session away from before
+                // it ever renders (any userType: 'client' path outside
+                // /client/** gets sent back to /client). The real client
+                // viewer now lives at /client/courses/[id].
+                const href = enrollment ? `/client/courses/${c.id}?enrollment=${enrollment.id}` : `/client/courses/${c.id}`
                 return (
                   <Link key={c.id} href={href} className="block px-5 py-4 hover:bg-gray-50 transition-colors">
                     <div className="flex items-start gap-3">

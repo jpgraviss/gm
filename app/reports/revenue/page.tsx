@@ -117,7 +117,7 @@ export default function RevenueReportPage() {
       <Header title="Revenue Report" subtitle="Revenue trends, pipeline forecast, and top deals" />
       <div className="page-content">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-5">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Period:</span>
           <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
             {(['3M', '6M', '12M', 'Custom'] as DateRange[]).map(r => (
@@ -132,7 +132,7 @@ export default function RevenueReportPage() {
             ))}
           </div>
           {dateRange === 'Custom' && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />
               <span className="text-xs text-gray-400">to</span>
               <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-green-700" />

@@ -334,7 +334,7 @@ export default function MonitoringPage() {
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <div className="grid grid-cols-12 gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/50 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+            <div className="hidden sm:grid grid-cols-12 gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/50 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
               <div className="col-span-4">Site</div>
               <div className="col-span-2">Status</div>
               <div className="col-span-2">30d Uptime</div>
@@ -348,9 +348,9 @@ export default function MonitoringPage() {
                   <button
                     key={site.id}
                     onClick={() => openDetail(site.id)}
-                    className="w-full grid grid-cols-12 gap-3 items-center px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                    className="w-full grid grid-cols-[1fr_auto] sm:grid-cols-12 gap-3 items-center px-4 py-3 hover:bg-gray-50 transition-colors text-left"
                   >
-                    <div className="col-span-4 flex items-center gap-3 min-w-0">
+                    <div className="sm:col-span-4 flex items-center gap-3 min-w-0">
                       <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
                         <Globe size={15} className="text-emerald-700" />
                       </div>
@@ -364,14 +364,14 @@ export default function MonitoringPage() {
                         <p className="text-xs text-gray-500 truncate">{site.url}</p>
                       </div>
                     </div>
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${colors.bg} ${colors.text}`}>
                         {colors.label}
                       </span>
                     </div>
-                    <div className="col-span-2 text-sm text-gray-700">{formatUptime(site.uptime30d)}</div>
-                    <div className="col-span-2 text-sm text-gray-700">{formatResponse(site.responseTimeMs)}</div>
-                    <div className="col-span-2 text-xs text-gray-500">{formatRelative(site.lastCheckAt)}</div>
+                    <div className="hidden sm:block sm:col-span-2 text-sm text-gray-700">{formatUptime(site.uptime30d)}</div>
+                    <div className="hidden sm:block sm:col-span-2 text-sm text-gray-700">{formatResponse(site.responseTimeMs)}</div>
+                    <div className="hidden sm:block sm:col-span-2 text-xs text-gray-500">{formatRelative(site.lastCheckAt)}</div>
                   </button>
                 )
               })}
@@ -710,31 +710,35 @@ function SiteDetailPanel({
                 <section>
                   <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Recent Checks</label>
                   <div className="bg-gray-50 rounded-xl overflow-hidden">
-                    <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                      <div className="col-span-4">Time</div>
-                      <div className="col-span-2">Status</div>
-                      <div className="col-span-2">Code</div>
-                      <div className="col-span-2">Time</div>
-                      <div className="col-span-2">Error</div>
-                    </div>
-                    <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
-                      {detail.recentChecks.length === 0 ? (
-                        <div className="px-3 py-4 text-center text-xs text-gray-400">No checks yet</div>
-                      ) : (
-                        detail.recentChecks.map(c => (
-                          <div key={c.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-xs text-gray-700 bg-white">
-                            <div className="col-span-4 text-gray-500">{new Date(c.checkedAt).toLocaleString()}</div>
-                            <div className="col-span-2">
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${c.up ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                                {c.up ? 'up' : 'down'}
-                              </span>
-                            </div>
-                            <div className="col-span-2">{c.statusCode ?? '—'}</div>
-                            <div className="col-span-2">{formatResponse(c.responseTimeMs)}</div>
-                            <div className="col-span-2 truncate text-red-600" title={c.errorMessage ?? ''}>{c.errorMessage ?? ''}</div>
-                          </div>
-                        ))
-                      )}
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[480px]">
+                        <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                          <div className="col-span-4">Time</div>
+                          <div className="col-span-2">Status</div>
+                          <div className="col-span-2">Code</div>
+                          <div className="col-span-2">Time</div>
+                          <div className="col-span-2">Error</div>
+                        </div>
+                        <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
+                          {detail.recentChecks.length === 0 ? (
+                            <div className="px-3 py-4 text-center text-xs text-gray-400">No checks yet</div>
+                          ) : (
+                            detail.recentChecks.map(c => (
+                              <div key={c.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-xs text-gray-700 bg-white">
+                                <div className="col-span-4 text-gray-500">{new Date(c.checkedAt).toLocaleString()}</div>
+                                <div className="col-span-2">
+                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${c.up ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                                    {c.up ? 'up' : 'down'}
+                                  </span>
+                                </div>
+                                <div className="col-span-2">{c.statusCode ?? '—'}</div>
+                                <div className="col-span-2">{formatResponse(c.responseTimeMs)}</div>
+                                <div className="col-span-2 truncate text-red-600" title={c.errorMessage ?? ''}>{c.errorMessage ?? ''}</div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -1076,10 +1080,10 @@ function WordPressTab({
             <div className="flex flex-col gap-1">
               {wpData.themes.map(t => (
                 <div key={t.slug} className="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 border border-gray-100">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <Palette size={13} className={t.active ? 'text-emerald-600' : 'text-gray-400'} />
-                    <div>
-                      <p className="text-xs font-medium text-gray-800">{t.name}</p>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-gray-800 truncate">{t.name}</p>
                       <p className="text-[10px] text-gray-400">v{t.version} · {t.active ? 'Active' : 'Inactive'}</p>
                     </div>
                   </div>

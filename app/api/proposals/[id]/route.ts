@@ -14,7 +14,11 @@ import { withErrorHandler } from '@/lib/api-handler'
 // proposal's CURRENT company, not what a portal client is trying to change
 // it TO, so an unrestricted field set would let a portal client reassign
 // their own proposal to an arbitrary different company.
-const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['status', 'respondedDate', 'renewalNotes'])
+// AUDIT #155 — signatureData/signatureType added so the client Approvals
+// Accept flow (app/client/approvals/page.tsx) can actually persist the
+// e-signature it captures, instead of discarding it like the old
+// app/portal/approvals/page.tsx did.
+const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['status', 'respondedDate', 'renewalNotes', 'signatureData', 'signatureType'])
 
 // Proposals have no transition-graph guard at all (unlike contracts) — any
 // value in PROPOSAL_STATUSES passes the general validate() check above.
@@ -50,6 +54,8 @@ function mapProposal(row: any) {
     rejectedBy:                 row.rejected_by ?? undefined,
     rejectedDate:               row.rejected_date ?? undefined,
     createdDate:                row.created_date ?? '',
+    signatureData:              row.signature_data ?? undefined,
+    signatureType:              row.signature_type ?? undefined,
   }
 }
 
@@ -66,6 +72,12 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
     assignedRep: { type: 'string', maxLength: 200 },
     items:       { type: 'array' },
     approvedBy:  { type: 'string', maxLength: 200 },
+    // signatureData is either a typed cursive name (short) or a drawn
+    // canvas.toDataURL() PNG data URI (can run tens of KB) — mirrors
+    // signature_requests.signature_data (app/api/signatures/[token]/route.ts),
+    // which stores the same drawn-PNG-data-URI shape unbounded.
+    signatureData: { type: 'string', maxLength: 500_000 },
+    signatureType: { type: 'string', enum: ['typed', 'drawn'] },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -124,6 +136,8 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
   if (body.approvedDate !== undefined)                update.approved_date = body.approvedDate
   if (body.rejectedBy !== undefined)                  update.rejected_by = body.rejectedBy
   if (body.rejectedDate !== undefined)                update.rejected_date = body.rejectedDate
+  if (body.signatureData !== undefined)               update.signature_data = body.signatureData
+  if (body.signatureType !== undefined)               update.signature_type = body.signatureType
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })

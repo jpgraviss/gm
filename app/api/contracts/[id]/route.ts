@@ -14,7 +14,11 @@ import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
 // record's CURRENT company, not what a portal client is trying to change
 // it TO, so an unrestricted field set would let a portal client reassign
 // their own contract to an arbitrary different company.
-const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['status', 'clientSigned'])
+// AUDIT #155 — signatureData/signatureType added so the client Approvals
+// Accept flow (app/client/approvals/page.tsx) can actually persist the
+// e-signature it captures, instead of discarding it like the old
+// app/portal/approvals/page.tsx did.
+const PORTAL_CLIENT_EDITABLE_FIELDS = new Set(['status', 'clientSigned', 'signatureData', 'signatureType'])
 
 // VALID_TRANSITIONS below governs which transitions are legal at all, for
 // any caller — it does NOT distinguish who is allowed to make a given
@@ -52,6 +56,8 @@ function mapContract(row: any) {
     serviceType:      row.service_type,
     clientSigned:     row.client_signed ?? undefined,
     internalSigned:   row.internal_signed ?? undefined,
+    signatureData:    row.signature_data ?? undefined,
+    signatureType:    row.signature_type ?? undefined,
     terminatedReason: row.terminated_reason ?? undefined,
     terminatedDate:   row.terminated_date ?? undefined,
   }
@@ -73,6 +79,12 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
     billingStructure: { type: 'string', enum: ['Monthly', 'Quarterly', 'Annual', 'One-time', 'Custom'] },
     clientSigned:     { type: 'string', maxLength: 30 },
     internalSigned:   { type: 'string', maxLength: 30 },
+    // signatureData is either a typed cursive name (short) or a drawn
+    // canvas.toDataURL() PNG data URI (can run tens of KB) — mirrors
+    // signature_requests.signature_data (app/api/signatures/[token]/route.ts),
+    // which stores the same drawn-PNG-data-URI shape unbounded.
+    signatureData:    { type: 'string', maxLength: 500_000 },
+    signatureType:    { type: 'string', enum: ['typed', 'drawn'] },
     renewalDate:      { type: 'string', maxLength: 30 },
     terminatedReason: { type: 'string', maxLength: 1000 },
     terminatedDate:   { type: 'string', maxLength: 30 },
@@ -139,6 +151,8 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
   if (body.value !== undefined)             update.value = body.value
   if (body.clientSigned !== undefined)      update.client_signed = body.clientSigned
   if (body.internalSigned !== undefined)    update.internal_signed = body.internalSigned
+  if (body.signatureData !== undefined)     update.signature_data = body.signatureData
+  if (body.signatureType !== undefined)     update.signature_type = body.signatureType
   if (body.assignedRep !== undefined)       update.assigned_rep = body.assignedRep
   if (body.billingStructure !== undefined)  update.billing_structure = body.billingStructure
   if (body.renewalDate !== undefined)       update.renewal_date = body.renewalDate

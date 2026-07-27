@@ -17,12 +17,15 @@ import { Bell, X, LogOut } from 'lucide-react'
 // Renders as a slim nav strip below the header, above whatever the active
 // route (page.tsx's tabs, or a sub-route) renders. Batch 1 added the first
 // two real routes: app/client/agreement/page.tsx and app/client/help/page.tsx.
+// Batch 2 added app/client/approvals/page.tsx (also fixes AUDIT #155 —
+// the captured e-signature is now actually persisted, not discarded).
 interface ClientRouteLink {
   href: string
   label: string
 }
 const CLIENT_ROUTES: ClientRouteLink[] = [
   { href: '/client/agreement', label: 'Agreement' },
+  { href: '/client/approvals', label: 'Approvals' },
   { href: '/client/help', label: 'Help Center' },
 ]
 

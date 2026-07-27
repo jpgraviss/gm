@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { mirrorTrackedEmailActivity } from '@/lib/tracked-emails'
+import { resolveGmailSettings } from '@/lib/gmail-settings'
+import { sendPushNotification } from '@/lib/push-notifications'
 
 // 1x1 transparent GIF — the actual tracking pixel payload.
 const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
@@ -50,6 +52,33 @@ export const GET = withErrorHandler('track/open/[id] GET', async (
     ])
     if (isFirstOpen) {
       await mirrorTrackedEmailActivity(db, tracked, `Opened email${tracked.subject ? `: ${tracked.subject}` : ''}`)
+
+      // AUDIT.md #407 — gmail_settings.notifyOnOpen was write-only. Gated on
+      // trackOpens too, matching the Settings copy's own stated dependency
+      // ("Get notified when someone opens your email — requires tracking")
+      // — this pixel request only exists at all because trackOpens embedded
+      // it, but a team member could still flip notifyOnOpen back on after
+      // turning trackOpens off without this ever un-wiring itself, so the
+      // explicit check is real, not redundant. Wrapped so a lookup/push
+      // failure can never turn this into a broken pixel for the recipient.
+      try {
+        const { data: member } = await db
+          .from('team_members')
+          .select('gmail_settings')
+          .eq('id', tracked.team_member_id)
+          .maybeSingle()
+        const gmailSettings = resolveGmailSettings(member?.gmail_settings)
+        if (gmailSettings.trackOpens && gmailSettings.notifyOnOpen) {
+          await sendPushNotification({
+            userId: tracked.team_member_id,
+            title: 'Email opened',
+            body: `${tracked.recipient_email} opened${tracked.subject ? `: ${tracked.subject}` : ' your email'}`,
+            url: '/inbox',
+          })
+        }
+      } catch (err) {
+        console.error('[track/open] notifyOnOpen failed:', err)
+      }
     }
   }
 

@@ -3,6 +3,7 @@ import { sendEmail } from '@/lib/email'
 import { sendPushNotification } from '@/lib/push-notifications'
 import { wrapBrandedEmail } from '@/lib/email-template'
 import { getSettings } from '@/lib/settings'
+import { shouldSendPushForEvent } from '@/lib/notification-preferences'
 import { contractMonthlyValue } from '@/lib/metrics'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -271,7 +272,7 @@ export async function executeWorkflow(
         const resumeContext = { ...automation.config, ...triggerData }
         const context = { ...automation.config, ...translateActionConfig(actionType, actionConfig), ...triggerData }
         const remainingActions = automation.actions.slice(i + 1)
-        const result = await executeAction(actionType, context, supabase, automation.id, runId, indexOffset + i, resumeContext)
+        const result = await executeAction(actionType, context, supabase, automation.id, runId, indexOffset + i, resumeContext, triggerType)
         steps.push({
           name: actionType,
           status: 'success',
@@ -389,6 +390,11 @@ async function executeAction(
   runId?: string,
   actionIndex = 0,
   resumeContext: Record<string, unknown> = {},
+  // The raw event key passed to fireAutomations() (e.g. 'deal_stage_changed')
+  // that caused this action to run — the only place in this flow where the
+  // notification's event type is actually known. Used to gate real push
+  // sends below against Settings > Notifications (AUDIT.md #406).
+  triggerType?: string,
 ): Promise<{ paused?: boolean; skipRemaining?: boolean } | void> {
   const company = (context.company as string) ?? ''
   const today = new Date().toISOString().split('T')[0]
@@ -573,13 +579,15 @@ async function executeAction(
         }
       }
 
-      for (const userId of targetUserIds) {
-        sendPushNotification({
-          userId,
-          title: 'Automation Notification',
-          body: message,
-          url: '/automation',
-        }).catch(() => {})
+      if (targetUserIds.length > 0 && await shouldSendPushForEvent(triggerType)) {
+        for (const userId of targetUserIds) {
+          sendPushNotification({
+            userId,
+            title: 'Automation Notification',
+            body: message,
+            url: '/automation',
+          }).catch(() => {})
+        }
       }
       break
     }
@@ -800,12 +808,14 @@ async function executeAction(
           .select('id')
           .eq('unit', targetUnit)
           .eq('status', 'active')
-        for (const m of members ?? []) {
-          sendPushNotification({ userId: m.id, title: action, body: notifMessage, url: '/automation' }).catch(() => {})
+        if (members && members.length > 0 && await shouldSendPushForEvent(triggerType)) {
+          for (const m of members) {
+            sendPushNotification({ userId: m.id, title: action, body: notifMessage, url: '/automation' }).catch(() => {})
+          }
         }
       } else if (action === 'Notify Assigned Rep') {
         const repId = await resolveAssignedRepUserId(context, db)
-        if (repId) {
+        if (repId && await shouldSendPushForEvent(triggerType)) {
           sendPushNotification({ userId: repId, title: action, body: notifMessage, url: '/automation' }).catch(() => {})
         }
       }

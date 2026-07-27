@@ -21,7 +21,7 @@ export interface GmailSendOptions {
  */
 export async function sendViaGmail(
   options: GmailSendOptions,
-): Promise<{ messageId: string }> {
+): Promise<{ messageId: string; threadId: string }> {
   const { accessToken, from, to, subject, htmlBody, replyTo, cc, bcc, inReplyTo, references } = options
 
   // ── Build RFC 2822 message ──────────────────────────────────────────────
@@ -67,5 +67,5 @@ export async function sendViaGmail(
   }
 
   const data = await res.json()
-  return { messageId: data.id as string }
+  return { messageId: data.id as string, threadId: data.threadId as string }
 }

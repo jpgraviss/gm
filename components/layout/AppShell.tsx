@@ -147,7 +147,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       router.replace(user.userType === 'client' ? '/client' : '/')
     } else if (user && pathname === '/team-login') {
       router.replace(user.userType === 'client' ? '/client' : '/')
-    } else if (user && user.userType === 'client' && pathname !== '/client') {
+    } else if (user && user.userType === 'client' && pathname !== '/client' && !pathname.startsWith('/client/')) {
       router.replace('/client')
     } else if (user && !isPublic && !isRouteAllowed(pathname, user)) {
       router.replace('/')

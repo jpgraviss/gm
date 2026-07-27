@@ -19,6 +19,25 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 
 const statuses: InvoiceStatus[] = ['Pending', 'Sent', 'Overdue', 'Paid', 'Cancelled']
 
+interface BillableTimeEntry {
+  id: string
+  date: string
+  description: string
+  teamMember: string
+  hours: number
+  minutes: number
+  serviceType: string
+}
+
+interface BillableSummaryGroup {
+  projectName: string
+  projectId: string | null
+  totalHours: number
+  totalMinutes: number
+  entryCount: number
+  entries: BillableTimeEntry[]
+}
+
 const statusIcons: Record<InvoiceStatus, React.ReactNode> = {
   Pending: <Clock size={14} className="text-gray-400" />,
   Sent: <Send size={14} className="text-blue-500" />,
@@ -417,6 +436,125 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
   )
 }
 
+function CreateInvoiceModal({ group, onClose, onCreated }: { group: BillableSummaryGroup; onClose: () => void; onCreated: () => void }) {
+  const { toast } = useToast()
+  const [company, setCompany] = useState(group.projectName !== 'Unassigned' ? group.projectName : '')
+  const [amount, setAmount] = useState('')
+  const [serviceType, setServiceType] = useState(group.entries[0]?.serviceType || 'General')
+  const [dueDate, setDueDate] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 30)
+    return d.toISOString().split('T')[0]
+  })
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const amountNum = parseFloat(amount)
+    if (!company.trim() || !amountNum || amountNum <= 0) {
+      toast('Enter a company and a valid amount', 'error')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: company.trim(),
+          amount: amountNum,
+          serviceType: serviceType.trim() || 'General',
+          dueDate,
+          timeEntryIds: group.entries.map(e => e.id),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to create invoice', 'error')
+        return
+      }
+      toast(`Invoice created — ${group.entryCount} time ${group.entryCount === 1 ? 'entry' : 'entries'} marked invoiced`, 'success')
+      onCreated()
+    } catch {
+      toast('Failed to create invoice', 'error')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div>
+            <h3 className="text-base font-bold text-gray-900">Create Invoice from Unbilled Time</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {group.entryCount} {group.entryCount === 1 ? 'entry' : 'entries'} · {group.totalHours}h {group.totalMinutes}m will be marked invoiced
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100">
+            <X size={16} className="text-gray-400" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Company</label>
+            <input
+              value={company}
+              onChange={e => setCompany(e.target.value)}
+              required
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Amount</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              required
+              placeholder="0.00"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Service Type</label>
+            <input
+              value={serviceType}
+              onChange={e => setServiceType(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Due Date</label>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={e => setDueDate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+            />
+          </div>
+          <div className="flex gap-2 justify-end pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-5 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-40 hover:opacity-90 transition-opacity"
+              style={{ background: '#015035' }}
+            >
+              {submitting ? 'Creating...' : 'Create Invoice'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function BillingPage() {
   const { toast } = useToast()
   const [localInvoices, setLocalInvoices] = useState<Invoice[]>([])
@@ -426,13 +564,22 @@ export default function BillingPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
 
-  // Billable time summary (view-only)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [billableSummary, setBillableSummary] = useState<any[]>([])
+  // Billable time summary — entries here are billable and not yet invoiced
+  // (see app/api/time-entries/billable-summary/route.ts). Creating an
+  // invoice from a group removes its entries from this list.
+  const [billableSummary, setBillableSummary] = useState<BillableSummaryGroup[]>([])
   const [showBillable, setShowBillable] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [invoiceGroup, setInvoiceGroup] = useState<BillableSummaryGroup | null>(null)
 
   const [loading, setLoading] = useState(true)
+
+  function loadBillableSummary() {
+    return fetch('/api/time-entries/billable-summary')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { if (Array.isArray(d)) setBillableSummary(d) })
+      .catch(() => toast('Failed to load billable time summary', 'error'))
+  }
 
   useEffect(() => {
     // AUDIT.md #212 — raw fetch() against a route cursor-paginated at 100
@@ -443,7 +590,7 @@ export default function BillingPage() {
       .finally(() => setLoading(false))
     fetchContracts().then(d => { if (Array.isArray(d)) setContracts(d) }).catch(() => toast('Failed to load contracts', 'error'))
     fetchRevenueByMonth().then(d => { if (Array.isArray(d)) setRevenueByMonth(d) }).catch(() => toast('Failed to load revenue data', 'error'))
-    fetch('/api/time-entries/billable-summary').then(r => r.ok ? r.json() : []).then(d => { if (Array.isArray(d)) setBillableSummary(d) }).catch(() => toast('Failed to load billable time summary', 'error'))
+    loadBillableSummary()
   }, [])
 
   const filtered = localInvoices.filter(i => {
@@ -601,9 +748,18 @@ export default function BillingPage() {
                         {group.totalHours}h {group.totalMinutes}m · {group.entryCount} {group.entryCount === 1 ? 'entry' : 'entries'}
                       </p>
                     </div>
-                    <span className="text-xs font-semibold text-amber-600 px-2.5 py-1 rounded-full bg-amber-50">
-                      Not yet invoiced
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-amber-600 px-2.5 py-1 rounded-full bg-amber-50">
+                        Not yet invoiced
+                      </span>
+                      <button
+                        onClick={() => setInvoiceGroup(group)}
+                        className="text-xs font-medium text-white px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity"
+                        style={{ background: '#015035' }}
+                      >
+                        Create Invoice
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -756,6 +912,18 @@ export default function BillingPage() {
             if (skipped > 0) parts.push(`${skipped} skipped (missing company/amount)`)
             toast(parts.join(', '), failed > 0 ? 'error' : 'success')
             setShowImportModal(false)
+            fetchAllPages<Invoice>('/api/invoices').then(setLocalInvoices).catch(() => toast('Failed to reload invoices', 'error'))
+          }}
+        />
+      )}
+
+      {invoiceGroup && (
+        <CreateInvoiceModal
+          group={invoiceGroup}
+          onClose={() => setInvoiceGroup(null)}
+          onCreated={() => {
+            setInvoiceGroup(null)
+            loadBillableSummary()
             fetchAllPages<Invoice>('/api/invoices').then(setLocalInvoices).catch(() => toast('Failed to reload invoices', 'error'))
           }}
         />

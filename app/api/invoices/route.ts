@@ -64,12 +64,13 @@ export const POST = withErrorHandler('invoices POST', async (req) => {
   const body = await req.json()
 
   const result = validate(body, {
-    company:     { required: true, type: 'string', maxLength: 200 },
-    amount:      { required: true, type: 'number', min: 0 },
-    status:      { type: 'string', enum: [...INVOICE_STATUSES] },
-    dueDate:     { type: 'string', maxLength: 30 },
-    serviceType: { type: 'string', maxLength: 100 },
-    contractId:  { type: 'string', maxLength: 100 },
+    company:      { required: true, type: 'string', maxLength: 200 },
+    amount:       { required: true, type: 'number', min: 0 },
+    status:       { type: 'string', enum: [...INVOICE_STATUSES] },
+    dueDate:      { type: 'string', maxLength: 30 },
+    serviceType:  { type: 'string', maxLength: 100 },
+    contractId:   { type: 'string', maxLength: 100 },
+    timeEntryIds: { type: 'array' },
   })
   if (!result.valid) return validationError(result.error)
 
@@ -94,6 +95,28 @@ export const POST = withErrorHandler('invoices POST', async (req) => {
 
   if (error) {
     throw new Error(error?.message || 'Failed to create invoice')
+  }
+
+  // AUDIT.md #224 — `time_entries.invoiced` was read by the billable-summary
+  // panel but never written by any code path, so "Unbilled Time" showed
+  // every billable entry ever logged as outstanding forever. The decided
+  // fix: when time entries are attached to an invoice at creation time
+  // (via the "Create Invoice from Unbilled Time" action), mark them
+  // invoiced and point them at this invoice. Scoped to billable,
+  // not-yet-invoiced entries so a stale/duplicate id list can't
+  // double-bill or steal an entry from another invoice.
+  const rawTimeEntryIds: unknown[] = Array.isArray(body.timeEntryIds) ? body.timeEntryIds : []
+  const timeEntryIds = rawTimeEntryIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+  if (timeEntryIds.length > 0) {
+    const { error: timeEntriesError } = await db
+      .from('time_entries')
+      .update({ invoiced: true, invoice_id: data.id })
+      .in('id', timeEntryIds)
+      .eq('billable', true)
+      .eq('invoiced', false)
+    if (timeEntriesError) {
+      throw new Error(timeEntriesError.message || 'Invoice created but failed to mark time entries as invoiced')
+    }
   }
 
   return NextResponse.json(mapInvoice(data), { status: 201 })

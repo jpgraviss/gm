@@ -21,7 +21,8 @@ export interface ScheduledEmail {
   html: string
   sendAt: string
   sentAt: string | null
-  status: 'pending' | 'sent' | 'failed' | 'cancelled'
+  sendingAt: string | null
+  status: 'pending' | 'sending' | 'sent' | 'failed' | 'cancelled'
   type: string
   recurring: string
   metadata: Record<string, unknown>
@@ -46,6 +47,7 @@ function mapRow(row: Record<string, unknown>): ScheduledEmail {
     html: row.html as string,
     sendAt: row.send_at as string,
     sentAt: (row.sent_at as string) ?? null,
+    sendingAt: (row.sending_at as string) ?? null,
     status: row.status as ScheduledEmail['status'],
     type: row.type as string,
     recurring: row.recurring as string,
@@ -138,6 +140,54 @@ function getNextSendAt(current: string, recurring: string): string | null {
   }
 }
 
+// AUDIT.md #370 — processScheduledEmails() atomically claims rows
+// pending -> sending before its send loop, but nothing rescued a row left
+// stuck in 'sending' if the request/serverless function was killed
+// mid-loop (a real risk chained after 6+ other jobs in the same
+// /api/cron invocation) — those rows were permanently excluded from
+// future claims (the claim query only ever looks at status='pending')
+// and invisible in the UI (STATUS_TABS has no 'stuck' state). Mirrors
+// the broadcast-side stuck-'sending' recovery in app/api/cron/route.ts's
+// dispatchScheduledBroadcasts, and the one-time version of this same
+// rescue already applied via supabase/migrations/
+// add_scheduled_emails_sending_status.sql ("Cron re-runs every 5 min;
+// anything stuck > 15 min is definitely orphaned") — this makes that
+// rescue a standing sweep instead of a one-off migration. There's no
+// retry-count column on scheduled_emails, so (matching the migration's
+// own approach) every stuck row is reset to 'pending' rather than ever
+// marked 'failed' here — a row that fails again for a real, deterministic
+// reason (bad address, provider error) still gets marked 'failed' by the
+// normal send loop below on its next attempt, it just isn't diagnosed as
+// "genuinely failed" purely from having been stuck once.
+const STUCK_SENDING_THRESHOLD_MS = 15 * 60 * 1000
+
+export async function rescueStuckSendingEmails(): Promise<{ rescued: number }> {
+  const db = createServiceClient()
+  const cutoff = new Date(Date.now() - STUCK_SENDING_THRESHOLD_MS).toISOString()
+
+  // Keyed off sending_at (stamped by the claim update in
+  // processScheduledEmails below, migration add_scheduled_emails_sending_at.sql),
+  // not send_at — send_at is frozen at insert time and can legitimately be
+  // well in the past the moment a backlogged row is claimed, which would
+  // make it look instantly "stuck" if age were measured from it instead of
+  // the real claim time. A row still 'sending' with sending_at older than
+  // the threshold has genuinely been claimed and not resolved (sent/failed)
+  // for at least that long — reset it to 'pending' so the next tick's claim
+  // query (which only looks at status='pending') can pick it up again. A
+  // sending_at of NULL shouldn't be possible for a freshly claimed row, but
+  // is treated as stuck too (a row somehow in 'sending' pre-migration/
+  // pre-stamp) rather than silently never rescued.
+  const { data: rescued, error } = await db
+    .from('scheduled_emails')
+    .update({ status: 'pending' })
+    .eq('status', 'sending')
+    .or(`sending_at.lte.${cutoff},sending_at.is.null`)
+    .select('id')
+
+  if (error) throw new Error(error.message)
+  return { rescued: rescued?.length ?? 0 }
+}
+
 export async function processScheduledEmails(): Promise<{ sent: number; failed: number }> {
   const db = createServiceClient()
   const now = new Date().toISOString()
@@ -159,7 +209,7 @@ export async function processScheduledEmails(): Promise<{ sent: number; failed: 
   const ids = candidateIds.map(r => r.id as string)
   const { data: claimedRows, error: claimErr } = await db
     .from('scheduled_emails')
-    .update({ status: 'sending' })
+    .update({ status: 'sending', sending_at: now })
     .in('id', ids)
     .eq('status', 'pending')
     .select('*')

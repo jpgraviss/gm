@@ -5,7 +5,7 @@ import { fireAutomations } from '@/lib/automations-engine'
 import { checkSite, recordCheck, computeUptime30d, type MonitoredSiteRow } from '@/lib/uptime'
 import { checkAllRanks, sendDueScheduledReports } from '@/lib/rank-tracker'
 import { publishSocialPost } from '@/lib/social-publish'
-import { processScheduledEmails } from '@/lib/email-scheduler'
+import { processScheduledEmails, rescueStuckSendingEmails } from '@/lib/email-scheduler'
 import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender'
 import { syncGranolaNotes, isGranolaConfigured } from '@/lib/granola'
 import { dispatchReviewCampaign } from '@/lib/review-campaigns'
@@ -149,6 +149,23 @@ export const GET = withErrorHandler('cron GET', async (req) => {
   } catch (err) {
     console.error('[cron] Rank tracker failed:', err)
     results.rankTracker = { error: 'Failed' }
+  }
+
+  // 6b. Rescue scheduled_emails rows left stuck in 'sending' — the pending
+  //     -> sending claim in processScheduledEmails has no corresponding
+  //     recovery if the request/serverless function is killed mid-loop
+  //     (a real risk chained as one of 12+ jobs in this same invocation);
+  //     those rows would otherwise be permanently excluded from future
+  //     claims (which only ever look at status='pending') and invisible in
+  //     the UI. Mirrors dispatchScheduledBroadcasts's stuck-'sending'
+  //     recovery below. Run before processScheduledEmails so a rescued row
+  //     is immediately eligible for (re)claim in the same tick instead of
+  //     waiting for the next one.
+  try {
+    results.rescuedScheduledEmails = await rescueStuckSendingEmails()
+  } catch (err) {
+    console.error('[cron] Rescue of stuck scheduled emails failed:', err)
+    results.rescuedScheduledEmails = { error: 'Failed' }
   }
 
   // 7. Process scheduled/recurring emails that are due.

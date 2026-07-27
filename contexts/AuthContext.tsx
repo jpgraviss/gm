@@ -196,13 +196,21 @@ async function autoProvisionTeamMember(
 // /api/auth/session — never set directly by client JS, since a client-set
 // value can't be cryptographically verified server-side. This function just
 // asks the server to (re-)issue one whenever we have a live Supabase session.
-async function establishSessionCookie(accessToken: string) {
+// AUDIT.md #439/#440 — this used to be fire-and-forget with its response
+// discarded, which is exactly why #440 could happen: callers had no way to
+// know the server had just said `{requires2FA: true}` (withheld the
+// cookie) and went ahead and treated the session as fully authenticated
+// anyway via a separate, unrelated direct Supabase read. Now returns the
+// parsed response so every caller can actually see and react to
+// requires2FA before touching any client-side auth state.
+async function establishSessionCookie(accessToken: string): Promise<{ requires2FA?: boolean; email?: string; error?: string } | null> {
   try {
-    await fetch('/api/auth/session', {
+    const res = await fetch('/api/auth/session', {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-  } catch {/* non-blocking */}
+    return await res.json().catch(() => null)
+  } catch { return null }
 }
 async function clearAuthCookie() {
   // Clearing the httpOnly gravhub-auth cookie only actually happens
@@ -267,7 +275,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // cookie via the server (requires a live Supabase access token — this
     // path only runs when we have a real Supabase session, e.g. password
     // login, magic-link-via-Supabase, or session restore/refresh).
-    const restoreProfile = async (email: string, accessToken?: string, avatar?: string) => {
+    //
+    // AUDIT.md #439/#440 — previously this called loadProfileByEmail()
+    // (a direct, RLS-gated Supabase table read) FIRST and set `user`/
+    // localStorage from its result, with establishSessionCookie() only
+    // fired afterward, fire-and-forget, its `{requires2FA: true}` result
+    // never even inspected. That meant a staff member's Supabase session
+    // that hadn't completed 2FA yet — which is fully live the instant a
+    // magic link is clicked, well before any code is entered, see
+    // app/auth/confirm/page.tsx — was still treated as fully authenticated
+    // by this app's own UI. Now the server session/2FA check runs FIRST,
+    // and `user`/localStorage are only ever populated once it confirms 2FA
+    // isn't outstanding for this specific browser session.
+    const restoreProfile = async (
+      email: string,
+      accessToken?: string,
+      avatar?: string,
+      opts?: { redirectOn2FA?: boolean },
+    ) => {
+      if (accessToken) {
+        const sessionResult = await establishSessionCookie(accessToken)
+        if (sessionResult?.requires2FA) {
+          // Do NOT set user/localStorage while 2FA is outstanding for this
+          // session. The mount-time restore path additionally redirects to
+          // the existing 2FA code-entry UI (team-login page) rather than
+          // silently leaving the caller on whatever page they loaded,
+          // unless already on an auth page that handles this itself.
+          if (opts?.redirectOn2FA && typeof window !== 'undefined') {
+            const path = window.location.pathname
+            if (path !== '/team-login' && !path.startsWith('/auth/confirm')) {
+              window.location.href = `/team-login?requires2FA=1&email=${encodeURIComponent(sessionResult.email || email)}`
+            }
+          }
+          return null
+        }
+      }
       let profile = await loadProfileByEmail(email, avatar)
       // Auto-provision on session restore for @gravissmarketing.com users
       if (!profile && email.toLowerCase().endsWith('@gravissmarketing.com')) {
@@ -284,7 +326,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAccessBlocked(blocked)
         }
         setUser(profile)
-        if (accessToken) await establishSessionCookie(accessToken)
+        // establishSessionCookie() already ran above (before this profile
+        // read) so its requires2FA result could gate whether we got here
+        // at all — nothing left to do with the cookie here.
         try { localStorage.setItem('gravhub_user', JSON.stringify(profile)) } catch {/* ignore */}
         if (profile.userType === 'staff') fetchMembers()
         if (profile.userType === 'client' && profile.id) {
@@ -348,7 +392,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ])
     sessionWithTimeout.then(async ({ data: { session } }) => {
       if (session?.user?.email) {
-        const profile = await restoreProfile(session.user.email, session.access_token)
+        // AUDIT.md #440 — this mount-time restore is the path the original
+        // finding was about: redirect to the 2FA prompt if this specific
+        // Supabase session hasn't completed it yet, rather than silently
+        // rendering the full authenticated app shell around it.
+        const profile = await restoreProfile(session.user.email, session.access_token, undefined, { redirectOn2FA: true })
         // Defer gmail token restoration — not needed for initial render
         if (profile) restoreGmailToken(profile.email)
       } else if (!hadCachedUser) {
@@ -400,8 +448,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // this route reissues the cookie with a fresh expiry on every
         // refresh) — correct regardless of this flag's state, so if this
         // skip ever fails to fire (e.g. a second tab), the worst case is a
-        // redundant cookie reissue/2FA email, not a bypass. Never skipped
-        // for TOKEN_REFRESHED, so routine background
+        // redundant cookie reissue/2FA email, not a bypass — restoreProfile()
+        // itself (AUDIT.md #440) now also refuses to set `user`/localStorage
+        // whenever establishSessionCookie() reports requires2FA, regardless
+        // of which of the two call sites reached it, so a missed skip here
+        // can no longer grant authenticated UI state pre-2FA either. Never
+        // skipped for TOKEN_REFRESHED, so routine background
         // refresh is completely unaffected.
         if (event === 'SIGNED_IN' && typeof sessionStorage !== 'undefined' && sessionStorage.getItem('gravhub_magic_link_pending') === '1') {
           return
@@ -476,9 +528,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verify2FACode = async (email: string, code: string): Promise<{ ok: boolean; error?: string }> => {
     try {
+      // AUDIT.md #439 — if this browser already holds a live Supabase Auth
+      // session (the magic-link path), pass its access token along so the
+      // server can mark that EXACT session as 2FA-verified (see
+      // supabase/migrations/enforce_2fa_session_rls.sql) — without this,
+      // that Supabase session/JWT would stay usable to bypass RLS-gated
+      // reads via a direct Supabase REST call forever, 2FA notwithstanding.
+      // Google Sign-In never establishes a Supabase session, so
+      // getSession() resolves with null there and this is simply omitted.
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      try {
+        const { data: { session } } = await getSupabaseClient().auth.getSession()
+        if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`
+      } catch {/* non-blocking — 2fa-verify still works without it */}
+
       const res = await fetch('/api/auth/2fa-verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ email, code }),
       })
       let data: { user?: AuthUser; error?: string } = {}

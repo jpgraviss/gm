@@ -41,6 +41,29 @@ interface PublicForm {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PHONE_RE = /^[\d\s\-+().]{7,20}$/
 
+// AUDIT #494 — mirrors the isSafeUrl()/safeLinkUrl() allowlist in
+// app/go/page/[slug]/PublicFunnelPage.tsx (AUDIT #341, not exported/reusable
+// from there since that's a separate standalone public page). A staff-set
+// form.redirect_url with a `javascript:` scheme would otherwise execute in
+// every anonymous visitor's browser on the trusted app origin via
+// window.location.href. Only known-safe schemes (or a scheme-less
+// relative/anchor path) are followed — anything else is dropped and the
+// visitor just sees the normal success state instead.
+const REDIRECT_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:'])
+
+function isSafeRedirectUrl(url: unknown): url is string {
+  if (typeof url !== 'string') return false
+  const trimmed = url.trim()
+  if (!trimmed) return false
+  if (trimmed.startsWith('#') || trimmed.startsWith('/')) return true
+  try {
+    return REDIRECT_PROTOCOLS.has(new URL(trimmed).protocol)
+  } catch {
+    // Not a valid absolute URL (e.g. a bare relative path like "thanks")
+    return true
+  }
+}
+
 function validateFieldLive(type: string, value: string, ratingMax?: number): string | null {
   if (!value) return null
   if (type === 'email' && !EMAIL_RE.test(value)) return 'Enter a valid email address'
@@ -362,7 +385,7 @@ export default function PublicFormPage() {
       if (isEmbed) {
         window.parent?.postMessage({ type: 'gravhub:submitted' }, '*')
       }
-      if (data.redirectUrl && !isEmbed) {
+      if (data.redirectUrl && !isEmbed && isSafeRedirectUrl(data.redirectUrl)) {
         setTimeout(() => { window.location.href = data.redirectUrl }, 800)
       }
     } catch {

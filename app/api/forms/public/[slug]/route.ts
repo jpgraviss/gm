@@ -6,6 +6,8 @@ import { fireTrigger } from '@/lib/automation-triggers'
 import { withErrorHandler } from '@/lib/api-handler'
 import { extractUtmFromBody } from '@/lib/attribution'
 import { getFirstPipelineStageName } from '@/lib/pipelines'
+import { resolveSafeIp, createPinnedDispatcher } from '@/lib/ssrf-guard'
+import type { Agent } from 'undici'
 
 // CORS — forms get embedded on external websites
 const corsHeaders = {
@@ -252,21 +254,26 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
     }
   }
 
-  // Webhook
+  // Webhook — AUDIT #500 — form.webhook_url is staff-set (any Team Member,
+  // via PATCH /api/forms/[id]) and was fetched here with a bare fetch(): no
+  // protocol check, no private/loopback/link-local/metadata-IP block. Same
+  // risk class already hardened for monitored-sites/uptime/WordPress checks
+  // (AUDIT #260/#292/#414) via lib/ssrf-guard.ts. sendFormWebhook() below
+  // validates the exact address before connecting and pins the fetch to it
+  // (never letting fetch() re-resolve the hostname itself, which would
+  // reopen the DNS-rebinding TOCTOU gap #414 closed). A blocked or failed
+  // webhook must never fail the visitor's actual form submission, so this
+  // stays fire-and-forget with errors only logged server-side.
   if (form.webhook_url) {
-    fetch(form.webhook_url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event: 'form_submitted',
-        formId: form.id,
-        formName: form.name,
-        submissionId,
-        contactId,
-        dealId,
-        data: body,
-        submittedAt: new Date().toISOString(),
-      }),
+    sendFormWebhook(form.webhook_url, {
+      event: 'form_submitted',
+      formId: form.id,
+      formName: form.name,
+      submissionId,
+      contactId,
+      dealId,
+      data: body,
+      submittedAt: new Date().toISOString(),
     }).catch((err) => console.error('[forms webhook]', err))
   }
 
@@ -279,6 +286,41 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
     { status: 201, headers: corsHeaders },
   )
 })
+
+const WEBHOOK_TIMEOUT_MS = 10_000
+
+// AUDIT #500 — mirrors the pinned-fetch pattern lib/uptime.ts's checkSite()
+// and lib/wordpress.ts's fetchWithTimeout() use (AUDIT #414): resolve the
+// hostname once via resolveSafeIp(), then pin the actual connection to that
+// exact validated address via createPinnedDispatcher() rather than letting
+// fetch() perform its own, independent (re-bindable) DNS lookup. Redirects
+// are not followed — a webhook target 302-ing to an internal/metadata
+// address would otherwise bypass validation entirely, and nothing here
+// needs the redirect response body.
+async function sendFormWebhook(url: string, payload: unknown): Promise<void> {
+  const resolution = await resolveSafeIp(url)
+  if (!resolution.safe) {
+    console.error('[forms webhook] blocked — URL resolves to a private or internal address:', url)
+    return
+  }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS)
+  const dispatcher = createPinnedDispatcher(resolution.ip, resolution.family)
+  const requestInit: RequestInit & { dispatcher: Agent } = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    redirect: 'manual',
+    signal: controller.signal,
+    dispatcher,
+  }
+  try {
+    await fetch(url, requestInit)
+  } finally {
+    clearTimeout(timer)
+    await dispatcher.destroy()
+  }
+}
 
 // Public, unauthenticated endpoint — submitted field values and the
 // respondent's own name are interpolated into HTML emails sent to real

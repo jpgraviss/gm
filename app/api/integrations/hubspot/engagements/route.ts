@@ -40,31 +40,37 @@ function s(val: string | null | undefined): string {
 
 type EngagementType = 'notes' | 'calls' | 'emails' | 'meetings'
 
+// `hs_lastmodifieddate` is the standard freshness property HubSpot exposes
+// on every engagement object (notes/calls/emails/meetings all use the same
+// `hs_`-prefixed convention as deals — see AUDIT.md #415); it wasn't
+// previously fetched here since the import only ever did an existence
+// check, never a freshness comparison.
 const ENGAGEMENT_CONFIGS: Record<EngagementType, { url: string; properties: string[]; mapType: string }> = {
   notes: {
     url: 'https://api.hubapi.com/crm/v3/objects/notes',
-    properties: ['hs_note_body', 'hs_timestamp', 'hubspot_owner_id', 'hs_attachment_ids'],
+    properties: ['hs_note_body', 'hs_timestamp', 'hubspot_owner_id', 'hs_attachment_ids', 'hs_lastmodifieddate'],
     mapType: 'note',
   },
   calls: {
     url: 'https://api.hubapi.com/crm/v3/objects/calls',
-    properties: ['hs_call_body', 'hs_call_title', 'hs_call_duration', 'hs_call_direction', 'hs_call_disposition', 'hs_timestamp', 'hubspot_owner_id'],
+    properties: ['hs_call_body', 'hs_call_title', 'hs_call_duration', 'hs_call_direction', 'hs_call_disposition', 'hs_timestamp', 'hubspot_owner_id', 'hs_lastmodifieddate'],
     mapType: 'call',
   },
   emails: {
     url: 'https://api.hubapi.com/crm/v3/objects/emails',
-    properties: ['hs_email_subject', 'hs_email_text', 'hs_email_direction', 'hs_timestamp', 'hubspot_owner_id'],
+    properties: ['hs_email_subject', 'hs_email_text', 'hs_email_direction', 'hs_timestamp', 'hubspot_owner_id', 'hs_lastmodifieddate'],
     mapType: 'email',
   },
   meetings: {
     url: 'https://api.hubapi.com/crm/v3/objects/meetings',
-    properties: ['hs_meeting_title', 'hs_meeting_body', 'hs_meeting_start_time', 'hs_meeting_end_time', 'hs_timestamp', 'hubspot_owner_id'],
+    properties: ['hs_meeting_title', 'hs_meeting_body', 'hs_meeting_start_time', 'hs_meeting_end_time', 'hs_timestamp', 'hubspot_owner_id', 'hs_lastmodifieddate'],
     mapType: 'meeting',
   },
 }
 
 function mapEngagement(type: EngagementType, e: HubSpotEngagement) {
   const p = e.properties
+  const lastModifiedDate = s(p.hs_lastmodifieddate)
   switch (type) {
     case 'notes':
       return {
@@ -73,6 +79,7 @@ function mapEngagement(type: EngagementType, e: HubSpotEngagement) {
         title: 'Note',
         body: s(p.hs_note_body),
         timestamp: s(p.hs_timestamp),
+        lastModifiedDate,
       }
     case 'calls':
       return {
@@ -83,6 +90,7 @@ function mapEngagement(type: EngagementType, e: HubSpotEngagement) {
         duration: p.hs_call_duration ? parseInt(p.hs_call_duration) : null,
         outcome: s(p.hs_call_disposition),
         timestamp: s(p.hs_timestamp),
+        lastModifiedDate,
       }
     case 'emails':
       return {
@@ -91,6 +99,7 @@ function mapEngagement(type: EngagementType, e: HubSpotEngagement) {
         title: s(p.hs_email_subject) || 'Email',
         body: s(p.hs_email_text),
         timestamp: s(p.hs_timestamp),
+        lastModifiedDate,
       }
     case 'meetings':
       return {
@@ -99,6 +108,7 @@ function mapEngagement(type: EngagementType, e: HubSpotEngagement) {
         title: s(p.hs_meeting_title) || 'Meeting',
         body: s(p.hs_meeting_body),
         timestamp: s(p.hs_meeting_start_time) || s(p.hs_timestamp),
+        lastModifiedDate,
       }
   }
 }
@@ -166,12 +176,18 @@ export const POST = withErrorHandler('integrations/hubspot/engagements POST', as
 
   const db = createServiceClient()
 
-  // Get existing activity IDs to avoid duplicates (check for hs- prefixed IDs)
+  // AUDIT #415 — used to be a bare `select('id')` existence check, which
+  // meant any hs-prefixed id already present was skipped forever with no
+  // way to re-process a row a rep later edited in HubSpot. Also selecting
+  // hs_last_modified (see add_crm_activities_hs_last_modified.sql) lets
+  // the loop below tell an unchanged re-fetch from a genuine edit.
   const { data: existingActivities } = await db
     .from('crm_activities')
-    .select('id')
+    .select('id, hs_last_modified')
     .like('id', 'hs-%')
-  const existingIds = new Set((existingActivities ?? []).map((a: { id: string }) => a.id))
+  const existingMeta = new Map(
+    (existingActivities ?? []).map((a: { id: string; hs_last_modified: string | null }) => [a.id, a.hs_last_modified]),
+  )
 
   // Build contact lookup for association
   const { data: allContacts } = await db.from('crm_contacts').select('id, full_name, company_id, company_name')
@@ -181,6 +197,7 @@ export const POST = withErrorHandler('integrations/hubspot/engagements POST', as
   }
 
   let inserted = 0
+  let updated = 0
   let skipped = 0
   const errors: string[] = []
   let totalFetched = 0
@@ -215,10 +232,31 @@ export const POST = withErrorHandler('integrations/hubspot/engagements POST', as
         if (selectedIds && !selectedIds.has(e.id)) continue
 
         const activityId = `hs-${engType}-${e.id}`
-        if (existingIds.has(activityId)) { skipped++; continue }
-
         const mapped = mapEngagement(engType, e)
         if (!mapped.body && !mapped.title) { skipped++; continue }
+
+        // AUDIT #415 — an id already present in existingMeta used to be
+        // skipped unconditionally forever. Now only skip when we can
+        // positively confirm the stored copy is still current: the
+        // incoming hs_lastmodifieddate is present AND no newer than what
+        // we stored last time. A missing stored value (every row imported
+        // before this fix, since the column above starts out NULL) is
+        // treated as "unknown, not confirmed current" rather than
+        // "definitely stale" — so it falls through to the update branch,
+        // which backfills hs_last_modified for next time instead of
+        // leaving the row stuck unskippable-but-uncomparable forever.
+        const isExisting = existingMeta.has(activityId)
+        const storedLastModified = existingMeta.get(activityId)
+        if (isExisting && storedLastModified && mapped.lastModifiedDate && mapped.lastModifiedDate <= storedLastModified) {
+          skipped++
+          continue
+        }
+        // No freshness signal from HubSpot at all and we've already
+        // recorded this row — nothing to act on, preserve prior behavior.
+        if (isExisting && !mapped.lastModifiedDate) {
+          skipped++
+          continue
+        }
 
         const timestamp = mapped.timestamp
           ? new Date(mapped.timestamp).toISOString()
@@ -242,6 +280,34 @@ export const POST = withErrorHandler('integrations/hubspot/engagements POST', as
           }
         }
 
+        const hsLastModified = mapped.lastModifiedDate
+          ? new Date(mapped.lastModifiedDate).toISOString()
+          : null
+
+        if (isExisting) {
+          // ── Update existing engagement ───────────────────────────────
+          const { error } = await db.from('crm_activities').update({
+            type: mapped.type,
+            title: mapped.title,
+            body: mapped.body || null,
+            company_id: companyId,
+            company_name: companyName,
+            contact_id: contactId,
+            contact_name: contactName,
+            duration: 'duration' in mapped ? (mapped as { duration?: number | null }).duration ?? null : null,
+            outcome: 'outcome' in mapped ? (mapped as { outcome?: string }).outcome ?? null : null,
+            hs_last_modified: hsLastModified,
+          }).eq('id', activityId)
+
+          if (error) {
+            errors.push(`Update ${engType} ${e.id}: ${error.message}`)
+          } else {
+            updated++
+            existingMeta.set(activityId, hsLastModified)
+          }
+          continue
+        }
+
         const { error } = await db.from('crm_activities').insert({
           id: activityId,
           type: mapped.type,
@@ -255,13 +321,14 @@ export const POST = withErrorHandler('integrations/hubspot/engagements POST', as
           timestamp,
           duration: 'duration' in mapped ? (mapped as { duration?: number | null }).duration ?? null : null,
           outcome: 'outcome' in mapped ? (mapped as { outcome?: string }).outcome ?? null : null,
+          hs_last_modified: hsLastModified,
         })
 
         if (error) {
           errors.push(`Insert ${engType} ${e.id}: ${error.message}`)
         } else {
           inserted++
-          existingIds.add(activityId)
+          existingMeta.set(activityId, hsLastModified)
         }
       }
 
@@ -270,5 +337,5 @@ export const POST = withErrorHandler('integrations/hubspot/engagements POST', as
     }
   }
 
-  return NextResponse.json({ inserted, updated: 0, skipped, errors, totalFetched })
+  return NextResponse.json({ inserted, updated, skipped, errors, totalFetched })
 })

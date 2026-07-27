@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase'
 import { decrypt } from '@/lib/encryption'
-import { isPrivateOrInternalUrl } from '@/lib/ssrf-guard'
+import { resolveSafeIp, createPinnedDispatcher } from '@/lib/ssrf-guard'
+import type { Agent } from 'undici'
 
 const WP_TIMEOUT = 12_000
 
@@ -74,35 +75,55 @@ function stripCredentialHeadersCrossOrigin(
   return stripped
 }
 
+// AUDIT #414 — this loop used to call isPrivateOrInternalUrl() (a boolean
+// check) per hop and then hand the URL to a plain fetch(), which performs
+// its own, independent DNS resolution to actually connect — the same
+// DNS-rebinding TOCTOU gap #319 fixed in lib/website-fetch.ts. Each hop now
+// uses resolveSafeIp() to get the exact validated address and pins the
+// fetch to it via a per-hop undici Agent (createPinnedDispatcher), the same
+// mechanism lib/website-fetch.ts uses. The original hostname stays in the
+// request URL, so TLS SNI and the Host header sent to the origin are
+// unaffected — only the socket's real destination is pinned.
 async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
   const wantsManual = opts.redirect === 'manual'
   const originalUrl = url
   let currentUrl = url
   let currentHeaders: Record<string, string> = { 'User-Agent': 'GravHub-WPCheck/1.0', ...(opts.headers as Record<string, string> | undefined) }
   for (let hop = 0; ; hop++) {
-    if (await isPrivateOrInternalUrl(currentUrl)) {
+    const resolution = await resolveSafeIp(currentUrl)
+    if (!resolution.safe) {
       throw new Error('URL resolves to a private or internal address')
     }
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), WP_TIMEOUT)
+    const dispatcher = createPinnedDispatcher(resolution.ip, resolution.family)
+    const requestInit: RequestInit & { dispatcher: Agent } = {
+      ...opts,
+      redirect: 'manual',
+      signal: controller.signal,
+      headers: currentHeaders,
+      dispatcher,
+    }
     let res: Response
     try {
-      res = await fetch(currentUrl, {
-        ...opts,
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: currentHeaders,
-      })
+      res = await fetch(currentUrl, requestInit)
     } finally {
       clearTimeout(timer)
     }
     if (!wantsManual && res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+      // Body isn't needed for a redirect hop — safe to tear this
+      // connection down immediately rather than following it.
+      await dispatcher.destroy()
       if (hop >= 5) throw new Error('Too many redirects')
       const nextUrl = new URL(res.headers.get('location')!, currentUrl).toString()
       currentHeaders = stripCredentialHeadersCrossOrigin(currentHeaders, originalUrl, nextUrl)
       currentUrl = nextUrl
       continue
     }
+    // Terminal response — the caller still needs to read its body
+    // (res.json()/res.text()), so the dispatcher can't be destroyed here.
+    // It's left to undici's own keep-alive timeout to close the idle
+    // connection once the caller is done with it.
     return res
   }
 }

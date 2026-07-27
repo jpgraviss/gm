@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase'
 import { getResend } from '@/lib/resend'
-import { isPrivateOrInternalUrl } from '@/lib/ssrf-guard'
+import { resolveSafeIp, createPinnedDispatcher } from '@/lib/ssrf-guard'
+import type { Agent } from 'undici'
 
 /**
  * Website uptime monitoring.
@@ -48,7 +49,14 @@ export async function checkSite(url: string): Promise<CheckResult> {
   // metadata address (DNS rebinding) was fetched by this cron-driven check
   // forever with no further guard. Re-validate on every check — cheap (one
   // DNS lookup) relative to the check itself.
-  if (await isPrivateOrInternalUrl(url)) {
+  //
+  // AUDIT #414 — resolveSafeIp() (rather than the boolean
+  // isPrivateOrInternalUrl()) so the address validated here can be pinned
+  // to the actual connection below via createPinnedDispatcher() — a plain
+  // fetch(url) afterward would perform its own, independent DNS lookup,
+  // reopening the exact TOCTOU rebind gap this check exists to close.
+  const resolution = await resolveSafeIp(url)
+  if (!resolution.safe) {
     return {
       up: false,
       statusCode: null,
@@ -56,24 +64,38 @@ export async function checkSite(url: string): Promise<CheckResult> {
       errorMessage: 'URL resolves to a private or internal address',
     }
   }
+  // Captured into plain locals (rather than referencing `resolution`
+  // directly) so the closure below doesn't lose TS's narrowing of the
+  // `{ safe: true }` branch.
+  const pinnedIp = resolution.ip
+  const pinnedFamily = resolution.family
 
   async function attempt(method: 'HEAD' | 'GET'): Promise<Response> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS)
+    // Pin this connection to the exact address validated above — never let
+    // fetch() re-resolve the hostname itself (see AUDIT #414).
+    const dispatcher = createPinnedDispatcher(pinnedIp, pinnedFamily)
+    const requestInit: RequestInit & { dispatcher: Agent } = {
+      method,
+      // AUDIT #292 — 'follow' transparently followed a redirect
+      // response to wherever it pointed with no re-validation (e.g. a
+      // compromised site 302-ing to a private/metadata address). A 3xx
+      // response already counts as "up" below without needing to know
+      // where it points, so there's no reason to follow it at all.
+      redirect: 'manual',
+      signal: controller.signal,
+      headers: { 'user-agent': 'GravHub-Uptime/1.0 (+https://app.gravissmarketing.com)' },
+      dispatcher,
+    }
     try {
-      return await fetch(url, {
-        method,
-        // AUDIT #292 — 'follow' transparently followed a redirect
-        // response to wherever it pointed with no re-validation (e.g. a
-        // compromised site 302-ing to a private/metadata address). A 3xx
-        // response already counts as "up" below without needing to know
-        // where it points, so there's no reason to follow it at all.
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: { 'user-agent': 'GravHub-Uptime/1.0 (+https://app.gravissmarketing.com)' },
-      })
+      return await fetch(url, requestInit)
     } finally {
       clearTimeout(timer)
+      // Only res.status/headers are read by callers (see checkSite below) —
+      // never the body — so it's safe to tear the connection down as soon
+      // as the response settles.
+      await dispatcher.destroy()
     }
   }
 

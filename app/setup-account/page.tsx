@@ -295,7 +295,7 @@ export default function SetupAccountPage() {
                 </p>
               </div>
 
-              <div className="flex justify-center gap-2 mb-6">
+              <div className="flex justify-center gap-1.5 sm:gap-2 mb-6">
                 {code.map((digit, i) => (
                   <input
                     key={i}
@@ -306,7 +306,7 @@ export default function SetupAccountPage() {
                     value={digit}
                     onChange={e => handleCodeChange(i, e.target.value)}
                     onKeyDown={e => handleCodeKeyDown(i, e)}
-                    className="w-11 h-13 text-center text-xl font-bold border border-gray-200 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:border-[#015035] focus:bg-white transition-colors"
+                    className="w-9 h-11 sm:w-11 sm:h-13 text-center text-lg sm:text-xl font-bold border border-gray-200 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:border-[#015035] focus:bg-white transition-colors"
                     autoFocus={i === 0}
                   />
                 ))}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
-import { getAuthUser } from '@/lib/rbac'
+import { getAuthUser, requireRole } from '@/lib/rbac'
 import { TASK_DEPARTMENTS, departmentForUnit } from '@/lib/task-department'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -79,10 +79,13 @@ export const VALID_PRIORITIES = ['High', 'Medium', 'Low']
 export const VALID_CATEGORIES = ['Deal', 'Contract', 'Billing', 'Renewal', 'Project', 'Ticket', 'Email', 'General']
 
 export const POST = withErrorHandler('tasks POST', async (req: NextRequest) => {
-  const user = await getAuthUser(req)
-  if (!user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
+  // AUDIT #461 — this route only checked authentication, not role, unlike
+  // its own PATCH/DELETE siblings in [id]/route.ts (both `requireRole(req,
+  // 'Team Member')`) and unlike POST /api/projects (fixed in the same
+  // earlier commit that added this route's auth-only check). A portal
+  // Client or Contractor account could create arbitrary internal tasks.
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
 
   const body = await req.json()
 

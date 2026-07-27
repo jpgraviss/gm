@@ -733,8 +733,19 @@ export default function TasksPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(task),
-    }).then(res => {
+    }).then(async res => {
       if (!res.ok) throw new Error('Failed')
+      // AUDIT #460 — the server always self-generates its own id
+      // (`task-${Date.now()}`, ignoring body.id), so the optimistic
+      // `at-${Date.now()}` id above never matches what's actually
+      // persisted. Swap the optimistic entry for the server's real
+      // returned row (matching the pattern in app/crm/pipeline/page.tsx's
+      // handleCreateDeal) so subsequent PATCH/DELETE calls target a real,
+      // existing id instead of 500ing and getting silently filtered out
+      // of local state by the "not found" recovery path.
+      const saved = await res.json()
+      setTasks(prev => prev.map(t => t.id === task.id ? (saved as AppTask) : t))
+      setSelectedTask(prev => prev?.id === task.id ? (saved as AppTask) : prev)
       toast('Task created', 'success')
     }).catch(() => {
       setTasks(prev => prev.filter(t => t.id !== task.id))

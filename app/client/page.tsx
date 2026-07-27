@@ -8,7 +8,7 @@ import type { Invoice } from '@/lib/types'
 import StatusBadge from '@/components/ui/StatusBadge'
 import {
   Globe, CheckCircle, FolderKanban, FileText, MessageSquare,
-  Download, Upload, Bell, ChevronRight, X, AlertTriangle, LogOut,
+  Download, Upload, ChevronRight, X, AlertTriangle,
   Search, BarChart3, Star, Activity, TrendingUp, Share2,
 } from 'lucide-react'
 
@@ -55,7 +55,7 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 
 export default function ClientPortalPage() {
   const { toast } = useToast()
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const company = user?.company ?? ''
   const contactName = user?.name ?? ''
 
@@ -63,10 +63,6 @@ export default function ClientPortalPage() {
   const [insights, setInsights] = useState<PortalInsights | null>(null)
   const [insightsLoading, setInsightsLoading] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
-
-  // Notifications
-  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; message?: string; link?: string; read: boolean; createdAt: string }>>([])
-  const [showNotifications, setShowNotifications] = useState(false)
 
   // Social posts for approval
   const [pendingPosts, setPendingPosts] = useState<Array<{ id: string; content: string; platforms: string[]; scheduledAt?: string; status: string; approvalStatus: string }>>([])
@@ -147,15 +143,6 @@ export default function ClientPortalPage() {
       .finally(() => setInsightsLoading(false))
   }, [activeTab, company, insights])
 
-  // Fetch notifications on mount
-  useEffect(() => {
-    if (!user?.id) return
-    fetch(`/api/portal-clients/notifications?clientId=${encodeURIComponent(user.id)}`)
-      .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (Array.isArray(data)) setNotifications(data) })
-      .catch(() => {/* non-fatal */})
-  }, [user?.id])
-
   // Load existing tickets when Support tab opens
   useEffect(() => {
     if (activeTab !== 'tickets' || !company) return
@@ -185,15 +172,6 @@ export default function ClientPortalPage() {
       .catch(() => {/* non-fatal */})
       .finally(() => setSocialLoading(false))
   }, [activeTab, company])
-
-  async function markNotificationRead(id: string) {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
-    fetch('/api/portal-clients/notifications', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [id], read: true }),
-    }).catch(() => {/* best-effort */})
-  }
 
   async function handleApprovePost(postId: string) {
     try {
@@ -273,85 +251,13 @@ export default function ClientPortalPage() {
     }
   }
 
-  const unreadCount = notifications.filter(n => !n.read).length
   const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
 
   if (loading) return <LoadingScreen />
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ background: '#f8fafc' }}>
-
-      {/* Header */}
-      <div className="flex-shrink-0 px-3 py-3 sm:px-6 sm:py-4 flex items-center justify-between shadow-sm" style={{ background: '#012b1e' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
-            {company?.[0] ?? ''}
-          </div>
-          <div>
-            <p className="text-white font-bold text-sm" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{company}</p>
-            <p className="text-white/50 text-[11px]">{user?.service ?? 'Client Portal'}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <button
-              onClick={() => setShowNotifications(v => !v)}
-              className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
-            >
-              <Bell size={16} className="text-white/60" />
-              {unreadCount > 0 && (
-                <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-            {showNotifications && (
-              <div className="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                  <p className="text-sm font-bold text-gray-900">Notifications</p>
-                  <button onClick={() => setShowNotifications(false)} className="p-1 rounded hover:bg-gray-100"><X size={14} className="text-gray-400" /></button>
-                </div>
-                <div className="max-h-72 overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <p className="text-xs text-gray-400 text-center py-8">No notifications yet</p>
-                  ) : (
-                    notifications.slice(0, 15).map(n => (
-                      <button
-                        key={n.id}
-                        onClick={() => markNotificationRead(n.id)}
-                        className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${!n.read ? 'bg-emerald-50/40' : ''}`}
-                      >
-                        <div className="flex items-start gap-2">
-                          {!n.read && <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 mt-1.5" />}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-gray-900 truncate">{n.title}</p>
-                            {n.message && <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>}
-                            <p className="text-[10px] text-gray-400 mt-1">{formatDate(n.createdAt)}</p>
-                          </div>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10">
-            <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-[10px] font-bold text-white">
-              {contactName.split(' ').map(n => n[0]).join('')}
-            </div>
-            <span className="text-white/80 text-xs font-medium hidden sm:block">{contactName}</span>
-          </div>
-          <button
-            onClick={logout}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white text-xs font-medium"
-          >
-            <LogOut size={14} /> Sign out
-          </button>
-        </div>
-      </div>
-
+    <>
       {/* Nav tabs */}
       <div className="flex-shrink-0 flex gap-1 px-3 sm:px-6 pt-3 pb-0 border-b border-gray-200 bg-white overflow-x-auto">
         {([
@@ -1023,7 +929,7 @@ export default function ClientPortalPage() {
           </div>
         )}
       </div>
-    </div>
+    </>
   )
 }
 

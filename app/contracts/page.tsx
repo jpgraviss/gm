@@ -17,6 +17,7 @@ import {
   X, CheckCircle, Clock, AlertCircle, ScrollText, Calendar, DollarSign, User,
   ExternalLink, FileText, FolderKanban, Send, RefreshCw, Shield, Plus, FilePlus2,
   PenTool, Mail, Search, Eye, Pencil, FileSignature, TrendingUp, Trash2, Download,
+  MessageSquare,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
@@ -207,6 +208,20 @@ function ContractPanel({
             {contract.terminatedReason && (
               <p className="text-[11px] text-red-700 leading-relaxed ml-[22px]">{contract.terminatedReason}</p>
             )}
+          </div>
+        )}
+
+        {/* AUDIT #470 — client feedback banner. Set by a portal client's
+            "Request Changes" action (app/client/approvals/page.tsx), which
+            reverts the contract to Draft and stores their typed feedback in
+            clientNotes so it's visible here instead of silently dropped. */}
+        {contract.status === 'Draft' && contract.clientNotes && (
+          <div className="flex-shrink-0 px-5 py-3 bg-amber-50 border-b border-amber-100">
+            <div className="flex items-center gap-2 mb-1">
+              <MessageSquare size={14} className="text-amber-600 flex-shrink-0" />
+              <span className="text-xs font-bold text-amber-800">Client Requested Changes</span>
+            </div>
+            <p className="text-[11px] text-amber-700 leading-relaxed ml-[22px]">{contract.clientNotes}</p>
           </div>
         )}
 

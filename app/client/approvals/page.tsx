@@ -264,10 +264,16 @@ export default function ClientApprovalsPage() {
         if (!res.ok) throw new Error()
         setProposals(prev => prev.map(p => p.id === selectedItem.data.id ? { ...p, status: 'Draft' } : p))
       } else {
+        // AUDIT #470 fix: previously PATCHed only {status: 'Draft'}, which
+        // (a) always 400'd because VALID_TRANSITIONS had no Sent/Viewed ->
+        // Draft edge, now added in app/api/contracts/[id]/route.ts, and
+        // (b) dropped the typed feedback entirely — contracts had no field
+        // to receive it. clientNotes now persists it, mirroring how the
+        // proposal branch above already reuses renewalNotes.
         const res = await fetch(`/api/contracts/${selectedItem.data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'Draft' }),
+          body: JSON.stringify({ status: 'Draft', clientNotes: `Client feedback: ${feedback.trim()}` }),
         })
         if (!res.ok) throw new Error()
         setContracts(prev => prev.map(c => c.id === selectedItem.data.id ? { ...c, status: 'Draft' } : c))

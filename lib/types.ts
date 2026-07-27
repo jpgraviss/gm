@@ -163,6 +163,10 @@ export interface Contract {
   terminatedReason?: string
   terminatedDate?: string
   companyId?: string | null
+  // AUDIT.md #470 — feedback text a portal client submits with "Request
+  // Changes" (app/client/approvals/page.tsx), persisted so it isn't
+  // silently discarded once the status flips back to Draft.
+  clientNotes?: string
 }
 
 export interface Invoice {

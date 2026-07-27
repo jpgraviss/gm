@@ -17,7 +17,6 @@ function mapEnrollment(row: any) {
     studentEmail:  row.student_email,
     progress:      row.progress ?? {},
     completedAt:   row.completed_at ?? undefined,
-    certificateId: row.certificate_id ?? undefined,
     status:        row.status,
     createdAt:     row.created_at,
     updatedAt:     row.updated_at,

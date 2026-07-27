@@ -16,7 +16,6 @@ function mapEnrollment(row: any) {
     studentEmail:  row.student_email,
     progress:      row.progress ?? {},
     completedAt:   row.completed_at ?? undefined,
-    certificateId: row.certificate_id ?? undefined,
     status:        row.status,
     createdAt:     row.created_at,
     updatedAt:     row.updated_at,
@@ -89,12 +88,11 @@ export const PATCH = withErrorHandler('courses/[id]/enrollments/[enrollmentId] P
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   // The real course viewer's self-service progress tracking
   // (app/courses/[id]/page.tsx markModuleComplete) only ever sends
-  // {progress, completed} — status/certificateId are staff-only fields so
-  // a student can't forge their own completion certificate directly.
+  // {progress, completed} — status is a staff-only field so a student
+  // can't forge their own completion status directly.
   if (body.progress !== undefined) update.progress = body.progress
   if (staff) {
-    if (body.status !== undefined)        update.status = body.status
-    if (body.certificateId !== undefined) update.certificate_id = body.certificateId
+    if (body.status !== undefined) update.status = body.status
   }
 
   if (body.completed === true) {

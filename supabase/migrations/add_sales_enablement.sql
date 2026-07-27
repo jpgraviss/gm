@@ -80,7 +80,6 @@ create table if not exists public.course_enrollments (
   student_email   text not null,
   progress        jsonb not null default '{}',
   completed_at    timestamptz,
-  certificate_id  text,
   status          text not null default 'active',
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()

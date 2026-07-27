@@ -669,7 +669,7 @@ export default function NewClientPage() {
           <StepIndicator steps={STEPS} current={step} />
 
           <div className="flex-1 min-w-0">
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm">
               <h2 className="text-lg font-bold text-gray-900 mb-1">{STEPS[step].label}</h2>
               <p className="text-sm text-gray-400 mb-5">
                 {step === 0 && 'Enter the company details or select an existing company.'}

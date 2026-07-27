@@ -257,9 +257,9 @@ export default function DocumentTemplatesPage() {
     <div className="flex flex-col h-full">
       <Header title="Document Templates" subtitle="Reusable proposal, contract, and addendum templates" />
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-1.5">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {(['all', ...TYPES.map(t => t.value)] as const).map(v => (
               <button
                 key={v}
@@ -277,7 +277,7 @@ export default function DocumentTemplatesPage() {
               id: '', name: '', type: typeFilter === 'all' ? 'proposal' : typeFilter, body: '',
               version: 1, isDefault: false, createdAt: '', updatedAt: '',
             })}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-white text-sm font-semibold"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-white text-sm font-semibold"
             style={{ background: '#015035' }}
           >
             <Plus size={15} /> New Template

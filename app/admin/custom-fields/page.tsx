@@ -137,8 +137,8 @@ export default function CustomFieldsAdminPage() {
     <div className="flex flex-col h-full">
       <Header title="Custom Fields" subtitle="Define extra fields to track on contacts, companies, and deals" />
 
-      <div className="flex-1 overflow-y-auto p-6 max-w-3xl">
-        <div className="flex items-center justify-between mb-5">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-3xl">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
           <div className="flex items-center gap-1.5">
             {ENTITY_TABS.map(t => (
               <button
@@ -154,7 +154,7 @@ export default function CustomFieldsAdminPage() {
           </div>
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-white text-sm font-semibold"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-white text-sm font-semibold"
             style={{ background: '#015035' }}
           >
             <Plus size={15} /> Add Field

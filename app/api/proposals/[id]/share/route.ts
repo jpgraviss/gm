@@ -4,6 +4,7 @@ import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getOrCreateProposalToken } from '@/lib/proposal-share'
 
 export const POST = withErrorHandler('proposals/[id]/share POST', async (req, ctx) => {
   const denied = await requireRole(req, 'Team Member')
@@ -30,8 +31,10 @@ export const POST = withErrorHandler('proposals/[id]/share POST', async (req, ct
     return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
   }
 
-  // Generate token if not already present
-  const token = proposal.token || crypto.randomUUID()
+  // Reuse the existing token if present (shared with the "mark as Sent"
+  // flow in app/api/email/send-proposal/route.ts, see lib/proposal-share.ts)
+  // so a resend never orphans a link the client may have already bookmarked.
+  const token = await getOrCreateProposalToken(db, proposal)
 
   // Update proposal with token and client email
   const { error: updateErr } = await db

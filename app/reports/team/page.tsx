@@ -15,7 +15,7 @@ type DateRange = '7D' | '30D' | '90D' | 'Custom'
 
 interface TicketRow {
   id: string
-  assignee: string
+  assignedTo?: string
   status: string
   created_at?: string
   resolved_at?: string
@@ -84,7 +84,11 @@ export default function TeamProductivityPage() {
       const completedTasks = memberTasks.filter(t => t.status === 'Completed' && (t.completedDate ?? '') >= cutoffDate && (t.completedDate ?? '') <= cutoffEnd)
       const memberTime = timeEntries.filter(t => t.teamMember === m.name && t.date >= cutoffDate && t.date <= cutoffEnd)
       const totalHours = memberTime.reduce((s, t) => s + t.hours + t.minutes / 60, 0)
-      const memberTickets = tickets.filter(t => t.assignee === m.name)
+      // AUDIT.md #442 — tickets carry assignedTo (lib/tickets.ts's mapTicket
+      // maps row.assigned_to to a team member name, same as app/tickets/page.tsx
+      // displays it), not `assignee` — that field never existed on the real
+      // ticket shape, so this comparison was silently always empty.
+      const memberTickets = tickets.filter(t => t.assignedTo === m.name)
       const resolvedTickets = memberTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed')
 
       // Revenue: deals where this member is the assigned rep, within date range

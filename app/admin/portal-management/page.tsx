@@ -9,21 +9,29 @@ import CompanySelect from '@/components/ui/CompanySelect'
 import {
   Building, Users, Plus, Trash2, Save, ChevronDown, ChevronRight,
   Mail, Shield, Eye, X, Search, Clock, UserPlus,
-  FileText, BarChart3, Globe, CreditCard, Megaphone, Palette,
-  MessageSquare, BookOpen, ArrowLeft, Image, Paintbrush,
+  FileText, BarChart3, Globe, CreditCard, Megaphone,
+  MessageSquare, ArrowLeft, Paintbrush,
   Target, PenTool, GraduationCap, Lightbulb, Upload, Calendar,
-  RefreshCw, ExternalLink, Check, Monitor,
+  Check, Monitor, Bell, AlertTriangle, Loader2, Ticket, LogIn,
 } from 'lucide-react'
 
+// href — where this service lives in the real client-facing /client tree.
+// Only SEO, Web Design, Social Media, and Sales Training have real ported
+// destinations (see app/client/services/page.tsx's audit notes: PPC,
+// Content Creation, and Marketing Strategy are confirmed dead/no real
+// backing data, and Email Marketing was deliberately not ported — real
+// cross-tenant leak risk via /api/broadcasts). The rest fall back to the
+// Services hub, which itself gates on what a client's contract actually
+// includes.
 const ALL_SERVICES = [
-  { key: 'SEO', label: 'SEO', description: 'Search engine optimization & organic growth', icon: Search, color: '#015035', href: '/portal/seo' },
-  { key: 'PPC', label: 'PPC', description: 'Pay-per-click advertising & paid search', icon: Target, color: '#2563eb', href: '/portal/ppc' },
-  { key: 'Web Design', label: 'Web Design', description: 'Website design, development & maintenance', icon: Globe, color: '#7c3aed', href: '/portal/web-design' },
-  { key: 'Social Media', label: 'Social Media', description: 'Social media management & strategy', icon: Megaphone, color: '#ec4899', href: '/portal/social-media' },
-  { key: 'Email Marketing', label: 'Email Marketing', description: 'Email campaigns, automation & nurturing', icon: Mail, color: '#0891b2', href: '/portal/email-marketing' },
-  { key: 'Content Creation', label: 'Content Creation', description: 'Blog posts, copywriting & content strategy', icon: PenTool, color: '#ea580c', href: '/portal/content-creation' },
-  { key: 'Sales Training', label: 'Sales Training', description: 'Sales coaching, scripts & training programs', icon: GraduationCap, color: '#be123c', href: '/portal/sales-training' },
-  { key: 'Marketing Strategy', label: 'Marketing Strategy', description: 'Full-funnel marketing strategy & consulting', icon: Lightbulb, color: '#4f46e5', href: '/portal/marketing-strategy' },
+  { key: 'SEO', label: 'SEO', description: 'Search engine optimization & organic growth', icon: Search, color: '#015035', href: '/client/seo' },
+  { key: 'PPC', label: 'PPC', description: 'Pay-per-click advertising & paid search', icon: Target, color: '#2563eb', href: '/client/services' },
+  { key: 'Web Design', label: 'Web Design', description: 'Website design, development & maintenance', icon: Globe, color: '#7c3aed', href: '/client/services/web-design' },
+  { key: 'Social Media', label: 'Social Media', description: 'Social media management & strategy', icon: Megaphone, color: '#ec4899', href: '/client/services/social-media' },
+  { key: 'Email Marketing', label: 'Email Marketing', description: 'Email campaigns, automation & nurturing', icon: Mail, color: '#0891b2', href: '/client/services' },
+  { key: 'Content Creation', label: 'Content Creation', description: 'Blog posts, copywriting & content strategy', icon: PenTool, color: '#ea580c', href: '/client/services' },
+  { key: 'Sales Training', label: 'Sales Training', description: 'Sales coaching, scripts & training programs', icon: GraduationCap, color: '#be123c', href: '/client/services/sales-training' },
+  { key: 'Marketing Strategy', label: 'Marketing Strategy', description: 'Full-funnel marketing strategy & consulting', icon: Lightbulb, color: '#4f46e5', href: '/client/services' },
 ] as const
 
 type ServiceKey = typeof ALL_SERVICES[number]['key']
@@ -188,6 +196,21 @@ export default function PortalManagementPage() {
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false)
   const [addCompanyForm, setAddCompanyForm] = useState({ companyName: '', companyId: undefined as string | undefined, service: '' as string, contactName: '', contactEmail: '' })
   const [addingCompany, setAddingCompany] = useState(false)
+
+  // ── Relocated from app/portal/page.tsx's PortalAdminPage (Batch 5 —
+  // /portal deleted, this is the only staff destination left). Access-
+  // status invite lifecycle (Not Setup → Invited → Active), the Portal
+  // Overview metrics band, and per-client message/ticket actions from that
+  // page's ManageClientPanel (Tickets + Notifications tabs were real; its
+  // Files tab was a no-op stub that only showed a toast — not ported).
+  const [inviteStatus, setInviteStatus] = useState<Record<string, string>>({}) // memberId -> 'sending' | 'sent' | error message
+  const [showLoginList, setShowLoginList] = useState(false)
+  const [notifyMember, setNotifyMember] = useState<{ member: PortalMember; company: string } | null>(null)
+  const [notifyForm, setNotifyForm] = useState({ title: '', message: '', link: '' })
+  const [notifySending, setNotifySending] = useState(false)
+  const [ticketModal, setTicketModal] = useState<string | null>(null) // groupKey
+  const [ticketForm, setTicketForm] = useState({ subject: '', description: '', priority: 'Normal' })
+  const [ticketSaving, setTicketSaving] = useState(false)
 
   useEffect(() => {
     if (!authLoading && (!user || !user.isAdmin)) {
@@ -370,6 +393,103 @@ export default function PortalManagementPage() {
     }
   }
 
+  // AUDIT #154 / Batch 5 — Send Invite / Resend Invite, relocated from
+  // app/portal/page.tsx's sendPortalInvite(). Uses the same
+  // /api/email/portal-invite flow that page always used (a verification-
+  // code email pointing at /portal/setup, which stays live post-merge —
+  // it's the pre-login onboarding flow, explicitly out of scope for
+  // deletion). Distinct from the invite modal below, which uses
+  // /api/portal-clients/invite to create a brand-new member from scratch;
+  // this one re-sends the invite for a member who already has a row.
+  const sendMemberInvite = async (member: PortalMember, company: string, isResend: boolean) => {
+    setInviteStatus(prev => ({ ...prev, [member.id]: 'sending' }))
+    try {
+      const res = await fetch('/api/email/portal-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company, contactName: member.contact, email: member.email, service: '', isResend }),
+      })
+      if (res.ok) {
+        setInviteStatus(prev => ({ ...prev, [member.id]: 'sent' }))
+        if (!isResend && member.access === 'Not Setup') {
+          await fetch(`/api/portal-clients/${member.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ access: 'Invited' }),
+          })
+          fetchClients()
+        }
+      } else {
+        const json = await res.json().catch(() => ({}))
+        setInviteStatus(prev => ({ ...prev, [member.id]: (json.error as string) || 'Failed to send' }))
+      }
+    } catch {
+      setInviteStatus(prev => ({ ...prev, [member.id]: 'Send failed' }))
+    } finally {
+      setTimeout(() => setInviteStatus(prev => { const n = { ...prev }; delete n[member.id]; return n }), 4000)
+    }
+  }
+
+  // AUDIT #154 / Batch 5 — relocated from ManageClientPanel's Notifications
+  // tab in app/portal/page.tsx. Real: posts to the same
+  // /api/portal-clients/notifications the client's bell icon reads
+  // (app/client/layout.tsx).
+  const sendMemberNotification = async () => {
+    if (!notifyMember || !notifyForm.title.trim()) return
+    setNotifySending(true)
+    try {
+      const res = await fetch('/api/portal-clients/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          portal_client_id: notifyMember.member.id,
+          type: 'general',
+          title: notifyForm.title.trim(),
+          message: notifyForm.message.trim() || null,
+          link: notifyForm.link.trim() || null,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      toast(`Notification sent to ${notifyMember.member.contact}`, 'success')
+      setNotifyMember(null)
+      setNotifyForm({ title: '', message: '', link: '' })
+    } catch {
+      toast('Failed to send notification', 'error')
+    } finally {
+      setNotifySending(false)
+    }
+  }
+
+  // AUDIT #154 / Batch 5 — relocated from ManageClientPanel's Tickets tab.
+  // Real: posts to the same /api/tickets the client's own Support tab uses.
+  const createCompanyTicket = async (groupKey: string) => {
+    const group = companies.find(g => g.groupKey === groupKey)
+    if (!group || !ticketForm.subject.trim()) return
+    setTicketSaving(true)
+    try {
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: ticketForm.subject.trim(),
+          description: ticketForm.description.trim(),
+          priority: ticketForm.priority,
+          company: group.company,
+          companyId: group.companyId ?? undefined,
+          status: 'Open',
+        }),
+      })
+      if (!res.ok) throw new Error()
+      toast('Support ticket created', 'success')
+      setTicketModal(null)
+      setTicketForm({ subject: '', description: '', priority: 'Normal' })
+    } catch {
+      toast('Failed to create ticket', 'error')
+    } finally {
+      setTicketSaving(false)
+    }
+  }
+
   const addReport = (groupKey: string) => {
     if (!reportForm.title || !reportForm.file_url) {
       toast('Title and file URL are required', 'error')
@@ -547,6 +667,17 @@ export default function PortalManagementPage() {
   // group here to get its display name for the modal headings below.
   const inviteModalGroup = showInviteModal ? companies.find(g => g.groupKey === showInviteModal) : null
   const reportModalGroup = reportModal ? companies.find(g => g.groupKey === reportModal) : null
+  const ticketModalGroup = ticketModal ? companies.find(g => g.groupKey === ticketModal) : null
+
+  // AUDIT #154 / Batch 5 — Portal Overview metrics, relocated from
+  // app/portal/page.tsx's PortalAdminPage. Flattened across every company's
+  // members since this page (unlike the old flat client list) groups by
+  // company.
+  const allMembers = companies.flatMap(g => g.members.map(m => ({ ...m, company: g.company })))
+  const activeMemberCount = allMembers.filter(m => m.access === 'Active').length
+  const invitedMemberCount = allMembers.filter(m => m.access === 'Invited').length
+  const thisMonthPrefix = new Date().toISOString().slice(0, 7) // "YYYY-MM"
+  const loggedInThisMonth = allMembers.filter(m => m.lastLogin && m.lastLogin.startsWith(thisMonthPrefix))
 
   if (authLoading || loading) {
     return (
@@ -581,6 +712,29 @@ export default function PortalManagementPage() {
             </div>
           </div>
 
+          {/* Portal Overview — relocated from app/portal/page.tsx's PortalAdminPage (AUDIT #154). */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {[
+              { label: 'Active Client Accounts', value: activeMemberCount.toString(), icon: <Globe size={16} />, color: '#015035', onClick: undefined },
+              { label: 'Portal Logins This Month', value: loggedInThisMonth.length.toString(), icon: <LogIn size={16} />, color: '#3b82f6', onClick: () => setShowLoginList(true) },
+              { label: 'Invitations Pending', value: invitedMemberCount.toString(), icon: <Clock size={16} />, color: '#f59e0b', onClick: undefined },
+            ].map(m => (
+              <div
+                key={m.label}
+                className={`metric-card flex items-center gap-4${m.onClick ? ' cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                onClick={m.onClick}
+              >
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${m.color}18` }}>
+                  <span style={{ color: m.color }}>{m.icon}</span>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>{m.value}</p>
+                  <p className="text-xs font-medium" style={{ color: m.onClick ? m.color : '#6b7280' }}>{m.label}{m.onClick ? ' →' : ''}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
           <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
@@ -607,7 +761,7 @@ export default function PortalManagementPage() {
               <p className="text-sm text-gray-500 font-medium">
                 {searchQuery ? 'No companies match your search' : 'No companies with portal access yet'}
               </p>
-              <p className="text-xs text-gray-400 mt-1">Add clients from the Portal page to get started.</p>
+              <p className="text-xs text-gray-400 mt-1">Use &quot;Add Company&quot; above to get started.</p>
             </div>
           )}
 
@@ -636,7 +790,12 @@ export default function PortalManagementPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <a
-                        href={`/portal/preview?company=${encodeURIComponent(group.company)}`}
+                        // AUDIT #154 / Batch 5 — "View as Client" now points at the
+                        // real merged /client tree instead of the deleted
+                        // /portal/preview → <ClientDashboard companyOverride>.
+                        // lib/useClientCompany.tsx reads this ?company= param
+                        // (gated on isAdmin) across every /client/* page.
+                        href={`/client?company=${encodeURIComponent(group.company)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={e => e.stopPropagation()}
@@ -666,19 +825,30 @@ export default function PortalManagementPage() {
                               <Users size={14} style={{ color: '#015035' }} />
                               <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Members</h3>
                             </div>
-                            <button
-                              onClick={() => { setShowInviteModal(group.groupKey); setInviteForm({ name: '', email: '', role: 'Viewer' }) }}
-                              className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg text-white transition-opacity"
-                              style={{ background: '#015035' }}
-                            >
-                              <UserPlus size={12} /> Add Member
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => { setTicketModal(group.groupKey); setTicketForm({ subject: '', description: '', priority: 'Normal' }) }}
+                                className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                                title="Create a support ticket on this company's behalf"
+                              >
+                                <Ticket size={12} /> Ticket
+                              </button>
+                              <button
+                                onClick={() => { setShowInviteModal(group.groupKey); setInviteForm({ name: '', email: '', role: 'Viewer' }) }}
+                                className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg text-white transition-opacity"
+                                style={{ background: '#015035' }}
+                              >
+                                <UserPlus size={12} /> Add Member
+                              </button>
+                            </div>
                           </div>
                           <div className="flex flex-col gap-2">
-                            {group.members.map(member => (
-                              <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                            {group.members.map(member => {
+                              const status = inviteStatus[member.id]
+                              return (
+                              <div key={member.id} className="flex items-center justify-between gap-2 p-3 bg-gray-50 rounded-xl flex-wrap">
                                 <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: '#015035' }}>
+                                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
                                     {member.contact.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                                   </div>
                                   <div>
@@ -686,7 +856,17 @@ export default function PortalManagementPage() {
                                     <p className="text-xs text-gray-400">{member.email}</p>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap justify-end">
+                                  {/* AUDIT #154 / Batch 5 — access-status badge, relocated from
+                                      app/portal/page.tsx's client list table (portal_clients.access
+                                      wasn't surfaced anywhere on this page before). */}
+                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                    member.access === 'Active' ? 'bg-green-100 text-green-700' :
+                                    member.access === 'Invited' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-gray-100 text-gray-500'
+                                  }`}>
+                                    {member.access}
+                                  </span>
                                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                                     member.role === 'Admin' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
                                   }`}>
@@ -696,6 +876,41 @@ export default function PortalManagementPage() {
                                     <Clock size={10} />
                                     {member.lastLogin === 'Never' ? 'Never' : member.lastLogin}
                                   </div>
+                                  {status === 'sending' && (
+                                    <span className="text-[10px] text-gray-400 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Sending…</span>
+                                  )}
+                                  {status === 'sent' && (
+                                    <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1"><Check size={10} /> Sent!</span>
+                                  )}
+                                  {status && status !== 'sending' && status !== 'sent' && (
+                                    <span className="text-[10px] text-red-500 font-semibold flex items-center gap-1" title={status}><AlertTriangle size={10} /> Failed</span>
+                                  )}
+                                  {!status && member.access === 'Not Setup' && (
+                                    <button
+                                      onClick={() => sendMemberInvite(member, group.company, false)}
+                                      className="text-[10px] font-semibold px-2 py-1 rounded-lg text-white"
+                                      style={{ background: '#015035' }}
+                                    >
+                                      Send Invite
+                                    </button>
+                                  )}
+                                  {!status && member.access === 'Invited' && (
+                                    <button
+                                      onClick={() => sendMemberInvite(member, group.company, true)}
+                                      className="text-[10px] font-semibold text-orange-600 hover:text-orange-700"
+                                    >
+                                      Resend Invite
+                                    </button>
+                                  )}
+                                  {!status && member.access === 'Active' && (
+                                    <button
+                                      onClick={() => { setNotifyMember({ member, company: group.company }); setNotifyForm({ title: '', message: '', link: '' }) }}
+                                      className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-700"
+                                      title="Send this client a portal notification"
+                                    >
+                                      <Bell size={10} /> Notify
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => removeMember(member.id)}
                                     disabled={removingMember === member.id}
@@ -710,7 +925,8 @@ export default function PortalManagementPage() {
                                   </button>
                                 </div>
                               </div>
-                            ))}
+                              )
+                            })}
                           </div>
                         </div>
 
@@ -1267,6 +1483,196 @@ export default function PortalManagementPage() {
                 style={{ background: '#015035' }}
               >
                 <Upload size={14} /> Add Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Portal Logins This Month modal — relocated from app/portal/page.tsx's PortalAdminPage (AUDIT #154) */}
+      {showLoginList && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowLoginList(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100" style={{ background: '#012b1e' }}>
+              <div>
+                <h2 className="text-white text-sm font-bold">Portal Logins This Month</h2>
+                <p className="text-white/50 text-[11px] mt-0.5">{loggedInThisMonth.length} client{loggedInThisMonth.length !== 1 ? 's' : ''} logged in &middot; {new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}</p>
+              </div>
+              <button onClick={() => setShowLoginList(false)} className="p-1.5 rounded-lg hover:bg-white/10">
+                <X size={16} className="text-white/60" />
+              </button>
+            </div>
+            <div className="max-h-96 overflow-y-auto divide-y divide-gray-100">
+              {loggedInThisMonth.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+                  <Eye size={28} className="text-gray-300 mb-3" />
+                  <p className="text-sm font-semibold text-gray-500">No portal logins yet this month</p>
+                  <p className="text-xs text-gray-400 mt-1">Logins will appear here as clients access their portals.</p>
+                </div>
+              ) : loggedInThisMonth.map(m => (
+                <div key={m.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#015035' }}>
+                    {m.company[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">{m.company}</p>
+                    <p className="text-xs text-gray-500">{m.contact}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs font-semibold text-blue-600">Last login</p>
+                    <p className="text-xs text-gray-500">{new Date(m.lastLogin + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+              <p className="text-xs text-gray-500">{activeMemberCount - loggedInThisMonth.length} active client{activeMemberCount - loggedInThisMonth.length !== 1 ? 's' : ''} have not logged in this month</p>
+              <button onClick={() => setShowLoginList(false)} className="text-xs font-semibold text-gray-600 hover:text-gray-800">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notify Member modal — relocated from ManageClientPanel's Notifications tab */}
+      {notifyMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setNotifyMember(null)} />
+          <div className="relative bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4" style={{ background: '#012b1e' }}>
+              <div>
+                <h2 className="text-sm font-bold text-white">Send Notification</h2>
+                <p className="text-[11px] text-white/50 mt-0.5">To {notifyMember.member.contact} &middot; {notifyMember.company}</p>
+              </div>
+              <button onClick={() => setNotifyMember(null)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                <X size={16} className="text-white/70" />
+              </button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Title <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={notifyForm.title}
+                  onChange={e => setNotifyForm(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Notification title..."
+                  autoFocus
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Message</label>
+                <textarea
+                  value={notifyForm.message}
+                  onChange={e => setNotifyForm(prev => ({ ...prev, message: e.target.value }))}
+                  placeholder="Optional message body..."
+                  rows={3}
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400 bg-white"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Link (optional)</label>
+                <input
+                  type="url"
+                  value={notifyForm.link}
+                  onChange={e => setNotifyForm(prev => ({ ...prev, link: e.target.value }))}
+                  placeholder="https://..."
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setNotifyMember(null)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={sendMemberNotification}
+                disabled={!notifyForm.title.trim() || notifySending}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-40"
+                style={{ background: '#015035' }}
+              >
+                {notifySending ? (
+                  <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Sending...</>
+                ) : (
+                  <><Bell size={14} /> Send Notification</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Ticket modal — relocated from ManageClientPanel's Tickets tab */}
+      {ticketModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setTicketModal(null)} />
+          <div className="relative bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4" style={{ background: '#012b1e' }}>
+              <div>
+                <h2 className="text-sm font-bold text-white">Create Support Ticket</h2>
+                <p className="text-[11px] text-white/50 mt-0.5">On behalf of {ticketModalGroup?.company}</p>
+              </div>
+              <button onClick={() => setTicketModal(null)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                <X size={16} className="text-white/70" />
+              </button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Subject <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={ticketForm.subject}
+                  onChange={e => setTicketForm(prev => ({ ...prev, subject: e.target.value }))}
+                  placeholder="Brief description of the issue..."
+                  autoFocus
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Description</label>
+                <textarea
+                  value={ticketForm.description}
+                  onChange={e => setTicketForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Detailed description of the issue..."
+                  rows={4}
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400 bg-white"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Priority</label>
+                <select
+                  value={ticketForm.priority}
+                  onChange={e => setTicketForm(prev => ({ ...prev, priority: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                >
+                  <option>Low</option>
+                  <option>Normal</option>
+                  <option>High</option>
+                  <option>Urgent</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setTicketModal(null)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => createCompanyTicket(ticketModal)}
+                disabled={!ticketForm.subject.trim() || ticketSaving}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-40"
+                style={{ background: '#015035' }}
+              >
+                {ticketSaving ? (
+                  <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Creating...</>
+                ) : (
+                  <><Ticket size={14} /> Create Ticket</>
+                )}
               </button>
             </div>
           </div>

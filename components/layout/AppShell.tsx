@@ -29,7 +29,14 @@ const UNIT_RESTRICTED: { prefix: string; allowedUnits: string[] }[] = [
   { prefix: '/billing',     allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
   { prefix: '/reports',     allowedUnits: ['Leadership/Admin', 'Billing/Finance', 'Sales'] },
   { prefix: '/automation',  allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
-  { prefix: '/portal',      allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
+  // AUDIT #154 / Batch 5 — the old '/portal' unit-gate entry is removed:
+  // app/portal/** is deleted except /portal/setup and /portal/auth/verify,
+  // both of which are in PUBLIC_ROUTES above and so never reach this table
+  // (isPublic short-circuits before isRouteAllowed runs). The real staff
+  // tool now lives at /admin/portal-management, gated by the '/admin'
+  // adminOnly entry below (stricter than this table's old unit-only gate —
+  // see the Sidebar.tsx comment on the 'Portal' nav item for the access-
+  // model gap this leaves for non-admin Billing/Finance staff).
   { prefix: '/settings',    allowedUnits: ['Leadership/Admin', 'Billing/Finance'] },
   { prefix: '/admin',       allowedUnits: [] }, // handled separately by adminOnly
 ]

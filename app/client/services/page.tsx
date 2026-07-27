@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useAuth } from '@/contexts/AuthContext'
+import { useClientCompany } from '@/lib/useClientCompany'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
@@ -117,9 +117,8 @@ const SERVICE_DESCRIPTIONS: Record<string, string> = {
 }
 
 export default function ClientServicesHubPage() {
-  const { user } = useAuth()
   const { toast } = useToast()
-  const company = user?.company ?? ''
+  const { company } = useClientCompany()
   const [data, setData] = useState<PortalData | null>(null)
   const [loading, setLoading] = useState(true)
 

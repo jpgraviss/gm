@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useClientCompany } from '@/lib/useClientCompany'
 import { formatCurrency, projectStatusColors, invoiceStatusColors, formatDate } from '@/lib/utils'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import type { Invoice } from '@/lib/types'
@@ -128,8 +129,7 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 export default function ClientPortalPage() {
   const { toast } = useToast()
   const { user } = useAuth()
-  const company = user?.company ?? ''
-  const contactName = user?.name ?? ''
+  const { company, contactName } = useClientCompany()
 
   const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files' | 'insights' | 'social'>('overview')
   const [insights, setInsights] = useState<PortalInsights | null>(null)

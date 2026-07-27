@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
+import { useClientCompany } from '@/lib/useClientCompany'
 import { formatDate } from '@/lib/utils'
-import { Bell, X, LogOut } from 'lucide-react'
+import { Bell, X, LogOut, Eye, ArrowLeft } from 'lucide-react'
 
 // Batch 0 of the /portal → /client merge. This layout owns the chrome shared
 // by every /client/* route (the header — company identity, notifications,
@@ -50,20 +51,22 @@ interface ClientNotification {
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
-  const company = user?.company ?? ''
-  const contactName = user?.name ?? ''
+  const { company, contactName, isPreview } = useClientCompany()
+  // Preview mode has no real client id to fetch notifications for — a
+  // previewing admin has no portal_clients row of their own.
+  const notificationsClientId = isPreview ? undefined : user?.id
 
   const [notifications, setNotifications] = useState<ClientNotification[]>([])
   const [showNotifications, setShowNotifications] = useState(false)
 
   // Fetch notifications on mount
   useEffect(() => {
-    if (!user?.id) return
-    fetch(`/api/portal-clients/notifications?clientId=${encodeURIComponent(user.id)}`)
+    if (!notificationsClientId) return
+    fetch(`/api/portal-clients/notifications?clientId=${encodeURIComponent(notificationsClientId)}`)
       .then(r => (r.ok ? r.json() : []))
       .then(data => { if (Array.isArray(data)) setNotifications(data) })
       .catch(() => {/* non-fatal */})
-  }, [user?.id])
+  }, [notificationsClientId])
 
   async function markNotificationRead(id: string) {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
@@ -140,14 +143,42 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             </div>
             <span className="text-white/80 text-xs font-medium hidden sm:block">{contactName}</span>
           </div>
-          <button
-            onClick={logout}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white text-xs font-medium"
-          >
-            <LogOut size={14} /> Sign out
-          </button>
+          {isPreview ? (
+            <Link
+              href="/admin/portal-management"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white text-xs font-medium"
+            >
+              <ArrowLeft size={14} /> Back to Admin
+            </Link>
+          ) : (
+            <button
+              onClick={logout}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white text-xs font-medium"
+            >
+              <LogOut size={14} /> Sign out
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Staff "View as Client" preview banner — see lib/useClientCompany.tsx.
+          Mirrors the old app/portal/preview/page.tsx banner, now pointing
+          back at the real staff destination (Portal Management) instead of
+          the deleted /portal/* tree. */}
+      {isPreview && (
+        <div className="flex items-center justify-between gap-2 flex-wrap px-4 py-2 text-xs font-semibold text-amber-800 bg-amber-100 border-b border-amber-300 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <Eye size={13} className="text-amber-600" />
+            <span>Previewing client portal as <strong>{company}</strong> — this is what your client sees</span>
+          </div>
+          <Link
+            href="/admin/portal-management"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-200 hover:bg-amber-300 transition-colors text-amber-900"
+          >
+            <ArrowLeft size={12} /> Exit Preview
+          </Link>
+        </div>
+      )}
 
       {/* Cross-route nav strip — only renders once CLIENT_ROUTES has entries */}
       {CLIENT_ROUTES.length > 0 && (
@@ -155,7 +186,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           {CLIENT_ROUTES.map(route => (
             <Link
               key={route.href}
-              href={route.href}
+              href={isPreview ? `${route.href}?company=${encodeURIComponent(company)}` : route.href}
               className="text-xs font-medium text-gray-500 hover:text-gray-800 transition-colors whitespace-nowrap flex-shrink-0"
             >
               {route.label}

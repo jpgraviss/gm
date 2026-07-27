@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useClientCompany } from '@/lib/useClientCompany'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import {
@@ -92,9 +92,8 @@ function formatDisplayDate(d: string): string {
 }
 
 export default function ClientSeoPage() {
-  const { user } = useAuth()
   const { toast } = useToast()
-  const company = user?.company ?? ''
+  const { company } = useClientCompany()
   const [strategy, setStrategy] = useState<SeoStrategy>(DEFAULT_STRATEGY)
   const [loading, setLoading] = useState(true)
 

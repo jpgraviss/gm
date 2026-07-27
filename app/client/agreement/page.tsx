@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useClientCompany } from '@/lib/useClientCompany'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { formatCurrency, formatDate } from '@/lib/utils'
@@ -31,9 +31,8 @@ interface Contract {
 }
 
 export default function ClientAgreementPage() {
-  const { user } = useAuth()
   const { toast } = useToast()
-  const company = user?.company ?? ''
+  const { company } = useClientCompany()
   const [contract, setContract] = useState<Contract | null>(null)
   const [loading, setLoading] = useState(true)
   const [nowMs] = useState(() => Date.now())

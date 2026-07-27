@@ -129,7 +129,9 @@ export default function PortalSetupPage() {
 
   useEffect(() => {
     if (step === 'approved') {
-      const timer = setTimeout(() => router.push('/portal'), 3000)
+      // AUDIT #154 / Batch 5 — the client-facing dashboard this page hands
+      // off to after setup is now /client, not the deleted /portal.
+      const timer = setTimeout(() => router.push('/client'), 3000)
       return () => clearTimeout(timer)
     }
   }, [step, router])

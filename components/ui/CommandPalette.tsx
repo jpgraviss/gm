@@ -58,7 +58,11 @@ const COMMANDS: CommandItem[] = [
   { id: 'maintenance',    label: 'Maintenance',      section: 'Operations', href: '/maintenance',     icon: <Wrench size={15} />,           keywords: ['hosting', 'websites'] },
   { id: 'renewals',       label: 'Renewals',         section: 'Operations', href: '/renewals',        icon: <RefreshCw size={15} /> },
   { id: 'tickets',        label: 'Tickets',          section: 'Clients',    href: '/tickets',         icon: <MessageSquare size={15} />,    keywords: ['support', 'issues'] },
-  { id: 'portal',         label: 'Client Portal',    section: 'Clients',    href: '/portal',          icon: <Globe size={15} /> },
+  // AUDIT #154 / Batch 5 — the old 'portal' entry (id) pointed at the now-
+  // deleted /portal dual-purpose page. Removed rather than repointed: the
+  // 'portal-mgmt' entry below already covers the real staff destination
+  // (/admin/portal-management) with 'portal' among its own keywords, so
+  // repointing this one too would just produce two identical search hits.
   { id: 'billing',        label: 'Billing',          section: 'Analytics',  href: '/billing',         icon: <CreditCard size={15} />,       keywords: ['invoices', 'payments'] },
   { id: 'reports',        label: 'Reports',          section: 'Analytics',  href: '/reports',         icon: <BarChart3 size={15} />,        keywords: ['analytics', 'metrics'] },
   { id: 'integrations',   label: 'Integrations',     section: 'Analytics',  href: '/integrations',    icon: <Plug size={15} />,             keywords: ['google', 'meta', 'api'] },

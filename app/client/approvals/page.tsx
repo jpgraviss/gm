@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useClientCompany } from '@/lib/useClientCompany'
 import { useToast } from '@/components/ui/Toast'
 import StatusBadge from '@/components/ui/StatusBadge'
 import LoadingScreen from '@/components/ui/LoadingScreen'
@@ -139,10 +139,8 @@ function SignatureCanvas({ onSave, onCancel }: { onSave: (sig: string) => void; 
 }
 
 export default function ClientApprovalsPage() {
-  const { user } = useAuth()
   const { toast } = useToast()
-  const company = user?.company ?? ''
-  const contactName = user?.name ?? ''
+  const { company, contactName } = useClientCompany()
 
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])

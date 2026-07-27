@@ -906,7 +906,7 @@ async function executeAction(
           type: 'system',
           title: `Update: ${context.trigger ?? action}`,
           message: (context.message as string) ?? `Your account has an update related to ${context.trigger ?? 'activity'}.`,
-          link: '/portal',
+          link: '/client',
           read: false,
           created_at: new Date().toISOString(),
         })

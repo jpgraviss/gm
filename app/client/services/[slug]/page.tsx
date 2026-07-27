@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
+import { useClientCompany } from '@/lib/useClientCompany'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
@@ -56,7 +57,7 @@ export default function ClientServiceDetailPage() {
   const router = useRouter()
   const { user } = useAuth()
   const { toast } = useToast()
-  const company = user?.company ?? ''
+  const { company } = useClientCompany()
 
   const serviceName = REAL_SERVICE_NAMES[slug]
 

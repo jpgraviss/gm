@@ -622,7 +622,10 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               <a
-                href={`/portal/preview?company=${encodeURIComponent(company.name)}`}
+                // AUDIT #154 / Batch 5 — "View as Client" now points at the real
+                // merged /client tree instead of the deleted /portal/preview.
+                // See lib/useClientCompany.tsx.
+                href={`/client?company=${encodeURIComponent(company.name)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0"

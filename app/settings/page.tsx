@@ -313,6 +313,8 @@ export default function SettingsPage() {
     bySource: Record<string, number>
     byFeature: Record<string, number>
     noProviderConfigured: boolean
+    alertThreshold24h: number
+    alertLevel: 'normal' | 'approaching' | 'over'
   }
   const [aiUsage, setAiUsage] = useState<AiUsageData | null>(null)
   const [aiUsageLoading, setAiUsageLoading] = useState(false)
@@ -2306,6 +2308,34 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 )}
+                {(() => {
+                  const level = aiUsage.alertLevel
+                  const pct = Math.min(100, Math.round((aiUsage.callsLast24h / aiUsage.alertThreshold24h) * 100))
+                  const style = level === 'over'
+                    ? { wrap: 'bg-red-50 border-red-200', bar: 'bg-red-500', text: 'text-red-800', badge: 'bg-red-600 text-white', label: 'Over threshold' }
+                    : level === 'approaching'
+                    ? { wrap: 'bg-amber-50 border-amber-200', bar: 'bg-amber-500', text: 'text-amber-800', badge: 'bg-amber-500 text-white', label: 'Approaching threshold' }
+                    : { wrap: 'bg-emerald-50 border-emerald-200', bar: 'bg-emerald-500', text: 'text-emerald-800', badge: 'bg-emerald-600 text-white', label: 'Normal' }
+                  return (
+                    <div className={`rounded-xl border p-5 ${style.wrap}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-bold uppercase tracking-wide flex items-center gap-1.5" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>
+                          <Bell size={14} /> Usage Alert
+                        </h3>
+                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${style.badge}`}>{style.label}</span>
+                      </div>
+                      <p className={`text-sm font-medium ${style.text}`}>
+                        {aiUsage.callsLast24h.toLocaleString()} of {aiUsage.alertThreshold24h.toLocaleString()} calls used in the last 24 hours ({pct}%)
+                      </p>
+                      <div className="mt-3 h-2 w-full rounded-full bg-white/70 overflow-hidden">
+                        <div className={`h-full rounded-full ${style.bar}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <p className="text-xs text-gray-400 mt-2.5">
+                        Informational only — this is call volume tracked locally, not a live provider quota. The 1,000/24h threshold is a conservative round number based on typical free-tier daily request caps for Groq (tried first among the cloud providers); it isn&apos;t billed cost, since real per-provider pricing isn&apos;t tracked here.
+                      </p>
+                    </div>
+                  )
+                })()}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: 'Calls (24h)', value: aiUsage.callsLast24h },

@@ -105,6 +105,7 @@ async function fetchGranolaDocuments(apiKey: string, since?: string): Promise<Gr
 export interface GranolaSyncResult {
   fetched: number
   imported: number
+  updated: number
   matched: number
   skipped: number
   error?: string
@@ -122,7 +123,7 @@ export async function syncGranolaNotes(db?: SupabaseClient): Promise<GranolaSync
   const settings = await getGranolaSettings(supabase)
 
   if (!settings.apiKey) {
-    return { fetched: 0, imported: 0, matched: 0, skipped: 0, error: 'Granola is not configured' }
+    return { fetched: 0, imported: 0, updated: 0, matched: 0, skipped: 0, error: 'Granola is not configured' }
   }
 
   let docs: GranolaDocument[]
@@ -130,12 +131,13 @@ export async function syncGranolaNotes(db?: SupabaseClient): Promise<GranolaSync
     docs = await fetchGranolaDocuments(settings.apiKey, settings.lastSyncedAt)
   } catch (err) {
     return {
-      fetched: 0, imported: 0, matched: 0, skipped: 0,
+      fetched: 0, imported: 0, updated: 0, matched: 0, skipped: 0,
       error: err instanceof Error ? err.message : 'Failed to fetch Granola documents',
     }
   }
 
   let imported = 0
+  let updated = 0
   let matched = 0
   let skipped = 0
   let latestSeen = settings.lastSyncedAt ?? ''
@@ -146,16 +148,25 @@ export async function syncGranolaNotes(db?: SupabaseClient): Promise<GranolaSync
     const updatedAt = doc.updated_at ?? doc.created_at ?? new Date().toISOString()
     if (updatedAt > latestSeen) latestSeen = updatedAt
 
-    // Already imported — Granola has no delete-tracking, so re-fetching an
-    // already-synced doc inside the updated_after window (e.g. it was
-    // edited after being summarized) is expected, not an error; just skip
-    // re-inserting it rather than erroring on the unique constraint.
+    // AUDIT — a note that's already been imported was previously skipped
+    // forever, even if Granola had since regenerated/edited it (Granola
+    // keeps refining a summary for a while after the meeting ends, and
+    // this app is meant to be the durable copy since Granola itself
+    // doesn't retain transcripts/notes indefinitely). occurred_at doubles
+    // as "the updated_at we last saw for this doc" (see the insert below),
+    // so only actually re-process when the incoming updatedAt is strictly
+    // newer than that — an unchanged doc re-fetched inside the
+    // updated_after window (Granola has no delete-tracking, so the API can
+    // legitimately return docs we've already seen) is still a no-op skip.
     const { data: existing } = await supabase
       .from('granola_meeting_notes')
-      .select('id')
+      .select('id, occurred_at, activity_id')
       .eq('granola_document_id', doc.id)
       .maybeSingle()
-    if (existing) { skipped++; continue }
+    if (existing && (!existing.occurred_at || updatedAt <= existing.occurred_at)) {
+      skipped++
+      continue
+    }
 
     const attendeeEmails = (doc.attendees ?? [])
       .map(a => a.email?.toLowerCase())
@@ -178,11 +189,20 @@ export async function syncGranolaNotes(db?: SupabaseClient): Promise<GranolaSync
     }
 
     const noteId = `granola-${doc.id}`
-    let activityId: string | null = null
+    // Re-matching on every update (not just first import) so a doc that
+    // initially had no attendee/contact match can pick one up later — e.g.
+    // Granola backfilling attendee emails after the fact, or the CRM
+    // contact being created after the meeting already happened.
+    let activityId = existing?.activity_id ?? null
 
     if (contactId) {
-      activityId = `act-granola-${doc.id}`
-      await supabase.from('crm_activities').insert({
+      activityId = activityId ?? `act-granola-${doc.id}`
+      // AUDIT — was a plain insert, which the unique granola_document_id
+      // constraint made silently unsafe to ever re-run for the same doc.
+      // Upserting on id (deterministic per doc) makes update-then-resync
+      // idempotent: a genuine update rewrites the same activity row's
+      // content instead of erroring or duplicating it.
+      await supabase.from('crm_activities').upsert({
         id: activityId,
         type: 'meeting',
         title: doc.title || 'Meeting (via Granola)',
@@ -194,7 +214,7 @@ export async function syncGranolaNotes(db?: SupabaseClient): Promise<GranolaSync
       })
     }
 
-    await supabase.from('granola_meeting_notes').insert({
+    await supabase.from('granola_meeting_notes').upsert({
       id: noteId,
       granola_document_id: doc.id,
       title: doc.title || '',
@@ -204,8 +224,11 @@ export async function syncGranolaNotes(db?: SupabaseClient): Promise<GranolaSync
       company_id: companyId,
       contact_id: contactId,
       activity_id: activityId,
+      synced_at: new Date().toISOString(),
     })
-    imported++
+
+    if (existing) updated++
+    else imported++
   }
 
   // `settings` here holds the decrypted apiKey (from getGranolaSettings) —
@@ -222,5 +245,5 @@ export async function syncGranolaNotes(db?: SupabaseClient): Promise<GranolaSync
     })
     .eq('id', 'global')
 
-  return { fetched: docs.length, imported, matched, skipped }
+  return { fetched: docs.length, imported, updated, matched, skipped }
 }

@@ -3121,7 +3121,8 @@ function GranolaIntegrationSection() {
       const res = await fetch('/api/integrations/granola/sync', { method: 'POST' })
       const data = await res.json()
       if (res.ok) {
-        setSyncResult(`Synced ${data.imported} new note${data.imported === 1 ? '' : 's'} (${data.matched} matched to a contact)`)
+        const updatedPart = data.updated > 0 ? `, ${data.updated} updated` : ''
+        setSyncResult(`Synced ${data.imported} new note${data.imported === 1 ? '' : 's'}${updatedPart} (${data.matched} matched to a contact)`)
         setLastSyncedAt(new Date().toISOString())
         setStatus('connected')
       } else {

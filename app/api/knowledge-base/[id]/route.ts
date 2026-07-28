@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
 
 export const GET = withErrorHandler('knowledge-base/[id] GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
@@ -31,7 +32,17 @@ export const PATCH = withErrorHandler('knowledge-base/[id] PATCH', async (req, {
   // is the one legitimate portal-client call site (the "was this helpful?"
   // widget), so it stays open to any authenticated caller. Everything else
   // below (real content edits) requires staff.
+  //
+  // AUDIT #536 — this comment previously described intent this branch
+  // didn't enforce: nothing preceded it, so it was reachable by a fully
+  // anonymous, unauthenticated request, not just "any authenticated
+  // caller." Only impact was spammable vote counts (no data leak), but the
+  // comment misrepresented the actual behavior.
   if (body.feedback === 'helpful' || body.feedback === 'not_helpful') {
+    const feedbackEmail = await getAuthenticatedEmail(req)
+    if (!feedbackEmail) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
     const col = body.feedback === 'helpful' ? 'helpful_count' : 'not_helpful_count'
     // AUDIT — atomic RPC instead of a read-then-write increment, which
     // could lose a count under concurrent feedback submissions, unlike the

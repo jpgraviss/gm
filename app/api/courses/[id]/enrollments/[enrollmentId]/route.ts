@@ -71,7 +71,7 @@ export const PATCH = withErrorHandler('courses/[id]/enrollments/[enrollmentId] P
 
   const { data: existing, error: fetchErr } = await db
     .from('course_enrollments')
-    .select('student_email')
+    .select('student_email, progress')
     .eq('id', enrollmentId)
     .eq('course_id', id)
     .single()
@@ -85,17 +85,52 @@ export const PATCH = withErrorHandler('courses/[id]/enrollments/[enrollmentId] P
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  // AUDIT #525 — this route used to accept any client-supplied `progress`
+  // object verbatim and any `completed: true` flag verbatim, with zero
+  // validation against the course's actual module list/types. #491 built
+  // POST .../quiz/[moduleId]/grade specifically so a quiz module's
+  // completion can only be earned by answering questions server-side —
+  // this endpoint let anyone bypass that entirely with a direct PATCH.
+  const { data: course } = await db.from('courses').select('modules').eq('id', id).single()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const courseModules: any[] = course?.modules ?? []
+  const quizModuleIds = new Set(courseModules.filter(m => m?.type === 'quiz').map(m => m.id))
+  const existingProgress = (existing.progress ?? {}) as Record<string, unknown>
+
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   // The real course viewer's self-service progress tracking
   // (app/courses/[id]/page.tsx markModuleComplete) only ever sends
   // {progress, completed} — status is a staff-only field so a student
   // can't forge their own completion status directly.
-  if (body.progress !== undefined) update.progress = body.progress
+  let effectiveProgress = existingProgress
+  if (body.progress !== undefined && typeof body.progress === 'object' && body.progress !== null) {
+    const rawProgress = body.progress as Record<string, unknown>
+    // Quiz modules: always carry forward whatever's already on record
+    // (never the client's value, and never dropped just because this
+    // particular request didn't re-mention it — the real client always
+    // sends the full merged object, but nothing here should assume that).
+    const sanitized: Record<string, unknown> = {}
+    for (const moduleId of quizModuleIds) {
+      if (existingProgress[moduleId] !== undefined) sanitized[moduleId] = existingProgress[moduleId]
+    }
+    for (const [moduleId, value] of Object.entries(rawProgress)) {
+      if (quizModuleIds.has(moduleId)) continue
+      sanitized[moduleId] = value
+    }
+    update.progress = sanitized
+    effectiveProgress = sanitized
+  }
   if (staff) {
     if (body.status !== undefined) update.status = body.status
   }
 
-  if (body.completed === true) {
+  // Only honor `completed: true` when every real module in the course is
+  // actually marked complete in the (sanitized) effective progress — a
+  // bare `{completed: true}` with no matching progress used to mark the
+  // whole course "Completed" instantly with zero verification.
+  const allModulesComplete = courseModules.length > 0
+    && courseModules.every(m => effectiveProgress[m.id] === true)
+  if (body.completed === true && allModulesComplete) {
     update.completed_at = new Date().toISOString()
     update.status = 'Completed'
   }

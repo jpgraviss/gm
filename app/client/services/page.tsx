@@ -118,7 +118,7 @@ const SERVICE_DESCRIPTIONS: Record<string, string> = {
 
 export default function ClientServicesHubPage() {
   const { toast } = useToast()
-  const { company } = useClientCompany()
+  const { company, isPreview } = useClientCompany()
   const [data, setData] = useState<PortalData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -159,7 +159,11 @@ export default function ClientServicesHubPage() {
             {services.map(svc => {
               const Icon = SERVICE_ICONS[svc] ?? Globe
               const color = SERVICE_COLORS[svc] ?? '#015035'
-              const href = SERVICE_HREFS[svc]
+              // AUDIT #528 — useClientCompany() only detects preview via
+              // ?company= in the URL; a static href with no query string
+              // silently exits preview mode the moment it's clicked.
+              const baseHref = SERVICE_HREFS[svc]
+              const href = baseHref && isPreview ? `${baseHref}?company=${encodeURIComponent(company)}` : baseHref
               const description = SERVICE_DESCRIPTIONS[svc] ?? ''
               const project = projects.find(p => p.serviceType === svc)
 

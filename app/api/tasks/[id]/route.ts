@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole, getAuthUser } from '@/lib/rbac'
 import { departmentForUnit, TASK_DEPARTMENTS } from '@/lib/task-department'
-import { VALID_STATUSES, VALID_PRIORITIES, VALID_CATEGORIES } from '../route'
+import { VALID_STATUSES, VALID_PRIORITIES, VALID_CATEGORIES, mapTask } from '../route'
 
 // Mirrors the department-visibility rule in tasks GET (Operations should
 // never touch a Finance task by id just because they know/guessed its id) —
@@ -68,7 +68,10 @@ export const PATCH = withErrorHandler('tasks/[id] PATCH', async (req: NextReques
   if (error) {
     throw new Error(error?.message || 'Failed to update task')
   }
-  return NextResponse.json(data)
+  // AUDIT #537 — GET/POST both return mapTask()'s camelCase shape; this
+  // used to return the raw snake_case row, the same bug class #202 fixed
+  // for tickets.
+  return NextResponse.json(mapTask(data))
 })
 
 export const DELETE = withErrorHandler('tasks/[id] DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {

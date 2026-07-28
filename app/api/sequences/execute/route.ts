@@ -467,6 +467,33 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
     const step = steps[enrollment.current_step]
     if (!step) continue
 
+    // AUDIT #523 — atomic claim before any real side effect (email send,
+    // task/activity creation, step advance). Overlapping cron ticks
+    // previously both passed the checks above for the same due enrollment
+    // and both sent the same email / created duplicate tasks —
+    // `.github/workflows/cron-ping.yml`'s client-side retry-on-timeout
+    // fires a genuinely independent second server-side invocation while
+    // the first keeps running past its own 300s maxDuration, making this a
+    // real, infrastructure-driven race, not just a theoretical one.
+    // Bumps `next_send_at` forward as a short-lived claim marker,
+    // conditioned on the exact value this row had when fetched at the top
+    // of this function — only the invocation that wins this race gets a
+    // row back. The real `next_send_at`/`status` is set normally below,
+    // overwriting the placeholder in every outcome (advance or complete).
+    const claimPlaceholder = new Date(now.getTime() + 5 * 60 * 1000).toISOString()
+    const { data: claimedRow, error: claimErr } = await db
+      .from('sequence_enrollments')
+      .update({ next_send_at: claimPlaceholder })
+      .eq('id', enrollment.id)
+      .eq('next_send_at', enrollment.next_send_at)
+      .select('id')
+      .maybeSingle()
+    if (claimErr || !claimedRow) {
+      // Lost the race — another invocation already claimed (or is mid-
+      // processing) this enrollment this tick.
+      continue
+    }
+
     const update: Record<string, unknown> = {}
 
     if (step.type === 'email') {

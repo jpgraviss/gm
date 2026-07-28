@@ -6,6 +6,16 @@ import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 
+// AUDIT #529 — name/companyName here can trace back to CRM data set
+// unescaped by a public, unauthenticated form submission
+// (app/api/forms/public/[slug]/route.ts's submissionToContact()), then get
+// echoed unescaped into this real outbound HTML email. Matches the
+// escapeHtml() convention lib/rank-tracker.ts's buildReportHtml and the
+// forms notify/confirmation emails (#386) already use.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 export const POST = withErrorHandler('reputation/send-request POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
@@ -71,12 +81,14 @@ export const POST = withErrorHandler('reputation/send-request POST', async (req)
   const reviewPageUrl = `${baseUrl}/go/review/${token}`
 
   const firstName = name.trim().split(' ')[0]
+  const safeFirstName = escapeHtml(firstName)
+  const safeCompanyName = escapeHtml(companyName)
 
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;">
-      <h2 style="color:#1a1a1a;font-size:22px;margin-bottom:8px;">Hi ${firstName},</h2>
+      <h2 style="color:#1a1a1a;font-size:22px;margin-bottom:8px;">Hi ${safeFirstName},</h2>
       <p style="color:#4a4a4a;font-size:16px;line-height:1.6;margin-bottom:16px;">
-        Thank you for choosing ${companyName}! We truly appreciate your business and hope we exceeded your expectations.
+        Thank you for choosing ${safeCompanyName}! We truly appreciate your business and hope we exceeded your expectations.
       </p>
       <p style="color:#4a4a4a;font-size:16px;line-height:1.6;margin-bottom:24px;">
         If you have a moment, we&rsquo;d love to hear about your experience. Your feedback helps us improve and helps others find us too.
@@ -89,11 +101,11 @@ export const POST = withErrorHandler('reputation/send-request POST', async (req)
       </p>
       <p style="color:#4a4a4a;font-size:16px;line-height:1.6;">
         Warm regards,<br/>
-        <strong>The ${companyName} Team</strong>
+        <strong>The ${safeCompanyName} Team</strong>
       </p>
       <hr style="border:none;border-top:1px solid #e5e5e5;margin:32px 0 16px;" />
       <p style="color:#999;font-size:12px;line-height:1.5;">
-        ${settings.email.footerText || ''}
+        ${escapeHtml(settings.email.footerText || '')}
       </p>
     </div>
   `

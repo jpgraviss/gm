@@ -17,8 +17,7 @@ interface TicketRow {
   id: string
   assignedTo?: string
   status: string
-  created_at?: string
-  resolved_at?: string
+  createdDate?: string
 }
 
 export default function TeamProductivityPage() {
@@ -88,7 +87,13 @@ export default function TeamProductivityPage() {
       // maps row.assigned_to to a team member name, same as app/tickets/page.tsx
       // displays it), not `assignee` — that field never existed on the real
       // ticket shape, so this comparison was silently always empty.
-      const memberTickets = tickets.filter(t => t.assignedTo === m.name)
+      // AUDIT #530 — memberTickets had no date filter at all, unlike every
+      // other metric in this same block, so "Tickets Resolved"/the Tickets
+      // column/the leaderboard score's ticket component were always
+      // all-time regardless of the selected Period. Matches #443's fix on
+      // the sibling app/reports/health/page.tsx (createdDate, not
+      // created_at/resolved_at, which never existed on the real shape).
+      const memberTickets = tickets.filter(t => t.assignedTo === m.name && (t.createdDate ?? '') >= cutoffDate && (t.createdDate ?? '') <= cutoffEnd)
       const resolvedTickets = memberTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed')
 
       // Revenue: deals where this member is the assigned rep, within date range

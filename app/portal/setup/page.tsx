@@ -129,9 +129,16 @@ export default function PortalSetupPage() {
 
   useEffect(() => {
     if (step === 'approved') {
-      // AUDIT #154 / Batch 5 — the client-facing dashboard this page hands
-      // off to after setup is now /client, not the deleted /portal.
-      const timer = setTimeout(() => router.push('/client'), 3000)
+      // AUDIT #527 — this used to redirect straight to /client, but nothing
+      // in this flow ever signs the browser in: POST /api/portal-clients/
+      // complete-setup only sets the password server-side (db.auth.admin.
+      // updateUserById), it never calls signInWithPassword or mints the
+      // gravhub-auth cookie. AppShell's route guard immediately bounced the
+      // newly-approved client to /login anyway — just send them there
+      // directly instead of promising an automatic dashboard redirect that
+      // can't happen. /login's own portal-client flow (signInWithPassword)
+      // is the real, working sign-in path from here.
+      const timer = setTimeout(() => router.push('/login'), 3000)
       return () => clearTimeout(timer)
     }
   }, [step, router])
@@ -367,11 +374,11 @@ export default function PortalSetupPage() {
               </div>
               <h2 className="text-lg font-bold text-gray-900 mb-2">You&apos;re Approved!</h2>
               <p className="text-sm text-gray-500 leading-relaxed mb-6">
-                Your portal access has been approved. Redirecting you to your dashboard...
+                Your portal access has been approved. Sign in with the password you just set to reach your dashboard.
               </p>
               <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
                 <Loader2 size={14} className="animate-spin" />
-                <span>Redirecting...</span>
+                <span>Taking you to sign in...</span>
               </div>
             </div>
           )}

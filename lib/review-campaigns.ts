@@ -56,24 +56,37 @@ export const REVIEW_TEMPLATES: Record<string, ReviewTemplateDef> = {
 
 export const DEFAULT_REVIEW_TEMPLATE = 'Happy Client Follow-Up'
 
+// AUDIT #529 — firstName/companyName/footerText are interpolated into a
+// real outbound HTML email; firstName/companyName ultimately trace back to
+// crm_contacts.full_name, which app/api/forms/public/[slug]/route.ts's
+// submissionToContact() sets unescaped from any public, unauthenticated
+// form submission. Matches the escapeHtml() convention already used by
+// lib/rank-tracker.ts's buildReportHtml and app/api/forms/public/[slug]/
+// route.ts's own notify/confirmation emails (#386).
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 function fillMergeTags(text: string, firstName: string, companyName: string): string {
   return text.replace(/\{\{\s*first_name\s*\}\}/gi, firstName).replace(/\{\{\s*company\s*\}\}/gi, companyName)
 }
 
 function buildEmailHtml(templateName: string, firstName: string, companyName: string, reviewPageUrl: string, footerText: string): string {
   const def = REVIEW_TEMPLATES[templateName] ?? REVIEW_TEMPLATES[DEFAULT_REVIEW_TEMPLATE]
-  const intro = fillMergeTags(def.intro, firstName, companyName)
+  const safeFirstName = escapeHtml(firstName)
+  const safeCompanyName = escapeHtml(companyName)
+  const intro = fillMergeTags(def.intro, safeFirstName, safeCompanyName)
   return `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;">
-      <h2 style="color:#1a1a1a;font-size:22px;margin-bottom:8px;">Hi ${firstName},</h2>
+      <h2 style="color:#1a1a1a;font-size:22px;margin-bottom:8px;">Hi ${safeFirstName},</h2>
       <p style="color:#4a4a4a;font-size:16px;line-height:1.6;margin-bottom:24px;">${intro}</p>
       <div style="text-align:center;margin:32px 0;">
         <a href="${reviewPageUrl}" style="display:inline-block;padding:14px 32px;background-color:#015035;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:16px;">Share Your Experience</a>
       </div>
       <p style="color:#4a4a4a;font-size:16px;line-height:1.6;margin-top:24px;">Thank you for your time &mdash; it means a lot to us!</p>
-      <p style="color:#4a4a4a;font-size:16px;line-height:1.6;">Warm regards,<br/><strong>The ${companyName} Team</strong></p>
+      <p style="color:#4a4a4a;font-size:16px;line-height:1.6;">Warm regards,<br/><strong>The ${safeCompanyName} Team</strong></p>
       <hr style="border:none;border-top:1px solid #e5e5e5;margin:32px 0 16px;" />
-      <p style="color:#999;font-size:12px;line-height:1.5;">${footerText}</p>
+      <p style="color:#999;font-size:12px;line-height:1.5;">${escapeHtml(footerText)}</p>
     </div>
   `
 }

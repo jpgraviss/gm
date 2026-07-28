@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TICKET_PRIORITIES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { requireRole } from '@/lib/rbac'
-import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
+import { requirePortalClient, isStaffCaller, blockIfPreview } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 import { mapTicket } from '@/lib/tickets'
 import { applyRoutingRules, notifyRoutedAssignee, type RoutingResult } from '@/lib/ticket-routing'
@@ -41,6 +41,11 @@ export const GET = withErrorHandler('tickets GET', async (req: NextRequest) => {
 })
 
 export const POST = withErrorHandler('tickets POST', async (req: NextRequest) => {
+  // AUDIT.md #506 — this is the same route app/client/page.tsx's Support
+  // tab uses to submit a new ticket on the client's behalf.
+  const blocked = blockIfPreview(req)
+  if (blocked) return blocked
+
   const body = await req.json()
   const result = validate(body, {
     subject: { required: true, type: 'string', maxLength: 500 },

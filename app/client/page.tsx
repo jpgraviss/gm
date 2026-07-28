@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useClientCompany } from '@/lib/useClientCompany'
+import { useClientCompany, previewFetch } from '@/lib/useClientCompany'
 import { formatCurrency, projectStatusColors, invoiceStatusColors, formatDate } from '@/lib/utils'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import type { Invoice } from '@/lib/types'
@@ -135,7 +135,7 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 export default function ClientPortalPage() {
   const { toast } = useToast()
   const { user } = useAuth()
-  const { company, contactName } = useClientCompany()
+  const { company, contactName, isPreview } = useClientCompany()
 
   const [activeTab, setActiveTab] = useState<'overview' | 'project' | 'billing' | 'tickets' | 'files' | 'insights' | 'social'>('overview')
   const [insights, setInsights] = useState<PortalInsights | null>(null)
@@ -297,8 +297,9 @@ export default function ClientPortalPage() {
   }, [activeTab, company])
 
   async function handleApprovePost(postId: string) {
+    if (isPreview) { toast("You're previewing this client's account — this action is disabled in preview mode.", 'error'); return }
     try {
-      const res = await fetch(`/api/social-posts/${postId}`, {
+      const res = await previewFetch(isPreview, `/api/social-posts/${postId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approvalStatus: 'approved' }),
@@ -310,8 +311,9 @@ export default function ClientPortalPage() {
   }
 
   async function handleRejectPost(postId: string) {
+    if (isPreview) { toast("You're previewing this client's account — this action is disabled in preview mode.", 'error'); return }
     try {
-      const res = await fetch(`/api/social-posts/${postId}`, {
+      const res = await previewFetch(isPreview, `/api/social-posts/${postId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approvalStatus: 'rejected', rejectionReason: rejectReason }),
@@ -335,6 +337,7 @@ export default function ClientPortalPage() {
     setAttachments: React.Dispatch<React.SetStateAction<ClientFileAttachment[]>>,
     setUploading: React.Dispatch<React.SetStateAction<boolean>>,
   ) {
+    if (isPreview) { toast("You're previewing this client's account — file uploads are disabled in preview mode.", 'error'); return }
     setUploading(true)
     try {
       const fd = new FormData()
@@ -357,6 +360,7 @@ export default function ClientPortalPage() {
 
   async function sendTicketReply() {
     if (!selectedTicket || (!replyText.trim() && replyAttachments.length === 0)) return
+    if (isPreview) { toast("You're previewing this client's account — replying is disabled in preview mode.", 'error'); return }
     setReplySending(true)
     try {
       const newMsg: ClientTicketMessage = {
@@ -368,7 +372,7 @@ export default function ClientPortalPage() {
         ...(replyAttachments.length > 0 ? { attachments: replyAttachments } : {}),
       }
       const updatedMessages = [...selectedTicket.messages, newMsg]
-      const res = await fetch(`/api/tickets/${selectedTicket.id}`, {
+      const res = await previewFetch(isPreview, `/api/tickets/${selectedTicket.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: updatedMessages }),
@@ -389,9 +393,10 @@ export default function ClientPortalPage() {
   // an invoice online despite POST /api/invoices/[id]/checkout being a
   // real, working Stripe Checkout endpoint already wired up for staff.
   async function handlePayInvoice(invoiceId: string) {
+    if (isPreview) { toast("You're previewing this client's account — payment is disabled in preview mode.", 'error'); return }
     setPayingInvoiceId(invoiceId)
     try {
-      const res = await fetch(`/api/invoices/${invoiceId}/checkout`, { method: 'POST' })
+      const res = await previewFetch(isPreview, `/api/invoices/${invoiceId}/checkout`, { method: 'POST' })
       const data = await res.json()
       if (res.ok && data.url) {
         window.location.href = data.url
@@ -993,9 +998,10 @@ export default function ClientPortalPage() {
                         <button
                           disabled={ticketSubmitting || !ticketSubject.trim()}
                           onClick={async () => {
+                            if (isPreview) { toast("You're previewing this client's account — submitting a ticket is disabled in preview mode.", 'error'); return }
                             setTicketSubmitting(true)
                             try {
-                              const res = await fetch('/api/tickets', {
+                              const res = await previewFetch(isPreview, '/api/tickets', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -1196,6 +1202,7 @@ export default function ClientPortalPage() {
                     onChange={async (e) => {
                       const file = e.target.files?.[0]
                       if (!file) return
+                      if (isPreview) { toast("You're previewing this client's account — file uploads are disabled in preview mode.", 'error'); return }
                       setUploading(true)
                       try {
                         const formData = new FormData()

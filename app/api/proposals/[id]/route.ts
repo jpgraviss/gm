@@ -4,7 +4,7 @@ import { validate, validationError, PROPOSAL_STATUSES } from '@/lib/validation'
 import { fireAutomations } from '@/lib/automations-engine'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
-import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
+import { requirePortalClient, isStaffCaller, blockIfPreview } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 
 // Fields the real portal Approvals UI ever sends (app/portal/approvals/page.tsx:
@@ -60,6 +60,11 @@ function mapProposal(row: any) {
 }
 
 export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) => {
+  // AUDIT.md #506 — this is the same route app/client/approvals/page.tsx
+  // uses to accept/decline/request-changes on a proposal.
+  const blocked = blockIfPreview(req)
+  if (blocked) return blocked
+
   const { id } = await ctx!.params
   const body = await req.json()
 

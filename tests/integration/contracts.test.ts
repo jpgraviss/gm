@@ -28,7 +28,7 @@ vi.mock('@/lib/supabase', () => ({
 }))
 
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }))
-vi.mock('@/lib/portal-auth', () => ({ requirePortalClient: vi.fn().mockResolvedValue(null), isStaffCaller: vi.fn().mockResolvedValue(true) }))
+vi.mock('@/lib/portal-auth', () => ({ requirePortalClient: vi.fn().mockResolvedValue(null), isStaffCaller: vi.fn().mockResolvedValue(true), blockIfPreview: vi.fn().mockReturnValue(null) }))
 vi.mock('@/lib/automations-engine', () => ({ fireAutomations: vi.fn() }))
 vi.mock('@/lib/rbac', () => ({
   requireRole: vi.fn().mockResolvedValue(null),

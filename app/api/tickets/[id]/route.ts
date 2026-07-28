@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TICKET_PRIORITIES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
-import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
+import { requirePortalClient, isStaffCaller, blockIfPreview } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 import { mapTicket } from '@/lib/tickets'
 import { stableStringify } from '@/lib/stable-json'
@@ -38,6 +38,11 @@ async function resolvePortalClientId(
 }
 
 export const PATCH = withErrorHandler('tickets/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  // AUDIT.md #506 — this is the same route app/client/page.tsx's Support
+  // tab uses to send a ticket reply on the client's behalf.
+  const blocked = blockIfPreview(req)
+  if (blocked) return blocked
+
   const { id } = await params
   const body = await req.json()
   const result = validate(body, {

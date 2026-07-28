@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useClientCompany } from '@/lib/useClientCompany'
+import { useClientCompany, previewFetch } from '@/lib/useClientCompany'
 import { useToast } from '@/components/ui/Toast'
 import StatusBadge from '@/components/ui/StatusBadge'
 import LoadingScreen from '@/components/ui/LoadingScreen'
@@ -140,7 +140,7 @@ function SignatureCanvas({ onSave, onCancel }: { onSave: (sig: string) => void; 
 
 export default function ClientApprovalsPage() {
   const { toast } = useToast()
-  const { company, contactName } = useClientCompany()
+  const { company, contactName, isPreview } = useClientCompany()
 
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
@@ -179,6 +179,10 @@ export default function ClientApprovalsPage() {
 
   async function handleAccept() {
     if (!selectedItem) return
+    // AUDIT.md #506 — short-circuit with a clear message instead of relying
+    // solely on the server-side blockIfPreview() 403 (still enforced below
+    // for defense in depth) surfacing as a generic "failed, try again" toast.
+    if (isPreview) { toast("You're previewing this client's account — signing is disabled in preview mode.", 'error'); return }
     const hasSignature = sigMode === 'type' ? typedSig.trim().length > 0 : !!drawnSig
     if (!hasSignature) { toast('Please provide a signature', 'error'); return }
 
@@ -193,7 +197,7 @@ export default function ClientApprovalsPage() {
     const today = new Date().toISOString().split('T')[0]
     try {
       if (selectedItem.type === 'proposal') {
-        const res = await fetch(`/api/proposals/${selectedItem.data.id}`, {
+        const res = await previewFetch(isPreview, `/api/proposals/${selectedItem.data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'Accepted', respondedDate: today, signatureData, signatureType }),
@@ -201,7 +205,7 @@ export default function ClientApprovalsPage() {
         if (!res.ok) throw new Error()
         setProposals(prev => prev.map(p => p.id === selectedItem.data.id ? { ...p, status: 'Accepted' } : p))
       } else {
-        const res = await fetch(`/api/contracts/${selectedItem.data.id}`, {
+        const res = await previewFetch(isPreview, `/api/contracts/${selectedItem.data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'Signed by Client', clientSigned: today, signatureData, signatureType }),
@@ -221,11 +225,12 @@ export default function ClientApprovalsPage() {
 
   async function handleDecline() {
     if (!selectedItem) return
+    if (isPreview) { toast("You're previewing this client's account — this action is disabled in preview mode.", 'error'); return }
     setSubmitting(true)
     const today = new Date().toISOString().split('T')[0]
     try {
       if (selectedItem.type === 'proposal') {
-        const res = await fetch(`/api/proposals/${selectedItem.data.id}`, {
+        const res = await previewFetch(isPreview, `/api/proposals/${selectedItem.data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'Declined', respondedDate: today }),
@@ -233,7 +238,7 @@ export default function ClientApprovalsPage() {
         if (!res.ok) throw new Error()
         setProposals(prev => prev.map(p => p.id === selectedItem.data.id ? { ...p, status: 'Declined' } : p))
       } else {
-        const res = await fetch(`/api/contracts/${selectedItem.data.id}`, {
+        const res = await previewFetch(isPreview, `/api/contracts/${selectedItem.data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'Expired' }),
@@ -253,10 +258,11 @@ export default function ClientApprovalsPage() {
 
   async function handleRequestChanges() {
     if (!selectedItem || !feedback.trim()) { toast('Please provide feedback', 'error'); return }
+    if (isPreview) { toast("You're previewing this client's account — this action is disabled in preview mode.", 'error'); return }
     setSubmitting(true)
     try {
       if (selectedItem.type === 'proposal') {
-        const res = await fetch(`/api/proposals/${selectedItem.data.id}`, {
+        const res = await previewFetch(isPreview, `/api/proposals/${selectedItem.data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'Draft', renewalNotes: `Client feedback: ${feedback.trim()}` }),
@@ -270,7 +276,7 @@ export default function ClientApprovalsPage() {
         // (b) dropped the typed feedback entirely — contracts had no field
         // to receive it. clientNotes now persists it, mirroring how the
         // proposal branch above already reuses renewalNotes.
-        const res = await fetch(`/api/contracts/${selectedItem.data.id}`, {
+        const res = await previewFetch(isPreview, `/api/contracts/${selectedItem.data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'Draft', clientNotes: `Client feedback: ${feedback.trim()}` }),

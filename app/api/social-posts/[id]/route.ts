@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuthUser, requireRole } from '@/lib/rbac'
-import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
+import { requirePortalClient, isStaffCaller, blockIfPreview } from '@/lib/portal-auth'
 import { logAudit } from '@/lib/audit'
 import { mapPost } from '@/lib/social-media'
 
@@ -38,6 +38,13 @@ export const GET = withErrorHandler('social-posts/[id] GET', async (req, { param
 })
 
 export const PATCH = withErrorHandler('social-posts/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  // AUDIT.md #506 — this is the same route app/client/page.tsx's Social tab
+  // uses for the client-facing approve/reject actions. Staff editing/
+  // publishing posts through the internal /social tools never sets this
+  // header, so they're unaffected.
+  const blocked = blockIfPreview(req)
+  if (blocked) return blocked
+
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()

@@ -5,7 +5,7 @@ import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
-import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
+import { requirePortalClient, isStaffCaller, blockIfPreview } from '@/lib/portal-auth'
 
 // Fields the real portal Approvals UI ever sends (app/portal/approvals/page.tsx:
 // { status: 'Signed by Client', clientSigned }, { status: 'Expired' },
@@ -65,6 +65,14 @@ function mapContract(row: any) {
 }
 
 export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  // AUDIT.md #506 — this is the same route app/client/approvals/page.tsx
+  // uses to sign/decline/request-changes on a contract — the single most
+  // severe example of the preview-mode gap this closes (a previewing
+  // admin's "Sign" click would otherwise be a real, indistinguishable-
+  // from-genuine binding signature; see VALID_TRANSITIONS below).
+  const blocked = blockIfPreview(req)
+  if (blocked) return blocked
+
   const { id } = await params
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'Invalid contract id' }, { status: 400 })

@@ -34,6 +34,7 @@ vi.mock('@/lib/rbac', () => ({ requireRole: vi.fn().mockResolvedValue(null) }))
 vi.mock('@/lib/portal-auth', () => ({
   requirePortalClient: vi.fn().mockResolvedValue(null),
   isStaffCaller: vi.fn().mockResolvedValue(true),
+  blockIfPreview: vi.fn().mockReturnValue(null),
 }))
 
 import { GET, POST } from '@/app/api/tickets/route'

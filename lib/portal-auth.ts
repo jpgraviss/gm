@@ -156,3 +156,20 @@ export async function isStaffCaller(req: NextRequest): Promise<boolean> {
     .maybeSingle()
   return !!staff && staff.status === 'active'
 }
+
+// AUDIT.md #506 — server-side half of the "View as Client" preview guard.
+// The x-client-preview header is only ever attached by lib/useClientCompany.
+// tsx's previewFetch(), and only when a staff member is admin-previewing a
+// client's account (see that file for the full writeup) — a real portal
+// client's own session never sets it, so this can't reject a genuine
+// client action. Call this first, before any other auth/validation, on
+// every mutation route reachable from a /client/** page that has a real,
+// consequential side effect (contract/proposal decisions, social post
+// approval, ticket replies/creation, invoice checkout).
+export function blockIfPreview(req: NextRequest): NextResponse | null {
+  if (req.headers.get('x-client-preview') !== 'true') return null
+  return NextResponse.json(
+    { error: "You're previewing this client's account — actions are disabled in preview mode." },
+    { status: 403 },
+  )
+}

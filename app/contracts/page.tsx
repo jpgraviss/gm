@@ -9,7 +9,7 @@ import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, contractStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
-import NewAddendumPanel, { type NewAddendumFormData } from '@/components/crm/NewAddendumPanel'
+import NewAddendumPanel, { type NewAddendumFormData, CHANGE_TYPES, type ChangeType } from '@/components/crm/NewAddendumPanel'
 import { ConvertToProjectModal, LinkExistingProjectModal } from '@/components/crm/ConvertOrLinkProjectPanel'
 import type { Contract, ContractStatus, Invoice, Project, Proposal, SignatureRequest } from '@/lib/types'
 import { computeMRR } from '@/lib/metrics'
@@ -60,7 +60,7 @@ function ContractPanel({
   onEdit: (contract: Contract) => void
   onUpdateStatus: (id: string, status: ContractStatus) => void
   addendums: Addendum[]
-  onAddAddendum: (contractId: string, title: string, description: string) => void
+  onAddAddendum: (data: NewAddendumFormData) => void
   onUpdateAddendumStatus: (id: string, status: Addendum['status']) => void
   invoices: Invoice[]
   projects: Project[]
@@ -80,6 +80,33 @@ function ContractPanel({
   const [showAddForm, setShowAddForm] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newDesc, setNewDesc] = useState('')
+  // AUDIT #465 — this in-panel form previously only captured title/
+  // description, unlike the full NewAddendumPanel (top-nav "+ Addendum")
+  // which also captures changeType/valueDelta/termDeltaMonths/scopeAdded/
+  // scopeRemoved/effectiveDate. Since #168's auto-apply only fires when a
+  // delta is set, an addendum created here could never affect the
+  // contract's value/duration/renewal date even when Accepted. Mirror the
+  // same structured fields (and the same contextual show/hide by
+  // changeType) as NewAddendumPanel instead of inventing a new shape.
+  const [newChangeType, setNewChangeType] = useState<ChangeType>('Scope Change')
+  const [newValueDelta, setNewValueDelta] = useState('')
+  const [newTermDeltaMonths, setNewTermDeltaMonths] = useState('')
+  const [newScopeAdded, setNewScopeAdded] = useState('')
+  const [newScopeRemoved, setNewScopeRemoved] = useState('')
+  const [newEffectiveDate, setNewEffectiveDate] = useState('')
+  const showNewValue = newChangeType === 'Value Change' || newChangeType === 'Scope Change' || newChangeType === 'Other'
+  const showNewTerm  = newChangeType === 'Term Extension' || newChangeType === 'Other'
+  const showNewScope = newChangeType === 'Scope Change' || newChangeType === 'Other'
+  function resetAddendumForm() {
+    setNewTitle('')
+    setNewDesc('')
+    setNewChangeType('Scope Change')
+    setNewValueDelta('')
+    setNewTermDeltaMonths('')
+    setNewScopeAdded('')
+    setNewScopeRemoved('')
+    setNewEffectiveDate('')
+  }
   const [showSigModal, setShowSigModal] = useState(false)
   const [sigEmail, setSigEmail] = useState('')
   const [sigName, setSigName] = useState('')
@@ -553,6 +580,88 @@ function ContractPanel({
                     />
                   </div>
                   <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Change Type</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {CHANGE_TYPES.map(t => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setNewChangeType(t)}
+                          className={`text-xs font-semibold py-2 px-2.5 rounded-lg border transition-colors ${
+                            newChangeType === t
+                              ? 'text-white border-transparent'
+                              : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}
+                          style={newChangeType === t ? { background: '#015035' } : {}}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {(showNewValue || showNewTerm) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {showNewValue && (
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Value Delta</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={newValueDelta}
+                            onChange={e => setNewValueDelta(e.target.value)}
+                            placeholder="e.g. 2500 or -500"
+                            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                          />
+                        </div>
+                      )}
+                      {showNewTerm && (
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Term Delta (months)</label>
+                          <input
+                            type="number"
+                            value={newTermDeltaMonths}
+                            onChange={e => setNewTermDeltaMonths(e.target.value)}
+                            placeholder="e.g. 6 or -3"
+                            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {showNewScope && (
+                    <>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Scope Added</label>
+                        <textarea
+                          rows={2}
+                          value={newScopeAdded}
+                          onChange={e => setNewScopeAdded(e.target.value)}
+                          placeholder="One per line: deliverable, page, feature…"
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Scope Removed</label>
+                        <textarea
+                          rows={2}
+                          value={newScopeRemoved}
+                          onChange={e => setNewScopeRemoved(e.target.value)}
+                          placeholder="One per line: deliverable, page, feature…"
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none bg-white"
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Effective Date</label>
+                    <input
+                      type="date"
+                      value={newEffectiveDate}
+                      onChange={e => setNewEffectiveDate(e.target.value)}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description of Changes</label>
                     <textarea
                       placeholder="Describe the changes being added to the original agreement..."
@@ -566,9 +675,18 @@ function ContractPanel({
                     <button
                       onClick={() => {
                         if (newTitle.trim() && newDesc.trim()) {
-                          onAddAddendum(contract.id, newTitle.trim(), newDesc.trim())
-                          setNewTitle('')
-                          setNewDesc('')
+                          onAddAddendum({
+                            contractId: contract.id,
+                            title: newTitle.trim(),
+                            description: newDesc.trim(),
+                            changeType: newChangeType,
+                            valueDelta: newValueDelta.trim() ? Number(newValueDelta) : undefined,
+                            termDeltaMonths: newTermDeltaMonths.trim() ? Number(newTermDeltaMonths) : undefined,
+                            scopeAdded: newScopeAdded.trim() || undefined,
+                            scopeRemoved: newScopeRemoved.trim() || undefined,
+                            effectiveDate: newEffectiveDate || undefined,
+                          })
+                          resetAddendumForm()
                           setShowAddForm(false)
                         }
                       }}
@@ -579,7 +697,7 @@ function ContractPanel({
                       Save as Draft
                     </button>
                     <button
-                      onClick={() => { setShowAddForm(false); setNewTitle(''); setNewDesc('') }}
+                      onClick={() => { setShowAddForm(false); resetAddendumForm() }}
                       className="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-100 transition-colors"
                     >
                       Cancel
@@ -958,25 +1076,11 @@ export default function ContractsPage() {
     }
   }
 
-  async function addAddendum(contractId: string, title: string, description: string) {
-    try {
-      const res = await fetch(`/api/contracts/${contractId}/addendums`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast(data.error || 'Failed to create addendum', 'error')
-        return
-      }
-      setLocalAddendums(prev => [data, ...prev])
-      toast('Addendum created', 'success')
-    } catch {
-      toast('Failed to create addendum', 'error')
-    }
-  }
-
+  // AUDIT #465 — ContractPanel's in-panel "New Addendum" form now captures
+  // the same structured fields as NewAddendumPanel (see the panel's
+  // onAddAddendum call), so both entry points share this one POST handler
+  // instead of the in-panel path having its own title/description-only
+  // fetch that could never populate change_type/value_delta/etc.
   async function handleNewAddendum(data: NewAddendumFormData) {
     try {
       const res = await fetch(`/api/contracts/${data.contractId}/addendums`, {
@@ -1570,7 +1674,7 @@ export default function ContractsPage() {
           onEdit={c => setEditingContract(c)}
           onUpdateStatus={updateContractStatus}
           addendums={localAddendums}
-          onAddAddendum={addAddendum}
+          onAddAddendum={handleNewAddendum}
           onUpdateAddendumStatus={updateAddendumStatus}
           invoices={invoices}
           projects={projects}

@@ -108,6 +108,7 @@ function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
   const [dueDate, setDueDate] = useState(getToday())
   const [company, setCompany] = useState('')
   const [department, setDepartment] = useState<TaskDepartment>('Operations')
+  const [serviceLine, setServiceLine] = useState<TeamServiceLine | ''>('')
   const [recurring, setRecurring] = useState(false)
   const [recFrequency, setRecFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
   const [recInterval, setRecInterval] = useState(1)
@@ -130,6 +131,7 @@ function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
       createdDate: getToday(),
       recurrence: recurring ? { frequency: recFrequency, interval: recInterval, ...(recEndDate ? { endDate: recEndDate } : {}) } : null,
       department,
+      teamServiceLine: serviceLine || undefined,
     })
   }
 
@@ -207,9 +209,20 @@ function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
             </div>
           </div>
 
-          <div>
-            <label className={labelCls}>Company (optional)</label>
-            <input value={company} onChange={e => setCompany(e.target.value)} placeholder="e.g. Coastal Realty" className={inputCls} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Company (optional)</label>
+              <input value={company} onChange={e => setCompany(e.target.value)} placeholder="e.g. Coastal Realty" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Service Line (optional)</label>
+              <select value={serviceLine} onChange={e => setServiceLine(e.target.value as TeamServiceLine | '')} className={selectCls}>
+                <option value="">No service line</option>
+                {([...SERVICE_NAMES, 'General'] as TeamServiceLine[]).map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
@@ -275,6 +288,24 @@ function TaskPanel({
   const [editTitle, setEditTitle] = useState(task.title)
   const [editingDesc, setEditingDesc] = useState(false)
   const [editDesc, setEditDesc] = useState(task.description ?? '')
+  // AUDIT #463 — Company previously called onUpdate() (a full optimistic
+  // update + its own PATCH /api/tasks/[id]) directly from the input's
+  // onChange, firing a request on every keystroke, unlike Title/Description
+  // above which deliberately batch via local state + onBlur (per the #294
+  // failure-revert race — reverting mid-keystroke on a stale/failed PATCH
+  // would stomp what the user is currently typing). Mirror that same
+  // local-state + onBlur pattern here. Resynced on task.id change since
+  // this panel isn't remounted per-task (selecting a different task while
+  // the panel stays open swaps the `task` prop in place) — done as a
+  // render-phase state adjustment (React's recommended "adjusting state
+  // when a prop changes" pattern) rather than a useEffect, so it doesn't
+  // trigger a synchronous setState-in-effect cascade.
+  const [editCompany, setEditCompany] = useState(task.company ?? '')
+  const [editCompanyTaskId, setEditCompanyTaskId] = useState(task.id)
+  if (task.id !== editCompanyTaskId) {
+    setEditCompanyTaskId(task.id)
+    setEditCompany(task.company ?? '')
+  }
   const due = dueDateLabel(task.dueDate, task.status)
   const pri = priorityConfig[task.priority]
   const catColor = categoryColors[task.category]
@@ -366,7 +397,14 @@ function TaskPanel({
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Company</label>
-              <input value={task.company ?? ''} onChange={e => onUpdate(task.id, { company: e.target.value || undefined })} placeholder="No company" className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 placeholder-gray-300" />
+              <input
+                value={editCompany}
+                onChange={e => setEditCompany(e.target.value)}
+                onBlur={() => { if (editCompany.trim() !== (task.company ?? '')) onUpdate(task.id, { company: editCompany.trim() || undefined }) }}
+                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setEditCompany(task.company ?? ''); (e.target as HTMLInputElement).blur() } }}
+                placeholder="No company"
+                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#015035]/40 placeholder-gray-300"
+              />
             </div>
             {task.recurrence && (
               <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">

@@ -137,7 +137,7 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   // ── 1. Check team_members (staff) — @gravissmarketing.com or direct match ──
   const { data: teamRow, error: teamErr } = await db
     .from('team_members')
-    .select('id, email, name, role, unit, initials, is_admin, status')
+    .select('id, email, name, role, unit, initials, is_admin, status, access_schedule')
     .ilike('email', email)
     .maybeSingle()
 
@@ -156,6 +156,27 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
         { status: 403 },
       )
     }
+
+    // AUDIT.md #505 — mirrors the access_schedule enforcement already in
+    // lib/rbac.ts's getCurrentUser() (#208), lib/admin-auth.ts's
+    // requireAdmin(), and this same login's own 2fa-verify route. Without
+    // this, a staff member mid-scheduled-removal could still mint a brand
+    // new session via Google Sign-In (when 2FA is Optional/Disabled) even
+    // though every requireRole/requireAdmin call would reject them on the
+    // very next request — the initial grant was the one gap in the chain.
+    const schedule = teamRow.access_schedule as { removeAccessOn?: string; reinstateOn?: string } | null
+    if (schedule?.removeAccessOn) {
+      const now = Date.now()
+      const removeAt = new Date(schedule.removeAccessOn).getTime()
+      const reinstateAt = schedule.reinstateOn ? new Date(schedule.reinstateOn).getTime() : null
+      if (removeAt <= now && (!reinstateAt || reinstateAt > now)) {
+        return NextResponse.json(
+          { error: 'Your access is currently restricted.' },
+          { status: 403 },
+        )
+      }
+    }
+
     clearAttempts(email)
 
     // AUDIT.md #207 — "Two-Factor Auth: Required" previously had zero

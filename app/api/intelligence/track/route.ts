@@ -46,9 +46,27 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
   // so existing visitors' visit_count is never touched here — only the RPC
   // call below (gated on page_view) is allowed to increment it.
   const identifiedEmail = (body.identifiedEmail as string) || (body.formData as Record<string, string>)?.formEmail || null
-  const formName = (body.formData as Record<string, string>)?.formName || null
-  const formPhone = (body.formData as Record<string, string>)?.formPhone || null
-  const formCompany = (body.formData as Record<string, string>)?.formCompany || null
+
+  // AUDIT.md #455 — GravIntel.identify(email, meta)'s `meta` param is
+  // documented (app/intelligence/page.tsx's "Setup & Embed" section, e.g.
+  // `GravIntel.identify('user@email.com', { name: 'Jane Doe' })`) and sent
+  // by public/gi.js as `identifyMeta`, but nothing here ever read it — the
+  // email landed on the visitor row while the name (or any other meta
+  // field) was silently dropped with no error, for a call this app's own
+  // docs tell developers to make. gi_visitors already has name/phone/
+  // company/title columns (used by the form_submit path below), so no
+  // migration is needed — identifyMeta just needed to feed the same
+  // columns, falling back to form-submission data when both are present.
+  const identifyMeta = (body.identifyMeta ?? null) as Record<string, unknown> | null
+  const identifyMetaName = typeof identifyMeta?.name === 'string' ? identifyMeta.name : null
+  const identifyMetaPhone = typeof identifyMeta?.phone === 'string' ? identifyMeta.phone : null
+  const identifyMetaCompany = typeof identifyMeta?.company === 'string' ? identifyMeta.company : null
+  const identifyMetaTitle = typeof identifyMeta?.title === 'string' ? identifyMeta.title : null
+
+  const formName = (body.formData as Record<string, string>)?.formName || identifyMetaName || null
+  const formPhone = (body.formData as Record<string, string>)?.formPhone || identifyMetaPhone || null
+  const formCompany = (body.formData as Record<string, string>)?.formCompany || identifyMetaCompany || null
+  const formTitle = identifyMetaTitle || null
 
   // AUDIT.md #453 — .select() here lets us tell an actual first-ever INSERT
   // apart from a no-op conflict: with ignoreDuplicates, Postgrest only
@@ -65,6 +83,7 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
     name: formName,
     phone: formPhone,
     company: formCompany,
+    title: formTitle,
     ip_address: ip,
     user_agent: userAgent,
     language: body.language as string ?? null,
@@ -94,6 +113,7 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
   if (formName) returningUpdates.name = formName
   if (formPhone) returningUpdates.phone = formPhone
   if (formCompany) returningUpdates.company = formCompany
+  if (formTitle) returningUpdates.title = formTitle
   await db.from('gi_visitors').update(returningUpdates).eq('visitor_id', visitorId)
 
   // Increment visit count on page_view — but only for a visitor the insert

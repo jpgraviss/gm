@@ -64,6 +64,17 @@ export const POST = withErrorHandler('inbox/unified POST', async (req) => {
   const db = createServiceClient()
   const body = await req.json().catch(() => ({}) as Record<string, unknown>)
   const limit = Math.min(parseInt(String(body.limit ?? '100'), 10) || 100, 200)
+  // AUDIT.md #489 — this route merges 6 heterogeneous sources (tickets,
+  // sequence activities, broadcast recipients, CRM activities, chatbot
+  // conversations, live Gmail) into per-contact threads, so a single
+  // cursor over the merged output (lib/pagination.ts's pattern) doesn't
+  // apply cleanly — "page 2" of threads isn't a stable slice of any one
+  // table. Instead, `offset` shifts the window on each *source* query
+  // (oldest-first beyond what's already been seen), and the frontend
+  // merges each additional batch into what it already has by contact
+  // email — same spirit as fetchAllPages, adapted for a merge/aggregate
+  // endpoint instead of a flat cursor-paginated table.
+  const offset = Math.max(parseInt(String(body.offset ?? '0'), 10) || 0, 0)
   const rawGmailToken = typeof body.gmailToken === 'string' ? body.gmailToken : null
   const rawGmailEmail = typeof body.gmailEmail === 'string' ? body.gmailEmail : null
 
@@ -84,7 +95,7 @@ export const POST = withErrorHandler('inbox/unified POST', async (req) => {
     .from('tickets')
     .select('id, subject, contact_name, contact_email, company, status, messages, created_date, created_at')
     .order('created_at', { ascending: false })
-    .limit(limit)
+    .range(offset, offset + limit - 1)
 
   // 2. Sequence activities (most recent reply/bounce/click events)
   const { data: seqActivities } = await db
@@ -92,14 +103,14 @@ export const POST = withErrorHandler('inbox/unified POST', async (req) => {
     .select('id, sequence_id, contact_email, event_type, metadata, created_at')
     .in('event_type', ['replied', 'clicked', 'bounced', 'sent'])
     .order('created_at', { ascending: false })
-    .limit(limit)
+    .range(offset, offset + limit - 1)
 
   // 3. Broadcast recipients (engagement events)
   const { data: broadcastRecipients } = await db
     .from('broadcast_recipients')
     .select('id, broadcast_id, email, status, sent_at, opened_at, clicked_at')
     .order('sent_at', { ascending: false })
-    .limit(limit)
+    .range(offset, offset + limit - 1)
 
   // 4. CRM activities flagged as communications
   const { data: crmActivities } = await db
@@ -111,7 +122,7 @@ export const POST = withErrorHandler('inbox/unified POST', async (req) => {
     // matched any real logged activity.
     .in('type', ['email', 'call', 'meeting', 'note', 'call_note'])
     .order('timestamp', { ascending: false })
-    .limit(limit)
+    .range(offset, offset + limit - 1)
 
   // 6. Chatbot conversations — only ones that captured a visitor email
   const { data: chatConversations } = await db
@@ -119,7 +130,18 @@ export const POST = withErrorHandler('inbox/unified POST', async (req) => {
     .select('id, chatbot_id, visitor_name, visitor_email, messages, flagged, updated_at, chatbots(name)')
     .not('visitor_email', 'is', null)
     .order('updated_at', { ascending: false })
-    .limit(limit)
+    .range(offset, offset + limit - 1)
+
+  // AUDIT.md #489 — every source query above previously capped at `limit`
+  // (max 200) with nothing telling the caller whether that was the whole
+  // result or a silent truncation. A source query that came back full
+  // (exactly `limit` rows) means there could be more beyond this window —
+  // this is a heuristic (a source could coincidentally have exactly
+  // `limit` rows left with nothing further), but it's the same trade-off
+  // cursor pagination elsewhere in the app accepts, and it errs toward
+  // showing "load more" too often rather than hiding real truncation.
+  const hasMore = [tickets, seqActivities, broadcastRecipients, crmActivities, chatConversations]
+    .some(rows => (rows?.length ?? 0) === limit)
 
   // Build a contact email → thread map
   const threads = new Map<string, UnifiedThread>()
@@ -301,7 +323,13 @@ export const POST = withErrorHandler('inbox/unified POST', async (req) => {
   const result = Array.from(threads.values()).sort(
     (a, b) => new Date(b.lastMessage.timestamp).getTime() - new Date(a.lastMessage.timestamp).getTime(),
   )
+  // Merging can produce fewer threads than raw source rows (multiple rows
+  // collapse into one contact's thread) or, across enough distinct
+  // contacts, more threads than any single source's `limit` — either way,
+  // slicing here is itself a second place truncation could happen even
+  // when no individual source query came back full.
   const page = result.slice(0, limit)
+  const hasMoreThreads = hasMore || result.length > limit
 
   // AUDIT #257 — "View CRM contact" linked with ?email=, but
   // app/crm/contacts/page.tsx only ever reads ?open=<id>, so clicking
@@ -321,8 +349,18 @@ export const POST = withErrorHandler('inbox/unified POST', async (req) => {
     }
   }
 
+  // AUDIT.md #489 — previously always returned a bare array truncated at
+  // `limit` with nothing indicating truncation happened, and no way for
+  // the frontend to ask for more (unlike `app/tickets/page.tsx`, which
+  // correctly uses `fetchAllPages()` against a real cursor). Keeps the
+  // response body an array (existing callers' `Array.isArray(data)` checks
+  // keep working) and signals truncation the same way lib/pagination.ts's
+  // `paginatedJson()` does for its cursor — via a response header — so the
+  // frontend can offer "Load more" and fetch the next `offset` window.
   return NextResponse.json(page.map(t => ({
     ...t,
     contactId: contactIdByEmail.get(t.contactEmail.toLowerCase()),
-  })))
+  })), {
+    headers: { 'X-Has-More': String(hasMoreThreads) },
+  })
 })

@@ -108,12 +108,23 @@ export const POST = withErrorHandler('invoices POST', async (req) => {
   const rawTimeEntryIds: unknown[] = Array.isArray(body.timeEntryIds) ? body.timeEntryIds : []
   const timeEntryIds = rawTimeEntryIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
   if (timeEntryIds.length > 0) {
+    // AUDIT #435 — defense in depth alongside the billable-summary filter:
+    // that route no longer surfaces Rejected entries for selection, but
+    // this endpoint takes raw timeEntryIds from the client, so a stale
+    // page, a replayed request, or a direct API call could still try to
+    // invoice one. Uses `.or(...)` rather than a plain `.neq('approval_status',
+    // 'rejected')` for the same reason as billable-summary: Postgres' NULL-
+    // propagating `<>` would silently exclude (and thus never mark
+    // invoiced) any row whose approval_status happens to be NULL. Any
+    // Rejected row in the id list simply won't match this filter and
+    // silently won't be marked invoiced, which is the desired outcome.
     const { error: timeEntriesError } = await db
       .from('time_entries')
       .update({ invoiced: true, invoice_id: data.id })
       .in('id', timeEntryIds)
       .eq('billable', true)
       .eq('invoiced', false)
+      .or('approval_status.is.null,approval_status.neq.rejected')
     if (timeEntriesError) {
       throw new Error(timeEntriesError.message || 'Invoice created but failed to mark time entries as invoiced')
     }

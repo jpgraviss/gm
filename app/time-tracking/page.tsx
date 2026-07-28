@@ -271,11 +271,31 @@ const APPROVAL_BADGE: Record<string, string> = {
   pending:  'bg-gray-100 text-gray-500',
 }
 
-function ApprovalBadge({ status }: { status?: string }) {
+// AUDIT #437 — `rejectionNote` is captured via a mandatory field in
+// RejectModal below, correctly persisted, and returned by the API
+// (mapEntry in app/api/time-entries/route.ts), but was never rendered
+// anywhere — every view showed only a bare "Rejected" badge, so the
+// rejected team member had no way to see why. Surfaced here as a small
+// truncated note right next to the badge (native `title` attribute holds
+// the full text on hover, matching this file's existing tooltip pattern —
+// see the `title="Calendar view"` / `title="Edit"` buttons elsewhere in
+// this file) so it's visible at a glance without needing a click, and
+// still readable in full for long notes.
+function ApprovalBadge({ status, rejectionNote }: { status?: string; rejectionNote?: string }) {
   const s = status ?? 'pending'
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${APPROVAL_BADGE[s] ?? APPROVAL_BADGE.pending}`}>
-      {s}
+    <span className="inline-flex items-center gap-1 min-w-0">
+      <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize flex-shrink-0 ${APPROVAL_BADGE[s] ?? APPROVAL_BADGE.pending}`}>
+        {s}
+      </span>
+      {s === 'rejected' && rejectionNote && (
+        <span
+          title={rejectionNote}
+          className="inline-block text-xs text-red-500/80 italic truncate max-w-[140px] sm:max-w-[240px] align-bottom"
+        >
+          &ldquo;{rejectionNote}&rdquo;
+        </span>
+      )}
     </span>
   )
 }
@@ -1025,7 +1045,7 @@ export default function TimeTrackingPage() {
                                   {!entry.billable && (
                                     <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-medium bg-orange-50 text-orange-500 hidden sm:inline">Non-Billable</span>
                                   )}
-                                  <ApprovalBadge status={entry.approvalStatus} />
+                                  <ApprovalBadge status={entry.approvalStatus} rejectionNote={entry.rejectionNote} />
                                 </div>
                               </div>
 

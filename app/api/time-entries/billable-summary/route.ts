@@ -20,16 +20,40 @@ export const GET = withErrorHandler('time-entries/billable-summary GET', async (
     throw new Error(error?.message || 'Failed to fetch billable summary')
   }
 
+  // AUDIT #435 — this query previously never looked at approval_status at
+  // all, so a Dept Manager's explicit Rejected on a time entry had zero
+  // effect on whether it showed up here as "Unbilled Time" and got billed
+  // to a client via the Create Invoice flow. Filtered here in JS (not via
+  // a second chained `.or()` on the query above) because PostgREST's
+  // handling of two independently-chained `.or()` calls on the same
+  // request isn't a pattern used anywhere else in this codebase and its
+  // AND-vs-override semantics across repeated query params aren't worth
+  // gambling on for a billing-correctness fix; a plain `.neq()` would also
+  // be wrong here since Postgres' NULL-propagating `<>` silently drops
+  // every row whose approval_status is NULL (`e.approval_status !==
+  // 'rejected'` in JS does not have that problem).
+  //
+  // Deliberately NOT requiring approval_status === 'approved': this table
+  // defaults every new entry to 'pending' (see
+  // supabase/migrations/add_timesheet_approvals.sql), and nothing else in
+  // this codebase currently gates invoicing on manager approval having
+  // happened first — doing so here would silently block all
+  // not-yet-reviewed time from ever being invoiced, a much bigger
+  // workflow change than this fix is scoped for. Flagged in AUDIT.md for a
+  // product-owner call if "no invoicing before approval" is actually the
+  // intended policy.
+  const billableRows = (data ?? []).filter(e => e.approval_status !== 'rejected')
+
   // Group by project/company
   const groups: Record<string, {
     projectName: string
     projectId: string | null
-    entries: typeof data
+    entries: typeof billableRows
     totalHours: number
     totalMinutes: number
   }> = {}
 
-  for (const entry of data ?? []) {
+  for (const entry of billableRows) {
     const key = entry.project_name || 'Unassigned'
     if (!groups[key]) {
       groups[key] = {
@@ -59,6 +83,10 @@ export const GET = withErrorHandler('time-entries/billable-summary GET', async (
       hours: e.hours,
       minutes: e.minutes,
       serviceType: e.service_type,
+      // AUDIT #435 — previously omitted entirely, so the UI had no way to
+      // tell an approved entry from a still-pending one in this list even
+      // though the rejected ones are now excluded server-side above.
+      approvalStatus: e.approval_status ?? 'pending',
     })),
   }))
 

@@ -46,7 +46,7 @@ export const PATCH = withErrorHandler('time-entries/[id] PATCH', async (req: Nex
   // matches app/time-tracking/page.tsx's own `canApprove` check.
   const { data: existingEntry, error: existingErr } = await db
     .from('time_entries')
-    .select('team_member')
+    .select('team_member, approval_status, invoiced')
     .eq('id', id)
     .single()
   if (existingErr || !existingEntry) {
@@ -64,6 +64,34 @@ export const PATCH = withErrorHandler('time-entries/[id] PATCH', async (req: Nex
   // not attempted here since name changes are rare and the workaround
   // (manager intervention) already exists.
   const canManageOthers = (await requireRole(req, 'Dept Manager')) === null
+
+  // AUDIT #436 — neither PATCH nor DELETE checked approval_status/invoiced
+  // before applying the change, so an entry could be freely edited after
+  // manager approval, or even after being invoiced (and possibly already
+  // paid), with no re-approval and no audit trail. Invoiced is an absolute
+  // lock for everyone, including Dept Manager+: `invoiced`/`invoice_id`
+  // are only ever set by app/api/invoices/route.ts when an invoice is
+  // created from these entries (see AUDIT.md #224/#435), and there is no
+  // "delete invoice" or unlock path anywhere in this codebase that would
+  // ever reset it — once an entry is on an invoice it's a financial
+  // record, not a draft. Deliberately not implementing an
+  // unlock/reopen/dispute flow here (out of scope for this fix); the
+  // required workaround is the same one that already exists for
+  // corrections generally — handle it through the invoice itself.
+  if (existingEntry.invoiced) {
+    return NextResponse.json({ error: 'This time entry has already been invoiced and can no longer be edited.' }, { status: 403 })
+  }
+  // Approved-but-not-yet-invoiced entries are locked for the owning Team
+  // Member (the same tier this file already restricts to self-only edits
+  // below) but stay editable by Dept Manager+, matching the existing
+  // override precedent just below for legitimate correction/backfill
+  // workflows — an approved entry needing a fix should go through a
+  // manager, not be silently changed by the person whose time was just
+  // approved.
+  if (existingEntry.approval_status === 'approved' && !canManageOthers) {
+    return NextResponse.json({ error: 'This time entry has been approved and can no longer be edited by you. Ask a manager to make the correction.' }, { status: 403 })
+  }
+
   if (!canManageOthers) {
     const caller = await getAuthUser(req)
     const callerName = (caller?.name ?? '').trim().toLowerCase()
@@ -109,7 +137,7 @@ export const DELETE = withErrorHandler('time-entries/[id] DELETE', async (req: N
   // otherwise delete any other team member's logged hours.
   const { data: existingEntry, error: existingErr } = await db
     .from('time_entries')
-    .select('team_member')
+    .select('team_member, approval_status, invoiced')
     .eq('id', id)
     .single()
   if (existingErr || !existingEntry) {
@@ -117,6 +145,19 @@ export const DELETE = withErrorHandler('time-entries/[id] DELETE', async (req: N
   }
 
   const canManageOthers = (await requireRole(req, 'Dept Manager')) === null
+
+  // AUDIT #436 — same lock as PATCH above: invoiced entries are a
+  // financial record and can never be deleted (no role override — see the
+  // comment on the PATCH handler for why), and an approved-but-not-yet-
+  // invoiced entry can only be deleted by a Dept Manager+, not the team
+  // member whose time was approved.
+  if (existingEntry.invoiced) {
+    return NextResponse.json({ error: 'This time entry has already been invoiced and can no longer be deleted.' }, { status: 403 })
+  }
+  if (existingEntry.approval_status === 'approved' && !canManageOthers) {
+    return NextResponse.json({ error: 'This time entry has been approved and can no longer be deleted by you. Ask a manager if it needs to be removed.' }, { status: 403 })
+  }
+
   if (!canManageOthers) {
     const caller = await getAuthUser(req)
     const callerName = (caller?.name ?? '').trim().toLowerCase()

@@ -11,15 +11,6 @@ import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 type DateRange = '3M' | '6M' | '12M' | 'Custom'
 
-const STAGE_WEIGHTS: Record<string, number> = {
-  Lead: 0.1,
-  Qualified: 0.25,
-  'Proposal Sent': 0.5,
-  'Contract Sent': 0.75,
-  'Closed Won': 1.0,
-  'Closed Lost': 0,
-}
-
 export default function RevenueReportPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -87,16 +78,26 @@ export default function RevenueReportPage() {
     // as if it were still forecast. "Pipeline" should mean open deals only,
     // matching the openDeals-only convention app/crm/pipeline/page.tsx's
     // weightedValue already uses for this exact computation.
+    // AUDIT #448 — this used to weight by a hardcoded STAGE_WEIGHTS map keyed
+    // on stage name, so any renamed/custom pipeline stage (stages are
+    // user-editable, see #42) fell through to `?? 0` and silently
+    // contributed $0 to "Pipeline (Weighted)" while its raw value still
+    // displayed. Deals already carry their own `probability` (0-100),
+    // populated from the real pipeline stage config's `probability` field
+    // whenever a deal's stage changes (see app/crm/pipeline/page.tsx's
+    // onDragEnd/handleAdvanceStage) — the same source app/crm/pipeline/page.tsx's
+    // own weightedValue KPI reads from. Using it here removes the stage-name
+    // lookup entirely instead of just expanding the map.
     const stages: Record<string, { count: number; value: number; weighted: number }> = {}
     filteredDeals.filter(d => !d.stage.startsWith('Closed')).forEach(d => {
       if (!stages[d.stage]) stages[d.stage] = { count: 0, value: 0, weighted: 0 }
       stages[d.stage].count++
       stages[d.stage].value += d.value
-      stages[d.stage].weighted += d.value * (STAGE_WEIGHTS[d.stage] ?? 0)
+      stages[d.stage].weighted += d.value * (d.probability / 100)
     })
     return Object.entries(stages)
       .map(([stage, data]) => ({ stage, ...data }))
-      .sort((a, b) => (STAGE_WEIGHTS[b.stage] ?? 0) - (STAGE_WEIGHTS[a.stage] ?? 0))
+      .sort((a, b) => (b.value > 0 ? b.weighted / b.value : 0) - (a.value > 0 ? a.weighted / a.value : 0))
   }, [filteredDeals])
 
   const totalWeighted = pipelineForecast.reduce((s, p) => s + p.weighted, 0)

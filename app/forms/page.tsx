@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 import {
   Plus, X, Trash2, Copy, ExternalLink, FileText, Eye, Pencil,
   Type, Mail, Phone, AlignLeft, ListChecks, CheckSquare, Hash, Link2,
@@ -66,6 +67,11 @@ interface LeadForm {
   confirmationMessage?: string
   notifyEmails?: string[]
   redirectUrl?: string
+  createContact?: boolean
+  createDeal?: boolean
+  dealStage?: string
+  tags?: string[]
+  owner?: string
   createdAt: string
 }
 
@@ -312,6 +318,23 @@ const DEFAULT_POPUP: PopupConfig = {
 function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => void; onSave: (f: LeadForm) => void }) {
   const [draft, setDraft] = useState<LeadForm>(form)
   const [tab, setTab] = useState<'fields' | 'submissions' | 'embed'>('fields')
+  const REPS = useTeamMembers()
+
+  // AUDIT.md #501 — deal_stage's options come from the actual saved pipeline
+  // config (same source lib/pipelines.ts's getFirstPipelineStageName() reads
+  // for the "pipeline default" fallback), not a hardcoded stage list, so this
+  // dropdown can't drift from a renamed/reordered stage.
+  const [pipelineStages, setPipelineStages] = useState<string[]>([])
+  useEffect(() => {
+    fetch('/api/pipelines')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: Array<{ id: string; stages: Array<{ name: string }> }> | null) => {
+        if (!Array.isArray(data)) return
+        const pipeline = data.find(p => p.id === 'client-acquisition') ?? data[0]
+        setPipelineStages(pipeline?.stages?.map(s => s.name) ?? [])
+      })
+      .catch(() => {})
+  }, [])
 
   function addField(type: string, mapsTo?: string) {
     setDraft(d => ({ ...d, fields: [...d.fields, newField(type, mapsTo)] }))
@@ -461,6 +484,30 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
                                       className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
                                     />
                                   )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-gray-400 shrink-0 w-32">Maps to CRM field</span>
+                                  <select
+                                    // AUDIT.md #502 — the field-type palette only ever pre-set mapsTo
+                                    // for a fixed handful of types (email/phone/textarea), and there was
+                                    // no way to change it afterward — so a field the user typed "Company"
+                                    // or "Last Name" into could never be selected as mapping to those
+                                    // structured CRM fields; submissionToContact() already supports both,
+                                    // it just never received them. 'custom' (the palette's default for
+                                    // plain text fields) is treated the same as unmapped here — both fall
+                                    // through to the free-text notes field exactly like before.
+                                    value={f.mapsTo === 'custom' ? '' : (f.mapsTo ?? '')}
+                                    onChange={e => updateField(f.id, { mapsTo: e.target.value || undefined })}
+                                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                  >
+                                    <option value="">Not mapped (saved to notes)</option>
+                                    <option value="first_name">First name</option>
+                                    <option value="last_name">Last name</option>
+                                    <option value="email">Email</option>
+                                    <option value="phone">Phone</option>
+                                    <option value="company">Company</option>
+                                    <option value="notes">Notes</option>
+                                  </select>
                                 </div>
                               </>)}
                                 {(f.type === 'select' || f.type === 'multi_select') && (
@@ -680,6 +727,71 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
                           className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                       </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section>
+                {/* AUDIT.md #501 — createDeal/dealStage/tags/owner were fully
+                    supported end-to-end (lib/forms.ts's type, both API route
+                    mappers, the schema, and — since #296 — the submit-time
+                    consumer) but had no editor UI anywhere, so create_deal's
+                    DB default of false could never actually be flipped on by
+                    a real user. */}
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">CRM Automation</p>
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Contact owner</label>
+                    <select
+                      value={draft.owner ?? ''}
+                      onChange={e => setDraft(d => ({ ...d, owner: e.target.value || undefined }))}
+                      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Unassigned</option>
+                      {REPS.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1">Assigned to any contact created or matched from this form&apos;s submissions</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Tags</label>
+                    <input
+                      value={(draft.tags ?? []).join(', ')}
+                      onChange={e => setDraft(d => ({
+                        ...d,
+                        tags: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
+                      }))}
+                      placeholder="lead, webform, high-intent"
+                      className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Comma-separated — applied to any contact created from this form</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={draft.createDeal ?? false}
+                      onChange={e => setDraft(d => ({ ...d, createDeal: e.target.checked }))}
+                      className="w-4 h-4 rounded border-gray-300 text-emerald-600"
+                    />
+                    <label className="text-xs text-gray-600">Auto-create a deal from each submission</label>
+                  </div>
+
+                  {draft.createDeal && (
+                    <div className="pl-6 flex flex-col gap-2 border-l-2 border-emerald-200">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Deal stage</label>
+                        <select
+                          value={draft.dealStage ?? ''}
+                          onChange={e => setDraft(d => ({ ...d, dealStage: e.target.value || undefined }))}
+                          className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-white focus:outline-none"
+                        >
+                          <option value="">Pipeline default (first stage)</option>
+                          {pipelineStages.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                      <p className="text-[10px] text-gray-400">Only created when a submission creates or matches a contact (requires an email field mapped above)</p>
                     </div>
                   )}
                 </div>

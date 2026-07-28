@@ -877,21 +877,38 @@ export default function AdminPage() {
       const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error()
 
+      // AUDIT.md #457 — this used to fire-and-forget the reassign call with
+      // .catch(() => {}) and no res.ok check, then unconditionally told the
+      // admin "deals reassigned" even when the request 4xx/5xx'd (.catch
+      // only intercepts network-level failures, not HTTP error statuses).
+      // The user removal above can succeed independently of this, so a
+      // reassign failure is surfaced as its own distinct toast rather than
+      // folded into — or silently overwritten by — the removal outcome.
+      let reassignFailed = false
       if (reassignTo) {
         const targetUser = users.find(u => u.id === id)
         if (targetUser) {
-          await fetch('/api/deals/reassign', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fromRep: targetUser.name, toRep: reassignTo }),
-          }).catch(() => {})
+          try {
+            const reassignRes = await fetch('/api/deals/reassign', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fromRep: targetUser.name, toRep: reassignTo }),
+            })
+            if (!reassignRes.ok) reassignFailed = true
+          } catch {
+            reassignFailed = true
+          }
         }
       }
 
       setUsers(prev => prev.map(u => u.id === id ? { ...u, status: 'deleted', deletedAt: new Date().toISOString() } : u))
       setRemoveConfirm(null)
       setReassignTo('')
-      toast('User removed and deals reassigned', 'success')
+      if (reassignFailed) {
+        toast('User removed, but reassigning their deals failed — please reassign them manually', 'error')
+      } else {
+        toast('User removed and deals reassigned', 'success')
+      }
     } catch {
       toast('Failed to remove user', 'error')
     }

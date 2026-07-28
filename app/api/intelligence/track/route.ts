@@ -50,7 +50,15 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
   const formPhone = (body.formData as Record<string, string>)?.formPhone || null
   const formCompany = (body.formData as Record<string, string>)?.formCompany || null
 
-  await db.from('gi_visitors').upsert({
+  // AUDIT.md #453 — .select() here lets us tell an actual first-ever INSERT
+  // apart from a no-op conflict: with ignoreDuplicates, Postgrest only
+  // returns a row for visitors it just inserted, never for ones it skipped.
+  // That distinction is what lets the gi_increment_visits RPC below apply
+  // only to returning visitors — the insert above already seeds visit_count
+  // at 1, so incrementing again on the same request double-counted every
+  // visitor's first page_view forever (1 -> 2), inflating lead_score by 5
+  // points (gi_score_visitor's visit_count * 5 term) from the very first hit.
+  const { data: insertedRows } = await db.from('gi_visitors').upsert({
     visitor_id: visitorId,
     site_id: siteId || 'default',
     email: identifiedEmail,
@@ -71,7 +79,8 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
   }, {
     onConflict: 'visitor_id',
     ignoreDuplicates: true,
-  })
+  }).select('visitor_id')
+  const isNewVisitor = (insertedRows?.length ?? 0) > 0
 
   // Refresh mutable per-visit fields for both new and returning visitors —
   // deliberately excludes visit_count, first_seen, and visit_count-adjacent
@@ -87,9 +96,14 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
   if (formCompany) returningUpdates.company = formCompany
   await db.from('gi_visitors').update(returningUpdates).eq('visitor_id', visitorId)
 
-  // Increment visit count on page_view
+  // Increment visit count on page_view — but only for a visitor the insert
+  // above did NOT just create, since that insert already seeds visit_count
+  // at 1. Incrementing unconditionally here bumped every brand-new visitor
+  // straight to 2 on their very first page_view (AUDIT.md #453).
   if (body.eventType === 'page_view') {
-    try { await db.rpc('gi_increment_visits', { vid: visitorId }) } catch { /* function may not exist yet */ }
+    if (!isNewVisitor) {
+      try { await db.rpc('gi_increment_visits', { vid: visitorId }) } catch { /* function may not exist yet */ }
+    }
 
     // Geolocation — no-op until IPINFO_API_KEY is set (see lib/geolocation.ts;
     // AUDIT.md #33). Looked up once per visitor (skipped once city is already

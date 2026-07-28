@@ -159,7 +159,12 @@ function parseSection(text: string, label: string): AuditSectionResult {
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0])
-      const score = Math.min(100, Math.max(0, Number(parsed.score) || 50))
+      // AUDIT.md #454 — `Number(parsed.score) || 50` treated a genuine score
+      // of 0 (real Grade F) as falsy and silently rewrote it to 50 (Grade C).
+      // Number.isFinite distinguishes "parsed to a real number, including
+      // zero" from "couldn't parse" (NaN from a missing/non-numeric field).
+      const parsedScore = Number(parsed.score)
+      const score = Math.min(100, Math.max(0, Number.isFinite(parsedScore) ? parsedScore : 50))
       return {
         name: label,
         score,

@@ -7,6 +7,7 @@ import { fetchContracts, fetchRevenueByMonth } from '@/lib/supabase'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, invoiceStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
+import CompanySelect from '@/components/ui/CompanySelect'
 import type { Invoice, InvoiceStatus, Contract, RevenueMonth } from '@/lib/types'
 import { computeMRR } from '@/lib/metrics'
 import {
@@ -438,7 +439,22 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
 
 function CreateInvoiceModal({ group, onClose, onCreated }: { group: BillableSummaryGroup; onClose: () => void; onCreated: () => void }) {
   const { toast } = useToast()
-  const [company, setCompany] = useState(group.projectName !== 'Unassigned' ? group.projectName : '')
+  // AUDIT #421 — this defaulted to the raw time_entries.project_name text
+  // in a freely-editable input with no dropdown/validation against real
+  // companies, and never sent companyId on POST. An uncorrected/typo'd
+  // value here doesn't just look wrong — it makes the invoice permanently
+  // invisible in that client's own portal, since GET /api/invoices?company=
+  // (via requirePortalClient) gates on an exact string match. Now backed by
+  // the same CompanySelect picker used elsewhere in the app (CRM, projects,
+  // admin), so the value is either a real, existing company or one
+  // explicitly created through it — never free text — and companyId travels
+  // alongside the display name. Deliberately NOT pre-filled from
+  // group.projectName the way the old free-text field was: an unverified
+  // guess sitting in the field was exactly how a mismatched value used to
+  // slip through unnoticed. Submission is blocked below until a real
+  // company (with a companyId) has been explicitly chosen or created.
+  const [company, setCompany] = useState('')
+  const [companyId, setCompanyId] = useState<string | undefined>(undefined)
   const [amount, setAmount] = useState('')
   const [serviceType, setServiceType] = useState(group.entries[0]?.serviceType || 'General')
   const [dueDate, setDueDate] = useState(() => {
@@ -451,8 +467,8 @@ function CreateInvoiceModal({ group, onClose, onCreated }: { group: BillableSumm
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const amountNum = parseFloat(amount)
-    if (!company.trim() || !amountNum || amountNum <= 0) {
-      toast('Enter a company and a valid amount', 'error')
+    if (!company.trim() || !companyId || !amountNum || amountNum <= 0) {
+      toast('Select a company and enter a valid amount', 'error')
       return
     }
     setSubmitting(true)
@@ -462,6 +478,7 @@ function CreateInvoiceModal({ group, onClose, onCreated }: { group: BillableSumm
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           company: company.trim(),
+          companyId,
           amount: amountNum,
           serviceType: serviceType.trim() || 'General',
           dueDate,
@@ -499,11 +516,11 @@ function CreateInvoiceModal({ group, onClose, onCreated }: { group: BillableSumm
         <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Company</label>
-            <input
+            <CompanySelect
               value={company}
-              onChange={e => setCompany(e.target.value)}
+              onChange={(name, id) => { setCompany(name); setCompanyId(id) }}
               required
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-green-700"
+              placeholder="Select a company..."
             />
           </div>
           <div>

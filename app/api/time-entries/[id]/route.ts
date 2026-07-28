@@ -17,9 +17,21 @@ export const PATCH = withErrorHandler('time-entries/[id] PATCH', async (req: Nex
   // (POST /api/time-entries) — this single-entry PATCH previously let any
   // Team Member self-approve/reject their own (or anyone's) time entry by
   // setting these fields directly, completely bypassing that gate.
+  let approver: Awaited<ReturnType<typeof getAuthUser>> = null
   if (APPROVAL_FIELDS.some(f => body[f] !== undefined)) {
     const approveDenied = await requireRole(req, 'Dept Manager')
     if (approveDenied) return approveDenied
+    // AUDIT #438 — this route previously trusted client-supplied
+    // `approvedBy`/`approvedAt` verbatim, unlike the bulk-approval endpoint
+    // (PATCH /api/time-entries) which correctly derives `approved_at`
+    // server-side and ignores any client value. Not reachable from the
+    // current UI, but a Dept Manager+ hitting this endpoint directly could
+    // attribute an approval to a different manager or backdate/postdate
+    // it. Resolved here the same way: derive both fields server-side from
+    // the authenticated caller and the current time, and ignore whatever
+    // the client sent (see body.approvedBy/body.approvedAt no longer being
+    // read below).
+    approver = await getAuthUser(req)
   }
   const result = validate(body, {
     date: { type: 'string', maxLength: 20 },
@@ -115,9 +127,18 @@ export const PATCH = withErrorHandler('time-entries/[id] PATCH', async (req: Nex
   if (body.projectId !== undefined)   update.project_id = body.projectId
   if (body.projectName !== undefined) update.project_name = body.projectName
   if (body.approvalStatus !== undefined)  update.approval_status = body.approvalStatus
-  if (body.approvedBy !== undefined)      update.approved_by = body.approvedBy
-  if (body.approvedAt !== undefined)      update.approved_at = body.approvedAt
   if (body.rejectionNote !== undefined)   update.rejection_note = body.rejectionNote
+  // AUDIT #438 — `approved_by`/`approved_at` are derived here from the
+  // authenticated caller (`approver`, resolved above only once the Dept
+  // Manager+ gate has passed) and the current server time, matching the
+  // bulk-approval endpoint's `approved_at` derivation. `body.approvedBy`/
+  // `body.approvedAt` are intentionally never read — trusting them let a
+  // Dept Manager+ attribute an approval to a different manager, or
+  // backdate/postdate it, by simply setting the fields in the request.
+  if (body.approvalStatus === 'approved' || body.approvalStatus === 'rejected') {
+    update.approved_by = approver?.name || approver?.email || 'Unknown'
+    update.approved_at = new Date().toISOString()
+  }
 
   const { data, error } = await db.from('time_entries').update(update).eq('id', id).select().single()
   if (error) {

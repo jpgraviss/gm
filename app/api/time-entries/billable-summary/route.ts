@@ -2,6 +2,47 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { applyCursor, slicePage, MAX_LIMIT } from '@/lib/pagination'
+
+type ServiceClient = ReturnType<typeof createServiceClient>
+
+// AUDIT #419 — this route previously ran a single unbounded `.select('*')`
+// query with no pagination at all, unlike its sibling GET /api/time-entries,
+// which correctly uses parsePagination/applyCursor. That left it entirely
+// dependent on PostgREST's default row cap: once unbilled entries exceeded
+// it, older ones silently vanished from the "Unbilled Time" panel and could
+// never be selected for invoicing, with no error or indication anything was
+// missing. This response is a computed aggregate (grouped-by-project
+// summary), not a raw row list, so exposing limit/cursor query params to the
+// caller the way GET /api/time-entries does isn't workable here — a
+// caller would have to re-merge partial groups across pages themselves.
+// Instead, this loops internally using the exact same applyCursor/slicePage
+// helpers as every other paginated route in this codebase until every
+// matching row has been fetched, then groups the complete set. Ordered by
+// 'date' (matching this route's pre-existing sort) rather than
+// 'created_at' — applyCursor/slicePage are generic over the orderBy field.
+async function fetchAllBillableRows(db: ServiceClient) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows: any[] = []
+  let cursor: string | null = null
+  for (;;) {
+    let query = db
+      .from('time_entries')
+      .select('*')
+      .eq('billable', true)
+      .or('invoiced.is.null,invoiced.eq.false')
+    query = applyCursor(query, { limit: MAX_LIMIT, cursor, orderBy: 'date' })
+    const { data, error } = await query
+    if (error) {
+      throw new Error(error?.message || 'Failed to fetch billable summary')
+    }
+    const { rows: page, nextCursor } = slicePage(data ?? [], MAX_LIMIT, 'date')
+    rows.push(...page)
+    if (!nextCursor) break
+    cursor = nextCursor
+  }
+  return rows
+}
 
 export const GET = withErrorHandler('time-entries/billable-summary GET', async (req) => {
   const denied = await requireRole(req, 'Team Member')
@@ -9,16 +50,7 @@ export const GET = withErrorHandler('time-entries/billable-summary GET', async (
 
   const db = createServiceClient()
 
-  const { data, error } = await db
-    .from('time_entries')
-    .select('*')
-    .eq('billable', true)
-    .or('invoiced.is.null,invoiced.eq.false')
-    .order('date', { ascending: false })
-
-  if (error) {
-    throw new Error(error?.message || 'Failed to fetch billable summary')
-  }
+  const data = await fetchAllBillableRows(db)
 
   // AUDIT #435 — this query previously never looked at approval_status at
   // all, so a Dept Manager's explicit Rejected on a time entry had zero

@@ -118,15 +118,43 @@ export const POST = withErrorHandler('invoices POST', async (req) => {
     // invoiced) any row whose approval_status happens to be NULL. Any
     // Rejected row in the id list simply won't match this filter and
     // silently won't be marked invoiced, which is the desired outcome.
-    const { error: timeEntriesError } = await db
+    // AUDIT #421 — this update previously never checked how many rows it
+    // actually affected. Its own `.eq('invoiced', false)` filter means a
+    // second "Create Invoice" request racing this one over the same
+    // unbilled group (both fired before the "Unbilled Time" panel had a
+    // chance to refresh) could each independently create an invoice, with
+    // whichever ran second silently claiming zero (or a partial subset) of
+    // the entries it thought it was billing — two invoices for the same
+    // work, no error, no signal to either staff member. `.select('id')`
+    // here so the affected-row count can be compared against what the
+    // client asked to claim.
+    const { data: claimedRows, error: timeEntriesError } = await db
       .from('time_entries')
       .update({ invoiced: true, invoice_id: data.id })
       .in('id', timeEntryIds)
       .eq('billable', true)
       .eq('invoiced', false)
       .or('approval_status.is.null,approval_status.neq.rejected')
+      .select('id')
     if (timeEntriesError) {
       throw new Error(timeEntriesError.message || 'Invoice created but failed to mark time entries as invoiced')
+    }
+
+    const claimedCount = claimedRows?.length ?? 0
+    if (claimedCount < timeEntryIds.length) {
+      // Fewer entries were actually claimed than requested — someone else
+      // (another concurrent request, or an entry that was rejected/already
+      // invoiced in the meantime) beat this one to some of them. The
+      // invoice just created above was priced/described for the full
+      // original set, so leaving it in place would double-bill the client
+      // for entries another invoice already covers. Roll it back rather
+      // than silently keeping a partial/incorrect invoice, and surface a
+      // clear error so the caller knows to refresh and retry instead of
+      // assuming success.
+      await db.from('invoices').delete().eq('id', data.id)
+      return NextResponse.json({
+        error: `Only ${claimedCount} of ${timeEntryIds.length} time entries could be claimed — the rest were already invoiced or changed by another request. Refresh and try again.`,
+      }, { status: 409 })
     }
   }
 

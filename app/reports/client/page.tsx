@@ -8,6 +8,7 @@ import {
   FileText, TrendingUp, TrendingDown, Eye, Search, Download,
   Globe, BarChart3, Star, Activity, CheckCircle, RefreshCw, AlertTriangle,
 } from 'lucide-react'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 interface Company {
   id: string
@@ -76,9 +77,12 @@ export default function ClientReportsPage() {
   const [bindingLoaded, setBindingLoaded] = useState(false)
 
   useEffect(() => {
-    fetch('/api/crm/companies?limit=500')
-      .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (Array.isArray(data)) setCompanies(data.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))) })
+    // AUDIT.md #445 — raw fetch() with a hardcoded limit=500 against a
+    // cursor-paginated route silently dropped companies past that page
+    // (same bug class as #206/#151); fetchAllPages() follows the cursor
+    // to completion instead.
+    fetchAllPages<{ id: string; name: string }>('/api/crm/companies')
+      .then(data => { if (Array.isArray(data)) setCompanies(data.map(c => ({ id: c.id, name: c.name }))) })
       .catch(() => {/* non-fatal */})
   }, [])
 

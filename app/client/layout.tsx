@@ -70,11 +70,24 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   async function markNotificationRead(id: string) {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
-    fetch('/api/portal-clients/notifications', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [id], read: true }),
-    }).catch(() => {/* best-effort */})
+    // AUDIT.md #473 — this used to fire-and-forget with a bare
+    // `.catch(() => {})`: no `res.ok` check and no revert on failure, so a
+    // failed PATCH left the client believing a notification was read (bell
+    // badge cleared) while it silently reappeared unread on next load, with
+    // no explanation. Revert the optimistic flip whenever the request
+    // doesn't actually succeed.
+    try {
+      const res = await fetch('/api/portal-clients/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [id], read: true }),
+      })
+      if (!res.ok) {
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: false } : n))
+      }
+    } catch {
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: false } : n))
+    }
   }
 
   const unreadCount = notifications.filter(n => !n.read).length

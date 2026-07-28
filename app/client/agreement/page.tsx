@@ -5,6 +5,7 @@ import { useClientCompany } from '@/lib/useClientCompany'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   FileText, Download, Calendar, DollarSign, Clock,
   CheckCircle, User,
@@ -39,13 +40,17 @@ export default function ClientAgreementPage() {
 
   useEffect(() => {
     if (!company) { requestAnimationFrame(() => setLoading(false)); return }
-    fetch(`/api/contracts?company=${encodeURIComponent(company)}`)
-      .then(r => r.ok ? r.json() : [])
-      .then((data: Contract[]) => {
-        const active = (Array.isArray(data) ? data : []).find(
+    // AUDIT.md #474 — was a raw (non-paginated) fetch, same bug class as
+    // #206/#212/#317: a company with >100 contracts would silently see only
+    // the first page, and the "active" search below would miss any active
+    // contract sitting past that cutoff. fetchAllPages follows the cursor
+    // until every contract is in hand.
+    fetchAllPages<Contract>(`/api/contracts?company=${encodeURIComponent(company)}`)
+      .then((data) => {
+        const active = data.find(
           c => ['Active', 'Signed by Client', 'Fully Executed'].includes(c.status)
         )
-        setContract(active ?? data?.[0] ?? null)
+        setContract(active ?? data[0] ?? null)
       })
       .catch(() => toast('Failed to load agreement', 'error'))
       .finally(() => setLoading(false))

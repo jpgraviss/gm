@@ -266,7 +266,11 @@ export default function ClientPortalPage() {
     // their newest 100 tickets, same bug class as #206/#212.
     fetchAllPages<ClientTicket>(`/api/tickets?company=${encodeURIComponent(company)}`)
       .then(data => setExistingTickets(data))
-      .catch(() => {/* non-fatal */})
+      // AUDIT.md #475 — this used to fail silently with no toast, unlike
+      // the initial company-data load's explicit per-source error toasts
+      // (see the Promise.all above) — a network error read as "no support
+      // tickets" (a genuine empty state) instead of an unknown failure.
+      .catch(() => toast('Failed to load support tickets', 'error'))
       .finally(() => setTicketsLoading(false))
   }, [activeTab, company])
 
@@ -283,7 +287,12 @@ export default function ClientPortalPage() {
         if (Array.isArray(pending)) setPendingPosts(pending)
         if (Array.isArray(published)) setPublishedPosts(published.slice(0, 10))
       })
-      .catch(() => {/* non-fatal */})
+      // AUDIT.md #475 — this used to fail silently with no toast, unlike
+      // the initial company-data load's explicit per-source error toasts
+      // (see the Promise.all above) — a network error read as "no pending/
+      // published posts" (a genuine empty state) instead of an unknown
+      // failure.
+      .catch(() => toast('Failed to load social posts', 'error'))
       .finally(() => setSocialLoading(false))
   }, [activeTab, company])
 

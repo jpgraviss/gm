@@ -554,13 +554,28 @@ export default function AutomationPage() {
   async function toggleStatus(id: string) {
     const a = automations.find(x => x.id === id)
     if (!a) return
+    const prevStatus = a.status
     const newStatus: AutoStatus = a.status === 'Paused' ? 'Active' : 'Paused'
     setAutomations(prev => prev.map(x => x.id === id ? { ...x, status: newStatus } : x))
-    await fetch(`/api/automations/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
-    })
+    // AUDIT.md #424 — this previously never checked res.ok and never
+    // reverted on failure, unlike deleteAutomation/handleNewAutomation in
+    // this same file — a failed PATCH left the badge flipped in the UI
+    // (Active/Paused) while the server-side status silently stayed
+    // unchanged, until the next full reload quietly corrected it.
+    try {
+      const res = await fetch(`/api/automations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!res.ok) {
+        setAutomations(prev => prev.map(x => x.id === id ? { ...x, status: prevStatus } : x))
+        toast('Failed to update automation status', 'error')
+      }
+    } catch {
+      setAutomations(prev => prev.map(x => x.id === id ? { ...x, status: prevStatus } : x))
+      toast('Failed to update automation status', 'error')
+    }
   }
 
   async function deleteAutomation(id: string) {

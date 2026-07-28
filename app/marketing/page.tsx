@@ -562,13 +562,23 @@ function BroadcastEditor({
                             const subjectMatch = text.match(/^Subject:\s*(.+)/m)
                             if (subjectMatch) {
                               setDraft(d => ({ ...d, subject: subjectMatch[1].trim() }))
+                              // AUDIT.md #423 — this toasted success whenever the
+                              // API call itself succeeded, regardless of whether a
+                              // subject was actually parsed out of the response. A
+                              // live LLM reply not matching the exact `Subject: ...`
+                              // format left the subject field silently unchanged
+                              // while the user was told it worked. The response's
+                              // `source` (ollama/groq/gemini/cerebras/template) was
+                              // also previously discarded, so a template fallback
+                              // (no AI provider reachable) looked identical to a
+                              // real AI draft, violating the app's established
+                              // "always label AI vs template" convention.
+                              toast(`Subject drafted ${aiSourceLabel(data.source)}`, data.source === 'template' ? 'info' : 'success')
+                            } else {
+                              toast("Couldn't parse a subject from the AI response — try again", 'error')
                             }
-                            // AUDIT — the response's `source` (ollama/groq/gemini/
-                            // cerebras/template) was discarded, so a template
-                            // fallback (no AI provider reachable) looked
-                            // identical to a real AI draft, violating the app's
-                            // established "always label AI vs template" convention.
-                            toast(`Subject drafted ${aiSourceLabel(data.source)}`, data.source === 'template' ? 'info' : 'success')
+                          } else {
+                            toast('Failed to draft subject', 'error')
                           }
                         } catch { /* ignore */ }
                         setAiDraftLoading(false)

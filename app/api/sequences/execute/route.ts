@@ -527,9 +527,15 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
       const bcc = step.bcc?.length ? step.bcc : undefined
 
       // ── 5. Email threading ─────────────────────────────────────────────
-      // Retrieve existing message IDs from enrollment for threading
+      // AUDIT.md #434 — thread_mode was selected above but never read again;
+      // every follow-up was unconditionally threaded under the first
+      // message regardless of the Settings toggle. Defaults to true (same
+      // as the column default and the Settings UI's `?? true` fallback) so
+      // an enrollment/sequence predating this column keeps its existing
+      // threaded behavior.
+      const threadMode = seq.thread_mode ?? true
       const existingMessageIds: string[] = enrollment.message_ids ?? []
-      const firstMessageId = existingMessageIds.length > 0 ? existingMessageIds[0] : undefined
+      const firstMessageId = threadMode && existingMessageIds.length > 0 ? existingMessageIds[0] : undefined
       const inReplyTo = firstMessageId ? `<${firstMessageId}>` : undefined
       const references = firstMessageId ? `<${firstMessageId}>` : undefined
 

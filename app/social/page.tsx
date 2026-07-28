@@ -349,6 +349,14 @@ interface AvailAccount { platform: SocialPlatform; externalId: string; label: st
 
 function SocialConnectionsModal({ onClose }: { onClose: () => void }) {
   const { toast } = useToast()
+  const { user } = useAuth()
+  // AUDIT.md #427 — the disconnect routes (both /api/social/connections
+  // DELETE and /api/integrations/linkedin/disconnect) require 'Leadership'
+  // server-side, but the GET populating this modal only requires 'Team
+  // Member', so a non-Leadership staffer saw a Disconnect button that
+  // always 403'd. Matches the canDeletePost pattern in this same file
+  // (#426) for gating other Leadership-only actions client-side.
+  const canDisconnect = !!user?.isAdmin || user?.role === 'Leadership' || user?.role === 'Super Admin'
   const [statuses, setStatuses] = useState<ConnStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [picker, setPicker] = useState<{ platform: SocialPlatform; accounts: AvailAccount[] } | null>(null)
@@ -394,13 +402,21 @@ function SocialConnectionsModal({ onClose }: { onClose: () => void }) {
   }
 
   async function disconnect(platform: SocialPlatform) {
-    if (platform === 'linkedin') {
-      await fetch('/api/integrations/linkedin/disconnect', { method: 'POST' }).catch(() => {})
-    } else {
-      await fetch(`/api/social/connections?platform=${platform}`, { method: 'DELETE' }).catch(() => {})
+    // AUDIT.md #427 — this previously toasted "Disconnected" unconditionally,
+    // regardless of whether the request actually succeeded. A non-Leadership
+    // caller got a 403 from the server (see canDisconnect above) and a false
+    // success toast, only for the connection to reappear on the next load().
+    if (!canDisconnect) { toast('Only Leadership can manage connections', 'error'); return }
+    try {
+      const res = platform === 'linkedin'
+        ? await fetch('/api/integrations/linkedin/disconnect', { method: 'POST' })
+        : await fetch(`/api/social/connections?platform=${platform}`, { method: 'DELETE' })
+      if (!res.ok) { toast('Failed to disconnect', 'error'); return }
+      toast('Disconnected', 'success')
+      load()
+    } catch {
+      toast('Failed to disconnect', 'error')
     }
-    toast('Disconnected', 'success')
-    load()
   }
 
   return (
@@ -444,7 +460,11 @@ function SocialConnectionsModal({ onClose }: { onClose: () => void }) {
                     <p className="text-[11px] text-gray-500 truncate">{s.connected ? s.accountLabel : 'Not connected'}</p>
                   </div>
                   {s.connected ? (
-                    <button onClick={() => disconnect(s.platform)} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Disconnect</button>
+                    canDisconnect ? (
+                      <button onClick={() => disconnect(s.platform)} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Disconnect</button>
+                    ) : (
+                      <span className="text-[11px] text-gray-400 italic px-1">Leadership only</span>
+                    )
                   ) : s.platform === 'linkedin' ? (
                     <a href="/api/integrations/linkedin/connect" className="text-xs font-medium px-3 py-1.5 rounded-lg text-white" style={{ background: '#015035' }}>Connect</a>
                   ) : (

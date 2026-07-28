@@ -27,6 +27,7 @@ interface UnmatchedContact {
   contactId: string
   contactName: string
   companyNameOnFile: string
+  ambiguous?: boolean
 }
 
 async function computeMatches(db: ReturnType<typeof createServiceClient>) {
@@ -41,10 +42,17 @@ async function computeMatches(db: ReturnType<typeof createServiceClient>) {
     .select('id, name')
   if (companiesErr) throw new Error(companiesErr.message || 'Failed to fetch companies')
 
-  const companyByName = new Map<string, { id: string; name: string }>()
+  // AUDIT #513 — group by name instead of keeping only the last company
+  // inserted per name, so a real duplicate-name collision (no unique
+  // constraint on crm_companies.name, see #243/#236) can be detected and
+  // routed to `unmatched` instead of silently picking an arbitrary one.
+  const companiesByName = new Map<string, { id: string; name: string }[]>()
   for (const c of companies ?? []) {
     const key = (c.name ?? '').toLowerCase().trim()
-    if (key) companyByName.set(key, { id: c.id, name: c.name })
+    if (!key) continue
+    const list = companiesByName.get(key) ?? []
+    list.push({ id: c.id, name: c.name })
+    companiesByName.set(key, list)
   }
 
   const matches: MatchPreview[] = []
@@ -53,20 +61,21 @@ async function computeMatches(db: ReturnType<typeof createServiceClient>) {
   for (const contact of contacts ?? []) {
     const companyNameOnFile = (contact.company_name ?? '').trim()
     const key = companyNameOnFile.toLowerCase()
-    const match = key ? companyByName.get(key) : undefined
-    if (match) {
+    const candidates = key ? companiesByName.get(key) : undefined
+    if (candidates?.length === 1) {
       matches.push({
         contactId: contact.id,
         contactName: contact.full_name || '(no name)',
         companyNameOnFile,
-        matchedCompanyId: match.id,
-        matchedCompanyName: match.name,
+        matchedCompanyId: candidates[0].id,
+        matchedCompanyName: candidates[0].name,
       })
     } else {
       unmatched.push({
         contactId: contact.id,
         contactName: contact.full_name || '(no name)',
         companyNameOnFile,
+        ambiguous: (candidates?.length ?? 0) > 1,
       })
     }
   }

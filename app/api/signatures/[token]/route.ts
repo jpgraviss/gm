@@ -179,6 +179,13 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
       const internalToken = crypto.randomUUID()
       const internalId = `sig-${Date.now()}`
 
+      // AUDIT #515 — this insert never set document_hash, so the mismatch
+      // check above (`if (sigReq.document_hash && contract)`) silently
+      // skipped for every internal countersignature: a contract edited
+      // between the client's signature and the internal countersignature
+      // went undetected, exactly the scenario #497 was built to catch, just
+      // uncovered for this one signer type. Same contract row already
+      // fetched above, same helper #497's client-facing request uses.
       await db
         .from('signature_requests')
         .insert({
@@ -189,6 +196,7 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
           signer_name: internalSignerName,
           type: 'internal',
           status: 'pending',
+          document_hash: contract ? computeContractDocumentHash(contract) : null,
         })
 
       // Send signing email to the internal signer

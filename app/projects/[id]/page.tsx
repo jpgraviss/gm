@@ -10,6 +10,7 @@ import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import type { Project, ProjectStatus, AppTask, AppTaskStatus, TaskPriority } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
+import { useAuth } from '@/contexts/AuthContext'
 import FileUpload from '@/components/ui/FileUpload'
 import CompanySelect from '@/components/ui/CompanySelect'
 import ConfirmModal from '@/components/ui/ConfirmModal'
@@ -656,6 +657,7 @@ export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuth()
   const allTeamMembers = useTeamMembers()
   const [project, setProject] = useState<Project | null>(null)
   const [tasks, setTasks] = useState<AppTask[]>([])
@@ -823,8 +825,17 @@ export default function ProjectDetailPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newTask),
-    }).then(res => {
+    }).then(async res => {
       if (!res.ok) throw new Error('Failed')
+      // AUDIT #509 — same class of bug as #460 (app/tasks/page.tsx): the
+      // server always self-generates its own id (`task-${Date.now()}`,
+      // ignoring body.id), so the optimistic id above never matches what's
+      // actually persisted. Swap the optimistic entry for the server's real
+      // returned row so subsequent PATCH/DELETE calls target a real,
+      // existing id instead of 404ing and getting silently filtered out of
+      // local state by the "not found" recovery path.
+      const saved = await res.json()
+      setTasks(prev => prev.map(t => t.id === newTask.id ? (saved as AppTask) : t))
     }).catch(() => {
       setTasks(prev => prev.filter(t => t.id !== newTask.id))
       toast('Failed to create task', 'error')
@@ -917,12 +928,12 @@ export default function ProjectDetailPage() {
       id: `note-${Date.now()}`,
       text: noteText.trim(),
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      author: 'You',
+      author: user?.name || user?.email || 'You',
     }
     updateProject({ notes: [...(project.notes ?? []), newNote] })
     setNoteText('')
     setShowNoteForm(false)
-  }, [project, noteText, updateProject])
+  }, [project, noteText, updateProject, user])
 
   const deleteNote = useCallback((noteId: string) => {
     if (!project) return

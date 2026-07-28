@@ -67,6 +67,11 @@ export const DEFAULT_PIPELINES: Pipeline[] = [
  * so that's what's returned here.
  */
 export async function getFirstPipelineStageName(db: SupabaseClient): Promise<string> {
+  const pipeline = await getClientAcquisitionPipeline(db)
+  return pipeline?.stages?.[0]?.name ?? 'Lead'
+}
+
+async function getClientAcquisitionPipeline(db: SupabaseClient): Promise<Pipeline | undefined> {
   const { data } = await db
     .from('app_settings')
     .select('pipelines')
@@ -76,6 +81,15 @@ export async function getFirstPipelineStageName(db: SupabaseClient): Promise<str
   const stored = data?.pipelines as Pipeline[] | null
   const pipelines = Array.isArray(stored) && stored.length > 0 ? stored : DEFAULT_PIPELINES
 
-  const pipeline = pipelines.find(p => p.id === 'client-acquisition') ?? pipelines[0]
-  return pipeline?.stages?.[0]?.name ?? 'Lead'
+  return pipelines.find(p => p.id === 'client-acquisition') ?? pipelines[0]
+}
+
+// AUDIT #516 — the automation builder/generator used to hardcode a stage
+// list (including 'Negotiation', which doesn't actually exist) instead of
+// reading the real, saved pipeline config, the same drift-prone pattern
+// #501 already fixed for the forms editor. Returns just the stage names, in
+// order, for whatever "Create Deal"/"Deal Stage Changed" dropdowns need.
+export async function getPipelineStageNames(db: SupabaseClient): Promise<string[]> {
+  const pipeline = await getClientAcquisitionPipeline(db)
+  return pipeline?.stages?.map(s => s.name) ?? []
 }

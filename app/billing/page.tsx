@@ -265,6 +265,35 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
   const [importing, setImporting] = useState(false)
   const [preview, setPreview] = useState(false)
 
+  // AUDIT #511 — unlike CreateInvoiceModal (fixed under #421 to require a
+  // real CompanySelect-backed companyId), this importer used to send only a
+  // raw free-text company string with no companyId, so a typo'd/differently-
+  // cased company name created an invoice invisible to that client's own
+  // portal (GET /api/invoices?company= does an exact, case-sensitive match).
+  // Real companies are resolved by exact case-insensitive name at import
+  // time — no fuzzy matching, and an ambiguous same-name match (see #513)
+  // is treated as no match, same conservative convention already
+  // established in app/api/crm/contacts/fix-company/route.ts.
+  const [companiesByName, setCompaniesByName] = useState<Map<string, string>>(new Map())
+  useEffect(() => {
+    fetchAllPages<{ id: string; name: string }>('/api/crm/companies')
+      .then(companies => {
+        const counts = new Map<string, number>()
+        const byName = new Map<string, string>()
+        for (const c of companies) {
+          const key = (c.name ?? '').toLowerCase().trim()
+          if (!key) continue
+          counts.set(key, (counts.get(key) ?? 0) + 1)
+          byName.set(key, c.id)
+        }
+        for (const [key, count] of counts) {
+          if (count > 1) byName.delete(key)
+        }
+        setCompaniesByName(byName)
+      })
+      .catch(() => {})
+  }, [])
+
   const fields = ['company', 'amount', 'status', 'serviceType', 'issuedDate', 'dueDate', 'paidDate'] as const
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -324,6 +353,7 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             company,
+            companyId: companiesByName.get(company.toLowerCase().trim()) ?? null,
             amount,
             status: getValue('status') || 'Pending',
             serviceType: getValue('serviceType') || 'Other',

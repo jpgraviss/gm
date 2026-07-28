@@ -124,6 +124,16 @@ export const POST = withErrorHandler('contracts/[id]/addendums POST', async (req
   return NextResponse.json(mapAddendum(data), { status: 201 })
 })
 
+// AUDIT.md #466 — content fields (title/description/change fields) may only
+// be edited while the addendum is still Draft: once it's been Sent, a client
+// may already be looking at the version they were sent, so silently
+// rewriting it out from under them would be worse than the original "typo
+// sits there forever" problem this fix addresses.
+const CONTENT_FIELDS = [
+  'title', 'description', 'changeType', 'valueDelta',
+  'termDeltaMonths', 'scopeAdded', 'scopeRemoved', 'effectiveDate',
+] as const
+
 export const PATCH = withErrorHandler('contracts/[id]/addendums PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
@@ -138,11 +148,36 @@ export const PATCH = withErrorHandler('contracts/[id]/addendums PATCH', async (r
   }
 
   const result = validate(body, {
-    status: { type: 'string', enum: [...ADDENDUM_STATUSES] },
+    status:          { type: 'string', enum: [...ADDENDUM_STATUSES] },
+    title:           { type: 'string', maxLength: 300 },
+    description:     { type: 'string', maxLength: 5000 },
+    changeType:      { type: 'string', enum: [...CHANGE_TYPES] },
+    valueDelta:      { type: 'number', min: -100_000_000, max: 100_000_000 },
+    termDeltaMonths: { type: 'number', min: -120, max: 120 },
+    scopeAdded:      { type: 'string', maxLength: 5000 },
+    scopeRemoved:    { type: 'string', maxLength: 5000 },
+    effectiveDate:   { type: 'string', maxLength: 30 },
   })
   if (!result.valid) return validationError(result.error)
 
   const db = createServiceClient()
+
+  const isContentEdit = CONTENT_FIELDS.some(f => body[f] !== undefined)
+
+  if (isContentEdit) {
+    const { data: existing, error: exErr } = await db
+      .from('contract_addendums')
+      .select('status')
+      .eq('id', addendumId)
+      .eq('contract_id', contractId)
+      .single()
+    if (exErr || !existing) {
+      return NextResponse.json({ error: 'Addendum not found' }, { status: 404 })
+    }
+    if (existing.status !== 'Draft') {
+      return NextResponse.json({ error: 'Only Draft addendums can be edited' }, { status: 400 })
+    }
+  }
 
   const update: Record<string, unknown> = {}
   if (body.status !== undefined) {
@@ -151,6 +186,14 @@ export const PATCH = withErrorHandler('contracts/[id]/addendums PATCH', async (r
       update.sent_at = new Date().toISOString()
     }
   }
+  if (body.title !== undefined) update.title = body.title
+  if (body.description !== undefined) update.description = body.description
+  if (body.changeType !== undefined) update.change_type = body.changeType
+  if (body.valueDelta !== undefined) update.value_delta = body.valueDelta
+  if (body.termDeltaMonths !== undefined) update.term_delta_months = body.termDeltaMonths
+  if (body.scopeAdded !== undefined) update.scope_added = body.scopeAdded
+  if (body.scopeRemoved !== undefined) update.scope_removed = body.scopeRemoved
+  if (body.effectiveDate !== undefined) update.effective_date = body.effectiveDate
 
   const { data, error } = await db
     .from('contract_addendums')
@@ -210,4 +253,46 @@ export const PATCH = withErrorHandler('contracts/[id]/addendums PATCH', async (r
   }
 
   return NextResponse.json(updatedContract ? { ...mapped, contract: updatedContract } : mapped)
+})
+
+// AUDIT.md #466 — deletion (like content edits above) is restricted to
+// Draft-status addendums: identified via a ?addendumId= query param, matching
+// this file's existing convention of scoping every write to `contract_id`
+// as well so an id can't be targeted against the wrong contract.
+export const DELETE = withErrorHandler('contracts/[id]/addendums DELETE', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+  const { id: contractId } = await params
+  const addendumId = req.nextUrl.searchParams.get('addendumId')
+
+  if (!addendumId) {
+    return NextResponse.json({ error: 'addendumId is required' }, { status: 400 })
+  }
+
+  const db = createServiceClient()
+
+  const { data: existing, error: exErr } = await db
+    .from('contract_addendums')
+    .select('status')
+    .eq('id', addendumId)
+    .eq('contract_id', contractId)
+    .single()
+  if (exErr || !existing) {
+    return NextResponse.json({ error: 'Addendum not found' }, { status: 404 })
+  }
+  if (existing.status !== 'Draft') {
+    return NextResponse.json({ error: 'Only Draft addendums can be deleted' }, { status: 400 })
+  }
+
+  const { error } = await db
+    .from('contract_addendums')
+    .delete()
+    .eq('id', addendumId)
+    .eq('contract_id', contractId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return NextResponse.json({ success: true })
 })

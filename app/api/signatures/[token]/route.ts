@@ -3,6 +3,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import crypto from 'crypto'
 import { logAudit } from '@/lib/audit'
+import { computeContractDocumentHash } from '@/lib/contract-hash'
 
 export const GET = withErrorHandler('signatures/[token] GET', async (
   _req,
@@ -89,6 +90,32 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
     return NextResponse.json({ error: 'Signature request has expired' }, { status: 400 })
   }
 
+  // Fetch the contract's current terms — reused below both to verify the
+  // document hash and (for a client signature) to look up the internal
+  // signer's service type, so this is the single fetch for both purposes.
+  const { data: contract } = await db
+    .from('contracts')
+    .select('company, value, service_type, items, notes, start_date, end_date')
+    .eq('id', sigReq.contract_id)
+    .single()
+
+  // AUDIT.md #497 — document_hash was computed once at request creation but
+  // never re-verified at signing time, so a contract edited after the sign
+  // link went out could be silently signed under its old, already-sent
+  // terms while the client (correctly) sees and signs the live current
+  // values. Recompute the identical hash now and block signing on a
+  // mismatch rather than let that happen unnoticed. A null document_hash
+  // (pre-#497 requests, or the contract fetch failing at creation time)
+  // has nothing to compare against, so it's not treated as a mismatch.
+  if (sigReq.document_hash && contract) {
+    const currentHash = computeContractDocumentHash(contract)
+    if (currentHash !== sigReq.document_hash) {
+      return NextResponse.json({
+        error: 'This contract’s terms have changed since this signature request was sent. Please request a new signature link.',
+      }, { status: 409 })
+    }
+  }
+
   // AUDIT #496 — conditional on status still being 'pending', matching the
   // atomic-claim pattern #81 established on
   // /api/reputation/review-request/[token]. The status/expiry checks above
@@ -138,13 +165,8 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
   // If a client just signed, auto-create an internal signature request
   if (sigReq.type === 'client') {
     try {
-      // Look up the contract's service_type
-      const { data: contract } = await db
-        .from('contracts')
-        .select('company, value, service_type')
-        .eq('id', sigReq.contract_id)
-        .single()
-
+      // Reuses the contract row already fetched above for the document-hash
+      // check — same row, no need for a second query.
       // Determine internal signer based on service type
       const serviceType = (contract?.service_type || '').toLowerCase()
       const isSales = serviceType.includes('sales')

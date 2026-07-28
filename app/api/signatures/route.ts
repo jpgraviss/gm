@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import crypto from 'crypto'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
+import { computeContractDocumentHash } from '@/lib/contract-hash'
 
 export const GET = withErrorHandler('signatures GET', async (req) => {
   const denied = await requireRole(req, 'Team Member')
@@ -82,18 +83,10 @@ export const POST = withErrorHandler('signatures POST', async (req) => {
     .eq('id', contractId)
     .single()
 
-  // Generate SHA-256 hash of the contract terms for audit trail
-  const documentHash = contract
-    ? crypto.createHash('sha256').update(JSON.stringify({
-        company: contract.company,
-        value: contract.value,
-        service_type: contract.service_type,
-        items: contract.items,
-        notes: contract.notes,
-        start_date: contract.start_date,
-        end_date: contract.end_date,
-      })).digest('hex')
-    : null
+  // Generate SHA-256 hash of the contract terms for audit trail. Reused
+  // verbatim at signing time (app/api/signatures/[token]/route.ts PATCH,
+  // AUDIT.md #497) to detect a contract edited after this request was sent.
+  const documentHash = contract ? computeContractDocumentHash(contract) : null
 
   // Store the document hash on the signature request
   if (documentHash) {

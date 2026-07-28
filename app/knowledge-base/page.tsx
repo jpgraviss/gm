@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   Search, BookOpen, Rocket, Users, TrendingUp, Megaphone, Settings2,
   CreditCard, Plug, ShieldCheck, Plus, X, Eye, EyeOff, Trash2, Tag,
@@ -101,7 +102,7 @@ function EditorPanel({
 }: {
   article: Article | null
   onClose: () => void
-  onSave: (data: { title: string; body: string; category: string; tags: string[]; status: string }, id?: string) => void
+  onSave: (data: { title: string; body: string; category: string; tags: string[]; status: string; author?: string | null }, id?: string) => void
   onDelete: (id: string) => void
 }) {
   const [title, setTitle] = useState(article?.title ?? '')
@@ -111,8 +112,14 @@ function EditorPanel({
   const [tagInput, setTagInput] = useState('')
   const [tags, setTags] = useState<string[]>(article?.tags ?? [])
   const [previewMode, setPreviewMode] = useState(false)
+  const { user } = useAuth()
 
   const canSave = title.trim().length > 0
+  // AUDIT #531 — no call site ever sent `author`, despite the API/UI fully
+  // supporting one, so every article's byline was permanently blank.
+  // Preserve an existing article's author on edit; default to the signed-in
+  // user's name for a new article, matching #519's pattern.
+  const author = article?.author ?? user?.name ?? user?.email ?? null
 
   function addTag() {
     const t = tagInput.trim().toLowerCase()
@@ -245,7 +252,7 @@ function EditorPanel({
               Cancel
             </button>
             <button
-              onClick={() => canSave && onSave({ title: title.trim(), body, category, tags, status }, article?.id)}
+              onClick={() => canSave && onSave({ title: title.trim(), body, category, tags, status, author }, article?.id)}
               disabled={!canSave}
               className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-opacity disabled:opacity-40"
               style={{ background: '#015035' }}
@@ -381,7 +388,7 @@ export default function KnowledgeBasePage() {
     } catch { /* keep the locally-known article */ }
   }
 
-  async function handleSave(data: { title: string; body: string; category: string; tags: string[]; status: string }, id?: string) {
+  async function handleSave(data: { title: string; body: string; category: string; tags: string[]; status: string; author?: string | null }, id?: string) {
     try {
       const url = id ? `/api/knowledge-base/${id}` : '/api/knowledge-base'
       const method = id ? 'PATCH' : 'POST'

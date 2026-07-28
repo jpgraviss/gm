@@ -145,6 +145,16 @@ async function processInbox(
       id: ticketId,
       subject,
       company: matchedCompany || 'Unknown',
+      // AUDIT #526 — never set, so mapTicket() always returned
+      // contactName: '' for email-imported tickets. app/tickets/page.tsx
+      // uses `msg.author === ticket.contactName` to decide client-styling
+      // (gray) vs. staff-reply styling (green) — with contactName always
+      // '', the client's own first message never matched and rendered as
+      // if staff had already replied. Also fed the Contact-field display,
+      // contact-name search, and the #486 reply-notification's preferred
+      // (contactEmail) lookup, all of which silently degraded without this.
+      contact_email: senderEmail || null,
+      contact_name: senderName || senderEmail || null,
       status: 'Open',
       priority: 'Medium',
       source: 'Email',

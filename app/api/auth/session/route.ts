@@ -30,7 +30,7 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
 
   const { data: teamRow } = await db
     .from('team_members')
-    .select('id, email, name, role, is_admin, status')
+    .select('id, email, name, role, is_admin, status, access_schedule')
     .ilike('email', email)
     .maybeSingle()
 
@@ -40,6 +40,27 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
   // for a fresh gravhub-auth session.
   if (teamRow && teamRow.status !== 'active') {
     return NextResponse.json({ error: 'Your account is not active. Contact an administrator.' }, { status: 403 })
+  }
+
+  // AUDIT.md #533 — mirrors the access_schedule enforcement already in
+  // lib/rbac.ts's getCurrentUser() (#208), lib/admin-auth.ts's
+  // requireAdmin(), app/api/auth/google-verify/route.ts (#505), and this
+  // same login's own 2fa-verify route. This route mints/reissues the
+  // gravhub-auth cookie for both magic-link login and every routine
+  // Supabase token-refresh, so without this a staff member mid-scheduled-
+  // removal could still get a fresh valid session cookie here (when 2FA is
+  // Optional/Disabled) even though every requireRole/requireAdmin call
+  // would reject them on the very next request.
+  if (teamRow) {
+    const schedule = teamRow.access_schedule as { removeAccessOn?: string; reinstateOn?: string } | null
+    if (schedule?.removeAccessOn) {
+      const now = Date.now()
+      const removeAt = new Date(schedule.removeAccessOn).getTime()
+      const reinstateAt = schedule.reinstateOn ? new Date(schedule.reinstateOn).getTime() : null
+      if (removeAt <= now && (!reinstateAt || reinstateAt > now)) {
+        return NextResponse.json({ error: 'Your access is currently restricted.' }, { status: 403 })
+      }
+    }
   }
 
   // AUDIT.md #207 — Session Timeout previously had zero effect.

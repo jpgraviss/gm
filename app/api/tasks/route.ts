@@ -5,8 +5,10 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { TASK_DEPARTMENTS, departmentForUnit } from '@/lib/task-department'
 
+// Exported so app/api/tasks/[id]/route.ts's PATCH can return the same
+// camelCase shape GET/POST already do (AUDIT #537).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapTask(row: any) {
+export function mapTask(row: any) {
   return {
     id:              row.id,
     title:           row.title,

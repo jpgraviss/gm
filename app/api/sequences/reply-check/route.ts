@@ -97,13 +97,25 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
 
         // If thread has more messages than we sent, there is a reply
         if (thread.messages.length > messageIds.length) {
-          replies++
-
-          // Update enrollment: unenroll due to reply
-          await db
+          // AUDIT #523 — atomic claim before any real side effect (activity
+          // insert, reply-rate recompute, active_count decrement, automation
+          // fire). This used to be an unconditional update, so an
+          // overlapping cron tick reprocessing the same still-`active`-per-
+          // its-own-stale-read enrollment before the first tick's write
+          // landed could double-insert a `replied` activity, double-fire
+          // `sequence_reply` (creating duplicate downstream deals/tasks),
+          // and drive `active_count` negative. Only the invocation that
+          // wins this conditional update (status still `active`) proceeds.
+          const { data: claimedRow, error: claimErr } = await db
             .from('sequence_enrollments')
             .update({ status: 'unenrolled', unenroll_reason: 'replied' })
             .eq('id', enrollment.id)
+            .eq('status', 'active')
+            .select('id')
+            .maybeSingle()
+          if (claimErr || !claimedRow) continue
+
+          replies++
 
           // Insert replied activity
           await db.from('sequence_activities').insert({

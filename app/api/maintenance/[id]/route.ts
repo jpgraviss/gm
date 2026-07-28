@@ -9,6 +9,10 @@ function mapRecord(row: any) {
   return {
     id:                 row.id,
     company:            row.company,
+    // AUDIT #538 — missing here even though the list route's mapRecord()
+    // (app/api/maintenance/route.ts) includes it and the column is written
+    // correctly by this route's own PATCH; kept the two functions in sync.
+    companyId:          row.company_id || null,
     contractId:         row.contract_id || null,
     serviceType:        row.service_type,
     startDate:          row.start_date ?? '',

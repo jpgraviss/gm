@@ -57,15 +57,16 @@ export default function ClientServiceDetailPage() {
   const router = useRouter()
   const { user } = useAuth()
   const { toast } = useToast()
-  const { company } = useClientCompany()
+  const { company, isPreview } = useClientCompany()
 
   const serviceName = REAL_SERVICE_NAMES[slug]
 
   // SEO already has a dedicated, fuller top-level route from Batch 3 —
-  // redirect there instead of duplicating it.
+  // redirect there instead of duplicating it. Preserve the preview param
+  // (#528) so this redirect doesn't silently exit preview mode.
   useEffect(() => {
-    if (slug === 'seo') router.replace('/client/seo')
-  }, [slug, router])
+    if (slug === 'seo') router.replace(isPreview ? `/client/seo?company=${encodeURIComponent(company)}` : '/client/seo')
+  }, [slug, router, isPreview, company])
 
   // Entitlement check — same real per-company source and precedence as the
   // hub (app/client/services/page.tsx), so a client can't reach a service
@@ -110,7 +111,7 @@ export default function ClientServiceDetailPage() {
 
   if (slug === 'web-design') return <WebDesignService company={company} />
   if (slug === 'social-media') return <SocialMediaService company={company} />
-  if (slug === 'sales-training') return <SalesTrainingService company={company} userEmail={user?.email} />
+  if (slug === 'sales-training') return <SalesTrainingService company={company} userEmail={user?.email} isPreview={isPreview} />
 
   return (
     <NotAvailable
@@ -478,7 +479,7 @@ interface TrainingData {
   totalInProgress: number
 }
 
-function SalesTrainingService({ company, userEmail }: { company: string; userEmail?: string }) {
+function SalesTrainingService({ company, userEmail, isPreview }: { company: string; userEmail?: string; isPreview: boolean }) {
   const { toast } = useToast()
   const [data, setData] = useState<TrainingData>({ courses: [], enrollments: [], totalCompleted: 0, totalInProgress: 0 })
   const [loading, setLoading] = useState(true)
@@ -589,7 +590,12 @@ function SalesTrainingService({ company, userEmail }: { company: string; userEma
                 // it ever renders (any userType: 'client' path outside
                 // /client/** gets sent back to /client). The real client
                 // viewer now lives at /client/courses/[id].
-                const href = enrollment ? `/client/courses/${c.id}?enrollment=${enrollment.id}` : `/client/courses/${c.id}`
+                // AUDIT #528 — append the preview param when previewing so
+                // clicking through doesn't silently exit preview mode; this
+                // is also the one page reachable this way with a real,
+                // unguarded mutation (course quiz/progress writes, #525).
+                const baseHref = enrollment ? `/client/courses/${c.id}?enrollment=${enrollment.id}` : `/client/courses/${c.id}`
+                const href = isPreview ? `${baseHref}${baseHref.includes('?') ? '&' : '?'}company=${encodeURIComponent(company)}` : baseHref
                 return (
                   <Link key={c.id} href={href} className="block px-5 py-4 hover:bg-gray-50 transition-colors">
                     <div className="flex items-start gap-3">

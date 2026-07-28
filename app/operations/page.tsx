@@ -7,6 +7,7 @@ import {
   FolderKanban, CheckSquare, Clock, CalendarDays, CalendarCheck,
   Wrench, RefreshCw, PackageCheck, Zap, ArrowRight,
 } from 'lucide-react'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 const CARDS = [
   { title: 'Projects',      href: '/projects',               icon: <FolderKanban size={20} />,  color: '#015035', description: 'Active project boards' },
@@ -44,11 +45,16 @@ export default function OperationsHub() {
   useEffect(() => {
     const { weekStart, weekEnd } = getWeekBounds()
 
+    // AUDIT #534 — these used to be raw `?limit=500`-capped fetches against
+    // cursor-paginated routes (same unfixed pattern as #151/#212/#285/#290/
+    // #338/#352), silently truncating any org exceeding 500 active
+    // projects/open tasks/time entries-in-week/renewals with no indication
+    // the count was a floor rather than the true total.
     Promise.all([
-      fetch('/api/projects?limit=500').then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch('/api/tasks?limit=500').then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch(`/api/time-entries?weekStart=${weekStart}&weekEnd=${weekEnd}&limit=500`).then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch('/api/renewals?limit=500').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetchAllPages<{ status: string }>('/api/projects').catch(() => []),
+      fetchAllPages<{ status: string }>('/api/tasks').catch(() => []),
+      fetchAllPages<{ hours?: number; minutes?: number }>(`/api/time-entries?weekStart=${weekStart}&weekEnd=${weekEnd}`).catch(() => []),
+      fetchAllPages<{ status: string; daysUntilExpiry: number }>('/api/renewals').catch(() => []),
     ]).then(([projects, tasks, timeEntries, renewals]) => {
       if (Array.isArray(projects)) {
         setActiveProjects(projects.filter((p: { status: string }) => p.status === 'In Progress').length)

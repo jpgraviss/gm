@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
-import { requirePortalClient } from '@/lib/portal-auth'
+import { requirePortalClient, blockIfPreview } from '@/lib/portal-auth'
 
 const BUCKET = 'client-files'
 const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
@@ -70,6 +70,14 @@ export const GET = withErrorHandler('files GET', async (req: NextRequest) => {
 })
 
 export const POST = withErrorHandler('files POST', async (req: NextRequest) => {
+  // AUDIT.md #535 — the client-side isPreview guard on app/client/page.tsx's
+  // upload call sites was bypassable via devtools/direct API call using the
+  // admin's own preview session, writing a real file into the real client's
+  // storage bucket. Internal staff upload tools never set this header, so
+  // they're unaffected.
+  const blocked = blockIfPreview(req)
+  if (blocked) return blocked
+
   const formData = await req.formData()
   const file = formData.get('file') as File | null
   const company = formData.get('company') as string | null

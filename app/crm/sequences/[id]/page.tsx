@@ -680,8 +680,8 @@ export default function SequenceDetailPage() {
       <Header title="CRM & Pipeline" subtitle="Companies · Contacts · Deals · Activity" />
       <div className="p-4 md:p-6 flex-1 flex flex-col bg-[#f8faf9]">
         {/* Back + Title */}
-        <div className="flex items-center gap-3 mb-1">
-          <button onClick={() => router.push('/crm/sequences')} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-1">
+          <button onClick={() => router.push('/crm/sequences')} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors self-start">
             <ChevronLeft size={18} className="text-gray-400" />
           </button>
           <div className="flex-1 min-w-0">
@@ -704,7 +704,7 @@ export default function SequenceDetailPage() {
               )}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={toggleStatus}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
@@ -729,7 +729,7 @@ export default function SequenceDetailPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-5 gap-3 mb-5 mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5 mt-4">
           {[
             { label: 'Enrolled', value: sequence.enrolledCount, icon: <Users size={14} />, color: '#3b82f6' },
             { label: 'Active', value: sequence.activeCount, icon: <Play size={12} />, color: '#10b981' },
@@ -748,12 +748,12 @@ export default function SequenceDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-gray-200 mb-5">
+        <div className="flex gap-1 border-b border-gray-200 mb-5 overflow-x-auto">
           {(['people', 'steps', 'performance', 'automate', 'settings'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-4 py-2.5 text-sm font-medium capitalize border-b-2 transition-colors ${
+              className={`px-4 py-2.5 text-sm font-medium capitalize border-b-2 transition-colors flex-shrink-0 ${
                 tab === t ? 'border-emerald-600 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -766,8 +766,8 @@ export default function SequenceDetailPage() {
         {tab === 'people' && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             {/* Actions bar */}
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-              <div className="relative flex-1 max-w-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 border-b border-gray-100">
+              <div className="relative flex-1 sm:max-w-sm">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   value={enrollSearch}
@@ -776,7 +776,7 @@ export default function SequenceDetailPage() {
                   className="w-full text-sm border border-gray-200 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
                 />
               </div>
-              <div className="flex gap-1">
+              <div className="flex gap-1 flex-wrap">
                 {(['all', 'active', 'completed'] as const).map(s => (
                   <button
                     key={s}
@@ -791,7 +791,7 @@ export default function SequenceDetailPage() {
                   </button>
                 ))}
               </div>
-              <div className="flex-1" />
+              <div className="hidden sm:block flex-1" />
               {selectedEnrollments.size > 0 && (
                 <button
                   onClick={() => setShowRemoveModal(true)}
@@ -831,6 +831,7 @@ export default function SequenceDetailPage() {
                 )}
               </div>
             ) : (
+              <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
@@ -944,6 +945,7 @@ export default function SequenceDetailPage() {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         )}
@@ -996,7 +998,7 @@ export default function SequenceDetailPage() {
                           <p className="text-sm font-semibold text-gray-900">
                             {i === 0 && step.day === 0 ? 'Send now' : `Day ${step.day}`} — {config.label}
                           </p>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                          <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
                             <button onClick={() => handleMoveStep(step.id, 'up')} disabled={i === 0} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30" title="Move up">
                               <ChevronUp size={13} className="text-gray-500" />
                             </button>
@@ -1067,6 +1069,7 @@ export default function SequenceDetailPage() {
                     <div className="px-5 py-4 border-b border-gray-100">
                       <h3 className="text-sm font-bold text-gray-900">Step Performance</h3>
                     </div>
+                    <div className="overflow-x-auto">
                     <table className="data-table w-full">
                       <thead>
                         <tr>
@@ -1091,6 +1094,7 @@ export default function SequenceDetailPage() {
                         })}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 )}
 

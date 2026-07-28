@@ -133,6 +133,19 @@ const AUDIT_SECTIONS: { key: string; label: string; prompt: string }[] = [
   },
 ]
 
+// AUDIT.md #452 — this fans out into up to 8 sections, each with up to 3
+// sequential attempts (MAX_RETRIES) capped at 45s per attempt plus backoff,
+// then a final summary call — the most LLM-call-heavy route in the
+// codebase, easily exceeding the platform's undeclared default. Matches
+// the ceiling already used by app/api/broadcasts/[id]/send/route.ts and
+// app/api/cron/route.ts (the other routes here with genuinely open-ended
+// sequential work) rather than ai/chat's single-call 60s or
+// proposals/generate's 180s. See rescueStuckAudits() in app/api/cron/
+// route.ts for the reconciliation this pairs with: if Vercel still kills
+// the function mid-run, the `audits` row is rescued out of 'running' on
+// the next cron tick instead of spinning forever.
+export const maxDuration = 300
+
 function scoreToGrade(score: number): 'A' | 'B' | 'C' | 'D' | 'F' {
   if (score >= 90) return 'A'
   if (score >= 80) return 'B'
@@ -146,7 +159,12 @@ function parseSection(text: string, label: string): AuditSectionResult {
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0])
-      const score = Math.min(100, Math.max(0, Number(parsed.score) || 50))
+      // AUDIT.md #454 — `Number(parsed.score) || 50` treated a genuine score
+      // of 0 (real Grade F) as falsy and silently rewrote it to 50 (Grade C).
+      // Number.isFinite distinguishes "parsed to a real number, including
+      // zero" from "couldn't parse" (NaN from a missing/non-numeric field).
+      const parsedScore = Number(parsed.score)
+      const score = Math.min(100, Math.max(0, Number.isFinite(parsedScore) ? parsedScore : 50))
       return {
         name: label,
         score,

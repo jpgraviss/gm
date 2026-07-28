@@ -96,7 +96,17 @@ export const PATCH = withErrorHandler('proposals/view/[token] PATCH', async (req
 
   const newStatus = action === 'accept' ? 'Accepted' : 'Declined'
 
-  const { error: updateErr } = await db
+  // AUDIT #496 — conditional on status not already being a terminal
+  // Accepted/Declined, matching the atomic-claim pattern #81 established on
+  // /api/reputation/review-request/[token]. The status check above reads a
+  // snapshot that a near-simultaneous second submission (e.g. the same
+  // proposal link opened on two devices, or a replayed request choosing
+  // "decline" after "accept" already landed) could also pass before either
+  // write lands. Only the request whose UPDATE actually claims the row
+  // (returns a row) proceeds to fire proposal_accepted/proposal_declined —
+  // otherwise two conflicting automations could double-fire for the same
+  // proposal.
+  const { data: updated, error: updateErr } = await db
     .from('proposals')
     .update({
       status: newStatus,
@@ -104,9 +114,15 @@ export const PATCH = withErrorHandler('proposals/view/[token] PATCH', async (req
       responded_date: new Date().toISOString().split('T')[0],
     })
     .eq('id', proposal.id)
+    .not('status', 'in', '(Accepted,Declined)')
+    .select()
+    .maybeSingle()
 
   if (updateErr) {
     throw new Error(updateErr?.message || 'Failed to update proposal')
+  }
+  if (!updated) {
+    return NextResponse.json({ error: 'This proposal has already been responded to' }, { status: 400 })
   }
 
   // This is the real client-facing accept/decline flow (the emailed link);

@@ -6,7 +6,7 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 import { useToast } from '@/components/ui/Toast'
 import { formatCurrency, aiSourceLabel } from '@/lib/utils'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
-import { Wand2, Loader2, X, RefreshCw } from 'lucide-react'
+import { Wand2, Loader2, X, RefreshCw, AlertTriangle } from 'lucide-react'
 
 type DateRange = '30D' | '90D' | '12M' | 'Custom'
 
@@ -70,6 +70,13 @@ export default function MarketingAnalyticsPage() {
   const [customEnd, setCustomEnd] = useState('')
   const [adsData, setAdsData] = useState<AdsAggregate | null>(null)
   const [adsLoading, setAdsLoading] = useState(false)
+  // AUDIT #449 — per-account fetch failures used to be dropped silently
+  // (`if (!res.ok) return null`), so a client with e.g. an expired OAuth
+  // token just vanished from spend/campaign totals with no indication.
+  // Mirrors the `warnings[]` pattern already used by lib/client-reports.ts
+  // / app/reports/client/page.tsx so a staff member can see which accounts
+  // were excluded instead of the totals silently under-reporting.
+  const [adsWarnings, setAdsWarnings] = useState<string[]>([])
 
   const adsDays = useMemo(() => {
     if (dateRange === '30D') return 30
@@ -93,30 +100,60 @@ export default function MarketingAnalyticsPage() {
 
       if (googleIds.length === 0 && metaIds.length === 0) {
         setAdsData(null)
+        setAdsWarnings([])
         setAdsLoading(false)
         return
       }
 
+      // AUDIT #449 — each of these used to just `return null` on a non-ok
+      // response, so a single client with e.g. an expired OAuth token
+      // silently vanished from spend/campaign totals below with no
+      // indication anything was missing. Every branch now resolves to a
+      // tagged `ok`/`error` result instead of `null` so a failure can be
+      // surfaced as a warning rather than swallowed.
       const results = await Promise.allSettled([
         ...googleIds.map(async (g) => {
-          const res = await fetch(`/api/integrations/ads/report?customerId=${encodeURIComponent(g.id)}&days=${days}`)
-          if (!res.ok) return null
-          const data = await res.json()
-          return { platform: 'google' as const, clientName: g.name, summary: data.summary, campaigns: data.campaigns ?? [] }
+          try {
+            const res = await fetch(`/api/integrations/ads/report?customerId=${encodeURIComponent(g.id)}&days=${days}`)
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}))
+              return { ok: false as const, platform: 'google' as const, clientName: g.name, error: body.error || `HTTP ${res.status}` }
+            }
+            const data = await res.json()
+            return { ok: true as const, platform: 'google' as const, clientName: g.name, summary: data.summary, campaigns: data.campaigns ?? [] }
+          } catch (err) {
+            return { ok: false as const, platform: 'google' as const, clientName: g.name, error: err instanceof Error ? err.message : String(err) }
+          }
         }),
         ...metaIds.map(async (m) => {
-          const res = await fetch(`/api/integrations/meta/report?adAccountId=${encodeURIComponent(m.id)}&days=${days}`)
-          if (!res.ok) return null
-          const data = await res.json()
-          return { platform: 'meta' as const, clientName: m.name, summary: data.summary, campaigns: data.campaigns ?? [] }
+          try {
+            const res = await fetch(`/api/integrations/meta/report?adAccountId=${encodeURIComponent(m.id)}&days=${days}`)
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}))
+              return { ok: false as const, platform: 'meta' as const, clientName: m.name, error: body.error || `HTTP ${res.status}` }
+            }
+            const data = await res.json()
+            return { ok: true as const, platform: 'meta' as const, clientName: m.name, summary: data.summary, campaigns: data.campaigns ?? [] }
+          } catch (err) {
+            return { ok: false as const, platform: 'meta' as const, clientName: m.name, error: err instanceof Error ? err.message : String(err) }
+          }
         }),
       ])
 
       let totalSpend = 0, impressions = 0, clicks = 0, conversions = 0
       const allCampaigns: AdsCampaign[] = []
+      const warnings: string[] = []
 
       for (const r of results) {
-        if (r.status !== 'fulfilled' || !r.value) continue
+        if (r.status !== 'fulfilled') {
+          warnings.push(`Ad account data unavailable: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
+          continue
+        }
+        if (!r.value.ok) {
+          const platformLabel = r.value.platform === 'google' ? 'Google Ads' : 'Meta Ads'
+          warnings.push(`${platformLabel} data unavailable for ${r.value.clientName}: ${r.value.error}`)
+          continue
+        }
         const { platform, clientName, summary, campaigns } = r.value
         if (summary) {
           totalSpend += platform === 'google' ? (summary.totalCost ?? 0) : (summary.spend ?? 0)
@@ -139,6 +176,7 @@ export default function MarketingAnalyticsPage() {
       }
 
       allCampaigns.sort((a, b) => b.cost - a.cost)
+      setAdsWarnings(warnings)
 
       setAdsData({
         totalSpend,
@@ -301,6 +339,28 @@ export default function MarketingAnalyticsPage() {
             </div>
           ))}
         </div>
+
+        {/* AUDIT #449 — surfaces ad accounts whose fetch failed instead of
+            letting them silently vanish from the totals below. Mirrors the
+            warnings[] banner pattern in app/reports/client/page.tsx. */}
+        {adsWarnings.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle size={15} className="text-amber-600" />
+              <h3 className="text-sm font-bold text-amber-800">
+                {adsWarnings.length} ad account{adsWarnings.length === 1 ? '' : 's'} failed to load — totals below may be incomplete
+              </h3>
+            </div>
+            <ul className="list-disc list-inside space-y-0.5">
+              {adsWarnings.map((w, i) => (
+                <li key={i} className="text-xs text-amber-700">{w}</li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-amber-600 mt-2">
+              Check the account&apos;s connection in Integrations — its spend and campaigns are excluded from the figures below until it loads successfully.
+            </p>
+          </div>
+        )}
 
         {/* Paid Advertising Section */}
         <div className="metric-card mb-6">

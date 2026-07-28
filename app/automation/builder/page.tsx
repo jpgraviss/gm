@@ -9,20 +9,35 @@ import {
   Clock, GitBranch, Bell, ListTodo, Activity, Trash2,
   X, Play, Pause, ZoomIn, ZoomOut, Maximize2,
   FileText, CheckCircle, ChevronRight, Check, AlertCircle, Loader2,
-  Edit3, Copy, Webhook, RefreshCw,
+  Edit3, Copy, Webhook, RefreshCw, Flag, DollarSign, LayoutTemplate, Globe,
 } from 'lucide-react'
 
+// AUDIT.md #425 — TriggerType/ActionType (and TRIGGER_TO_DB/ACTION_TO_DB
+// below) previously only covered a subset of what lib/automations-engine.ts
+// actually recognizes (TRIGGER_MAP / executeAction's switch), so loading an
+// automation created via the simple panel (app/automation/page.tsx's
+// TRIGGER_OPTIONS/ACTION_OPTIONS — the same real, non-dead sets audited
+// there) with e.g. trigger 'Renewal Date Within 90 Days' or action 'Create
+// Draft Contract' rebuilt a node with subtype undefined: its label still
+// showed (rebuilt from the raw DB string), but clicking it did nothing,
+// since NodeConfigPanel only renders when a node's subtype is truthy.
 type TriggerType =
   | 'contact_created' | 'deal_stage_changed' | 'invoice_overdue'
-  | 'contract_signed' | 'form_submitted'
+  | 'contract_signed' | 'contract_sent' | 'form_submitted'
   | 'proposal_accepted' | 'proposal_declined' | 'invoice_paid'
+  | 'renewal_90' | 'renewal_30'
   | 'webhook_received'
 
 type ActionType =
-  | 'send_email'
+  | 'send_email' | 'send_followup_email'
   | 'update_contact' | 'create_deal' | 'add_tag' | 'remove_tag' | 'rotate_owner'
   | 'create_task' | 'log_activity' | 'send_notification'
   | 'generate_proposal'
+  | 'create_draft_contract' | 'create_billing_task' | 'create_renewal_task'
+  | 'create_project_record' | 'create_maintenance_record'
+  | 'notify_sales_rep' | 'notify_finance_team' | 'notify_delivery_team' | 'notify_assigned_rep'
+  | 'log_touchpoint' | 'flag_in_dashboard' | 'update_revenue_metrics'
+  | 'apply_service_template' | 'update_client_portal' | 'escalate_7_days'
   | 'wait' | 'if_else'
 
 interface WorkflowNode {
@@ -38,10 +53,13 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string; icon: React.ReactNod
   { value: 'deal_stage_changed', label: 'Deal Stage Changed',   icon: <Briefcase size={18} />,  description: 'When a deal moves to a new stage' },
   { value: 'invoice_overdue',    label: 'Invoice Overdue',      icon: <Clock size={18} />,       description: 'When an invoice passes its due date' },
   { value: 'contract_signed',    label: 'Contract Signed',      icon: <FileText size={18} />,   description: 'When a contract is fully executed' },
+  { value: 'contract_sent',      label: 'Contract Sent',        icon: <FileText size={18} />,   description: 'When a contract is sent to the client for signature' },
   { value: 'form_submitted',     label: 'Form Submitted',       icon: <ListTodo size={18} />,   description: 'When a form submission is received' },
   { value: 'proposal_accepted',  label: 'Proposal Accepted',    icon: <CheckCircle size={18} />,description: 'When a proposal is accepted by client' },
   { value: 'proposal_declined',  label: 'Proposal Declined',    icon: <X size={18} />,          description: 'When a proposal is declined by client' },
   { value: 'invoice_paid',       label: 'Invoice Paid',         icon: <CheckCircle size={18} />,description: 'When a payment is received for an invoice' },
+  { value: 'renewal_90',         label: 'Renewal Date Within 90 Days', icon: <Clock size={18} />, description: 'When a contract is within 90 days of its renewal date' },
+  { value: 'renewal_30',         label: 'Renewal Date Within 30 Days', icon: <Clock size={18} />, description: 'When a contract is within 30 days of its renewal date' },
   { value: 'webhook_received',   label: 'Webhook Received',     icon: <Webhook size={18} />,    description: 'When an external system (Zapier, Stripe, ad platform) POSTs to a URL unique to this automation' },
 ]
 
@@ -49,7 +67,8 @@ const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: s
   {
     label: 'Communication',
     actions: [
-      { value: 'send_email',     label: 'Send Email',       icon: <Mail size={18} />,          description: 'Send an automated email' },
+      { value: 'send_email',          label: 'Send Email',          icon: <Mail size={18} />, description: 'Send an automated email' },
+      { value: 'send_followup_email', label: 'Send Follow-up Email', icon: <Mail size={18} />, description: 'Send an automated follow-up email' },
     ],
   },
   {
@@ -69,11 +88,36 @@ const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: s
     ],
   },
   {
+    label: 'Contracts & Billing',
+    actions: [
+      { value: 'create_draft_contract',    label: 'Create Draft Contract',     icon: <FileText size={18} />,     description: 'Create a draft contract record' },
+      { value: 'create_billing_task',      label: 'Create Billing Task',       icon: <ListTodo size={18} />,     description: 'Create a task for the billing/finance team' },
+      { value: 'create_renewal_task',      label: 'Create Renewal Task',       icon: <Clock size={18} />,        description: 'Create a task to handle an upcoming renewal' },
+      { value: 'create_maintenance_record', label: 'Create Maintenance Record', icon: <RefreshCw size={18} />,   description: 'Create a maintenance record for the account' },
+      { value: 'update_revenue_metrics',   label: 'Update Revenue Metrics',    icon: <DollarSign size={18} />,   description: 'Recalculate and store current revenue metrics' },
+    ],
+  },
+  {
+    label: 'Delivery & Ops',
+    actions: [
+      { value: 'create_project_record',    label: 'Create Project Record',     icon: <Briefcase size={18} />,      description: 'Create a project record for the account' },
+      { value: 'apply_service_template',   label: 'Apply Service Template',    icon: <LayoutTemplate size={18} />, description: 'Apply a matching service template to the account' },
+      { value: 'update_client_portal',     label: 'Update Client Portal',      icon: <Globe size={18} />,          description: 'Post an update notification to the client portal' },
+    ],
+  },
+  {
     label: 'Internal',
     actions: [
       { value: 'create_task',       label: 'Create Task',       icon: <ListTodo size={18} />,  description: 'Create a task for the team' },
       { value: 'log_activity',      label: 'Log Activity',      icon: <Activity size={18} />,  description: 'Log an activity in the CRM' },
+      { value: 'log_touchpoint',    label: 'Log Touchpoint',    icon: <Activity size={18} />,  description: 'Log a touchpoint on the account' },
+      { value: 'flag_in_dashboard', label: 'Flag in Dashboard', icon: <Flag size={18} />,      description: 'Flag the account for attention' },
+      { value: 'escalate_7_days',   label: 'Escalate if 7+ Days', icon: <AlertCircle size={18} />, description: 'Escalate to Leadership if untouched for 7+ days' },
       { value: 'send_notification', label: 'Send Notification', icon: <Bell size={18} />,      description: 'Notify a team member' },
+      { value: 'notify_sales_rep',      label: 'Notify Sales Rep',      icon: <Bell size={18} />, description: 'Notify the Sales team' },
+      { value: 'notify_finance_team',   label: 'Notify Finance Team',   icon: <Bell size={18} />, description: 'Notify the Billing/Finance team' },
+      { value: 'notify_delivery_team',  label: 'Notify Delivery Team',  icon: <Bell size={18} />, description: 'Notify the Delivery team' },
+      { value: 'notify_assigned_rep',   label: 'Notify Assigned Rep',   icon: <Bell size={18} />, description: 'Notify the assigned rep' },
     ],
   },
   {
@@ -90,10 +134,13 @@ const TRIGGER_TO_DB: Record<TriggerType, string> = {
   deal_stage_changed: 'Deal Stage Changed',
   invoice_overdue:    'Invoice Overdue',
   contract_signed:    'Contract Fully Executed',
+  contract_sent:      'Contract Sent',
   form_submitted:     'Form Submitted',
   proposal_accepted:  'Proposal Accepted',
   proposal_declined:  'Proposal Declined',
   invoice_paid:       'Invoice Paid',
+  renewal_90:         'Renewal Date Within 90 Days',
+  renewal_30:         'Renewal Date Within 30 Days',
   webhook_received:   'Webhook Received',
 }
 
@@ -108,16 +155,32 @@ function generateWebhookToken(): string {
 }
 
 const ACTION_TO_DB: Record<ActionType, string> = {
-  send_email:        'Send Email Reminder',
-  update_contact:    'Update Contact',
-  create_deal:       'Create Deal',
-  add_tag:           'Add Tag',
-  remove_tag:        'Remove Tag',
-  rotate_owner:      'Rotate Contact Owner',
-  create_task:       'Create Task',
-  log_activity:      'Log Activity',
-  send_notification: 'Send Notification',
-  generate_proposal: 'Generate Proposal',
+  send_email:            'Send Email Reminder',
+  send_followup_email:   'Send Follow-up Email',
+  update_contact:        'Update Contact',
+  create_deal:           'Create Deal',
+  add_tag:               'Add Tag',
+  remove_tag:            'Remove Tag',
+  rotate_owner:          'Rotate Contact Owner',
+  create_task:           'Create Task',
+  log_activity:          'Log Activity',
+  send_notification:     'Send Notification',
+  generate_proposal:     'Generate Proposal',
+  create_draft_contract:    'Create Draft Contract',
+  create_billing_task:      'Create Billing Task',
+  create_renewal_task:      'Create Renewal Task',
+  create_project_record:    'Create Project Record',
+  create_maintenance_record: 'Create Maintenance Record',
+  notify_sales_rep:      'Notify Sales Rep',
+  notify_finance_team:   'Notify Finance Team',
+  notify_delivery_team:  'Notify Delivery Team',
+  notify_assigned_rep:   'Notify Assigned Rep',
+  log_touchpoint:        'Log Touchpoint',
+  flag_in_dashboard:     'Flag in Dashboard',
+  update_revenue_metrics: 'Update Revenue Metrics',
+  apply_service_template: 'Apply Service Template',
+  update_client_portal:  'Update Client Portal',
+  escalate_7_days:       'Escalate if 7+ Days',
   wait:              'Wait',
   if_else:           'If/Else',
 }

@@ -150,7 +150,7 @@ export default function BrandKitsAdminPage() {
     <div className="flex flex-col h-full">
       <Header title="Brand Kits" subtitle="Logo, colors, tone of voice, and hashtags per client — used to steer AI-generated content" />
 
-      <div className="flex-1 overflow-y-auto p-6 max-w-3xl">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-3xl">
         <div className="flex items-center justify-end mb-5">
           <button
             onClick={() => setShowAdd(true)}

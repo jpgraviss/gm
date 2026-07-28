@@ -64,6 +64,7 @@ export const POST = withErrorHandler('crm/activities POST', async (req) => {
   const body = await req.json()
 
   const result = validate(body, {
+    id:       { type: 'string', maxLength: 200 },
     type:     { required: true, type: 'string' },
     title:    { required: true, type: 'string', maxLength: 300 },
     // Raised from 5000 — call transcripts logged as "Call Notes" activities
@@ -74,29 +75,62 @@ export const POST = withErrorHandler('crm/activities POST', async (req) => {
   if (!result.valid) return validationError(result.error)
 
   const db = createServiceClient()
+
+  // AUDIT #485 — this route used to always mint its own `act-...` id,
+  // ignoring any `id` the caller sent. app/inbox/page.tsx's "Log as
+  // Activity" flow (and the autoLogInbound/autoLogSent server paths in
+  // app/api/gmail/message and app/api/gmail/send) all rely on a stable
+  // `gmail_${messageId}` id to dedup "already logged" across reloads —
+  // silently discarding a caller-supplied id broke that dedup entirely.
+  // Honor it when present, falling back to our own mint otherwise.
+  const suppliedId = (body.id as string | undefined)?.trim()
+  const activityId = suppliedId || `act-${Date.now()}`
+
+  const activityRow = {
+    id:           activityId,
+    type:         body.type,
+    title:        body.title,
+    body:         body.body ?? null,
+    company_id:   body.companyId ?? null,
+    company_name: body.companyName ?? null,
+    contact_id:   body.contactId ?? null,
+    contact_name: body.contactName ?? null,
+    deal_id:      body.dealId ?? null,
+    user_name:    body.user ?? '',
+    timestamp:    body.timestamp ?? new Date().toISOString(),
+    duration:     body.duration ?? null,
+    outcome:      body.outcome ?? null,
+    next_step:    body.nextStep ?? null,
+    pinned:       body.pinned ?? false,
+  }
+
+  // Insert-or-ignore-on-conflict (ON CONFLICT DO NOTHING) so a caller-
+  // supplied id that already exists — e.g. the same email double-clicked
+  // "Log as Activity" for, or one already auto-logged server-side — is a
+  // safe no-op instead of a 500 from a unique-constraint violation.
   const { data, error } = await db
     .from('crm_activities')
-    .insert({
-      id:           `act-${Date.now()}`,
-      type:         body.type,
-      title:        body.title,
-      body:         body.body ?? null,
-      company_id:   body.companyId ?? null,
-      company_name: body.companyName ?? null,
-      contact_id:   body.contactId ?? null,
-      contact_name: body.contactName ?? null,
-      deal_id:      body.dealId ?? null,
-      user_name:    body.user ?? '',
-      timestamp:    body.timestamp ?? new Date().toISOString(),
-      duration:     body.duration ?? null,
-      outcome:      body.outcome ?? null,
-      next_step:    body.nextStep ?? null,
-      pinned:       body.pinned ?? false,
-    })
+    .upsert(activityRow, { onConflict: 'id', ignoreDuplicates: true })
     .select()
-    .single()
+    .maybeSingle()
   if (error) {
     throw new Error(error?.message || 'Failed to create activity')
   }
+
+  if (!data) {
+    // ignoreDuplicates skips the write and returns no row when the id
+    // already existed — fetch the existing activity so callers still get a
+    // real row back (and can treat this as the idempotent success it is).
+    const { data: existing, error: fetchErr } = await db
+      .from('crm_activities')
+      .select('*')
+      .eq('id', activityId)
+      .maybeSingle()
+    if (fetchErr || !existing) {
+      throw new Error(fetchErr?.message || 'Failed to create activity')
+    }
+    return NextResponse.json(mapActivity(existing), { status: 200 })
+  }
+
   return NextResponse.json(mapActivity(data), { status: 201 })
 })

@@ -38,34 +38,93 @@ const SOURCE_META: Record<string, { label: string; icon: React.ReactNode; color:
   chatbot:   { label: 'Chatbot',   icon: <Bot size={11} />,           color: '#0ea5e9' },
 }
 
+// AUDIT.md #489 — merges a new batch of threads (from the next `offset`
+// window) into what's already loaded, keyed by contact email. Unlike a
+// flat cursor-paginated list, a "next page" here can either introduce a
+// brand-new contact thread or add an older message to a contact already
+// on screen — in the latter case, keep whichever lastMessage is more
+// recent (matching the server's own upsertThread precedence) and sum the
+// counts, since each source row only ever appears in exactly one offset
+// window.
+function mergeThreads(existing: UnifiedThread[], incoming: UnifiedThread[]): UnifiedThread[] {
+  const byEmail = new Map<string, UnifiedThread>()
+  for (const t of existing) byEmail.set(t.contactEmail.toLowerCase(), t)
+  for (const t of incoming) {
+    const key = t.contactEmail.toLowerCase()
+    const prev = byEmail.get(key)
+    if (!prev) { byEmail.set(key, t); continue }
+    const newer = new Date(t.lastMessage.timestamp) > new Date(prev.lastMessage.timestamp) ? t : prev
+    byEmail.set(key, {
+      contactEmail: prev.contactEmail,
+      contactId: prev.contactId ?? t.contactId,
+      contactName: prev.contactName || t.contactName,
+      company: prev.company || t.company,
+      lastMessage: newer.lastMessage,
+      unreadCount: prev.unreadCount + t.unreadCount,
+      totalMessages: prev.totalMessages + t.totalMessages,
+      sources: Array.from(new Set([...prev.sources, ...t.sources])),
+    })
+  }
+  return Array.from(byEmail.values()).sort(
+    (a, b) => new Date(b.lastMessage.timestamp).getTime() - new Date(a.lastMessage.timestamp).getTime(),
+  )
+}
+
 export default function UnifiedInboxPage() {
   const { toast } = useToast()
   const { gmailToken, gmailEmail } = useAuth()
   const [threads, setThreads] = useState<UnifiedThread[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [offset, setOffset] = useState(0)
   const [search, setSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<string>('all')
   const [selected, setSelected] = useState<UnifiedThread | null>(null)
 
-  const load = useCallback(() => {
-    setLoading(true)
+  const fetchPage = useCallback((pageOffset: number) => {
     // AUDIT — gmailToken now goes in the POST body, not a query string
     // (query strings leak into logs/history/Sentry error reports).
-    const body: Record<string, unknown> = { limit: 200 }
+    const body: Record<string, unknown> = { limit: 200, offset: pageOffset }
     if (gmailToken && gmailEmail) {
       body.gmailToken = gmailToken
       body.gmailEmail = gmailEmail
     }
-    fetch('/api/inbox/unified', {
+    return fetch('/api/inbox/unified', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+    }).then(async r => {
+      if (!r.ok) throw new Error('Failed to load inbox')
+      const data = await r.json()
+      return {
+        data: Array.isArray(data) ? (data as UnifiedThread[]) : [],
+        hasMore: r.headers.get('X-Has-More') === 'true',
+      }
     })
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error('Failed to load inbox'))))
-      .then(data => { if (Array.isArray(data)) setThreads(data) })
+  }, [gmailToken, gmailEmail])
+
+  const load = useCallback(() => {
+    setLoading(true)
+    setOffset(0)
+    fetchPage(0)
+      .then(({ data, hasMore: more }) => { setThreads(data); setHasMore(more) })
       .catch(() => toast('Failed to load inbox', 'error'))
       .finally(() => setLoading(false))
-  }, [toast, gmailToken, gmailEmail])
+  }, [toast, fetchPage])
+
+  const loadMore = useCallback(() => {
+    const nextOffset = offset + 200
+    setLoadingMore(true)
+    fetchPage(nextOffset)
+      .then(({ data, hasMore: more }) => {
+        setThreads(prev => mergeThreads(prev, data))
+        setHasMore(more)
+        setOffset(nextOffset)
+      })
+      .catch(() => toast('Failed to load more conversations', 'error'))
+      .finally(() => setLoadingMore(false))
+  }, [offset, toast, fetchPage])
 
   useEffect(() => {
     // load() re-runs whenever gmailToken/gmailEmail resolve after mount, and
@@ -231,6 +290,22 @@ export default function UnifiedInboxPage() {
                     </button>
                   )
                 })}
+                {hasMore && (
+                  // AUDIT.md #489 — this endpoint merges 6 different sources
+                  // and previously silently truncated at 200 rows per
+                  // source with no indication or way to see more. `X-Has-
+                  // More` (set by the route when any source query came back
+                  // full) now drives this affordance instead.
+                  <div className="p-3 border-t border-gray-100">
+                    <button
+                      onClick={loadMore}
+                      disabled={loadingMore}
+                      className="w-full py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {loadingMore ? 'Loading…' : 'Load older conversations'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

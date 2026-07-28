@@ -9,7 +9,7 @@ import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, contractStatusColors, serviceTypeColors, formatDate } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
-import NewAddendumPanel, { type NewAddendumFormData } from '@/components/crm/NewAddendumPanel'
+import NewAddendumPanel, { type NewAddendumFormData, CHANGE_TYPES, type ChangeType } from '@/components/crm/NewAddendumPanel'
 import { ConvertToProjectModal, LinkExistingProjectModal } from '@/components/crm/ConvertOrLinkProjectPanel'
 import type { Contract, ContractStatus, Invoice, Project, Proposal, SignatureRequest } from '@/lib/types'
 import { computeMRR } from '@/lib/metrics'
@@ -52,6 +52,7 @@ interface Addendum {
 
 function ContractPanel({
   contract, onClose, onEdit, onUpdateStatus, addendums, onAddAddendum, onUpdateAddendumStatus,
+  onEditAddendum, onDeleteAddendum,
   invoices, projects, proposals, signatures, onRequestSignature, onSignInternally,
   onTerminate, onUpdateInvoice, onConvertToProject, onLinkProject,
 }: {
@@ -60,8 +61,10 @@ function ContractPanel({
   onEdit: (contract: Contract) => void
   onUpdateStatus: (id: string, status: ContractStatus) => void
   addendums: Addendum[]
-  onAddAddendum: (contractId: string, title: string, description: string) => void
+  onAddAddendum: (data: NewAddendumFormData) => void
   onUpdateAddendumStatus: (id: string, status: Addendum['status']) => void
+  onEditAddendum: (id: string, data: NewAddendumFormData) => void
+  onDeleteAddendum: (id: string) => void
   invoices: Invoice[]
   projects: Project[]
   proposals: Proposal[]
@@ -78,8 +81,55 @@ function ContractPanel({
   const [showTerminateConfirm, setShowTerminateConfirm] = useState(false)
   const [terminateReasonInput, setTerminateReasonInput] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
+  // AUDIT #466 — Draft addendums previously could never be edited or
+  // deleted once created. `editingAddendumId` set (non-null) means this same
+  // inline form is in edit mode against that addendum id instead of
+  // creating a new one; `null` while `showAddForm` is true means create mode.
+  const [editingAddendumId, setEditingAddendumId] = useState<string | null>(null)
+  const [deletingAddendumId, setDeletingAddendumId] = useState<string | null>(null)
   const [newTitle, setNewTitle] = useState('')
   const [newDesc, setNewDesc] = useState('')
+  // AUDIT #465 — this in-panel form previously only captured title/
+  // description, unlike the full NewAddendumPanel (top-nav "+ Addendum")
+  // which also captures changeType/valueDelta/termDeltaMonths/scopeAdded/
+  // scopeRemoved/effectiveDate. Since #168's auto-apply only fires when a
+  // delta is set, an addendum created here could never affect the
+  // contract's value/duration/renewal date even when Accepted. Mirror the
+  // same structured fields (and the same contextual show/hide by
+  // changeType) as NewAddendumPanel instead of inventing a new shape.
+  const [newChangeType, setNewChangeType] = useState<ChangeType>('Scope Change')
+  const [newValueDelta, setNewValueDelta] = useState('')
+  const [newTermDeltaMonths, setNewTermDeltaMonths] = useState('')
+  const [newScopeAdded, setNewScopeAdded] = useState('')
+  const [newScopeRemoved, setNewScopeRemoved] = useState('')
+  const [newEffectiveDate, setNewEffectiveDate] = useState('')
+  const showNewValue = newChangeType === 'Value Change' || newChangeType === 'Scope Change' || newChangeType === 'Other'
+  const showNewTerm  = newChangeType === 'Term Extension' || newChangeType === 'Other'
+  const showNewScope = newChangeType === 'Scope Change' || newChangeType === 'Other'
+  function resetAddendumForm() {
+    setNewTitle('')
+    setNewDesc('')
+    setNewChangeType('Scope Change')
+    setNewValueDelta('')
+    setNewTermDeltaMonths('')
+    setNewScopeAdded('')
+    setNewScopeRemoved('')
+    setNewEffectiveDate('')
+    setEditingAddendumId(null)
+  }
+
+  function startEditAddendum(a: Addendum) {
+    setNewTitle(a.title)
+    setNewDesc(a.description)
+    setNewChangeType(a.changeType ?? 'Scope Change')
+    setNewValueDelta(a.valueDelta != null ? String(a.valueDelta) : '')
+    setNewTermDeltaMonths(a.termDeltaMonths != null ? String(a.termDeltaMonths) : '')
+    setNewScopeAdded(a.scopeAdded ?? '')
+    setNewScopeRemoved(a.scopeRemoved ?? '')
+    setNewEffectiveDate(a.effectiveDate ?? '')
+    setEditingAddendumId(a.id)
+    setShowAddForm(true)
+  }
   const [showSigModal, setShowSigModal] = useState(false)
   const [sigEmail, setSigEmail] = useState('')
   const [sigName, setSigName] = useState('')
@@ -543,12 +593,97 @@ function ContractPanel({
               {/* Inline creation form */}
               {showAddForm && (
                 <div className="p-3 border border-gray-200 rounded-xl bg-gray-50 flex flex-col gap-3">
+                  {editingAddendumId && (
+                    <p className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide">Editing Draft Addendum</p>
+                  )}
                   <div>
                     <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title</label>
                     <input
                       placeholder="e.g. Scope Extension — Additional Landing Pages"
                       value={newTitle}
                       onChange={e => setNewTitle(e.target.value)}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Change Type</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {CHANGE_TYPES.map(t => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setNewChangeType(t)}
+                          className={`text-xs font-semibold py-2 px-2.5 rounded-lg border transition-colors ${
+                            newChangeType === t
+                              ? 'text-white border-transparent'
+                              : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}
+                          style={newChangeType === t ? { background: '#015035' } : {}}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {(showNewValue || showNewTerm) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {showNewValue && (
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Value Delta</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={newValueDelta}
+                            onChange={e => setNewValueDelta(e.target.value)}
+                            placeholder="e.g. 2500 or -500"
+                            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                          />
+                        </div>
+                      )}
+                      {showNewTerm && (
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Term Delta (months)</label>
+                          <input
+                            type="number"
+                            value={newTermDeltaMonths}
+                            onChange={e => setNewTermDeltaMonths(e.target.value)}
+                            placeholder="e.g. 6 or -3"
+                            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {showNewScope && (
+                    <>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Scope Added</label>
+                        <textarea
+                          rows={2}
+                          value={newScopeAdded}
+                          onChange={e => setNewScopeAdded(e.target.value)}
+                          placeholder="One per line: deliverable, page, feature…"
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Scope Removed</label>
+                        <textarea
+                          rows={2}
+                          value={newScopeRemoved}
+                          onChange={e => setNewScopeRemoved(e.target.value)}
+                          placeholder="One per line: deliverable, page, feature…"
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none bg-white"
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Effective Date</label>
+                    <input
+                      type="date"
+                      value={newEffectiveDate}
+                      onChange={e => setNewEffectiveDate(e.target.value)}
                       className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
                     />
                   </div>
@@ -566,9 +701,23 @@ function ContractPanel({
                     <button
                       onClick={() => {
                         if (newTitle.trim() && newDesc.trim()) {
-                          onAddAddendum(contract.id, newTitle.trim(), newDesc.trim())
-                          setNewTitle('')
-                          setNewDesc('')
+                          const data: NewAddendumFormData = {
+                            contractId: contract.id,
+                            title: newTitle.trim(),
+                            description: newDesc.trim(),
+                            changeType: newChangeType,
+                            valueDelta: newValueDelta.trim() ? Number(newValueDelta) : undefined,
+                            termDeltaMonths: newTermDeltaMonths.trim() ? Number(newTermDeltaMonths) : undefined,
+                            scopeAdded: newScopeAdded.trim() || undefined,
+                            scopeRemoved: newScopeRemoved.trim() || undefined,
+                            effectiveDate: newEffectiveDate || undefined,
+                          }
+                          if (editingAddendumId) {
+                            onEditAddendum(editingAddendumId, data)
+                          } else {
+                            onAddAddendum(data)
+                          }
+                          resetAddendumForm()
                           setShowAddForm(false)
                         }
                       }}
@@ -576,10 +725,10 @@ function ContractPanel({
                       className="flex-1 py-2 rounded-lg text-white text-xs font-semibold disabled:opacity-40 transition-opacity hover:opacity-90"
                       style={{ background: '#015035' }}
                     >
-                      Save as Draft
+                      {editingAddendumId ? 'Save Changes' : 'Save as Draft'}
                     </button>
                     <button
-                      onClick={() => { setShowAddForm(false); setNewTitle(''); setNewDesc('') }}
+                      onClick={() => { setShowAddForm(false); resetAddendumForm() }}
                       className="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-100 transition-colors"
                     >
                       Cancel
@@ -635,15 +784,51 @@ function ContractPanel({
                         </div>
                       )}
                       <p className="text-[11px] text-gray-500 leading-relaxed mb-2.5 line-clamp-2">{a.description}</p>
+                      {/* AUDIT #466 — a typo or accidental Draft addendum previously
+                          sat permanently since nothing could edit or delete it.
+                          Edit/delete are intentionally Draft-only, matching the
+                          API's own restriction: once Sent, a client may already be
+                          looking at that version. */}
+                      {a.status === 'Draft' && deletingAddendumId === a.id ? (
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span className="text-gray-500">Delete this draft addendum?</span>
+                          <button
+                            onClick={() => { onDeleteAddendum(a.id); setDeletingAddendumId(null) }}
+                            className="font-semibold text-red-600 bg-red-50 px-2 py-1 rounded-lg hover:bg-red-100 transition-colors"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            onClick={() => setDeletingAddendumId(null)}
+                            className="font-medium text-gray-500 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
                       <div className="flex gap-2 items-center">
                         {a.status === 'Draft' && (
-                          <button
-                            onClick={() => onUpdateAddendumStatus(a.id, 'Sent')}
-                            className="flex items-center gap-1 text-[11px] font-semibold text-white px-2.5 py-1 rounded-lg transition-opacity hover:opacity-90"
-                            style={{ background: '#015035' }}
-                          >
-                            <Send size={10} /> Send to Client
-                          </button>
+                          <>
+                            <button
+                              onClick={() => onUpdateAddendumStatus(a.id, 'Sent')}
+                              className="flex items-center gap-1 text-[11px] font-semibold text-white px-2.5 py-1 rounded-lg transition-opacity hover:opacity-90"
+                              style={{ background: '#015035' }}
+                            >
+                              <Send size={10} /> Send to Client
+                            </button>
+                            <button
+                              onClick={() => startEditAddendum(a)}
+                              className="flex items-center gap-1 text-[11px] font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg hover:bg-gray-200 transition-colors"
+                            >
+                              <Pencil size={10} /> Edit
+                            </button>
+                            <button
+                              onClick={() => setDeletingAddendumId(a.id)}
+                              className="flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg hover:bg-red-100 transition-colors"
+                            >
+                              <Trash2 size={10} /> Delete
+                            </button>
+                          </>
                         )}
                         {a.status === 'Sent' && (
                           <>
@@ -675,6 +860,7 @@ function ContractPanel({
                           <span className="text-[11px] text-red-500">Declined by client</span>
                         )}
                       </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -958,25 +1144,11 @@ export default function ContractsPage() {
     }
   }
 
-  async function addAddendum(contractId: string, title: string, description: string) {
-    try {
-      const res = await fetch(`/api/contracts/${contractId}/addendums`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast(data.error || 'Failed to create addendum', 'error')
-        return
-      }
-      setLocalAddendums(prev => [data, ...prev])
-      toast('Addendum created', 'success')
-    } catch {
-      toast('Failed to create addendum', 'error')
-    }
-  }
-
+  // AUDIT #465 — ContractPanel's in-panel "New Addendum" form now captures
+  // the same structured fields as NewAddendumPanel (see the panel's
+  // onAddAddendum call), so both entry points share this one POST handler
+  // instead of the in-panel path having its own title/description-only
+  // fetch that could never populate change_type/value_delta/etc.
   async function handleNewAddendum(data: NewAddendumFormData) {
     try {
       const res = await fetch(`/api/contracts/${data.contractId}/addendums`, {
@@ -1034,6 +1206,59 @@ export default function ContractsPage() {
       }
     } catch {
       toast('Failed to update addendum', 'error')
+    }
+  }
+
+  // AUDIT #466 — Draft addendums can now be edited in place (the API
+  // rejects this once the addendum is no longer Draft, so this always
+  // reflects the server's own restriction rather than duplicating it here).
+  async function handleEditAddendum(id: string, data: NewAddendumFormData) {
+    try {
+      const res = await fetch(`/api/contracts/${data.contractId}/addendums`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          addendumId: id,
+          title: data.title,
+          description: data.description,
+          changeType: data.changeType,
+          valueDelta: data.valueDelta,
+          termDeltaMonths: data.termDeltaMonths,
+          scopeAdded: data.scopeAdded,
+          scopeRemoved: data.scopeRemoved,
+          effectiveDate: data.effectiveDate,
+        }),
+      })
+      const updated = await res.json()
+      if (!res.ok) {
+        toast(updated.error || 'Failed to update addendum', 'error')
+        return
+      }
+      setLocalAddendums(prev => prev.map(a => a.id === id ? updated : a))
+      toast('Addendum updated', 'success')
+    } catch {
+      toast('Failed to update addendum', 'error')
+    }
+  }
+
+  // AUDIT #466 — restricted to Draft addendums server-side; the UI only
+  // ever surfaces this action for Draft rows (see ContractPanel).
+  async function handleDeleteAddendum(id: string) {
+    const contractId = localAddendums.find(a => a.id === id)?.contractId
+    if (!contractId) return
+    try {
+      const res = await fetch(`/api/contracts/${contractId}/addendums?addendumId=${id}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || 'Failed to delete addendum', 'error')
+        return
+      }
+      setLocalAddendums(prev => prev.filter(a => a.id !== id))
+      toast('Addendum deleted', 'success')
+    } catch {
+      toast('Failed to delete addendum', 'error')
     }
   }
 
@@ -1570,8 +1795,10 @@ export default function ContractsPage() {
           onEdit={c => setEditingContract(c)}
           onUpdateStatus={updateContractStatus}
           addendums={localAddendums}
-          onAddAddendum={addAddendum}
+          onAddAddendum={handleNewAddendum}
           onUpdateAddendumStatus={updateAddendumStatus}
+          onEditAddendum={handleEditAddendum}
+          onDeleteAddendum={handleDeleteAddendum}
           invoices={invoices}
           projects={projects}
           proposals={proposals}

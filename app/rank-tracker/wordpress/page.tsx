@@ -527,7 +527,7 @@ export default function WordPressSeoPage() {
             <p className="text-xs text-gray-500 max-w-sm mx-auto mb-4">
               Install the GravHub SEO plugin on client WordPress sites. Once connected, site health data and SEO scores will appear here.
             </p>
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <a
                 href="/api/wordpress/plugin/download"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white transition-opacity hover:opacity-90"
@@ -544,9 +544,9 @@ export default function WordPressSeoPage() {
             </div>
           </div>
         ) : (
-          <div className="flex gap-6">
+          <div className="flex flex-col sm:flex-row gap-6">
             {/* Sites list */}
-            <div className="w-72 flex-shrink-0 space-y-2">
+            <div className="w-full sm:w-72 flex-shrink-0 space-y-2">
               <div className="flex items-center justify-between px-1 mb-2">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
                   Connected Sites ({sites.length})
@@ -634,7 +634,7 @@ export default function WordPressSeoPage() {
               {tab === 'apikeys' && !selectedSite ? (
                 <div className="space-y-4">
                   <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                       <div>
                         <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                           <Key size={15} style={{ color: '#015035' }} /> WordPress API Keys
@@ -643,19 +643,19 @@ export default function WordPressSeoPage() {
                           Generate API keys for the GravHub SEO WordPress plugin. Enter these in the plugin settings.
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                         <input
                           type="text"
                           value={newKeyLabel}
                           onChange={e => setNewKeyLabel(e.target.value)}
                           placeholder="e.g. Graviss Marketing — main site"
-                          className="text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-gray-400 w-56"
+                          className="text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-gray-400 w-full sm:w-56"
                           onKeyDown={e => { if (e.key === 'Enter') generateApiKey() }}
                         />
                         <select
                           value={newKeySiteUrl}
                           onChange={e => setNewKeySiteUrl(e.target.value)}
-                          className="text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-gray-400 w-44"
+                          className="text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-gray-400 w-full sm:w-44"
                         >
                           <option value="">Site...</option>
                           {sites.map(s => (
@@ -665,7 +665,7 @@ export default function WordPressSeoPage() {
                         <button
                           onClick={generateApiKey}
                           disabled={generatingKey}
-                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50 whitespace-nowrap"
+                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50 whitespace-nowrap"
                           style={{ background: '#015035' }}
                         >
                           <Plus size={13} /> {generatingKey ? 'Generating...' : 'Generate Key'}
@@ -753,7 +753,7 @@ export default function WordPressSeoPage() {
               ) : (
                 <div className="space-y-4">
                   {/* Client assignment */}
-                  <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3">
+                  <div className="bg-white rounded-2xl border border-gray-100 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
                     <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Client</span>
                     <select
                       value={selectedSite.company_id ?? ''}
@@ -953,7 +953,7 @@ function HealthTab({ site, avgScore, pluginUpdates, syncing, onSync }: {
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <p className="text-xs text-gray-400">
           {site.last_reported_at
             ? `Last sync: ${new Date(site.last_reported_at).toLocaleString()}`
@@ -1056,7 +1056,8 @@ function ScoresTab({ scores }: { scores: SeoScore[] }) {
           <p className="text-xs text-gray-300 mt-1">Run an analysis from the WordPress plugin</p>
         </div>
       ) : (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-sm">
           <thead className="bg-gray-50">
             <tr>
               <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Page</th>
@@ -1115,6 +1116,7 @@ function ScoresTab({ scores }: { scores: SeoScore[] }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )
@@ -1181,7 +1183,7 @@ function MetaTab({ settings, scores, onEdit, onBulkSave, bulkSaving }: {
         </div>
       ) : (
         <>
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 border-b border-gray-100 bg-gray-50">
             <p className="text-[11px] text-gray-400">
               {bulkMode ? 'Editing titles and descriptions inline — other fields (OG image, schema) are preserved as-is.' : `${rows.length} page(s)`}
             </p>
@@ -1213,7 +1215,8 @@ function MetaTab({ settings, scores, onEdit, onBulkSave, bulkSaving }: {
               </button>
             )}
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-gray-50">
               <tr>
                 <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Page</th>
@@ -1272,6 +1275,7 @@ function MetaTab({ settings, scores, onEdit, onBulkSave, bulkSaving }: {
               ))}
             </tbody>
           </table>
+          </div>
         </>
       )}
     </div>
@@ -1292,7 +1296,7 @@ function ReportsTab({ site, report, loading, onGenerate, onPrint, greenCount, ye
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-gray-900">SEO Report</h3>
           <p className="text-xs text-gray-400">Generate a comprehensive SEO report for {site.company_name}</p>
@@ -1327,19 +1331,19 @@ function ReportsTab({ site, report, loading, onGenerate, onPrint, greenCount, ye
         <div className="space-y-4 print:space-y-6" id="seo-report">
           {/* Report Header */}
           <div className="bg-white rounded-2xl border border-gray-100 p-6 print:border-0 print:shadow-none">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">{report.companyName}</h2>
                 <p className="text-xs text-gray-400">{report.siteUrl}</p>
               </div>
-              <div className="text-right">
+              <div className="sm:text-right">
                 <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Generated</p>
                 <p className="text-xs text-gray-500">{new Date(report.generatedAt).toLocaleString()}</p>
               </div>
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="text-center p-4 bg-gray-50 rounded-xl">
                 <ScoreCircle score={report.averageScore} size={70} />
                 <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold mt-2">Overall Score</p>

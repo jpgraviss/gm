@@ -1744,17 +1744,39 @@ export default function ContactsPage() {
 
   async function handleBulkDelete() {
     const ids = Array.from(selectedIds)
+    const removed = localContacts.filter(c => selectedIds.has(c.id))
     setLocalContacts(prev => prev.filter(c => !selectedIds.has(c.id)))
     setSelectedIds(new Set())
     setShowBulkDeleteConfirm(false)
+    // AUDIT #433 — this previously awaited the response but never checked
+    // res.ok, so a non-Leadership user (bulk-delete requires Leadership,
+    // see app/api/crm/bulk-delete/route.ts) got a 403, a false "N contacts
+    // deleted" success toast, and the rows vanishing locally while nothing
+    // was touched server-side — reappearing on next reload. The exact bug
+    // already fixed on the Companies page for #294; same fix here.
     try {
-      await fetch('/api/crm/bulk-delete', {
+      const res = await fetch('/api/crm/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'contacts', ids }),
       })
-      toast(`${ids.length} contacts deleted`, 'success')
+      if (!res.ok) {
+        if (removed.length > 0) setLocalContacts(prev => [...removed, ...prev])
+        toast('Failed to delete contacts', 'error')
+        return
+      }
+      const body = await res.json() as { deleted: number; skipped: { id: string; name: string; reason: string }[] }
+      const skippedIds = new Set(body.skipped.map(s => s.id))
+      const skippedRecords = removed.filter(c => skippedIds.has(c.id))
+      if (skippedRecords.length > 0) setLocalContacts(prev => [...skippedRecords, ...prev])
+      if (body.skipped.length > 0) {
+        const detail = body.skipped.map(s => `${s.name} (${s.reason})`).join('; ')
+        toast(`${body.deleted} deleted, ${body.skipped.length} skipped — ${detail}`, body.deleted > 0 ? 'success' : 'error')
+      } else {
+        toast(`${body.deleted} contacts deleted`, 'success')
+      }
     } catch {
+      if (removed.length > 0) setLocalContacts(prev => [...removed, ...prev])
       toast('Failed to delete contacts', 'error')
     }
   }
@@ -1771,17 +1793,36 @@ export default function ContactsPage() {
     setShowBulkTag(false)
     setBulkTagValue('')
     setSelectedIds(new Set())
-    for (const id of ids) {
+    // AUDIT #433 — previously fire-and-forget PATCHes with `.catch(() =>
+    // {})` and no res.ok check, then an unconditional success toast — the
+    // exact bug already fixed on the Companies page (#294) for its bulk
+    // tag handler. Same fix: track which ids actually failed and revert
+    // only those (simple tag removal, not a stale-snapshot revert, so no
+    // race risk the way a full-record revert would have).
+    const failedIds = new Set<string>()
+    await Promise.all(ids.map(async id => {
       const contact = localContacts.find(c => c.id === id)
       if (contact && !contact.tags.includes(tag)) {
-        fetch(`/api/crm/contacts/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tags: [...contact.tags, tag] }),
-        }).catch(() => {})
+        try {
+          const res = await fetch(`/api/crm/contacts/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: [...contact.tags, tag] }),
+          })
+          if (!res.ok) throw new Error('Failed')
+        } catch {
+          failedIds.add(id)
+        }
       }
+    }))
+    if (failedIds.size > 0) {
+      setLocalContacts(prev => prev.map(c =>
+        failedIds.has(c.id) ? { ...c, tags: c.tags.filter(t => t !== tag) } : c
+      ))
+      toast(`Tag "${tag}" applied to ${ids.length - failedIds.size} contacts, ${failedIds.size} failed`, 'error')
+    } else {
+      toast(`Tag "${tag}" applied to ${ids.length} contacts`, 'success')
     }
-    toast(`Tag "${tag}" applied to ${ids.length} contacts`, 'success')
   }
 
   async function handleBulkReassign() {
@@ -1792,14 +1833,37 @@ export default function ContactsPage() {
     setShowBulkReassign(false)
     setBulkReassignValue('')
     setSelectedIds(new Set())
-    for (const id of ids) {
-      fetch(`/api/crm/contacts/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner }),
-      }).catch(() => {})
+    // AUDIT #433 — same fire-and-forget bug as handleBulkTag above, fixed
+    // the same way as the Companies page's bulk owner-reassignment (#294):
+    // Promise.all + per-request res.ok, then on failure refetch the full
+    // list (no single-contact GET, same as companies) and merge in only
+    // the ids that actually failed so a concurrent successful edit to one
+    // of these contacts isn't clobbered by a stale local revert.
+    const failedIds = new Set<string>()
+    await Promise.all(ids.map(async id => {
+      try {
+        const res = await fetch(`/api/crm/contacts/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ owner }),
+        })
+        if (!res.ok) throw new Error('Failed')
+      } catch {
+        failedIds.add(id)
+      }
+    }))
+    if (failedIds.size > 0) {
+      try {
+        const fresh = await fetchCrmContacts()
+        const freshById = new Map(fresh.map(c => [c.id, c]))
+        setLocalContacts(prev => prev.map(c => failedIds.has(c.id) ? (freshById.get(c.id) ?? c) : c))
+      } catch {
+        // Best-effort reconciliation; leave the optimistic state if this fails too.
+      }
+      toast(`${ids.length - failedIds.size} contacts reassigned to ${owner}, ${failedIds.size} failed`, 'error')
+    } else {
+      toast(`${ids.length} contacts reassigned to ${owner}`, 'success')
     }
-    toast(`${ids.length} contacts reassigned to ${owner}`, 'success')
   }
 
   useEffect(() => { queueMicrotask(() => setCurrentPage(1)) }, [search, stageFilter])

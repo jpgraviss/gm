@@ -8,6 +8,7 @@ import {
   FileText, TrendingUp, TrendingDown, Eye, Search, Download,
   Globe, BarChart3, Star, Activity, CheckCircle, RefreshCw, AlertTriangle,
 } from 'lucide-react'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 interface Company {
   id: string
@@ -71,14 +72,22 @@ export default function ClientReportsPage() {
   const [gbpLocationName, setGbpLocationName] = useState('')
   const [startDate, setStartDate] = useState(firstOfMonth())
   const [endDate, setEndDate] = useState(lastOfMonth())
-  const [loading, setLoading] = useState(false)
+  // AUDIT.md #446 — `loading` tracks which action is in flight ('preview' or
+  // 'save') so each button can show its own busy state, and `reportSaved`
+  // tracks whether the report currently on screen was actually persisted (a
+  // real snapshot row) vs. just an exploratory preview.
+  const [loading, setLoading] = useState<'preview' | 'save' | null>(null)
   const [report, setReport] = useState<ClientReport | null>(null)
+  const [reportSaved, setReportSaved] = useState(false)
   const [bindingLoaded, setBindingLoaded] = useState(false)
 
   useEffect(() => {
-    fetch('/api/crm/companies?limit=500')
-      .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (Array.isArray(data)) setCompanies(data.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))) })
+    // AUDIT.md #445 — raw fetch() with a hardcoded limit=500 against a
+    // cursor-paginated route silently dropped companies past that page
+    // (same bug class as #206/#151); fetchAllPages() follows the cursor
+    // to completion instead.
+    fetchAllPages<{ id: string; name: string }>('/api/crm/companies')
+      .then(data => { if (Array.isArray(data)) setCompanies(data.map(c => ({ id: c.id, name: c.name }))) })
       .catch(() => {/* non-fatal */})
   }, [])
 
@@ -109,12 +118,12 @@ export default function ClientReportsPage() {
 
   const companyOptions = useMemo(() => companies.map(c => c.name).sort(), [companies])
 
-  async function generate() {
+  async function generate(save: boolean) {
     if (!companyName) {
       toast('Select a company first', 'error')
       return
     }
-    setLoading(true)
+    setLoading(save ? 'save' : 'preview')
     setReport(null)
     try {
       const res = await fetch('/api/client-reports', {
@@ -127,21 +136,22 @@ export default function ClientReportsPage() {
           gbpLocationName: gbpLocationName || undefined,
           startDate,
           endDate,
-          save: true,
+          save,
         }),
       })
       const data = await res.json()
       if (!res.ok) {
         toast(data.error || 'Failed to build report', 'error')
-        setLoading(false)
+        setLoading(null)
         return
       }
       setReport(data)
-      toast('Report generated', 'success')
+      setReportSaved(save)
+      toast(save ? 'Report generated and saved' : 'Preview generated (not saved)', 'success')
     } catch {
       toast('Failed to build report', 'error')
     } finally {
-      setLoading(false)
+      setLoading(null)
     }
   }
 
@@ -233,12 +243,19 @@ export default function ClientReportsPage() {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={generate}
-              disabled={loading || !companyName}
+              onClick={() => generate(false)}
+              disabled={loading !== null || !companyName}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-semibold disabled:opacity-40 hover:bg-gray-50 flex items-center justify-center gap-1.5"
+            >
+              <Eye size={13} /> {loading === 'preview' ? 'Building…' : 'Preview'}
+            </button>
+            <button
+              onClick={() => generate(true)}
+              disabled={loading !== null || !companyName}
               className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 hover:opacity-90"
               style={{ background: '#015035' }}
             >
-              {loading ? 'Building…' : 'Generate Report'}
+              {loading === 'save' ? 'Building…' : 'Generate Report'}
             </button>
             {report && (
               <button
@@ -249,6 +266,13 @@ export default function ClientReportsPage() {
               </button>
             )}
           </div>
+          {report && (
+            <p className="text-[11px] text-gray-400 mt-2">
+              {reportSaved
+                ? 'This report was saved as a snapshot for this client.'
+                : 'This is a preview only — nothing was saved. Click "Generate Report" to save a snapshot.'}
+            </p>
+          )}
         </div>
 
         {/* Warnings — staff-only, never included in the client-facing PDF */}

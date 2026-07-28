@@ -130,7 +130,7 @@ export default function AuditDetailPage() {
     <>
       <Header title="Audit Report" subtitle={audit.company_name || audit.website_url} />
       <main className="p-6 max-w-5xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Link href="/audits" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
             <ArrowLeft size={14} /> Back to Audits
           </Link>
@@ -214,7 +214,7 @@ export default function AuditDetailPage() {
           <div className="space-y-3">
             {sections.map((s, i) => (
               <div key={i} className="flex items-center gap-3">
-                <div className="w-40 text-sm text-gray-600 shrink-0">{s.name}</div>
+                <div className="w-24 sm:w-40 text-sm text-gray-600 shrink-0 truncate">{s.name}</div>
                 {s.unavailable ? (
                   <div className="flex-1 text-sm text-gray-400 italic">AI analysis unavailable</div>
                 ) : (

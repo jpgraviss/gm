@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { getAuthenticatedEmail } from '@/lib/admin-auth'
 
+// AUDIT.md #476 — every sibling /api/portal/* route (dashboard/seo/insights)
+// is requirePortalClient-gated, but this one had zero auth check, reachable
+// by a fully anonymous caller. Unlike those siblings this isn't company-
+// scoped (the Help Center catalog isn't per-tenant data), so a full
+// requirePortalClient(company) gate doesn't apply here — instead this
+// matches the "any authenticated caller" pattern GET /api/courses uses for
+// the same kind of portal-visible-but-not-company-scoped content (#385).
 export const GET = withErrorHandler('portal/help GET', async (req) => {
+  const email = await getAuthenticatedEmail(req)
+  if (!email) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const { searchParams } = new URL(req.url)
   const category = searchParams.get('category')
   const search = searchParams.get('search')

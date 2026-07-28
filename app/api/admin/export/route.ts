@@ -5,10 +5,19 @@ import { requireAdmin } from '@/lib/admin-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser } from '@/lib/rbac'
 
+// AUDIT.md #458 — the UI promises "All data visible to your role will be
+// included," but several entities silently dropped real columns from their
+// own table. Contacts was missing `emails`/`phones` (crm_contacts.emails and
+// .phones are both text[] — see supabase/schema.sql) despite those being
+// core contact fields. Companies was missing `owner`/`tags` (also real
+// columns on crm_companies). Deals has no `owner` or `tags` columns at all
+// (it uses `assigned_rep`, already exported, in place of "owner") — its
+// actual analogous omission is `service_types` (text[], added by
+// add_deals_service_types.sql), which is the array field that was left out.
 const ENTITY_CONFIGS: Record<string, { table: string; columns: string }> = {
-  contacts:    { table: 'crm_contacts',  columns: 'id, first_name, last_name, title, company_name, created_at' },
-  companies:   { table: 'crm_companies', columns: 'id, name, industry, website, phone, hq, size, status, created_at' },
-  deals:       { table: 'deals',         columns: 'id, company, stage, value, service_type, close_date, assigned_rep, created_at' },
+  contacts:    { table: 'crm_contacts',  columns: 'id, first_name, last_name, title, company_name, emails, phones, created_at' },
+  companies:   { table: 'crm_companies', columns: 'id, name, industry, website, phone, hq, size, status, owner, tags, created_at' },
+  deals:       { table: 'deals',         columns: 'id, company, stage, value, service_type, service_types, close_date, assigned_rep, created_at' },
   projects:    { table: 'projects',      columns: 'id, company, service_type, status, start_date, progress, created_at' },
   contracts:   { table: 'contracts',     columns: 'id, company, status, value, start_date, renewal_date, service_type, created_at' },
   invoices:    { table: 'invoices',      columns: 'id, company, amount, status, due_date, issued_date, paid_date, service_type, created_at' },
@@ -66,7 +75,17 @@ export const POST = withErrorHandler('admin/export POST', async (req) => {
     const cols = config.columns.split(',').map(c => c.trim())
     const header = toCsvRow(cols)
     const rows = data.map(row =>
-      toCsvRow(cols.map(col => String((row as unknown as Record<string, unknown>)[col] ?? '')))
+      toCsvRow(cols.map(col => {
+        // AUDIT.md #458 — array columns (emails/phones/tags/service_types)
+        // need explicit joining: without this, JS's default Array#toString
+        // comma-joins with no space (e.g. "a@x.com,b@x.com"), which reads
+        // as one malformed CSV field per address once toCsvRow quotes it,
+        // inconsistent with the ", " join already used for arrays in
+        // app/api/rank-tracker/export/route.ts.
+        const value = (row as unknown as Record<string, unknown>)[col]
+        if (Array.isArray(value)) return value.join(', ')
+        return String(value ?? '')
+      }))
     )
 
     csvSections.push(`--- ${entity.toUpperCase()} ---`)

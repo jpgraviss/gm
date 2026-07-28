@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   ArrowLeft, Search, Flag, CheckCircle, Trash2, X,
   MessageSquare, User, Bot,
@@ -50,28 +51,35 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
     fetch(`/api/chatbots/${id}`).then(r => r.ok ? r.json() : null).then(d => { if (d) setChatbot(d) }).catch(() => {})
   }, [id])
 
+  // AUDIT #493 — GET /api/chatbots/[id]/conversations is now cursor-
+  // paginated (100/page by default); a raw single fetch() here would only
+  // see the most recent page and silently truncate a chatbot's history
+  // (naturally unbounded for a publicly-embedded widget). fetchAllPages()
+  // follows the cursor to completion, matching every other full-list
+  // consumer of a paginated endpoint in this codebase.
   async function fetchConversations() {
     try {
       const params = new URLSearchParams()
       if (filter !== 'all') params.set('status', filter)
       if (search) params.set('search', search)
-      const res = await fetch(`/api/chatbots/${id}/conversations?${params}`)
-      if (res.ok) setConversations(await res.json())
-    } catch { /* ignore */ }
+      const data = await fetchAllPages<Conversation>(`/api/chatbots/${id}/conversations?${params}`)
+      setConversations(data)
+    } catch { toast('Failed to load conversations', 'error') }
     setLoading(false)
   }
 
   useEffect(() => {
     let cancelled = false
+    setLoading(true)
     const params = new URLSearchParams()
     if (filter !== 'all') params.set('status', filter)
     if (search) params.set('search', search)
-    fetch(`/api/chatbots/${id}/conversations?${params}`)
-      .then(r => r.ok ? r.json() : [])
+    fetchAllPages<Conversation>(`/api/chatbots/${id}/conversations?${params}`)
       .then(data => { if (!cancelled) setConversations(data) })
-      .catch(() => {})
+      .catch(() => { if (!cancelled) toast('Failed to load conversations', 'error') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, filter, search])
 
   async function toggleFlag(convo: Conversation) {
@@ -128,7 +136,7 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
           <ArrowLeft size={14} /> Back to Chatbots
         </Link>
 
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -138,7 +146,7 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
               className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm"
             />
           </div>
-          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5 overflow-x-auto">
             {filters.map(f => (
               <button
                 key={f.key}
@@ -152,8 +160,8 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        <div className="flex gap-4">
-          <div className={`flex-1 ${selectedConvo ? 'max-w-sm' : ''}`}>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className={`flex-1 ${selectedConvo ? 'md:max-w-sm' : ''}`}>
             {loading ? (
               <div className="flex items-center justify-center py-20">
                 <div className="w-6 h-6 border-2 border-gray-300 rounded-full animate-spin" style={{ borderTopColor: brandColor }} />

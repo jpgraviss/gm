@@ -193,6 +193,21 @@ export default function SOPsPage() {
     }
   }, [user, authLoading, router])
 
+  // AUDIT #459 — warn on an actual page unload/close/refresh with unsaved
+  // SOP edits, mirroring the pattern #189 established on
+  // app/admin/portal-management/page.tsx, since navigating away previously
+  // lost them silently.
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (dirty) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [dirty])
+
   // Load SOPs from API (fall back to defaults)
   useEffect(() => {
     fetch('/api/settings')

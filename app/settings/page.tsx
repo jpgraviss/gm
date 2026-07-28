@@ -3545,6 +3545,8 @@ function GoogleReviewsIntegrationSection() {
   const { toast } = useToast()
   const [locationName, setLocationName] = useState('')
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
+  const [googleReviewUrl, setGoogleReviewUrl] = useState('')
+  const [reviewUrlError, setReviewUrlError] = useState('')
   const [gbpStatus, setGbpStatus] = useState<'idle' | 'testing' | 'connected' | 'syncing' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [saving, setSaving] = useState(false)
@@ -3560,9 +3562,20 @@ function GoogleReviewsIntegrationSection() {
           setGbpStatus('connected')
         }
         if (cfg?.lastSyncAt) setLastSyncAt(cfg.lastSyncAt)
+        if (cfg?.googleReviewUrl) setGoogleReviewUrl(cfg.googleReviewUrl)
       })
       .catch(() => {})
   }, [])
+
+  function isValidReviewUrl(value: string): boolean {
+    if (!value) return true // empty is allowed — feature is just inactive until set
+    try {
+      const parsed = new URL(value)
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+    } catch {
+      return false
+    }
+  }
 
   async function handleTest() {
     if (!locationName.trim()) return
@@ -3584,12 +3597,20 @@ function GoogleReviewsIntegrationSection() {
   }
 
   async function handleSave() {
+    const trimmedUrl = googleReviewUrl.trim()
+    if (!isValidReviewUrl(trimmedUrl)) {
+      setReviewUrlError('Enter a valid URL (e.g. https://search.google.com/local/writereview?placeid=...)')
+      return
+    }
+    setReviewUrlError('')
     setSaving(true)
     try {
       const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ google_reviews: { locationName: locationName.trim(), lastSyncAt } }),
+        body: JSON.stringify({
+          google_reviews: { locationName: locationName.trim(), lastSyncAt, googleReviewUrl: trimmedUrl },
+        }),
       })
       if (!res.ok) throw new Error('Failed')
       toast('Google Reviews settings saved', 'success')
@@ -3660,6 +3681,25 @@ function GoogleReviewsIntegrationSection() {
           <p className="text-[11px] text-gray-400 mt-1">
             {'Find this in your Google Business Profile dashboard or use the GBP Locations API. Format: accounts/{id}/locations/{id}'}
           </p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Google Review Link</label>
+          <input
+            type="text"
+            value={googleReviewUrl}
+            onChange={e => { setGoogleReviewUrl(e.target.value); if (reviewUrlError) setReviewUrlError('') }}
+            onBlur={e => setReviewUrlError(isValidReviewUrl(e.target.value.trim()) ? '' : 'Enter a valid URL (e.g. https://search.google.com/local/writereview?placeid=...)')}
+            placeholder="https://search.google.com/local/writereview?placeid=..."
+            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-800 bg-gray-50 focus:outline-none focus:border-green-700 focus:bg-white transition-colors"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            The direct link customers are redirected to after leaving a 4-5 star rating on your review request page.
+            Use your Google &quot;write a review&quot; link — typically {'https://search.google.com/local/writereview?placeid=...'} or a {'g.page/.../review'} short link.
+          </p>
+          {reviewUrlError && (
+            <p className="text-[11px] text-red-500 mt-1">{reviewUrlError}</p>
+          )}
         </div>
 
         {errorMsg && (

@@ -4,8 +4,8 @@ import { useState, useMemo } from 'react'
 import { X, ChevronLeft, Search, FileText, DollarSign, Calendar } from 'lucide-react'
 import type { Contract } from '@/lib/types'
 
-const CHANGE_TYPES = ['Scope Change', 'Value Change', 'Term Extension', 'Termination', 'Other'] as const
-type ChangeType = typeof CHANGE_TYPES[number]
+export const CHANGE_TYPES = ['Scope Change', 'Value Change', 'Term Extension', 'Termination', 'Other'] as const
+export type ChangeType = typeof CHANGE_TYPES[number]
 
 export interface NewAddendumFormData {
   contractId: string

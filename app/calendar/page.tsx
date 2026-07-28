@@ -328,7 +328,10 @@ export default function CalendarPage() {
         if (res.ok) {
           const data = await res.json()
           setSubscriptions(prev => [{ id: data.id, user_email: user?.email || '', name: data.name, ical_url: gcalLinkInput.trim(), last_synced_at: new Date().toISOString(), event_count: data.total, created_at: new Date().toISOString() }, ...prev])
-          setImportResult(`Imported ${data.imported} events from "${data.name}"`)
+          // AUDIT #481 — the import endpoint now reports a `failed` count
+          // when some events couldn't be saved, instead of silently
+          // reporting full success.
+          setImportResult(`Imported ${data.imported} events from "${data.name}"${data.failed ? ` (${data.failed} failed)` : ''}`)
           const params = userSlug ? `?slug=${userSlug}` : ''
           const bookingsRes = await fetch(`/api/bookings${params}`)
           if (bookingsRes.ok) {
@@ -352,7 +355,7 @@ export default function CalendarPage() {
           const data = await res.json()
           if (data.type === 'subscription') {
             setSubscriptions(prev => [{ id: data.subscriptionId, user_email: user?.email || '', name: data.name, ical_url: gcalLinkInput.trim(), last_synced_at: new Date().toISOString(), event_count: data.total, created_at: new Date().toISOString() }, ...prev])
-            setImportResult(`Imported ${data.imported} events from "${data.name}"`)
+            setImportResult(`Imported ${data.imported} events from "${data.name}"${data.failed ? ` (${data.failed} failed)` : ''}`)
             const params = userSlug ? `?slug=${userSlug}` : ''
             const bookingsRes = await fetch(`/api/bookings${params}`)
             if (bookingsRes.ok) {

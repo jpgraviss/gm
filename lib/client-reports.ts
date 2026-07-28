@@ -371,7 +371,13 @@ export async function getPreviousSnapshot(
     .eq('company_name', companyName)
     .eq('product', product)
     .lt('period_start', beforePeriodStart)
+    // AUDIT.md #444 — period_start alone isn't a reliable sort key when
+    // duplicate rows exist for the same period (pre-upsert-fix legacy rows,
+    // or a race between two concurrent report runs): tie-break on
+    // created_at so "most recent" is always the most-recently-written
+    // snapshot, not whichever duplicate Postgres happened to return first.
     .order('period_start', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
   return (data as { metrics: Record<string, unknown> } | null)?.metrics ?? null
@@ -379,6 +385,19 @@ export async function getPreviousSnapshot(
 
 /**
  * Save a report snapshot to client_data_snapshots for historical comparisons.
+ *
+ * AUDIT.md #444 — this used to be a blind insert with a random id, so
+ * regenerating a report for the same company+product+period (a staff
+ * re-run, a retry, a cron re-delivery) silently piled up duplicate rows
+ * with no dedup, corrupting the month-over-month comparison
+ * getPreviousSnapshot() feeds into client-facing report narratives. Now
+ * upserts on the natural key (company_name, product, period_start,
+ * period_end) — see supabase/migrations/add_client_data_snapshots_natural_key.sql
+ * (not yet applied — no live DB access this session) for the backing
+ * unique index. `id` is still a fresh random value on every call, same as
+ * add_client_integrations.sql's upsert pattern: on conflict, Postgres just
+ * renames the existing row's id to the new one, which is harmless since
+ * nothing else parses or depends on this id's format.
  */
 export async function saveReportSnapshot(report: ClientReportData): Promise<void> {
   const db = createServiceClient()
@@ -393,7 +412,7 @@ export async function saveReportSnapshot(report: ClientReportData): Promise<void
   if (report.wordpressSeo) entries.push({ product: 'wordpress_seo', metrics: report.wordpressSeo as unknown as Record<string, unknown> })
 
   for (const entry of entries) {
-    await db.from('client_data_snapshots').insert({
+    await db.from('client_data_snapshots').upsert({
       id: `${baseId}-${entry.product}`,
       company_id: report.company.id ?? null,
       company_name: report.company.name,
@@ -401,6 +420,6 @@ export async function saveReportSnapshot(report: ClientReportData): Promise<void
       period_start: report.period.start,
       period_end: report.period.end,
       metrics: entry.metrics,
-    })
+    }, { onConflict: 'workspace_id,company_name,product,period_start,period_end' })
   }
 }

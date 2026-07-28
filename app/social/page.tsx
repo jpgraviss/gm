@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import Header from '@/components/layout/Header'
+import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { formatDate, aiSourceLabel } from '@/lib/utils'
 import { PLATFORM_META, type SocialPlatform, type PostStatus } from '@/lib/social-media'
@@ -62,6 +63,13 @@ function startDayOfWeek(year: number, month: number): number {
 
 export default function SocialMediaPage() {
   const { toast } = useToast()
+  const { user } = useAuth()
+  // AUDIT #426 — DELETE /api/social-posts/[id] requires 'Leadership'
+  // server-side (see app/api/social-posts/[id]/route.ts), but nothing here
+  // gated the delete button by role, matching the pattern used elsewhere
+  // (e.g. app/rank-tracker/page.tsx's canRefresh) for other Leadership-only
+  // actions.
+  const canDeletePost = !!user?.isAdmin || user?.role === 'Leadership' || user?.role === 'Super Admin'
   const [posts, setPosts] = useState<SocialPost[]>([])
   const [clients, setClients] = useState<ClientBinding[]>([])
   const [loading, setLoading] = useState(true)
@@ -168,9 +176,17 @@ export default function SocialMediaPage() {
   }
 
   async function deletePost(id: string) {
+    // AUDIT #426 — this never checked res.ok, so a Team Member (blocked
+    // server-side by requireRole 'Leadership') got a false "Deleted"
+    // success toast and watched the post vanish from local state, only for
+    // it to reappear on next reload since the server never touched it.
+    // Matches the res.ok pattern already used by createPost/updatePost/
+    // publishPost in this same file.
+    if (!canDeletePost) { toast('Only Leadership can delete posts', 'error'); return }
     if (!confirm('Delete this post?')) return
     try {
-      await fetch(`/api/social-posts/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/social-posts/${id}`, { method: 'DELETE' })
+      if (!res.ok) { toast('Failed to delete post', 'error'); return }
       setPosts(prev => prev.filter(p => p.id !== id))
       setComposing(null)
       toast('Deleted', 'success')
@@ -312,6 +328,7 @@ export default function SocialMediaPage() {
         <PostComposer
           post={composing === 'new' ? null : composing}
           clients={clients.map(c => c.companyName)}
+          canDelete={canDeletePost}
           onClose={() => setComposing(null)}
           onCreate={createPost}
           onUpdate={updatePost}
@@ -332,6 +349,14 @@ interface AvailAccount { platform: SocialPlatform; externalId: string; label: st
 
 function SocialConnectionsModal({ onClose }: { onClose: () => void }) {
   const { toast } = useToast()
+  const { user } = useAuth()
+  // AUDIT.md #427 — the disconnect routes (both /api/social/connections
+  // DELETE and /api/integrations/linkedin/disconnect) require 'Leadership'
+  // server-side, but the GET populating this modal only requires 'Team
+  // Member', so a non-Leadership staffer saw a Disconnect button that
+  // always 403'd. Matches the canDeletePost pattern in this same file
+  // (#426) for gating other Leadership-only actions client-side.
+  const canDisconnect = !!user?.isAdmin || user?.role === 'Leadership' || user?.role === 'Super Admin'
   const [statuses, setStatuses] = useState<ConnStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [picker, setPicker] = useState<{ platform: SocialPlatform; accounts: AvailAccount[] } | null>(null)
@@ -377,13 +402,21 @@ function SocialConnectionsModal({ onClose }: { onClose: () => void }) {
   }
 
   async function disconnect(platform: SocialPlatform) {
-    if (platform === 'linkedin') {
-      await fetch('/api/integrations/linkedin/disconnect', { method: 'POST' }).catch(() => {})
-    } else {
-      await fetch(`/api/social/connections?platform=${platform}`, { method: 'DELETE' }).catch(() => {})
+    // AUDIT.md #427 — this previously toasted "Disconnected" unconditionally,
+    // regardless of whether the request actually succeeded. A non-Leadership
+    // caller got a 403 from the server (see canDisconnect above) and a false
+    // success toast, only for the connection to reappear on the next load().
+    if (!canDisconnect) { toast('Only Leadership can manage connections', 'error'); return }
+    try {
+      const res = platform === 'linkedin'
+        ? await fetch('/api/integrations/linkedin/disconnect', { method: 'POST' })
+        : await fetch(`/api/social/connections?platform=${platform}`, { method: 'DELETE' })
+      if (!res.ok) { toast('Failed to disconnect', 'error'); return }
+      toast('Disconnected', 'success')
+      load()
+    } catch {
+      toast('Failed to disconnect', 'error')
     }
-    toast('Disconnected', 'success')
-    load()
   }
 
   return (
@@ -427,7 +460,11 @@ function SocialConnectionsModal({ onClose }: { onClose: () => void }) {
                     <p className="text-[11px] text-gray-500 truncate">{s.connected ? s.accountLabel : 'Not connected'}</p>
                   </div>
                   {s.connected ? (
-                    <button onClick={() => disconnect(s.platform)} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Disconnect</button>
+                    canDisconnect ? (
+                      <button onClick={() => disconnect(s.platform)} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Disconnect</button>
+                    ) : (
+                      <span className="text-[11px] text-gray-400 italic px-1">Leadership only</span>
+                    )
                   ) : s.platform === 'linkedin' ? (
                     <a href="/api/integrations/linkedin/connect" className="text-xs font-medium px-3 py-1.5 rounded-lg text-white" style={{ background: '#015035' }}>Connect</a>
                   ) : (
@@ -450,9 +487,10 @@ function SocialConnectionsModal({ onClose }: { onClose: () => void }) {
 
 // ─── Post composer side panel ──────────────────────────────────────────────
 
-function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, onPublish }: {
+function PostComposer({ post, clients, canDelete, onClose, onCreate, onUpdate, onDelete, onPublish }: {
   post: SocialPost | null
   clients: string[]
+  canDelete: boolean
   onClose: () => void
   onCreate: (data: { companyName: string; content: string; platforms: SocialPlatform[]; scheduledAt?: string; hashtags?: string[]; linkUrl?: string; status?: PostStatus }) => void
   onUpdate: (id: string, patch: Partial<SocialPost>) => void
@@ -605,7 +643,9 @@ function PostComposer({ post, clients, onClose, onCreate, onUpdate, onDelete, on
               {post.status === 'draft' || (post.status === 'pending_approval' && post.approvalStatus === 'approved') ? (
                 <button onClick={() => onPublish(post.id)} className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 flex items-center gap-1.5"><Send size={13} /> Publish</button>
               ) : null}
-              <button onClick={() => onDelete(post.id)} className="p-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>
+              {canDelete && (
+                <button onClick={() => onDelete(post.id)} className="p-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>
+              )}
             </>
           ) : (
             <>

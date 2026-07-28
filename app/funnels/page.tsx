@@ -92,6 +92,7 @@ export default function FunnelsPage() {
   const [editPageName, setEditPageName] = useState('')
   const [addingPage, setAddingPage] = useState(false)
   const [newPageName, setNewPageName] = useState('')
+  const [savingPage, setSavingPage] = useState(false)
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [creatingFromTemplate, setCreatingFromTemplate] = useState(false)
@@ -285,8 +286,12 @@ export default function FunnelsPage() {
     }
   }
 
+  // AUDIT #430 — guard against the "Add" button firing twice (double-click,
+  // or Enter-then-click) before the first request resolves, which used to
+  // be able to create two pages from a single submission.
   async function addPage(funnelId: string) {
-    if (!newPageName.trim()) return
+    if (!newPageName.trim() || savingPage) return
+    setSavingPage(true)
     try {
       const res = await fetch(`/api/funnels/${funnelId}/pages`, {
         method: 'POST',
@@ -306,6 +311,8 @@ export default function FunnelsPage() {
       }
     } catch {
       addToast('Failed to add page', 'error')
+    } finally {
+      setSavingPage(false)
     }
   }
 
@@ -762,15 +769,16 @@ export default function FunnelsPage() {
                                 value={newPageName}
                                 onChange={(e) => setNewPageName(e.target.value)}
                                 onKeyDown={(e) => {
-                                  if (e.key === 'Enter') addPage(detail.id)
+                                  if (e.key === 'Enter' && !savingPage) addPage(detail.id)
                                   if (e.key === 'Escape') { setAddingPage(false); setNewPageName('') }
                                 }}
                                 placeholder="Page name..."
                                 className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm flex-1"
                                 autoFocus
+                                disabled={savingPage}
                               />
-                              <button onClick={() => addPage(detail.id)} className="text-xs px-3 py-1.5 rounded-lg bg-[#015035] text-white font-medium">Add</button>
-                              <button onClick={() => { setAddingPage(false); setNewPageName('') }} className="text-xs px-2 py-1.5 text-gray-500 hover:text-gray-700">Cancel</button>
+                              <button onClick={() => addPage(detail.id)} disabled={savingPage} className="text-xs px-3 py-1.5 rounded-lg bg-[#015035] text-white font-medium disabled:opacity-50">{savingPage ? 'Adding...' : 'Add'}</button>
+                              <button onClick={() => { setAddingPage(false); setNewPageName('') }} disabled={savingPage} className="text-xs px-2 py-1.5 text-gray-500 hover:text-gray-700 disabled:opacity-50">Cancel</button>
                             </div>
                           ) : (
                             <button

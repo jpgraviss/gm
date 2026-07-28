@@ -266,7 +266,11 @@ export default function ClientPortalPage() {
     // their newest 100 tickets, same bug class as #206/#212.
     fetchAllPages<ClientTicket>(`/api/tickets?company=${encodeURIComponent(company)}`)
       .then(data => setExistingTickets(data))
-      .catch(() => {/* non-fatal */})
+      // AUDIT.md #475 — this used to fail silently with no toast, unlike
+      // the initial company-data load's explicit per-source error toasts
+      // (see the Promise.all above) — a network error read as "no support
+      // tickets" (a genuine empty state) instead of an unknown failure.
+      .catch(() => toast('Failed to load support tickets', 'error'))
       .finally(() => setTicketsLoading(false))
   }, [activeTab, company])
 
@@ -283,7 +287,12 @@ export default function ClientPortalPage() {
         if (Array.isArray(pending)) setPendingPosts(pending)
         if (Array.isArray(published)) setPublishedPosts(published.slice(0, 10))
       })
-      .catch(() => {/* non-fatal */})
+      // AUDIT.md #475 — this used to fail silently with no toast, unlike
+      // the initial company-data load's explicit per-source error toasts
+      // (see the Promise.all above) — a network error read as "no pending/
+      // published posts" (a genuine empty state) instead of an unknown
+      // failure.
+      .catch(() => toast('Failed to load social posts', 'error'))
       .finally(() => setSocialLoading(false))
   }, [activeTab, company])
 
@@ -638,7 +647,7 @@ export default function ClientPortalPage() {
                       <Star size={16} className="text-emerald-700" />
                       <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Reputation</h3>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                       <InsightMetric label="Average Rating" value={`${insights.reputation.averageRating.toFixed(1)} ★`} />
                       <InsightMetric label="New Reviews" value={insights.reputation.newReviews.toString()} />
                       <InsightMetric label="Total Reviews" value={insights.reputation.totalReviews.toString()} />
@@ -668,7 +677,7 @@ export default function ClientPortalPage() {
                       <Activity size={16} className="text-emerald-700" />
                       <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Website Uptime</h3>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                       <InsightMetric label="Sites" value={insights.uptime.sitesMonitored.toString()} />
                       <InsightMetric label="Uptime (30d)" value={`${insights.uptime.uptimePercent}%`} />
                       <InsightMetric label="Incidents" value={insights.uptime.incidents.toString()} />

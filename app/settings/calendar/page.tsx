@@ -265,6 +265,12 @@ export default function CalendarSettingsPage() {
         setSubUrl('')
         setSubName('')
         setShowAddSub(false)
+        // AUDIT #481 — the import endpoint now reports a `failed` count
+        // when some events couldn't be saved, instead of silently
+        // reporting full success.
+        if (data.failed) {
+          alert(`Imported ${data.imported} of ${data.total} events — ${data.failed} failed to save.`)
+        }
       }
     } catch { /* ignore */ }
     setAddingSub(false)
@@ -281,6 +287,11 @@ export default function CalendarSettingsPage() {
       if (res.ok) {
         const data = await res.json()
         setSubscriptions(prev => prev.map(s => s.id === id ? { ...s, last_synced_at: new Date().toISOString(), event_count: data.synced } : s))
+        // AUDIT #481 — surface per-event sync failures instead of letting
+        // them disappear into a "successful" sync.
+        if (data.failed) {
+          alert(`Synced ${data.synced} events — ${data.failed} failed to save.`)
+        }
       }
     } catch { /* ignore */ }
     setSyncingSubId(null)
@@ -370,7 +381,7 @@ export default function CalendarSettingsPage() {
     <div className="min-h-screen bg-[#f9fafb]">
       <Header title="Calendar Settings" />
 
-      <div className="max-w-2xl mx-auto px-8 py-8 space-y-6">
+      <div className="max-w-2xl mx-auto px-4 sm:px-8 py-6 sm:py-8 space-y-6">
 
         {/* Status banners */}
         {isConnected && (
@@ -417,7 +428,7 @@ export default function CalendarSettingsPage() {
               <p className="text-xs text-gray-500">
                 Your Google Calendar is connected. New bookings will automatically appear in your calendar and attendees will receive Google Meet links.
               </p>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <button
                   onClick={handleSyncNow}
                   disabled={syncing}
@@ -457,7 +468,7 @@ export default function CalendarSettingsPage() {
               <p className="text-xs text-gray-500 mb-3">
                 Paste this URL into Apple Calendar (File &rarr; New Calendar Subscription) or any calendar app that supports iCal feeds.
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <div className="flex-1 flex items-center border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
                   <span className="px-3 py-2 text-xs text-gray-400 border-r border-gray-200 flex-shrink-0">
                     <Rss className="w-3.5 h-3.5" />
@@ -470,7 +481,7 @@ export default function CalendarSettingsPage() {
                 </div>
                 <button
                   onClick={copyFeedUrl}
-                  className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
+                  className="flex items-center justify-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
                 >
                   {copiedFeed ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   {copiedFeed ? 'Copied!' : 'Copy'}
@@ -506,7 +517,7 @@ export default function CalendarSettingsPage() {
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
               Link slug (URL-friendly, no spaces)
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <div className="flex-1 flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#015035]/30">
                 <span className="px-3 py-2 text-xs text-gray-400 bg-gray-50 border-r border-gray-200 whitespace-nowrap">/book/</span>
                 <input
@@ -516,22 +527,24 @@ export default function CalendarSettingsPage() {
                   placeholder="your-name"
                 />
               </div>
-              <button
-                onClick={copyLink}
-                className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
-              >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-              <a
-                href={`/book/${slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                Preview
-              </a>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={copyLink}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+                <a
+                  href={`/book/${slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Preview
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -547,7 +560,7 @@ export default function CalendarSettingsPage() {
               <div className="text-xs text-gray-500">Paste your calendar.app.google link — clients can book directly in Google Calendar</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <input
               type="url"
               value={gcalLink}
@@ -560,7 +573,7 @@ export default function CalendarSettingsPage() {
                 href={gcalLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
+                className="flex items-center justify-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
               >
                 <ExternalLink className="w-3.5 h-3.5" /> Open
               </a>
@@ -700,7 +713,7 @@ export default function CalendarSettingsPage() {
 
         {/* ── Calendar Subscriptions ── */}
         <div className="bg-white rounded-xl border border-gray-100 p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
                 <Calendar className="w-4 h-4 text-indigo-500" />

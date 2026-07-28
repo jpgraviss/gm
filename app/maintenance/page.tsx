@@ -45,6 +45,7 @@ function AddRecordPanel({
 
   const [form, setForm] = useState({
     company: initial?.company ?? '',
+    companyId: initial?.companyId ?? undefined as string | undefined,
     serviceType: initial?.serviceType ?? 'Website Build',
     startDate: initial?.startDate ?? new Date().toISOString().split('T')[0],
     endDate: defaultEnd,
@@ -70,6 +71,7 @@ function AddRecordPanel({
     if (!form.company) return
     onSave({
       company: form.company,
+      companyId: form.companyId ?? null,
       serviceType: form.serviceType as MaintenanceRecord['serviceType'],
       startDate: form.startDate,
       endDate: form.endDate,
@@ -111,7 +113,7 @@ function AddRecordPanel({
             <label className={labelClass}>Company *</label>
             <CompanySelect
               value={form.company}
-              onChange={(name) => setForm(p => ({ ...p, company: name }))}
+              onChange={(name, companyId) => setForm(p => ({ ...p, company: name, companyId }))}
               required
             />
           </div>
@@ -250,7 +252,15 @@ function MaintenancePanel({
   const cancelFeeApplies = cancelNoticeDays < record.cancellationWindow && cancelFeeAmount > 0
 
   const contact = crmContacts.find(c => c.companyName === record.company && c.isPrimary)
-  const contract = contracts.find(c => c.company === record.company && c.serviceType === record.serviceType)
+  // AUDIT.md #417 — `contract_id` is a real FK, populated automatically for
+  // records created by the "Create Maintenance Record" automation action.
+  // Prefer it directly when present (exact, unambiguous); only fall back to
+  // the company+serviceType name-match heuristic for records with no stored
+  // link yet (manually created/edited records), where it's a best-effort
+  // guess rather than a guarantee.
+  const contract = record.contractId
+    ? contracts.find(c => c.id === record.contractId)
+    : contracts.find(c => c.company === record.company && c.serviceType === record.serviceType)
   const relatedInvoices = invoices.filter(i => i.company === record.company)
 
   const startDate = new Date(record.startDate)

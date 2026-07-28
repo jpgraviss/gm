@@ -424,10 +424,20 @@ function BroadcastEditor({
       audienceFilter: draft.audienceFilter,
     })
     if (updated) setDraft(updated)
+    return updated
   }
 
   async function previewAudience() {
-    await save()
+    // AUDIT #422 — previously called save() without checking its result,
+    // then unconditionally fetched the audience preview anyway. onSave
+    // (updateBroadcast) already toasts its own "Failed to save" error and
+    // returns undefined on failure, but that failure was silently ignored
+    // here — the preview would run against whatever filter is still
+    // persisted server-side (stale, or empty for a brand-new draft), while
+    // the UI displayed it as a confident count for the filter currently on
+    // screen. Bail out before fetching if the save didn't actually land.
+    const updated = await save()
+    if (!updated) return
     const res = await fetch(`/api/broadcasts/${broadcast.id}/audience`)
     if (!res.ok) { toast('Failed to preview audience', 'error'); return }
     const data = await res.json()
@@ -552,13 +562,23 @@ function BroadcastEditor({
                             const subjectMatch = text.match(/^Subject:\s*(.+)/m)
                             if (subjectMatch) {
                               setDraft(d => ({ ...d, subject: subjectMatch[1].trim() }))
+                              // AUDIT.md #423 — this toasted success whenever the
+                              // API call itself succeeded, regardless of whether a
+                              // subject was actually parsed out of the response. A
+                              // live LLM reply not matching the exact `Subject: ...`
+                              // format left the subject field silently unchanged
+                              // while the user was told it worked. The response's
+                              // `source` (ollama/groq/gemini/cerebras/template) was
+                              // also previously discarded, so a template fallback
+                              // (no AI provider reachable) looked identical to a
+                              // real AI draft, violating the app's established
+                              // "always label AI vs template" convention.
+                              toast(`Subject drafted ${aiSourceLabel(data.source)}`, data.source === 'template' ? 'info' : 'success')
+                            } else {
+                              toast("Couldn't parse a subject from the AI response — try again", 'error')
                             }
-                            // AUDIT — the response's `source` (ollama/groq/gemini/
-                            // cerebras/template) was discarded, so a template
-                            // fallback (no AI provider reachable) looked
-                            // identical to a real AI draft, violating the app's
-                            // established "always label AI vs template" convention.
-                            toast(`Subject drafted ${aiSourceLabel(data.source)}`, data.source === 'template' ? 'info' : 'success')
+                          } else {
+                            toast('Failed to draft subject', 'error')
                           }
                         } catch { /* ignore */ }
                         setAiDraftLoading(false)

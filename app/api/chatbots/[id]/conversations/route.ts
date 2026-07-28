@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 
 export const GET = withErrorHandler('chatbots/[id]/conversations GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireAdmin(req)
@@ -13,11 +14,19 @@ export const GET = withErrorHandler('chatbots/[id]/conversations GET', async (re
 
   const db = createServiceClient()
 
+  // AUDIT #493 — this had no pagination/limit at all, unlike courses/
+  // enrollments in the same scope; a chatbot embedded on a public site has
+  // a naturally unbounded conversation history, so a busy bot could
+  // silently truncate at PostgREST's default row cap with no cursor/
+  // next-page affordance. Cursor-paginated on updated_at (matching the
+  // page's own default sort) using this codebase's established
+  // lib/pagination.ts pattern.
+  const pag = { ...parsePagination(req), orderBy: 'updated_at' }
+
   let query = db
     .from('chatbot_conversations')
     .select('*')
     .eq('chatbot_id', id)
-    .order('updated_at', { ascending: false })
 
   if (status === 'flagged') {
     query = query.eq('flagged', true)
@@ -25,13 +34,23 @@ export const GET = withErrorHandler('chatbots/[id]/conversations GET', async (re
     query = query.eq('status', status)
   }
 
+  query = applyCursor(query, pag)
+
   const { data, error } = await query
 
   if (error) {
     throw new Error(error.message)
   }
 
-  let results = data ?? []
+  const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'updated_at')
+
+  // Substring search still runs in application code (message content lives
+  // in a JSON column, not something PostgREST can filter on directly) —
+  // scoped to this page's rows only. Callers that need every match across
+  // the full history (e.g. the conversations page's search box) must
+  // follow the cursor via fetchAllPages, same as any other paginated list
+  // in this codebase.
+  let results = rows
   if (search) {
     const q = search.toLowerCase()
     results = results.filter(c => {
@@ -43,7 +62,7 @@ export const GET = withErrorHandler('chatbots/[id]/conversations GET', async (re
     })
   }
 
-  return NextResponse.json(results)
+  return paginatedJson(results, nextCursor)
 })
 
 export const PATCH = withErrorHandler('chatbots/[id]/conversations PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {

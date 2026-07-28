@@ -70,11 +70,24 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   async function markNotificationRead(id: string) {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
-    fetch('/api/portal-clients/notifications', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [id], read: true }),
-    }).catch(() => {/* best-effort */})
+    // AUDIT.md #473 — this used to fire-and-forget with a bare
+    // `.catch(() => {})`: no `res.ok` check and no revert on failure, so a
+    // failed PATCH left the client believing a notification was read (bell
+    // badge cleared) while it silently reappeared unread on next load, with
+    // no explanation. Revert the optimistic flip whenever the request
+    // doesn't actually succeed.
+    try {
+      const res = await fetch('/api/portal-clients/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [id], read: true }),
+      })
+      if (!res.ok) {
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: false } : n))
+      }
+    } catch {
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: false } : n))
+    }
   }
 
   const unreadCount = notifications.filter(n => !n.read).length
@@ -93,8 +106,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             <p className="text-white/50 text-[11px]">{user?.service ?? 'Client Portal'}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex items-center gap-3 relative">
+          <div>
             <button
               onClick={() => setShowNotifications(v => !v)}
               className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
@@ -107,7 +120,17 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               )}
             </button>
             {showNotifications && (
-              <div className="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50">
+              // Mobile fix: this used to be positioned relative to the bell's
+              // own (narrow) wrapper, which sits to the LEFT of the avatar
+              // chip and sign-out/back button in this flex row — so
+              // `right-0` anchored to the bell's right edge, not the
+              // header's, and the fixed w-80 (320px) panel could overflow
+              // off the left edge of a ~375px phone viewport. The `relative`
+              // context now lives on the whole icon-group row above instead,
+              // so `right-0` anchors to the actual right edge of the header
+              // content; max-w-[calc(100vw-1.5rem)] is a safety net so it
+              // never exceeds the viewport even on the narrowest phones.
+              <div className="absolute right-0 top-12 w-80 max-w-[calc(100vw-1.5rem)] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-bold text-gray-900">Notifications</p>
                   <button onClick={() => setShowNotifications(false)} className="p-1 rounded hover:bg-gray-100"><X size={14} className="text-gray-400" /></button>

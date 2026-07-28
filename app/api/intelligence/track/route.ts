@@ -46,17 +46,44 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
   // so existing visitors' visit_count is never touched here — only the RPC
   // call below (gated on page_view) is allowed to increment it.
   const identifiedEmail = (body.identifiedEmail as string) || (body.formData as Record<string, string>)?.formEmail || null
-  const formName = (body.formData as Record<string, string>)?.formName || null
-  const formPhone = (body.formData as Record<string, string>)?.formPhone || null
-  const formCompany = (body.formData as Record<string, string>)?.formCompany || null
 
-  await db.from('gi_visitors').upsert({
+  // AUDIT.md #455 — GravIntel.identify(email, meta)'s `meta` param is
+  // documented (app/intelligence/page.tsx's "Setup & Embed" section, e.g.
+  // `GravIntel.identify('user@email.com', { name: 'Jane Doe' })`) and sent
+  // by public/gi.js as `identifyMeta`, but nothing here ever read it — the
+  // email landed on the visitor row while the name (or any other meta
+  // field) was silently dropped with no error, for a call this app's own
+  // docs tell developers to make. gi_visitors already has name/phone/
+  // company/title columns (used by the form_submit path below), so no
+  // migration is needed — identifyMeta just needed to feed the same
+  // columns, falling back to form-submission data when both are present.
+  const identifyMeta = (body.identifyMeta ?? null) as Record<string, unknown> | null
+  const identifyMetaName = typeof identifyMeta?.name === 'string' ? identifyMeta.name : null
+  const identifyMetaPhone = typeof identifyMeta?.phone === 'string' ? identifyMeta.phone : null
+  const identifyMetaCompany = typeof identifyMeta?.company === 'string' ? identifyMeta.company : null
+  const identifyMetaTitle = typeof identifyMeta?.title === 'string' ? identifyMeta.title : null
+
+  const formName = (body.formData as Record<string, string>)?.formName || identifyMetaName || null
+  const formPhone = (body.formData as Record<string, string>)?.formPhone || identifyMetaPhone || null
+  const formCompany = (body.formData as Record<string, string>)?.formCompany || identifyMetaCompany || null
+  const formTitle = identifyMetaTitle || null
+
+  // AUDIT.md #453 — .select() here lets us tell an actual first-ever INSERT
+  // apart from a no-op conflict: with ignoreDuplicates, Postgrest only
+  // returns a row for visitors it just inserted, never for ones it skipped.
+  // That distinction is what lets the gi_increment_visits RPC below apply
+  // only to returning visitors — the insert above already seeds visit_count
+  // at 1, so incrementing again on the same request double-counted every
+  // visitor's first page_view forever (1 -> 2), inflating lead_score by 5
+  // points (gi_score_visitor's visit_count * 5 term) from the very first hit.
+  const { data: insertedRows } = await db.from('gi_visitors').upsert({
     visitor_id: visitorId,
     site_id: siteId || 'default',
     email: identifiedEmail,
     name: formName,
     phone: formPhone,
     company: formCompany,
+    title: formTitle,
     ip_address: ip,
     user_agent: userAgent,
     language: body.language as string ?? null,
@@ -71,7 +98,8 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
   }, {
     onConflict: 'visitor_id',
     ignoreDuplicates: true,
-  })
+  }).select('visitor_id')
+  const isNewVisitor = (insertedRows?.length ?? 0) > 0
 
   // Refresh mutable per-visit fields for both new and returning visitors —
   // deliberately excludes visit_count, first_seen, and visit_count-adjacent
@@ -85,11 +113,17 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
   if (formName) returningUpdates.name = formName
   if (formPhone) returningUpdates.phone = formPhone
   if (formCompany) returningUpdates.company = formCompany
+  if (formTitle) returningUpdates.title = formTitle
   await db.from('gi_visitors').update(returningUpdates).eq('visitor_id', visitorId)
 
-  // Increment visit count on page_view
+  // Increment visit count on page_view — but only for a visitor the insert
+  // above did NOT just create, since that insert already seeds visit_count
+  // at 1. Incrementing unconditionally here bumped every brand-new visitor
+  // straight to 2 on their very first page_view (AUDIT.md #453).
   if (body.eventType === 'page_view') {
-    try { await db.rpc('gi_increment_visits', { vid: visitorId }) } catch { /* function may not exist yet */ }
+    if (!isNewVisitor) {
+      try { await db.rpc('gi_increment_visits', { vid: visitorId }) } catch { /* function may not exist yet */ }
+    }
 
     // Geolocation — no-op until IPINFO_API_KEY is set (see lib/geolocation.ts;
     // AUDIT.md #33). Looked up once per visitor (skipped once city is already

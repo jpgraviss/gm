@@ -50,10 +50,17 @@ export const POST = withErrorHandler('forms/public/funnel-submit POST', async (r
 
   const db = createServiceClient()
 
+  // AUDIT.md #499 — same `status = 'Published'` gate the real public funnel
+  // page (app/go/page/[slug]/page.tsx) already applies before it'll render
+  // anything. Without it, a caller who knows an unpublished/draft funnel's
+  // slug could POST here directly — the page 404s them, but this endpoint
+  // had no equivalent check — creating real CRM contacts and firing
+  // automations for a funnel that was never actually live.
   const { data: funnel } = await db
     .from('funnels')
     .select('id')
     .eq('slug', funnelSlug)
+    .eq('status', 'Published')
     .single()
 
   if (!funnel) {

@@ -41,12 +41,12 @@ function CopyButton({ text }: { text: string }) {
 function DnsRecordBlock({ record }: { record: DnsRecord }) {
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
-      <div className="grid grid-cols-3 gap-4 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+      <div className="hidden sm:grid grid-cols-3 gap-4 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
         <span>Type</span>
         <span>Host</span>
         <span>Value</span>
       </div>
-      <div className="grid grid-cols-3 gap-4 items-start">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 sm:items-start">
         <span className="text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-md px-2 py-1 w-fit">
           {record.type}
         </span>

@@ -16,7 +16,7 @@ interface TicketRow {
   id: string
   company?: string
   status: string
-  created_at?: string
+  createdDate?: string
 }
 
 interface ClientHealth {
@@ -163,7 +163,7 @@ export default function ClientHealthPage() {
       return !i.issuedDate || (i.issuedDate >= cutoffISO && i.issuedDate <= endISO)
     })
     const filteredTickets = tickets.filter(t => {
-      return !t.created_at || (t.created_at >= cutoffISO && t.created_at <= endISO)
+      return !t.createdDate || (t.createdDate >= cutoffISO && t.createdDate <= endISO)
     })
 
     return companies

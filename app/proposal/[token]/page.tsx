@@ -207,7 +207,7 @@ export default function ProposalViewPage() {
         {/* ── Company & Meta Card ── */}
         <section style={{
           background: 'var(--card-bg)', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-          padding: '32px 36px', marginBottom: 20,
+          padding: 'clamp(20px, 6vw, 32px) clamp(18px, 6vw, 36px)', marginBottom: 20,
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
             <div>
@@ -232,7 +232,7 @@ export default function ProposalViewPage() {
         {proposal.pdfUrl && (
           <section style={{
             background: COLORS.forestGreen, borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-            padding: '28px 36px', marginBottom: 20,
+            padding: 'clamp(20px, 6vw, 28px) clamp(18px, 6vw, 36px)', marginBottom: 20,
             display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16,
           }}>
             <div>
@@ -261,7 +261,7 @@ export default function ProposalViewPage() {
         {/* ── Executive Summary ── */}
         <section style={{
           background: 'var(--card-bg)', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-          padding: '32px 36px', marginBottom: 20,
+          padding: 'clamp(20px, 6vw, 32px) clamp(18px, 6vw, 36px)', marginBottom: 20,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
             <div style={{ width: 3, height: 22, background: COLORS.forestGreen, borderRadius: 2 }} />
@@ -281,7 +281,7 @@ export default function ProposalViewPage() {
         {proposal.items.length > 0 && (
           <section style={{
             background: 'var(--card-bg)', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-            padding: '32px 36px', marginBottom: 20,
+            padding: 'clamp(20px, 6vw, 32px) clamp(18px, 6vw, 36px)', marginBottom: 20,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
               <div style={{ width: 3, height: 22, background: COLORS.forestGreen, borderRadius: 2 }} />
@@ -296,8 +296,8 @@ export default function ProposalViewPage() {
                 <p style={{ fontSize: 10, fontWeight: 700, color: COLORS.stone, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
                   Recurring Services
                 </p>
-                <div style={{ overflow: 'hidden', borderRadius: 10, border: `1px solid #e8e4df` }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', borderRadius: 10, border: `1px solid #e8e4df` }}>
+                  <table style={{ width: '100%', minWidth: 420, borderCollapse: 'collapse', fontSize: 14 }}>
                     <thead>
                       <tr style={{ background: COLORS.warmCream }}>
                         <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 10, fontWeight: 700, color: COLORS.stone, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Service</th>
@@ -337,8 +337,8 @@ export default function ProposalViewPage() {
                 <p style={{ fontSize: 10, fontWeight: 700, color: COLORS.stone, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
                   One-Time Services
                 </p>
-                <div style={{ overflow: 'hidden', borderRadius: 10, border: `1px solid #e8e4df` }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', borderRadius: 10, border: `1px solid #e8e4df` }}>
+                  <table style={{ width: '100%', minWidth: 420, borderCollapse: 'collapse', fontSize: 14 }}>
                     <thead>
                       <tr style={{ background: COLORS.warmCream }}>
                         <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 10, fontWeight: 700, color: COLORS.stone, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Service</th>
@@ -377,7 +377,7 @@ export default function ProposalViewPage() {
         {/* ── Total Value Card ── */}
         <section style={{
           background: COLORS.deepPine, borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.1)',
-          padding: '28px 36px', marginBottom: 20,
+          padding: 'clamp(20px, 6vw, 28px) clamp(18px, 6vw, 36px)', marginBottom: 20,
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16,
         }}>
           <div>
@@ -403,7 +403,7 @@ export default function ProposalViewPage() {
         {/* ── Response Section ── */}
         <section style={{
           background: 'var(--card-bg)', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-          padding: '32px 36px',
+          padding: 'clamp(20px, 6vw, 32px) clamp(18px, 6vw, 36px)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
             <div style={{ width: 3, height: 22, background: COLORS.terracotta, borderRadius: 2 }} />
@@ -451,7 +451,7 @@ export default function ProposalViewPage() {
               onClick={() => handleResponse('accept')}
               disabled={submitting}
               style={{
-                flex: 1, padding: '14px 24px', borderRadius: 10, border: 'none',
+                flex: 1, padding: '14px clamp(10px, 4vw, 24px)', borderRadius: 10, border: 'none',
                 background: COLORS.forestGreen, color: '#ffffff',
                 fontSize: 14, fontWeight: 700, fontFamily: "'Montserrat', sans-serif",
                 cursor: submitting ? 'not-allowed' : 'pointer',
@@ -468,7 +468,7 @@ export default function ProposalViewPage() {
               onClick={() => handleResponse('decline')}
               disabled={submitting}
               style={{
-                flex: 1, padding: '14px 24px', borderRadius: 10,
+                flex: 1, padding: '14px clamp(10px, 4vw, 24px)', borderRadius: 10,
                 border: `1.5px solid #e8e4df`, background: '#ffffff', color: COLORS.stone,
                 fontSize: 14, fontWeight: 600, fontFamily: "'Montserrat', sans-serif",
                 cursor: submitting ? 'not-allowed' : 'pointer',

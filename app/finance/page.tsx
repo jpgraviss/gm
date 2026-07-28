@@ -60,8 +60,22 @@ export default function FinanceHub() {
       .then(setContracts)
       .catch(() => {})
 
+    // AUDIT.md #420 — `r.ok ? r.json() : null` resolves (doesn't reject) on
+    // a real non-2xx response (400 no API key, 502 upstream Mercury error),
+    // so the old `.catch()` — which only fires on a true network
+    // exception — never ran and the "Mercury not connected" banner never
+    // showed; the UI silently fell through to a bare "No accounts found."
+    // Now a non-ok response is explicitly turned into a rejection carrying
+    // the route's real error message, so the banner reflects what actually
+    // went wrong (no API key vs. a genuine upstream Mercury API failure).
     fetch('/api/mercury/accounts')
-      .then(r => r.ok ? r.json() : null)
+      .then(async r => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null)
+          throw new Error(body?.error || `Mercury request failed (${r.status})`)
+        }
+        return r.json()
+      })
       .then(d => {
         if (d?.accounts) {
           setMercuryAccounts(d.accounts)
@@ -73,7 +87,7 @@ export default function FinanceHub() {
           }
         }
       })
-      .catch(() => setMercuryError('Mercury not connected'))
+      .catch(err => setMercuryError(err instanceof Error ? err.message : 'Mercury not connected'))
       .finally(() => setMercuryLoading(false))
   }, [])
 
@@ -127,8 +141,14 @@ export default function FinanceHub() {
 
           {mercuryError ? (
             <div className="p-5 text-center">
-              <p className="text-sm text-gray-500 mb-2">Mercury is not connected yet.</p>
-              <p className="text-xs text-gray-400">Add your <code className="bg-gray-100 px-1.5 py-0.5 rounded">MERCURY_API_KEY</code> to environment variables.</p>
+              <p className="text-sm text-gray-500 mb-2">
+                {mercuryError.toLowerCase().includes('not configured') ? 'Mercury is not connected yet.' : 'Mercury is not available right now.'}
+              </p>
+              <p className="text-xs text-gray-400">
+                {mercuryError.toLowerCase().includes('not configured') ? (
+                  <>Add your <code className="bg-gray-100 px-1.5 py-0.5 rounded">MERCURY_API_KEY</code> to environment variables.</>
+                ) : mercuryError}
+              </p>
             </div>
           ) : mercuryAccounts.length > 0 ? (
             <div className="p-5 space-y-4">

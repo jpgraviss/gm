@@ -78,17 +78,25 @@ export const POST = withErrorHandler('courses/[id]/quiz/[moduleId]/grade POST', 
   }
 
   const db = createServiceClient()
+  const staff = await isStaffCaller(req)
 
   // The real answer key lives only in the DB row's raw `modules` column —
   // never through mapCourse, which is what strips correctIndex before
   // anything reaches a student.
   const { data: course, error: courseErr } = await db
     .from('courses')
-    .select('modules')
+    .select('modules, status')
     .eq('id', id)
     .single()
 
   if (courseErr || !course) {
+    return NextResponse.json({ error: 'Course not found' }, { status: 404 })
+  }
+  // Same staff-only-Draft gate the sibling GET route enforces (courses/[id]/
+  // route.ts) — without it, an unpublished course's quiz answer key would be
+  // readable by anyone via this endpoint even though the course itself 404s
+  // for non-staff callers.
+  if (course.status !== 'Published' && !staff) {
     return NextResponse.json({ error: 'Course not found' }, { status: 404 })
   }
 
@@ -111,6 +119,18 @@ export const POST = withErrorHandler('courses/[id]/quiz/[moduleId]/grade POST', 
     return NextResponse.json({ error: 'This quiz has no questions to grade' }, { status: 400 })
   }
 
+  // AUDIT.md #512 — the no-enrollmentId "preview" branch was originally
+  // meant for staff QA-ing a course they're not enrolled in, but nothing
+  // actually enforced that: any authenticated caller could hit it with
+  // guessed answers on any quiz (including Draft-course quizzes past the
+  // status gate above, if they somehow had the id) and read back every
+  // correctIndex in the response — a full answer-key oracle. Preview mode
+  // now requires a real staff caller; anyone else must supply a real
+  // enrollmentId, which is ownership-checked below.
+  if (!enrollmentId && !staff) {
+    return NextResponse.json({ error: 'enrollmentId is required' }, { status: 400 })
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let enrollment: any = null
   if (enrollmentId) {
@@ -130,7 +150,6 @@ export const POST = withErrorHandler('courses/[id]/quiz/[moduleId]/grade POST', 
     // #100/#123) — staff may grade on behalf of any student, everyone else
     // only their own enrollment. Not touched/weakened, just mirrored here so
     // this endpoint can't be used to forge someone else's progress either.
-    const staff = await isStaffCaller(req)
     if (!staff && found.student_email?.toLowerCase() !== email.toLowerCase()) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

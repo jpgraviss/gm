@@ -204,13 +204,19 @@ export default function ChatbotsPage() {
 
   async function toggleActive(bot: Chatbot) {
     try {
-      await fetch(`/api/chatbots/${bot.id}`, {
+      const res = await fetch(`/api/chatbots/${bot.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: !bot.active }),
       })
+      // AUDIT #521 — a failed toggle (e.g. blocked by requireAdmin) used to
+      // fail silently: fetchBots() would resync to the real (unchanged)
+      // state with no feedback telling the user why their click did nothing.
+      if (!res.ok) toast('Failed to update chatbot status', 'error')
       fetchBots()
-    } catch { /* ignore */ }
+    } catch {
+      toast('Failed to update chatbot status', 'error')
+    }
   }
 
   /* ── Embed helpers ─────────────────────────────────────────── */

@@ -38,6 +38,15 @@
 -- original is_staff() creation) rolls back with nothing applied, which is
 -- exactly what produces "function public.is_staff() does not exist" if you
 -- then run this file on its own.
+--
+-- AUDIT.md #514 — this is a STALE copy of is_staff() (no 2FA check). The
+-- canonical, most-recent definition lives in
+-- supabase/migrations/enforce_2fa_session_rls.sql (folds in
+-- staff_two_factor_ok()). Since `create or replace function` means
+-- whichever migration runs LAST wins, running this file after that one
+-- would silently re-open AUDIT.md #439's 2FA-RLS bypass. If you're
+-- copying this file's pattern for a new migration, base it on
+-- enforce_2fa_session_rls.sql's is_staff() instead of this one.
 
 create or replace function public.is_staff()
 returns boolean

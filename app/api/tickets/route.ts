@@ -3,11 +3,10 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, TICKET_STATUSES, TICKET_PRIORITIES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { requireRole } from '@/lib/rbac'
-import { requirePortalClient, isStaffCaller } from '@/lib/portal-auth'
+import { requirePortalClient, isStaffCaller, blockIfPreview } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 import { mapTicket } from '@/lib/tickets'
-import { sendPushNotification } from '@/lib/push-notifications'
-import { shouldSendPushForEvent } from '@/lib/notification-preferences'
+import { applyRoutingRules, notifyRoutedAssignee, type RoutingResult } from '@/lib/ticket-routing'
 
 export const GET = withErrorHandler('tickets GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
@@ -41,63 +40,12 @@ export const GET = withErrorHandler('tickets GET', async (req: NextRequest) => {
   return paginatedJson(rows.map(row => mapTicket(row, includeInternal)), nextCursor)
 })
 
-// AUDIT.md #486 — result now also says *why* someone was assigned, so the
-// POST handler below can tell a plain routing assignment apart from the
-// Urgent/High → Leadership escalation and title the push notification
-// accordingly. Callers that only care about the name can keep using
-// `?.name` as before.
-type RoutingResult = { name: string; escalated: boolean }
-
-async function applyRoutingRules(
-  db: ReturnType<typeof createServiceClient>,
-  company: string,
-  priority: string,
-  serviceType: string,
-): Promise<RoutingResult | null> {
-  if (priority === 'Urgent' || priority === 'High') {
-    const { data: leader } = await db
-      .from('team_members')
-      .select('name')
-      .eq('unit', 'Leadership')
-      .eq('status', 'active')
-      .limit(1)
-      .maybeSingle()
-    if (leader) return { name: leader.name, escalated: true }
-  }
-
-  const { data: rep } = await db
-    .from('deals')
-    .select('assigned_rep')
-    .eq('company', company)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (rep?.assigned_rep) return { name: rep.assigned_rep, escalated: false }
-
-  const unitMap: Record<string, string> = {
-    'SEO': 'Delivery/Operations',
-    'Web Design': 'Delivery/Operations',
-    'Social Media': 'Delivery/Operations',
-    'PPC': 'Delivery/Operations',
-    'Billing': 'Billing/Finance',
-    'General': 'Sales',
-  }
-  const unit = unitMap[serviceType]
-  if (unit) {
-    const { data: member } = await db
-      .from('team_members')
-      .select('name')
-      .eq('unit', unit)
-      .eq('status', 'active')
-      .limit(1)
-      .maybeSingle()
-    if (member) return { name: member.name, escalated: false }
-  }
-
-  return null
-}
-
 export const POST = withErrorHandler('tickets POST', async (req: NextRequest) => {
+  // AUDIT.md #506 — this is the same route app/client/page.tsx's Support
+  // tab uses to submit a new ticket on the client's behalf.
+  const blocked = blockIfPreview(req)
+  if (blocked) return blocked
+
   const body = await req.json()
   const result = validate(body, {
     subject: { required: true, type: 'string', maxLength: 500 },
@@ -165,26 +113,7 @@ export const POST = withErrorHandler('tickets POST', async (req: NextRequest) =>
   // failure must never turn a successful ticket creation into an error
   // response, same posture as lib/portal-notify.ts and the automations
   // engine's own push call sites.
-  if (routing?.name) {
-    try {
-      const { data: assignee } = await db
-        .from('team_members')
-        .select('id')
-        .eq('name', routing.name)
-        .eq('status', 'active')
-        .maybeSingle()
-      if (assignee?.id && await shouldSendPushForEvent('ticket_created')) {
-        await sendPushNotification({
-          userId: assignee.id,
-          title: routing.escalated ? 'Urgent ticket escalated to you' : 'New ticket assigned to you',
-          body: `${body.subject} — ${body.company ?? ''}`,
-          url: '/tickets',
-        }).catch(() => {})
-      }
-    } catch (err) {
-      console.error('[tickets] assignee push notification failed:', err)
-    }
-  }
+  await notifyRoutedAssignee(db, routing, body.subject, body.company ?? '')
 
   return NextResponse.json(mapTicket(data, true), { status: 201 })
 })

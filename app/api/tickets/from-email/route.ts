@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
+import { applyRoutingRules, notifyRoutedAssignee } from '@/lib/ticket-routing'
 
 type Db = ReturnType<typeof createServiceClient>
 
@@ -127,6 +128,18 @@ async function processInbox(
     const parsedDate = dateHeader ? new Date(dateHeader) : new Date()
     const createdDate = (Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate).toISOString().split('T')[0]
 
+    // AUDIT #518 — inbound-email tickets used to insert directly with
+    // assigned_to hardcoded to '', never calling applyRoutingRules() (the
+    // function the staff/portal creation path uses to auto-assign by
+    // rep/service-unit and escalate Urgent/High priority to Leadership).
+    // Every ticket auto-created from an unread support email landed
+    // permanently unassigned with nobody notified. Mirrors POST /api/tickets
+    // exactly — Medium priority and 'General' service type are what an
+    // email-created ticket already implicitly used (no priority/serviceType
+    // signal exists in an inbound email), so routing resolves the same way
+    // a staff-created ticket with those same defaults would.
+    const routing = await applyRoutingRules(db, matchedCompany || 'Unknown', 'Medium', 'General')
+
     const ticketId = `tkt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const { error: ticketErr } = await db.from('tickets').insert({
       id: ticketId,
@@ -135,7 +148,7 @@ async function processInbox(
       status: 'Open',
       priority: 'Medium',
       source: 'Email',
-      assigned_to: '',
+      assigned_to: routing?.name ?? '',
       created_date: createdDate,
       tags: [],
       // Field names must match what mapTicket()/the tickets UI actually
@@ -166,6 +179,7 @@ async function processInbox(
     }
 
     await db.from('processed_emails').update({ ticket_id: ticketId }).eq('id', claimId)
+    await notifyRoutedAssignee(db, routing, subject, matchedCompany || 'Unknown')
 
     created++
   }

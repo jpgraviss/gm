@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import BulkActionBar from '@/components/ui/BulkActionBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import { useAuth } from '@/contexts/AuthContext'
 
 type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Client' | 'Resolved' | 'Closed'
 type TicketPriority = 'Low' | 'Medium' | 'High' | 'Urgent'
@@ -306,6 +307,7 @@ function TicketPanel({
 
 export default function TicketsPage() {
   const { toast } = useToast()
+  const { user } = useAuth()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [localTickets, setLocalTickets] = useState<Ticket[]>([])
@@ -372,7 +374,7 @@ export default function TicketsPage() {
     const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
     const newMsg: TicketMessage = {
       id: `m-${Date.now()}`,
-      author: 'You',
+      author: user?.name || user?.email || 'You',
       isInternal,
       body,
       timestamp,

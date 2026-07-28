@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS public.report_work_log (
 
 CREATE INDEX IF NOT EXISTS idx_report_work_log_company_period ON public.report_work_log(company_name, period_start);
 
+-- AUDIT.md #514 — this is a STALE copy of is_staff() (no 2FA check). The
+-- canonical, most-recent definition lives in
+-- supabase/migrations/enforce_2fa_session_rls.sql (folds in
+-- staff_two_factor_ok()). Since `create or replace function` means
+-- whichever migration runs LAST wins, running this file after that one
+-- would silently re-open AUDIT.md #439's 2FA-RLS bypass. If you're
+-- copying this file's pattern for a new migration, base it on
+-- enforce_2fa_session_rls.sql's is_staff() instead of this one.
 create or replace function public.is_staff()
 returns boolean
 language sql

@@ -361,6 +361,26 @@ export default function KnowledgeBasePage() {
     return list
   }, [articles, activeCategory, statusFilter, search])
 
+  // AUDIT #522 — the internal KB page used to just switch to the
+  // already-fetched local article object on view, never hitting
+  // GET /api/knowledge-base/[id] (the only thing that fires #276's atomic
+  // increment_kb_article_views RPC), so the "X views" counter was always
+  // 0/stale for every article viewed internally. Fire the real GET so views
+  // actually accrue, and sync the incremented count into local state; fall
+  // back to the local object (no increment) if the request fails so viewing
+  // an article never breaks over a transient network error.
+  async function openArticle(article: Article) {
+    setViewArticle(article)
+    try {
+      const res = await fetch(`/api/knowledge-base/${article.id}`)
+      if (!res.ok) return
+      const fresh = await res.json()
+      const updated: Article = { ...article, views: fresh.views ?? article.views }
+      setViewArticle(updated)
+      setArticles(prev => prev.map(a => a.id === updated.id ? updated : a))
+    } catch { /* keep the locally-known article */ }
+  }
+
   async function handleSave(data: { title: string; body: string; category: string; tags: string[]; status: string }, id?: string) {
     try {
       const url = id ? `/api/knowledge-base/${id}` : '/api/knowledge-base'
@@ -512,7 +532,7 @@ export default function KnowledgeBasePage() {
             {filtered.map((article) => (
               <button
                 key={article.id}
-                onClick={() => setViewArticle(article)}
+                onClick={() => openArticle(article)}
                 className="w-full text-left flex items-start gap-4 p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:shadow-sm transition-all group"
               >
                 <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-gray-100 transition-colors">

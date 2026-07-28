@@ -5,6 +5,15 @@
 -- included) — the field_type only drives which input control the UI shows
 -- and how the value is parsed for display; keeping storage untyped avoids
 -- a second migration every time a new field_type is added.
+--
+-- AUDIT.md #514 — this is a STALE copy of is_staff() (no 2FA check). The
+-- canonical, most-recent definition lives in
+-- supabase/migrations/enforce_2fa_session_rls.sql (folds in
+-- staff_two_factor_ok()). Since `create or replace function` means
+-- whichever migration runs LAST wins, running this file after that one
+-- would silently re-open AUDIT.md #439's 2FA-RLS bypass. If you're
+-- copying this file's pattern for a new migration, base it on
+-- enforce_2fa_session_rls.sql's is_staff() instead of this one.
 create or replace function public.is_staff()
 returns boolean
 language sql

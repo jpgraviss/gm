@@ -68,6 +68,8 @@ export const POST = withErrorHandler('invoices POST', async (req) => {
     amount:       { required: true, type: 'number', min: 0 },
     status:       { type: 'string', enum: [...INVOICE_STATUSES] },
     dueDate:      { type: 'string', maxLength: 30 },
+    issuedDate:   { type: 'string', maxLength: 30 },
+    paidDate:     { type: 'string', maxLength: 30 },
     serviceType:  { type: 'string', maxLength: 100 },
     contractId:   { type: 'string', maxLength: 100 },
     timeEntryIds: { type: 'array' },
@@ -85,7 +87,12 @@ export const POST = withErrorHandler('invoices POST', async (req) => {
       amount:       body.amount,
       status:       body.status ?? 'Pending',
       due_date:     body.dueDate ?? null,
-      issued_date:  today,
+      // AUDIT #510 — issuedDate/paidDate weren't in this schema at all, so
+      // both were silently swallowed no matter what a caller sent — invisible
+      // for CreateInvoiceModal (which never sends them, #421) but a real bug
+      // for the CSV importer (#511), which does.
+      issued_date:  body.issuedDate || today,
+      paid_date:    body.paidDate || null,
       service_type: body.serviceType ?? 'General',
       contract_id:  body.contractId ?? null,
       source:       'manual',

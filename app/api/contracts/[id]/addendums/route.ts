@@ -195,15 +195,20 @@ export const PATCH = withErrorHandler('contracts/[id]/addendums PATCH', async (r
   if (body.scopeRemoved !== undefined) update.scope_removed = body.scopeRemoved
   if (body.effectiveDate !== undefined) update.effective_date = body.effectiveDate
 
-  const { data, error } = await db
-    .from('contract_addendums')
-    .update(update)
-    .eq('id', addendumId)
-    .eq('contract_id', contractId)
-    .select()
-    .single()
+  // AUDIT #520 — the Draft-only guard above was read-then-write with no
+  // `.eq('status', 'Draft')` on the write itself, so a concurrent request
+  // transitioning the same addendum Draft→Sent between the read and this
+  // update could let a content edit land after the addendum was already
+  // sent to the client. Re-assert it on the actual write for content edits;
+  // a status-change-only PATCH (e.g. Draft→Sent) isn't restricted to Draft
+  // rows by design, so it keeps its original unconditional write.
+  const baseQuery = db.from('contract_addendums').update(update).eq('id', addendumId).eq('contract_id', contractId)
+  const { data, error } = await (isContentEdit ? baseQuery.eq('status', 'Draft') : baseQuery).select().single()
 
   if (error) {
+    if (isContentEdit && error.code === 'PGRST116') {
+      return NextResponse.json({ error: 'This addendum is no longer editable — it may have been sent since this page loaded' }, { status: 409 })
+    }
     throw new Error(error.message)
   }
 

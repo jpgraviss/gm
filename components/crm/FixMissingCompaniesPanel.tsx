@@ -15,6 +15,7 @@ interface UnmatchedContact {
   contactId: string
   contactName: string
   companyNameOnFile: string
+  ambiguous?: boolean
 }
 
 interface FixMissingCompaniesPanelProps {
@@ -143,7 +144,9 @@ export default function FixMissingCompaniesPanel({ onClose, onFixed }: FixMissin
                   <div key={u.contactId} className="p-3 rounded-lg border border-amber-100 bg-amber-50/50 flex items-center justify-between gap-3">
                     <p className="text-sm font-medium text-gray-800 truncate">{u.contactName}</p>
                     <p className="text-[11px] text-gray-400 truncate flex-shrink-0">
-                      {u.companyNameOnFile ? `"${u.companyNameOnFile}" (no match)` : 'No company on file'}
+                      {u.ambiguous
+                        ? `"${u.companyNameOnFile}" (ambiguous — multiple companies share this name)`
+                        : u.companyNameOnFile ? `"${u.companyNameOnFile}" (no match)` : 'No company on file'}
                     </p>
                   </div>
                 ))}

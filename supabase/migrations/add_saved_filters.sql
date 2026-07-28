@@ -11,6 +11,15 @@
 -- RLS fixes) was never actually applied to this database. Run
 -- tighten_authenticated_rls.sql and tighten_authenticated_rls_part2.sql
 -- too, not just this file — this redefinition only unblocks this table.
+--
+-- AUDIT.md #514 — this is a STALE copy of is_staff() (no 2FA check). The
+-- canonical, most-recent definition lives in
+-- supabase/migrations/enforce_2fa_session_rls.sql (folds in
+-- staff_two_factor_ok()). Since `create or replace function` means
+-- whichever migration runs LAST wins, running this file after that one
+-- would silently re-open AUDIT.md #439's 2FA-RLS bypass. If you're
+-- copying this file's pattern for a new migration, base it on
+-- enforce_2fa_session_rls.sql's is_staff() instead of this one.
 create or replace function public.is_staff()
 returns boolean
 language sql

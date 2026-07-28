@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requirePortalClient } from '@/lib/portal-auth'
+import { requirePortalClient, blockIfPreview } from '@/lib/portal-auth'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { getStripeSecretKey, createInvoiceCheckoutSession } from '@/lib/stripe'
 
@@ -12,6 +12,13 @@ import { getStripeSecretKey, createInvoiceCheckoutSession } from '@/lib/stripe'
 // both cases (active staff always pass; a portal client passes only for
 // their own company's invoice).
 export const POST = withErrorHandler('invoices/[id]/checkout POST', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  // AUDIT.md #506 — this is the same route app/client/page.tsx's Billing
+  // tab uses for "Pay Now" — a real Stripe Checkout session with a real
+  // payment consequence, the highest-stakes single action reachable from
+  // preview mode.
+  const blocked = blockIfPreview(req)
+  if (blocked) return blocked
+
   const { id } = await params
   const db = createServiceClient()
 

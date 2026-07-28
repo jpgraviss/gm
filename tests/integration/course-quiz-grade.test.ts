@@ -9,6 +9,7 @@ import { NextRequest } from 'next/server'
 
 const COURSE_ROW = {
   id: 'crs-1',
+  status: 'Published',
   modules: [
     {
       id: 'mod-quiz-1',
@@ -191,7 +192,8 @@ describe('POST /api/courses/[id]/quiz/[moduleId]/grade', () => {
     expect(res.status).toBe(200)
   })
 
-  it('grades without persisting progress when no enrollmentId is supplied (preview mode)', async () => {
+  it('grades without persisting progress when no enrollmentId is supplied (staff preview mode)', async () => {
+    vi.mocked(isStaffCaller).mockResolvedValue(true)
     const res = await callRoute({ answers: { '0': 1, '1': 1, '2': 1 } })
     const body = await res.json()
 
@@ -199,6 +201,16 @@ describe('POST /api/courses/[id]/quiz/[moduleId]/grade', () => {
     expect(body.passed).toBe(true)
     expect(body.enrollment).toBeNull()
     expect(updateCalls.length).toBe(0)
+  })
+
+  // AUDIT #512 — the no-enrollmentId "preview" branch was originally meant
+  // for staff QA-ing a course, but nothing enforced that: any authenticated
+  // caller could hit it with guessed answers and read back every
+  // correctIndex, a full answer-key oracle. isStaffCaller is mocked false
+  // by default in beforeEach, so this exercises the non-staff case.
+  it('rejects preview-mode grading (no enrollmentId) for a non-staff caller', async () => {
+    const res = await callRoute({ answers: { '0': 1, '1': 1, '2': 1 } })
+    expect(res.status).toBe(400)
   })
 
   it('returns 404 for a non-quiz module id', async () => {

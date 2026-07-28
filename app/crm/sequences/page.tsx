@@ -420,12 +420,20 @@ export default function SequencesPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newSeq),
     })
-    if (res.ok) {
-      const saved = await res.json()
-      setSequences(prev => [saved, ...prev])
-      router.push(`/crm/sequences/${saved.id}`)
+    // AUDIT #517 — this used to close the modal unconditionally with no
+    // res.ok check, so a failed POST (role check, validation, DB error)
+    // left the modal closing silently with zero toast and no sequence
+    // created, asymmetric with updateSequence/deleteSequence on this same
+    // page (#389).
+    if (!res.ok) {
+      toast('Failed to create sequence', 'error')
+      setCreatingSeq(false)
+      return
     }
+    const saved = await res.json()
+    setSequences(prev => [saved, ...prev])
     setCreatingSeq(false)
+    router.push(`/crm/sequences/${saved.id}`)
   }
 
   // Re-resolves a single sequence's real server state via the list route

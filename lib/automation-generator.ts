@@ -23,7 +23,12 @@ export const VALID_TRIGGERS = [
   'Deal Stage Changed', 'Contact Created', 'Form Submitted',
 ] as const
 
-const DEAL_STAGES = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
+// AUDIT #516 — this hardcoded list is now only the last-resort fallback for
+// when the caller (POST /api/automations/generate) can't fetch the real,
+// saved pipeline config; the actual system prompt uses live stage names via
+// lib/pipelines.ts's getPipelineStageNames(), same fix #501 already applied
+// to the forms editor's deal-stage dropdown.
+const FALLBACK_DEAL_STAGES = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
 const CONTACT_FIELDS = ['status', 'lifecycle_stage', 'owner', 'source']
 const NOTIFY_TARGETS = ['assigned_rep', 'sales_team', 'finance_team', 'delivery_team', 'leadership']
 const CONDITION_OPERATORS = ['equals', 'not_equals', 'contains', 'greater_than', 'less_than']
@@ -38,7 +43,9 @@ const ACTION_CATALOG: Record<string, string | null> = {
   'Send Email Reminder': 'subject (string), body (string, plain text/short paragraphs), fromName (string, optional)',
   'Create Task': 'title (string), assignee (string — a team member name, or a unit like "Sales"), dueDateOffset (number of days from now)',
   'Update Contact': `field (one of: ${CONTACT_FIELDS.join('|')}), value (string)`,
-  'Create Deal': `dealName (string), stage (one of: ${DEAL_STAGES.join('|')})`,
+  // Placeholder — buildSystemPrompt() overrides this entry with the real,
+  // live pipeline stage names before rendering the prompt.
+  'Create Deal': `dealName (string), stage (one of: ${FALLBACK_DEAL_STAGES.join('|')})`,
   'Log Activity': 'note (string)',
   'Send Notification': `target (one of: ${NOTIFY_TARGETS.join('|')}), message (string)`,
   'Add Tag': 'tag (string)',
@@ -60,7 +67,11 @@ const ACTION_CATALOG: Record<string, string | null> = {
   'Apply Service Template': null,
   'Update Client Portal': null,
   'Escalate if 7+ Days': null,
-  'Generate Proposal': null, // only meaningful under the Form Submitted trigger
+  // executeAction() only implements this for the Form Submitted trigger with
+  // a real formId in context (lib/automations-engine.ts) — under any other
+  // trigger it's a silent no-op, so both the prompt and normalizeAutomation()
+  // below must keep it scoped to that one trigger.
+  'Generate Proposal': null,
 }
 
 const VALID_ACTIONS = Object.keys(ACTION_CATALOG)
@@ -83,9 +94,17 @@ export interface GenerateAutomationResult {
   error: string | null
 }
 
-function buildSystemPrompt(): string {
+function buildSystemPrompt(dealStages: string[]): string {
+  const stages = dealStages.length > 0 ? dealStages : FALLBACK_DEAL_STAGES
   const actionList = Object.entries(ACTION_CATALOG)
-    .map(([name, fields]) => `- "${name}"${fields ? ` — config: {${fields}}` : ' — no config needed, pass config: {}'}`)
+    .map(([name, fields]) => {
+      const resolvedFields = name === 'Create Deal'
+        ? `dealName (string), stage (one of: ${stages.join('|')})`
+        : fields
+      const base = resolvedFields ? ` — config: {${resolvedFields}}` : ' — no config needed, pass config: {}'
+      const note = name === 'Generate Proposal' ? ' (ONLY valid when trigger is "Form Submitted" — never pair with any other trigger)' : ''
+      return `- "${name}"${base}${note}`
+    })
     .join('\n')
 
   return `You are the automation builder for GravHub, a marketing agency's internal operations app. A staff member will describe, in plain English, an automation they want. Turn it into a working automation, then respond with ONLY a single JSON object (no markdown fences, no commentary before or after).
@@ -151,9 +170,20 @@ function normalizeAutomation(raw: any): GeneratedAutomation {
   }
 
   const rawActions = Array.isArray(raw.actions) ? raw.actions : []
-  const actions = rawActions
+  let actions: GeneratedAutomationAction[] = rawActions
     .map((a: unknown) => normalizeAction(a, warnings))
     .filter((a: GeneratedAutomationAction | null): a is GeneratedAutomationAction => a !== null)
+
+  // executeAction() no-ops 'Generate Proposal' for every trigger except Form
+  // Submitted (lib/automations-engine.ts) — never let it through under any
+  // other trigger, since it would sit "Active" and silently never run.
+  if (trigger !== 'Form Submitted') {
+    const droppedCount = actions.filter(a => a.type === 'Generate Proposal').length
+    if (droppedCount > 0) {
+      warnings.push('Dropped "Generate Proposal" — it only works under the "Form Submitted" trigger and would otherwise silently never run.')
+      actions = actions.filter(a => a.type !== 'Generate Proposal')
+    }
+  }
 
   if (actions.length === 0) {
     warnings.push('The AI didn\'t propose any real actions — add at least one manually before activating.')
@@ -167,9 +197,9 @@ function normalizeAutomation(raw: any): GeneratedAutomation {
   }
 }
 
-export async function generateAutomation(description: string): Promise<GenerateAutomationResult> {
+export async function generateAutomation(description: string, dealStages: string[] = []): Promise<GenerateAutomationResult> {
   const ai = await chatCompletion({
-    system: buildSystemPrompt(),
+    system: buildSystemPrompt(dealStages),
     messages: [{ role: 'user', content: description }],
     maxTokens: 1500,
     timeoutMs: 30_000,

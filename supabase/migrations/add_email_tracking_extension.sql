@@ -10,6 +10,15 @@
 -- origin), so it authenticates with its own long-lived Bearer token —
 -- extension_tokens stores only a SHA-256 hash of the real token, never the
 -- token itself, same principle as an API key table.
+--
+-- AUDIT.md #514 — this is a STALE copy of is_staff() (no 2FA check). The
+-- canonical, most-recent definition lives in
+-- supabase/migrations/enforce_2fa_session_rls.sql (folds in
+-- staff_two_factor_ok()). Since `create or replace function` means
+-- whichever migration runs LAST wins, running this file after that one
+-- would silently re-open AUDIT.md #439's 2FA-RLS bypass. If you're
+-- copying this file's pattern for a new migration, base it on
+-- enforce_2fa_session_rls.sql's is_staff() instead of this one.
 create or replace function public.is_staff()
 returns boolean
 language sql

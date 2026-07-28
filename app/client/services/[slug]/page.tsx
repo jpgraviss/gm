@@ -339,7 +339,7 @@ function SocialMediaService({ company }: { company: string }) {
           content: (p.content as string ?? '').slice(0, 120),
           platforms: p.platforms as string[] ?? [],
           status: p.status as string ?? 'Draft',
-          scheduledDate: p.scheduledDate as string ?? p.scheduled_date as string ?? undefined,
+          scheduledDate: p.scheduledAt as string ?? p.scheduledDate as string ?? p.scheduled_date as string ?? undefined,
           publishedDate: p.publishedDate as string ?? p.published_date as string ?? undefined,
         }))
         setData({ posts })

@@ -10,6 +10,7 @@ import {
   Layers, Plus, GripVertical,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { PublicBlock } from '@/app/go/page/[slug]/PublicFunnelPage'
 
 type BlockType = 'hero' | 'features' | 'testimonials' | 'cta' | 'form' | 'video' | 'faq' | 'footer'
 
@@ -525,6 +526,7 @@ function EditorInner() {
   const [loading, setLoading] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobilePanel, setMobilePanel] = useState<'blocks' | 'settings' | null>(null)
+  const [funnelSlug, setFunnelSlug] = useState('')
 
   const selectedBlock = blocks.find((b) => b.id === selectedBlockId) ?? null
 
@@ -571,6 +573,9 @@ function EditorInner() {
       // doesn't require bouncing back to the Funnels list between pages.
       const pagesList = (data.pages as PageData[]) ?? []
       setAllPages(pagesList)
+      // AUDIT.md #432 — the real slug, so "Preview" can render blocks through
+      // the same PublicBlock component the live page uses (see below).
+      setFunnelSlug((data.slug as string) ?? '')
       const pg = pagesList.find((p) => p.id === pageId)
       if (pg) {
         setPage(pg)
@@ -688,8 +693,15 @@ function EditorInner() {
           </button>
         </div>
         <div>
+          {/* AUDIT.md #432 — this used to render through BlockPreview, the same
+              mockup used for on-canvas editing, which always showed a static
+              placeholder for video blocks and never linked hero/CTA buttons to
+              their configured URL. Reusing the real PublicBlock (from the
+              public funnel page) means Preview matches what a visitor
+              actually sees. Forms stay non-destructive: `preview` short-
+              circuits the real submit network call inside FormBlock. */}
           {blocks.map((block) => (
-            <BlockPreview key={block.id} block={block} />
+            <PublicBlock key={block.id} block={block} funnelSlug={funnelSlug} pageId={pageId ?? ''} preview />
           ))}
           {blocks.length === 0 && (
             <div className="py-20 text-center text-gray-400 text-sm">No blocks added yet.</div>

@@ -56,7 +56,7 @@ function FaqAccordion({ question, answer }: { question: string; answer: string }
   )
 }
 
-function FormBlock({ data, funnelSlug, pageId }: { data: Record<string, unknown>; funnelSlug: string; pageId: string }) {
+function FormBlock({ data, funnelSlug, pageId, preview }: { data: Record<string, unknown>; funnelSlug: string; pageId: string; preview?: boolean }) {
   const fields = (data.fields ?? []) as Array<{ name: string; label: string; type: string; required: boolean }>
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -69,6 +69,14 @@ function FormBlock({ data, funnelSlug, pageId }: { data: Record<string, unknown>
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    // Editor "Preview" reuses this component for visual fidelity, but a real
+    // submit here would write a live lead row for a form staff is only
+    // looking at — so preview stops short of the network call and just
+    // shows the same success state a real visitor would see.
+    if (preview) {
+      setSubmitted(true)
+      return
+    }
     setSubmitting(true)
     setError(false)
     try {
@@ -144,7 +152,10 @@ function FormBlock({ data, funnelSlug, pageId }: { data: Record<string, unknown>
   )
 }
 
-function PublicBlock({ block, funnelSlug, pageId }: { block: Block; funnelSlug: string; pageId: string }) {
+// Exported so the funnel editor's "Preview" mode (app/funnels/editor/page.tsx)
+// can render through the same component the public page uses, instead of a
+// separate mockup — see AUDIT.md #432.
+export function PublicBlock({ block, funnelSlug, pageId, preview }: { block: Block; funnelSlug: string; pageId: string; preview?: boolean }) {
   const d = block.data
   const padding = `${d.padding ?? '60'}px`
   const bgColor = (d.bgColor as string) ?? '#ffffff'
@@ -221,7 +232,7 @@ function PublicBlock({ block, funnelSlug, pageId }: { block: Block; funnelSlug: 
         </section>
       )
     case 'form':
-      return <FormBlock data={d} funnelSlug={funnelSlug} pageId={pageId} />
+      return <FormBlock data={d} funnelSlug={funnelSlug} pageId={pageId} preview={preview} />
     case 'video':
       return (
         <section style={{ background: bgColor, color: textColor, padding }}>

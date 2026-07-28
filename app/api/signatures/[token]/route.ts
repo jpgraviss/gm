@@ -89,7 +89,15 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
     return NextResponse.json({ error: 'Signature request has expired' }, { status: 400 })
   }
 
-  // Update the signature request
+  // AUDIT #496 — conditional on status still being 'pending', matching the
+  // atomic-claim pattern #81 established on
+  // /api/reputation/review-request/[token]. The status/expiry checks above
+  // read a snapshot that a near-simultaneous second submission (e.g. the
+  // same signing link opened on two devices, or a replayed request) could
+  // also pass before either write lands. Only the request whose UPDATE
+  // actually claims the row (returns a row) proceeds — this prevents
+  // duplicate internal-signature-request creation and duplicate signer
+  // emails below.
   const { data: updated, error: updateErr } = await db
     .from('signature_requests')
     .update({
@@ -102,11 +110,15 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
       signature_date: signatureDate || new Date().toISOString().split('T')[0],
     })
     .eq('token', token)
+    .eq('status', 'pending')
     .select()
-    .single()
+    .maybeSingle()
 
   if (updateErr) {
     throw new Error(updateErr?.message || 'Failed to update signature')
+  }
+  if (!updated) {
+    return NextResponse.json({ error: 'Already signed' }, { status: 400 })
   }
 
   // Audit log for signature recording

@@ -160,13 +160,21 @@ export const POST = withErrorHandler('inbox/unified POST', async (req) => {
   }
 
   for (const t of (tickets ?? [])) {
-    if (!t.contact_email) continue
+    // AUDIT #487 — NewTicketPanel's canSave doesn't require Contact Email,
+    // so a staff-created ticket can legitimately have none. This used to
+    // `continue` here, silently dropping any such ticket from the Unified
+    // Inbox despite this route's stated purpose of aggregating "every
+    // channel." Give it a per-ticket placeholder key instead so it still
+    // surfaces — a shared literal placeholder (e.g. plain '') would merge
+    // every no-email ticket into a single thread via upsertThread's
+    // email-keyed map, which is worse than dropping them.
+    const contactEmail = t.contact_email || `(no email — ticket ${t.id})`
     const lastMsg = Array.isArray(t.messages) && t.messages.length > 0
       ? t.messages[t.messages.length - 1]
       : null
     const preview = lastMsg?.body ?? lastMsg?.text ?? t.subject ?? ''
     upsertThread(
-      t.contact_email,
+      contactEmail,
       t.contact_name ?? '',
       t.company ?? undefined,
       'ticket',

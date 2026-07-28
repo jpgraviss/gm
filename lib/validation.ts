@@ -76,5 +76,11 @@ export const TASK_PRIORITIES = ['High', 'Medium', 'Low'] as const
 // AUDIT.md #483 — the two routes below previously reused TASK_PRIORITIES
 // unmodified, so any Urgent ticket 400'd on creation/update.
 export const TICKET_PRIORITIES = ['Urgent', 'High', 'Medium', 'Low'] as const
-export const TICKET_STATUSES = ['Open', 'In Progress', 'Waiting', 'Resolved', 'Closed'] as const
+// AUDIT.md #484 — was 'Waiting' while app/tickets/page.tsx's frontend
+// TicketStatus type/statusConfig/allStatuses all used 'Waiting on Client'.
+// No write path had ever produced either string (inert at the time), so no
+// reconciliation of live data was needed — reconciled to the frontend's
+// more descriptive string, which was already fully built out everywhere
+// except `filterTabs` (see that file).
+export const TICKET_STATUSES = ['Open', 'In Progress', 'Waiting on Client', 'Resolved', 'Closed'] as const
 export const RENEWAL_STATUSES = ['Upcoming', 'In Progress', 'Renewed', 'Churned'] as const

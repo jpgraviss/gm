@@ -265,6 +265,12 @@ export default function CalendarSettingsPage() {
         setSubUrl('')
         setSubName('')
         setShowAddSub(false)
+        // AUDIT #481 — the import endpoint now reports a `failed` count
+        // when some events couldn't be saved, instead of silently
+        // reporting full success.
+        if (data.failed) {
+          alert(`Imported ${data.imported} of ${data.total} events — ${data.failed} failed to save.`)
+        }
       }
     } catch { /* ignore */ }
     setAddingSub(false)
@@ -281,6 +287,11 @@ export default function CalendarSettingsPage() {
       if (res.ok) {
         const data = await res.json()
         setSubscriptions(prev => prev.map(s => s.id === id ? { ...s, last_synced_at: new Date().toISOString(), event_count: data.synced } : s))
+        // AUDIT #481 — surface per-event sync failures instead of letting
+        // them disappear into a "successful" sync.
+        if (data.failed) {
+          alert(`Synced ${data.synced} events — ${data.failed} failed to save.`)
+        }
       }
     } catch { /* ignore */ }
     setSyncingSubId(null)

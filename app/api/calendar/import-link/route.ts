@@ -60,7 +60,13 @@ export const POST = withErrorHandler('calendar/import-link POST', async (req) =>
       event_count: cal.events.length,
     })
 
+    // AUDIT #481 — this used to increment `imported` unconditionally
+    // without checking the upsert's own error (the single-event branch
+    // below already did check its insert's error — this loop was the odd
+    // one out). Only count a real success; surface a failure count if any
+    // occurred, matching the sibling loops in calendar/subscriptions.
     let imported = 0
+    let failed = 0
     for (const event of cal.events) {
       if (!event.dtstart) continue
       const startDate = new Date(event.dtstart)
@@ -69,7 +75,7 @@ export const POST = withErrorHandler('calendar/import-link POST', async (req) =>
       const startHHMM = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`
       const endHHMM = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`
 
-      await db.from('bookings').upsert({
+      const { error: upsertError } = await db.from('bookings').upsert({
         id: `ics-${subId}-${event.uid}`,
         calendar_slug: 'imported',
         client_name: event.summary,
@@ -82,7 +88,12 @@ export const POST = withErrorHandler('calendar/import-link POST', async (req) =>
         notes: event.description || (event.location ? `Location: ${event.location}` : `Imported from ${name}`),
         subscription_id: subId,
       }, { onConflict: 'id' })
-      imported++
+      if (upsertError) {
+        console.error(`[calendar/import-link] failed to upsert event ${event.uid}:`, upsertError.message)
+        failed++
+      } else {
+        imported++
+      }
     }
 
     return NextResponse.json({
@@ -91,6 +102,7 @@ export const POST = withErrorHandler('calendar/import-link POST', async (req) =>
       name,
       imported,
       total: cal.events.length,
+      ...(failed > 0 ? { failed } : {}),
     })
   }
 

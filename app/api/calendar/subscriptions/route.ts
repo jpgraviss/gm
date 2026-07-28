@@ -82,7 +82,14 @@ export const POST = withErrorHandler('calendar/subscriptions POST', async (req) 
 
   if (insertError) throw new Error(insertError.message)
 
+  // AUDIT #481 — this used to increment `imported` unconditionally without
+  // checking the upsert's own error, so a per-event write failure (e.g. the
+  // `bookings.calendar_slug` FK to calendar_settings(slug) rejecting the
+  // hardcoded 'imported' slug if that row doesn't exist) would silently
+  // report success while persisting nothing. Only count a real success;
+  // surface a failure count if any occurred.
   let imported = 0
+  let failed = 0
   for (const event of cal.events) {
     if (!event.dtstart) continue
     const startDate = new Date(event.dtstart)
@@ -95,7 +102,7 @@ export const POST = withErrorHandler('calendar/subscriptions POST', async (req) 
       endHHMM = `${String(e.getHours()).padStart(2, '0')}:${String(e.getMinutes()).padStart(2, '0')}`
     }
 
-    await db.from('bookings').upsert({
+    const { error: upsertError } = await db.from('bookings').upsert({
       id: `ics-${subId}-${event.uid}`,
       calendar_slug: 'imported',
       client_name: event.summary,
@@ -108,7 +115,12 @@ export const POST = withErrorHandler('calendar/subscriptions POST', async (req) 
       notes: event.description || (event.location ? `Location: ${event.location}` : `Imported from ${subName}`),
       subscription_id: subId,
     }, { onConflict: 'id' })
-    imported++
+    if (upsertError) {
+      console.error(`[calendar/subscriptions] failed to upsert event ${event.uid}:`, upsertError.message)
+      failed++
+    } else {
+      imported++
+    }
   }
 
   return NextResponse.json({
@@ -116,6 +128,7 @@ export const POST = withErrorHandler('calendar/subscriptions POST', async (req) 
     name: subName,
     imported,
     total: cal.events.length,
+    ...(failed > 0 ? { failed } : {}),
   }, { status: 201 })
 })
 
@@ -154,7 +167,12 @@ async function syncSubscription(db: ReturnType<typeof createServiceClient>, sub:
   const existingIds = new Set((existing ?? []).map(b => b.id))
   const newIds = new Set<string>()
 
+  // AUDIT #481 — same unconditional-increment bug as the initial-import
+  // loop above: check each upsert's own error and only count real
+  // successes, so a per-event write failure can't masquerade as a
+  // successful sync.
   let imported = 0
+  let failed = 0
   for (const event of cal.events) {
     if (!event.dtstart) continue
     const bookingId = `ics-${sub.id}-${event.uid}`
@@ -170,7 +188,7 @@ async function syncSubscription(db: ReturnType<typeof createServiceClient>, sub:
       endHHMM = `${String(e.getHours()).padStart(2, '0')}:${String(e.getMinutes()).padStart(2, '0')}`
     }
 
-    await db.from('bookings').upsert({
+    const { error: upsertError } = await db.from('bookings').upsert({
       id: bookingId,
       calendar_slug: 'imported',
       client_name: event.summary,
@@ -183,7 +201,12 @@ async function syncSubscription(db: ReturnType<typeof createServiceClient>, sub:
       notes: event.description || (event.location ? `Location: ${event.location}` : `Imported from ${sub.name}`),
       subscription_id: sub.id,
     }, { onConflict: 'id' })
-    imported++
+    if (upsertError) {
+      console.error(`[calendar/subscriptions] sync failed to upsert event ${event.uid}:`, upsertError.message)
+      failed++
+    } else {
+      imported++
+    }
   }
 
   const toDelete = [...existingIds].filter(id => !newIds.has(id))
@@ -196,7 +219,11 @@ async function syncSubscription(db: ReturnType<typeof createServiceClient>, sub:
     event_count: cal.events.length,
   }).eq('id', sub.id)
 
-  return imported
+  if (failed > 0) {
+    console.error(`[calendar/subscriptions] sync for ${sub.id} had ${failed} failed event upsert(s) out of ${cal.events.length}`)
+  }
+
+  return { imported, failed }
 }
 
 async function syncAllSubscriptions(userEmail?: string) {
@@ -210,16 +237,28 @@ async function syncAllSubscriptions(userEmail?: string) {
   }
 
   let totalSynced = 0
+  // `errors` counts subscriptions that failed entirely (e.g. the feed
+  // fetch itself threw); `totalFailed` counts individual event upserts
+  // that failed within an otherwise-successful sync — both are real
+  // failure modes and neither should be silently absorbed into `synced`.
   let errors = 0
+  let totalFailed = 0
   for (const sub of subs) {
     try {
-      totalSynced += await syncSubscription(db, sub)
+      const { imported, failed } = await syncSubscription(db, sub)
+      totalSynced += imported
+      totalFailed += failed
     } catch {
       errors++
     }
   }
 
-  return NextResponse.json({ synced: totalSynced, errors, subscriptions: subs.length })
+  return NextResponse.json({
+    synced: totalSynced,
+    errors,
+    subscriptions: subs.length,
+    ...(totalFailed > 0 ? { failedEvents: totalFailed } : {}),
+  })
 }
 
 export const PATCH = withErrorHandler('calendar/subscriptions PATCH', async (req) => {
@@ -237,8 +276,8 @@ export const PATCH = withErrorHandler('calendar/subscriptions PATCH', async (req
   }
 
   try {
-    const imported = await syncSubscription(db, sub)
-    return NextResponse.json({ synced: imported })
+    const { imported, failed } = await syncSubscription(db, sub)
+    return NextResponse.json({ synced: imported, ...(failed > 0 ? { failed } : {}) })
   } catch (err) {
     throw new Error(`Sync failed: ${err instanceof Error ? err.message : 'unknown'}`)
   }

@@ -45,6 +45,7 @@ interface WorkflowStep {
 }
 
 interface WorkflowData {
+  id: string
   company: string
   service: string
   steps: WorkflowStep[]
@@ -292,7 +293,17 @@ function StepDetails({ step, details }: { step: number; details: StepDetail }) {
 export default function ClientWorkflowPage() {
   const { toast } = useToast()
   const { company } = useClientCompany()
-  const [workflow, setWorkflow] = useState<WorkflowData | null>(null)
+  // AUDIT #472 — /api/delivery/workflow?company= can return more than one
+  // row for a company with concurrent engagements (multiple services, e.g.
+  // a website build alongside an SEO retainer); this used to keep only
+  // data[0], so every workflow but the newest was silently invisible to
+  // the client with no list/selector and no error — same bug class #399
+  // already fixed on the client portal's Project tab. Now keeps the full
+  // list and derives the displayed workflow from a selection, defaulting
+  // to the first (most recent, per the API's created_at-desc ordering).
+  const [workflows, setWorkflows] = useState<WorkflowData[]>([])
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null)
+  const workflow = workflows.find(w => w.id === selectedWorkflowId) ?? workflows[0] ?? null
   const [loading, setLoading] = useState(true)
   const [expandedStep, setExpandedStep] = useState<number | null>(null)
 
@@ -304,11 +315,12 @@ export default function ClientWorkflowPage() {
     // GET /api/delivery/workflow always returns a JSON array (it's
     // cursor-paginated), even scoped to a single company — treating it as
     // a lone WorkflowData object threw on every render (`workflow.steps`
-    // was undefined on an array). Take the first/most recent match.
+    // was undefined on an array). Keep the full array; selection above
+    // picks which one to display.
     fetch(`/api/delivery/workflow?company=${encodeURIComponent(company)}`)
       .then(r => r.ok ? r.json() : [])
       .then((data: WorkflowData[]) => {
-        if (Array.isArray(data) && data.length > 0) setWorkflow(data[0])
+        if (Array.isArray(data)) setWorkflows(data)
       })
       .catch(() => toast('Failed to load workflow', 'error'))
       .finally(() => setLoading(false))
@@ -330,6 +342,21 @@ export default function ClientWorkflowPage() {
             <p className="text-sm text-gray-500 mt-1">{workflow.service} for {workflow.company}</p>
           )}
         </div>
+
+        {workflows.length > 1 && (
+          <div className="flex flex-wrap gap-2 mb-6">
+            {workflows.map(w => (
+              <button
+                key={w.id}
+                onClick={() => setSelectedWorkflowId(w.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${w.id === workflow?.id ? 'text-white' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                style={w.id === workflow?.id ? { background: '#015035', borderColor: '#015035' } : undefined}
+              >
+                {w.service}
+              </button>
+            ))}
+          </div>
+        )}
 
         {!workflow ? (
           <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">

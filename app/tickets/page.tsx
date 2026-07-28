@@ -66,7 +66,11 @@ const priorityConfig: Record<TicketPriority, { color: string; bg: string; border
 }
 
 const allStatuses: TicketStatus[] = ['Open', 'In Progress', 'Waiting on Client', 'Resolved', 'Closed']
-const filterTabs: Array<TicketStatus | 'All'> = ['All', 'Open', 'In Progress', 'Resolved', 'Closed']
+// AUDIT #484 — 'Waiting on Client' was missing from filterTabs even though
+// it's a real, selectable status in statusConfig/allStatuses (and now the
+// backend's TICKET_STATUSES) — a ticket in that status had no filter tab
+// to find it under.
+const filterTabs: Array<TicketStatus | 'All'> = ['All', 'Open', 'In Progress', 'Waiting on Client', 'Resolved', 'Closed']
 const priorityLevels: Array<TicketPriority | 'All'> = ['All', 'Urgent', 'High', 'Medium', 'Low']
 
 function TicketPanel({

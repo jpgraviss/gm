@@ -199,11 +199,11 @@ export const POST = withErrorHandler('forms/public/[slug] POST', async (req: Nex
     throw insertErr instanceof Error ? insertErr : new Error('Failed to save submission')
   }
 
-  // Bump submissions count
-  await db
-    .from('forms')
-    .update({ submissions_count: (form.submissions_count ?? 0) + 1 })
-    .eq('id', form.id)
+  // Bump submissions count — AUDIT.md #498: atomic RPC instead of a
+  // read-then-write increment, which could lose a count under concurrent
+  // submissions to the same busy public form (same pattern already used for
+  // funnel_pages.views/conversions and knowledge_articles feedback counts).
+  await db.rpc('increment_form_submissions_count', { p_id: form.id })
 
   fireTrigger('form_submitted', {
     formId: form.id,

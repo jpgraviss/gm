@@ -509,6 +509,14 @@ function FormEditor({ form, onClose, onSave }: { form: LeadForm; onClose: () => 
                                     <option value="notes">Notes</option>
                                   </select>
                                 </div>
+                                {f.type !== 'hidden' && (
+                                  <input
+                                    value={f.helpText ?? ''}
+                                    onChange={e => updateField(f.id, { helpText: e.target.value })}
+                                    placeholder="Help text (shown below the field on the public form)"
+                                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                  />
+                                )}
                               </>)}
                                 {(f.type === 'select' || f.type === 'multi_select') && (
                                   <input

@@ -49,6 +49,15 @@
 --      default-denied (no policy = no access for that command), which is
 --      a widening, not a tightening. Each such table below gets exactly
 --      the set of per-command policies that existed live, no more.
+--
+-- AUDIT.md #514 — this is a STALE copy of is_staff() (no 2FA check). The
+-- canonical, most-recent definition lives in
+-- supabase/migrations/enforce_2fa_session_rls.sql (folds in
+-- staff_two_factor_ok()). Since `create or replace function` means
+-- whichever migration runs LAST wins, running this file after that one
+-- would silently re-open AUDIT.md #439's 2FA-RLS bypass. If you're
+-- copying this file's pattern for a new migration, base it on
+-- enforce_2fa_session_rls.sql's is_staff() instead of this one.
 
 create or replace function public.is_staff()
 returns boolean

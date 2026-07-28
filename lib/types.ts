@@ -238,7 +238,7 @@ export interface MaintenanceRecord {
   nextBillingDate: string
   documents?: AttachedDocument[]
   companyId?: string | null
-  contractId?: string
+  contractId?: string | null
 }
 
 export interface RenewalProposalData {

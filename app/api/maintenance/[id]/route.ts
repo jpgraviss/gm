@@ -9,6 +9,7 @@ function mapRecord(row: any) {
   return {
     id:                 row.id,
     company:            row.company,
+    contractId:         row.contract_id || null,
     serviceType:        row.service_type,
     startDate:          row.start_date ?? '',
     endDate:            row.end_date ?? undefined,
@@ -45,8 +46,10 @@ export const PATCH = withErrorHandler('maintenance/[id] PATCH', async (req, { pa
   if (body.paymentTerms !== undefined)       update.payment_terms = body.paymentTerms
   if (body.contractDuration !== undefined)   update.contract_duration = body.contractDuration
   if (body.company !== undefined)            update.company = body.company
+  if (body.companyId !== undefined)          update.company_id = body.companyId || null
   if (body.serviceType !== undefined)        update.service_type = body.serviceType
   if (body.startDate !== undefined)          update.start_date = body.startDate
+  if (body.contractId !== undefined)         update.contract_id = body.contractId || null
   const { data, error } = await db.from('maintenance_records').update(update).eq('id', id).select().single()
   if (error) {
     throw new Error(error?.message || 'Failed to update maintenance record')

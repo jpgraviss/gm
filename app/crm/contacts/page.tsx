@@ -15,6 +15,7 @@ import { InfoRow } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
 import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
+import FixMissingCompaniesPanel from '@/components/crm/FixMissingCompaniesPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMContact, ContactNote, ContactTask, CRMCompany, Deal, Contract, Project, CRMActivity } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
@@ -26,7 +27,7 @@ import {
   TrendingUp, DollarSign, FileText, Clock, FolderKanban, Globe,
   CheckCircle2, Circle, Calendar, AlertCircle, RefreshCw, Presentation,
   PhoneCall, Video, Pencil, Trash2, Upload, Eye, MessageSquare, MousePointerClick,
-  Flame, Thermometer, Snowflake, Sparkles, Brain, Wand2, GitMerge, Download, Tag, ArrowUpDown,
+  Flame, Thermometer, Snowflake, Sparkles, Brain, Wand2, GitMerge, Download, Tag, ArrowUpDown, Building2,
   MapPin, Smartphone, NotebookPen, Check, UserCog,
 } from 'lucide-react'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
@@ -1541,6 +1542,7 @@ export default function ContactsPage() {
   const [creatingContact, setCreatingContact] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showDuplicates, setShowDuplicates] = useState(false)
+  const [showFixCompany, setShowFixCompany] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
   const [showBulkTag, setShowBulkTag] = useState(false)
@@ -1934,6 +1936,12 @@ export default function ContactsPage() {
             <GitMerge size={13} /> Show Duplicates
           </button>
           <button
+            onClick={() => setShowFixCompany(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
+          >
+            <Building2 size={13} /> Fix Missing Companies
+          </button>
+          <button
             onClick={() => setShowImport(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
           >
@@ -2181,6 +2189,14 @@ export default function ContactsPage() {
           type="contacts"
           onClose={() => setShowDuplicates(false)}
           onMergeComplete={() => {
+            fetchCrmContacts().then(data => setLocalContacts(data))
+          }}
+        />
+      )}
+      {showFixCompany && (
+        <FixMissingCompaniesPanel
+          onClose={() => setShowFixCompany(false)}
+          onFixed={() => {
             fetchCrmContacts().then(data => setLocalContacts(data))
           }}
         />

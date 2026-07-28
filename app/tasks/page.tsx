@@ -554,7 +554,13 @@ function KanbanBoard({ tasks, onSelectTask, onToggleComplete, onCopy }: { tasks:
 function ListView({ tasks, onSelectTask, onToggleComplete }: { tasks: AppTask[]; onSelectTask: (t: AppTask) => void; onToggleComplete: (id: string, completed: boolean) => void }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="hidden sm:grid grid-cols-[40px_1fr_100px_120px_100px_120px_100px] gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+      {/* AUDIT #464 — Department is now a real 8th grid column (with its own
+          header) instead of a conditionally-rendered 8th row item under a
+          7-column grid template. NewTaskModal always assigns a non-null
+          department by default, so the old conditional item wrapped onto an
+          implicit new row under nearly every task instead of aligning as a
+          column. */}
+      <div className="hidden sm:grid grid-cols-[40px_1fr_100px_120px_100px_120px_100px_110px] gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
         <div />
         <div>Task</div>
         <div>Priority</div>
@@ -562,6 +568,7 @@ function ListView({ tasks, onSelectTask, onToggleComplete }: { tasks: AppTask[];
         <div>Status</div>
         <div>Assignee</div>
         <div>Category</div>
+        <div>Department</div>
       </div>
       <div className="divide-y divide-gray-100">
         {tasks.map(task => {
@@ -574,7 +581,7 @@ function ListView({ tasks, onSelectTask, onToggleComplete }: { tasks: AppTask[];
           return (
             <div
               key={task.id}
-              className={`grid grid-cols-1 sm:grid-cols-[40px_1fr_100px_120px_100px_120px_100px] gap-2 px-4 py-3 items-center hover:bg-gray-50/80 transition-colors cursor-pointer ${overdue ? 'bg-red-50/30' : ''} ${isCompleted ? 'opacity-60' : ''}`}
+              className={`grid grid-cols-1 sm:grid-cols-[40px_1fr_100px_120px_100px_120px_100px_110px] gap-2 px-4 py-3 items-center hover:bg-gray-50/80 transition-colors cursor-pointer ${overdue ? 'bg-red-50/30' : ''} ${isCompleted ? 'opacity-60' : ''}`}
               onClick={() => onSelectTask(task)}
             >
               <div className="flex items-center justify-center">
@@ -612,11 +619,11 @@ function ListView({ tasks, onSelectTask, onToggleComplete }: { tasks: AppTask[];
               <div className="hidden sm:block">
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${categoryColors[task.category]}`}>{task.category}</span>
               </div>
-              {task.department && (
-                <div className="hidden sm:block">
+              <div className="hidden sm:block">
+                {task.department && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-slate-100 text-slate-600">{task.department}</span>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )
         })}

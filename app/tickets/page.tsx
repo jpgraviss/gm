@@ -553,17 +553,31 @@ export default function TicketsPage() {
 
   async function handleBulkDelete() {
     const ids = Array.from(selectedIds)
+    const removed = localTickets.filter(t => selectedIds.has(t.id))
     setLocalTickets(prev => prev.filter(t => !selectedIds.has(t.id)))
     setSelectedIds(new Set())
     setShowBulkDeleteConfirm(false)
+    // AUDIT #490 — this previously fired the request but never checked
+    // res.ok, so a non-Leadership Team Member (bulk-delete requires
+    // Leadership server-side, see app/api/crm/bulk-delete/route.ts, but the
+    // button isn't role-gated client-side) got a 403, a false "N tickets
+    // deleted" success toast, and the rows vanishing locally while nothing
+    // was touched server-side — reappearing on next reload. The exact bug
+    // already fixed on Contacts/Companies for #294/#433; same fix here.
     try {
-      await fetch('/api/crm/bulk-delete', {
+      const res = await fetch('/api/crm/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'tickets', ids }),
       })
+      if (!res.ok) {
+        if (removed.length > 0) setLocalTickets(prev => [...removed, ...prev])
+        toast('Failed to delete tickets', 'error')
+        return
+      }
       toast(`${ids.length} tickets deleted`, 'success')
     } catch {
+      if (removed.length > 0) setLocalTickets(prev => [...removed, ...prev])
       toast('Failed to delete tickets', 'error')
     }
   }

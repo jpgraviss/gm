@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import {
@@ -528,10 +528,37 @@ function EditorInner() {
 
   const selectedBlock = blocks.find((b) => b.id === selectedBlockId) ?? null
 
+  // AUDIT #431 — snapshot of the last-loaded/last-saved blocks+name, used by
+  // isDirty() below to detect unsaved edits before they're silently
+  // discarded by a page switch / "Back to Funnels" / tab close. Mirrors the
+  // savedConfigRef pattern in app/admin/portal-management/page.tsx.
+  const savedStateRef = useRef<string>('')
+
+  function isDirty(): boolean {
+    return JSON.stringify({ blocks, pageName }) !== savedStateRef.current
+  }
+
   useEffect(() => {
     if (!funnelId || !pageId) return
     loadPage()
   }, [funnelId, pageId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Warn on an actual browser unload/refresh/close with unsaved block edits.
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (isDirty()) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [blocks, pageName]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function confirmDiscardIfDirty(): boolean {
+    if (!isDirty()) return true
+    return window.confirm('You have unsaved changes on this page. Leave without saving?')
+  }
 
   async function loadPage() {
     try {
@@ -549,6 +576,7 @@ function EditorInner() {
         setPage(pg)
         setBlocks(pg.blocks ?? [])
         setPageName(pg.name)
+        savedStateRef.current = JSON.stringify({ blocks: pg.blocks ?? [], pageName: pg.name })
       }
     } finally {
       setLoading(false)
@@ -593,8 +621,12 @@ function EditorInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId, blocks, name: pageName }),
       })
-      if (res.ok) toast('Page saved', 'success')
-      else toast('Failed to save page', 'error')
+      if (res.ok) {
+        toast('Page saved', 'success')
+        savedStateRef.current = JSON.stringify({ blocks, pageName })
+      } else {
+        toast('Failed to save page', 'error')
+      }
     } catch {
       toast('Failed to save page', 'error')
     } finally {
@@ -615,6 +647,7 @@ function EditorInner() {
         toast('Failed to save latest edits — funnel not published', 'error')
         return
       }
+      savedStateRef.current = JSON.stringify({ blocks, pageName })
       const res = await fetch(`/api/funnels/${funnelId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -670,7 +703,10 @@ function EditorInner() {
     <div className="h-screen flex flex-col">
       {/* Top bar */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-white/10 px-3 md:px-4 py-2.5 flex items-center gap-2 md:gap-3 z-10 flex-shrink-0">
-        <button onClick={() => router.push('/funnels')} className="text-gray-400 hover:text-gray-600 text-xs flex-shrink-0">
+        <button
+          onClick={() => { if (confirmDiscardIfDirty()) router.push('/funnels') }}
+          className="text-gray-400 hover:text-gray-600 text-xs flex-shrink-0"
+        >
           &larr; <span className="hidden sm:inline">Funnels</span>
         </button>
         <div className="h-4 w-px bg-gray-200 dark:bg-white/10 hidden sm:block" />
@@ -683,7 +719,9 @@ function EditorInner() {
           <select
             value={pageId ?? ''}
             onChange={(e) => {
-              if (e.target.value !== pageId) router.push(`/funnels/editor?funnel=${funnelId}&page=${e.target.value}`)
+              if (e.target.value !== pageId && confirmDiscardIfDirty()) {
+                router.push(`/funnels/editor?funnel=${funnelId}&page=${e.target.value}`)
+              }
             }}
             className="hidden sm:block text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-600 dark:text-white/60 max-w-[160px] flex-shrink-0"
             title="Switch to another page in this funnel"

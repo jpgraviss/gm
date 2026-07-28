@@ -40,13 +40,32 @@ export const POST = withErrorHandler('funnels/[id]/pages POST', async (req: Next
   const nextOrder = existing && existing.length > 0 ? (existing[0].sort_order as number) + 1 : 0
 
   const pageId = `fp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+
+  // AUDIT #430 — mirrors the retry-on-collision pattern already used for
+  // funnel-level slug creation (app/api/funnels/route.ts POST): without it,
+  // two pages with the same generated slug (e.g. both named "Thank You")
+  // collide, and the second page becomes unreachable via a direct ?step=
+  // link with no way to fix the slug or delete the page short of deleting
+  // the whole funnel.
+  let slug = slugifyForm(body.name)
+  for (let i = 0; i < 10; i++) {
+    const { data: existingSlug } = await db
+      .from('funnel_pages')
+      .select('id')
+      .eq('funnel_id', id)
+      .eq('slug', slug)
+      .maybeSingle()
+    if (!existingSlug) break
+    slug = `${slugifyForm(body.name)}-${Math.random().toString(36).slice(2, 6)}`
+  }
+
   const { data, error } = await db
     .from('funnel_pages')
     .insert({
       id: pageId,
       funnel_id: id,
       name: body.name,
-      slug: slugifyForm(body.name),
+      slug,
       blocks: body.blocks ?? [],
       sort_order: nextOrder,
     })

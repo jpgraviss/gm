@@ -377,6 +377,30 @@ function PipelineStageSelect({ value, onChange, includeAnyOption }: {
   )
 }
 
+// AUDIT #524 — "Apply Service Template" used to have zero config UI here,
+// so the engine's `context.templateName` was always undefined and fell
+// back to fuzzy-matching the trigger's own label against real template
+// names, which essentially never matched — and even a match never read
+// `template.body`, only writing a fake-looking activity note. This picks a
+// real template by id, and lib/automations-engine.ts's case now actually
+// fills placeholders and emails the result.
+function ServiceTemplateSelect({ value, onChange }: { value: string; onChange: (templateId: string) => void }) {
+  const [templates, setTemplates] = useState<{ id: string; name: string; type: string }[]>([])
+  useEffect(() => {
+    fetch('/api/document-templates')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: Array<{ id: string; name: string; type: string }>) => setTemplates(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [])
+
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)} className="cfg-input">
+      <option value="">Select a template...</option>
+      {templates.map(t => <option key={t.id} value={t.id}>{t.name} ({t.type})</option>)}
+    </select>
+  )
+}
+
 // ─── Node Config Panel ───────────────────────────────────────────────────────
 
 function NodeConfigPanel({ node, onChange, onClose }: {
@@ -566,6 +590,15 @@ function NodeConfigPanel({ node, onChange, onClose }: {
         )
       case 'generate_proposal':
         return <p className="text-xs text-gray-500 italic">Uses this automation&apos;s Form Submitted trigger and its submitted answers as the intake — no additional configuration. Set &quot;Specific Form&quot; on the trigger above so this only fires for the intended intake form.</p>
+      case 'apply_service_template':
+        return (
+          <>
+            <FieldLabel label="Template">
+              <ServiceTemplateSelect value={(config.templateId as string) ?? ''} onChange={v => update('templateId', v)} />
+            </FieldLabel>
+            <p className="text-xs text-gray-500 italic">Fills the template&apos;s [CLIENT NAME]/[DATE] and other bracket placeholders with real data, emails the result to the account&apos;s primary contact, and logs the full text to the company&apos;s Activity feed.</p>
+          </>
+        )
       default:
         return <p className="text-xs text-gray-500 italic">No configuration options.</p>
     }

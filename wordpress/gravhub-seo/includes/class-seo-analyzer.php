@@ -59,6 +59,27 @@ class GravHub_SEO_Analyzer {
 	const MAX_SLUG_LENGTH = 75;
 
 	/**
+	 * Returns the real rendered content for analysis. Elementor-built pages
+	 * store the visual content as JSON in _elementor_data, not post_content
+	 * (post_content on those pages is a hidden SEO-text fallback that is
+	 * never shown to real visitors) — so for those pages we pull the
+	 * actual builder-rendered HTML instead of running the_content on the
+	 * hidden fallback text.
+	 *
+	 * @param WP_Post $post The post to analyze.
+	 * @return string Rendered HTML content.
+	 */
+	private function get_analyzable_content( $post ) {
+		if ( class_exists( '\Elementor\Plugin' ) ) {
+			$document = \Elementor\Plugin::$instance->documents->get( $post->ID );
+			if ( $document && $document->is_built_with_elementor() ) {
+				return \Elementor\Plugin::$instance->frontend->get_builder_content_for_display( $post->ID );
+			}
+		}
+		return apply_filters( 'the_content', $post->post_content );
+	}
+
+	/**
 	 * Analyze a single post/page for SEO quality.
 	 *
 	 * @param WP_Post $post The post to analyze.
@@ -69,7 +90,7 @@ class GravHub_SEO_Analyzer {
 		$score  = 100;
 
 		// Get post content without shortcodes rendered.
-		$content = $post->post_content;
+		$content = $this->get_analyzable_content( $post );
 
 		// Get the post permalink for URL analysis.
 		$permalink = get_permalink( $post );
@@ -446,8 +467,7 @@ class GravHub_SEO_Analyzer {
 		}
 
 		$keyword_lower   = mb_strtolower( $keyword );
-		$content         = $post->post_content;
-		$rendered        = apply_filters( 'the_content', $content );
+		$rendered        = $this->get_analyzable_content( $post );
 		$stripped        = wp_strip_all_tags( $rendered );
 		$stripped_lower  = mb_strtolower( $stripped );
 		$title_lower     = mb_strtolower( $post->post_title );
@@ -596,7 +616,7 @@ class GravHub_SEO_Analyzer {
 	 * @return array Array of readability check results.
 	 */
 	public function analyze_readability( $post ) {
-		return $this->analyze_readability_content( $post->post_content );
+		return $this->analyze_readability_content( $this->get_analyzable_content( $post ) );
 	}
 
 	/**

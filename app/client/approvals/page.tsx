@@ -184,7 +184,10 @@ export default function ClientApprovalsPage() {
     // for defense in depth) surfacing as a generic "failed, try again" toast.
     if (isPreview) { toast("You're previewing this client's account — signing is disabled in preview mode.", 'error'); return }
     const hasSignature = sigMode === 'type' ? typedSig.trim().length > 0 : !!drawnSig
-    if (!hasSignature) { toast('Please provide a signature', 'error'); return }
+    // Contracts don't always need a real captured signature — a "Skip"
+    // control lets the client accept without one (see the skip button
+    // below). Proposals still require one; unchanged from before.
+    if (selectedItem.type === 'proposal' && !hasSignature) { toast('Please provide a signature', 'error'); return }
 
     // AUDIT #155 fix: the captured signature (typed name or drawn canvas
     // PNG data URI) is now actually sent to the PATCH routes instead of
@@ -208,7 +211,11 @@ export default function ClientApprovalsPage() {
         const res = await previewFetch(isPreview, `/api/contracts/${selectedItem.data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'Signed by Client', clientSigned: today, signatureData, signatureType }),
+          body: JSON.stringify({
+            status: 'Signed by Client',
+            clientSigned: today,
+            ...(hasSignature ? { signatureData, signatureType } : {}),
+          }),
         })
         if (!res.ok) throw new Error()
         setContracts(prev => prev.map(c => c.id === selectedItem.data.id ? { ...c, status: 'Signed by Client', clientSigned: today } : c))
@@ -409,8 +416,23 @@ export default function ClientApprovalsPage() {
 
           {actionMode === 'accept' && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-gray-800 mb-1">E-Signature Required</h3>
-              <p className="text-xs text-gray-400 mb-4">By signing, you agree to the terms of this {selectedItem.type}.</p>
+              <h3 className="text-sm font-semibold text-gray-800 mb-1">
+                {selectedItem.type === 'contract' ? 'E-Signature (Optional)' : 'E-Signature Required'}
+              </h3>
+              <p className="text-xs text-gray-400 mb-4">
+                {selectedItem.type === 'contract'
+                  ? 'You can sign below, or accept without a signature.'
+                  : `By signing, you agree to the terms of this ${selectedItem.type}.`}
+              </p>
+              {selectedItem.type === 'contract' && (
+                <button
+                  onClick={handleAccept}
+                  disabled={submitting}
+                  className="text-[11px] text-gray-400 hover:text-gray-600 underline mb-4 disabled:opacity-40"
+                >
+                  {submitting ? 'Submitting...' : 'Skip — accept without a signature'}
+                </button>
+              )}
 
               <div className="flex gap-2 mb-4">
                 <button

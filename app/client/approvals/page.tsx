@@ -177,13 +177,20 @@ export default function ClientApprovalsPage() {
     setFeedback('')
   }
 
-  async function handleAccept() {
+  async function handleAccept(forceSkip = false) {
     if (!selectedItem) return
     // AUDIT.md #506 — short-circuit with a clear message instead of relying
     // solely on the server-side blockIfPreview() 403 (still enforced below
     // for defense in depth) surfacing as a generic "failed, try again" toast.
     if (isPreview) { toast("You're previewing this client's account — signing is disabled in preview mode.", 'error'); return }
-    const hasSignature = sigMode === 'type' ? typedSig.trim().length > 0 : !!drawnSig
+    // AUDIT — the Skip button used to just call handleAccept() directly, so
+    // hasSignature was computed from whatever happened to already be in
+    // typedSig/drawnSig state. Any partial typed text (even one stray
+    // character) or an already-drawn-and-saved signature made Skip silently
+    // submit that as a real signatureData — the exact opposite of what the
+    // button promises. forceSkip makes the skip path explicit and immune to
+    // leftover capture state.
+    const hasSignature = !forceSkip && (sigMode === 'type' ? typedSig.trim().length > 0 : !!drawnSig)
     // Contracts don't always need a real captured signature — a "Skip"
     // control lets the client accept without one (see the skip button
     // below). Proposals still require one; unchanged from before.
@@ -426,7 +433,7 @@ export default function ClientApprovalsPage() {
               </p>
               {selectedItem.type === 'contract' && (
                 <button
-                  onClick={handleAccept}
+                  onClick={() => handleAccept(true)}
                   disabled={submitting}
                   className="text-[11px] text-gray-400 hover:text-gray-600 underline mb-4 disabled:opacity-40"
                 >
@@ -472,7 +479,7 @@ export default function ClientApprovalsPage() {
                       Cancel
                     </button>
                     <button
-                      onClick={handleAccept}
+                      onClick={() => handleAccept()}
                       disabled={!typedSig.trim() || submitting}
                       className="text-xs text-white font-semibold px-4 py-2 rounded-lg disabled:opacity-40"
                       style={{ background: '#015035' }}
@@ -498,7 +505,7 @@ export default function ClientApprovalsPage() {
                           Cancel
                         </button>
                         <button
-                          onClick={handleAccept}
+                          onClick={() => handleAccept()}
                           disabled={submitting}
                           className="text-xs text-white font-semibold px-4 py-2 rounded-lg disabled:opacity-40"
                           style={{ background: '#015035' }}

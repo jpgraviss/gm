@@ -34,6 +34,7 @@ function mapProposal(row: any) {
     id:                         row.id,
     dealId:                     row.deal_id ?? '',
     company:                    row.company,
+    companyId:                  row.company_id || null,
     status:                     row.status,
     value:                      row.value,
     serviceType:                row.service_type,
@@ -73,6 +74,7 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
     status:      { type: 'string', enum: [...PROPOSAL_STATUSES] },
     value:       { type: 'number', min: 0, max: 100_000_000 },
     company:     { type: 'string', maxLength: 200 },
+    companyId:   { type: 'string', maxLength: 100 },
     serviceType: { type: 'string', maxLength: 100 },
     assignedRep: { type: 'string', maxLength: 200 },
     items:       { type: 'array' },
@@ -130,6 +132,7 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
   if (body.status !== undefined)                      update.status = body.status
   if (body.value !== undefined)                       update.value = body.value
   if (body.company !== undefined)                     update.company = body.company
+  if (body.companyId !== undefined)                   update.company_id = body.companyId
   if (body.serviceType !== undefined)                 update.service_type = body.serviceType
   if (body.assignedRep !== undefined)                 update.assigned_rep = body.assignedRep
   if (body.items !== undefined)                       update.items = body.items

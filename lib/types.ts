@@ -121,6 +121,7 @@ export interface Proposal {
   id: string
   dealId: string
   company: string
+  companyId?: string | null
   status: ProposalStatus
   value: number
   serviceType: ServiceType

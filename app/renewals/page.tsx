@@ -274,6 +274,7 @@ function RenewalProposalSidebar({
 
 type LogRenewalPayload = {
   company: string
+  companyId?: string
   serviceType: string
   startDate: string
   expirationDate: string
@@ -289,6 +290,7 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (pa
   const teamMembers = useTeamMembers()
 
   const [company, setCompany] = useState('')
+  const [companyId, setCompanyId] = useState<string | undefined>(undefined)
   const [serviceType, setServiceType] = useState('Website Build')
   const [customServices, setCustomServices] = useState<string[]>([])
   const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0])
@@ -319,7 +321,7 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (pa
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company Name *</label>
             <CompanySelect
               value={company}
-              onChange={(name) => setCompany(name)}
+              onChange={(name, id) => { setCompany(name); setCompanyId(id) }}
               placeholder="Select a company..."
             />
           </div>
@@ -410,7 +412,7 @@ function LogRenewalModal({ onClose, onSave }: { onClose: () => void; onSave: (pa
               if (canSave) {
                 const daysUntilExpiry = Math.ceil((new Date(expirationDate).getTime() - Date.now()) / 86400000)
                 const svcType = serviceType === 'Custom' && customServices.length > 0 ? customServices.join(', ') : serviceType
-                onSave({ company: company.trim(), serviceType: svcType, startDate, expirationDate, daysUntilExpiry, renewalValue: renewalValue || 0, assignedRep, notes, contractId: '', status: 'Upcoming' })
+                onSave({ company: company.trim(), companyId, serviceType: svcType, startDate, expirationDate, daysUntilExpiry, renewalValue: renewalValue || 0, assignedRep, notes, contractId: '', status: 'Upcoming' })
                 onClose()
               }
             }}

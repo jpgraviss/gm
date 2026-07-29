@@ -10,9 +10,18 @@ import {
 import { getSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
 import { zonedWallTimeToUtc } from '@/lib/timezone'
+import { requireRole } from '@/lib/rbac'
 
 // GET /api/bookings?slug=jaycee-graviss&status=confirmed
+// This route's prefix is in proxy.ts's PUBLIC_PREFIXES so guest POSTs (the
+// actual public booking flow) can reach it — but that makes GET public too,
+// since the proxy matches by path prefix, not method. GET has always leaked
+// every client_name/email/phone/notes across every staff member's calendar
+// to any unauthenticated caller; gate it here, matching the already-correct
+// pattern in app/api/calendar/bookings/route.ts's internal listing branch.
 export const GET = withErrorHandler('bookings GET', async (req) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { searchParams } = new URL(req.url)
   const slug   = searchParams.get('slug')
   const status = searchParams.get('status')

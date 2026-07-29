@@ -28,10 +28,16 @@ export const POST = withErrorHandler('email/send-proposal POST', async (req) => 
       return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
     }
 
-    const { data: contacts } = await db
-      .from('crm_contacts')
-      .select('*')
-      .eq('company_name', proposal.company)
+    // AUDIT — crm_companies.name has no unique constraint (#96/#513); two
+    // companies sharing a name would send a real proposal link to the
+    // wrong company's contact. company_id (now populated for new/
+    // backfilled rows, see supabase/migrations/add_company_id_fks.sql) is
+    // collision-proof — prefer it, falling back to the name match only for
+    // older rows that predate the backfill.
+    const contactQuery = proposal.company_id
+      ? db.from('crm_contacts').select('*').eq('company_id', proposal.company_id)
+      : db.from('crm_contacts').select('*').eq('company_name', proposal.company)
+    const { data: contacts } = await contactQuery
       .order('is_primary', { ascending: false })
       .limit(1)
 

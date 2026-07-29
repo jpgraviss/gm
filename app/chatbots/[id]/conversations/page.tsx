@@ -84,11 +84,12 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
 
   async function toggleFlag(convo: Conversation) {
     try {
-      await fetch(`/api/chatbots/${id}/conversations`, {
+      const res = await fetch(`/api/chatbots/${id}/conversations`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversationId: convo.id, flagged: !convo.flagged }),
       })
+      if (!res.ok) { toast('Failed to update', 'error'); return }
       toast(convo.flagged ? 'Unflagged' : 'Flagged', 'success')
       fetchConversations()
       if (selectedConvo?.id === convo.id) setSelectedConvo({ ...convo, flagged: !convo.flagged })
@@ -97,11 +98,12 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
 
   async function markResolved(convo: Conversation) {
     try {
-      await fetch(`/api/chatbots/${id}/conversations`, {
+      const res = await fetch(`/api/chatbots/${id}/conversations`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversationId: convo.id, status: 'resolved' }),
       })
+      if (!res.ok) { toast('Failed to update', 'error'); return }
       toast('Marked as resolved', 'success')
       fetchConversations()
       if (selectedConvo?.id === convo.id) setSelectedConvo({ ...convo, status: 'resolved' })
@@ -111,7 +113,8 @@ export default function ConversationsPage({ params }: { params: Promise<{ id: st
   async function deleteConvo(convoId: string) {
     if (!confirm('Delete this conversation?')) return
     try {
-      await fetch(`/api/chatbots/${id}/conversations?conversationId=${convoId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/chatbots/${id}/conversations?conversationId=${convoId}`, { method: 'DELETE' })
+      if (!res.ok) { toast('Failed to delete', 'error'); return }
       toast('Conversation deleted', 'success')
       if (selectedConvo?.id === convoId) setSelectedConvo(null)
       fetchConversations()

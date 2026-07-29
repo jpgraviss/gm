@@ -30,6 +30,15 @@ export const POST = withErrorHandler('proposals/generate POST', async (req) => {
   let intakeText = body.intakeText?.trim() ?? ''
   let clientName = body.clientName?.trim() ?? ''
   let submissionId: string | null = null
+  // AUDIT — this route (the sole "New Proposal" entry point on the
+  // standalone Proposals page — no CompanySelect anywhere in it) never set
+  // company_id on the proposals it inserted, defeating company_id for the
+  // majority of new proposals. Resolved two ways below: directly off the
+  // submitting contact's own company_id when available (most precise), or
+  // by name-matching the resolved clientName against crm_companies
+  // otherwise — same fallback pattern the add_company_id_fks.sql backfill
+  // itself used. Left null (existing behavior) if neither resolves.
+  let companyId: string | null = null
 
   if (body.submissionId) {
     const { data: submission } = await db
@@ -57,11 +66,20 @@ export const POST = withErrorHandler('proposals/generate POST', async (req) => {
         if (f.mapsTo === 'company' && submission.data?.[f.name]) { clientName = String(submission.data[f.name]); break }
       }
     }
-    if (!clientName && submission.contact_id) {
-      const { data: contact } = await db.from('crm_contacts').select('company_name').eq('id', submission.contact_id).maybeSingle()
-      clientName = contact?.company_name ?? ''
+    if (submission.contact_id) {
+      const { data: contact } = await db.from('crm_contacts').select('company_name, company_id').eq('id', submission.contact_id).maybeSingle()
+      if (!clientName) clientName = contact?.company_name ?? ''
+      companyId = contact?.company_id ?? null
     }
     if (!clientName) clientName = form.name
+  }
+
+  if (!companyId && clientName) {
+    // .limit(1) rather than .maybeSingle() — crm_companies.name has no
+    // unique constraint (AUDIT #96/#513), and maybeSingle() throws if a
+    // name collision returns more than one row.
+    const { data: matchedCompanies } = await db.from('crm_companies').select('id').ilike('name', clientName).limit(1)
+    companyId = matchedCompanies?.[0]?.id ?? null
   }
 
   if (!intakeText) {
@@ -88,6 +106,7 @@ export const POST = withErrorHandler('proposals/generate POST', async (req) => {
     .insert({
       id: `prop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       company: clientName,
+      company_id: companyId,
       status: 'Draft',
       value,
       service_type: 'Custom',

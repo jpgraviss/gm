@@ -29,6 +29,13 @@ export interface SessionPayload {
   // gate in app/api/auth/session/route.ts for why this can't just be
   // "does a valid cookie for this email already exist."
   twoFactorVerifiedAt?: number
+  // "Remember me" checkbox (client-portal password login only). Carried
+  // forward in the cookie payload itself — not just a one-shot request
+  // flag — so a later reissue of this exact cookie (routine Supabase
+  // token-refresh, or a mount-time session restore) keeps the extended
+  // lifetime instead of silently reverting to the default Session Timeout
+  // on the very next refresh. See app/api/auth/session/route.ts.
+  rememberMe?: boolean
 }
 
 interface SignedBody extends SessionPayload {

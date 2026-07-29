@@ -112,7 +112,9 @@ class GravHub_Broken_Link_Scanner {
 		$checked_urls  = array(); // Dedupe within this run — the same external URL often appears on multiple posts.
 
 		foreach ( $posts as $post ) {
-			$external_links = $this->extract_external_links( $post->post_content, $site_host );
+			// Elementor-aware — on an Elementor page, post_content is a
+			// hidden SEO-text fallback, never the real link-bearing content.
+			$external_links = $this->extract_external_links( GravHub_Content_Helper::get_analyzable_content( $post ), $site_host );
 
 			foreach ( $external_links as $url ) {
 				if ( isset( $checked_urls[ $url ] ) ) {

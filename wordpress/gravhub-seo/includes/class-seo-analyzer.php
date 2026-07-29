@@ -59,27 +59,6 @@ class GravHub_SEO_Analyzer {
 	const MAX_SLUG_LENGTH = 75;
 
 	/**
-	 * Returns the real rendered content for analysis. Elementor-built pages
-	 * store the visual content as JSON in _elementor_data, not post_content
-	 * (post_content on those pages is a hidden SEO-text fallback that is
-	 * never shown to real visitors) — so for those pages we pull the
-	 * actual builder-rendered HTML instead of running the_content on the
-	 * hidden fallback text.
-	 *
-	 * @param WP_Post $post The post to analyze.
-	 * @return string Rendered HTML content.
-	 */
-	private function get_analyzable_content( $post ) {
-		if ( class_exists( '\Elementor\Plugin' ) ) {
-			$document = \Elementor\Plugin::$instance->documents->get( $post->ID );
-			if ( $document && $document->is_built_with_elementor() ) {
-				return \Elementor\Plugin::$instance->frontend->get_builder_content_for_display( $post->ID );
-			}
-		}
-		return apply_filters( 'the_content', $post->post_content );
-	}
-
-	/**
 	 * Analyze a single post/page for SEO quality.
 	 *
 	 * @param WP_Post $post The post to analyze.
@@ -89,8 +68,8 @@ class GravHub_SEO_Analyzer {
 		$issues = array();
 		$score  = 100;
 
-		// Get post content without shortcodes rendered.
-		$content = $this->get_analyzable_content( $post );
+		// Real, rendered content (Elementor-aware — see GravHub_Content_Helper).
+		$content = GravHub_Content_Helper::get_analyzable_content( $post );
 
 		// Get the post permalink for URL analysis.
 		$permalink = get_permalink( $post );
@@ -182,7 +161,10 @@ class GravHub_SEO_Analyzer {
 		}
 
 		// 3. H1 tag count check.
-		$rendered_content = apply_filters( 'the_content', $content );
+		// $content is already the real rendered content (Elementor's own
+		// output for Elementor pages, the_content-filtered post_content
+		// otherwise) — no need to run the_content a second time here.
+		$rendered_content = $content;
 		$h1_count         = preg_match_all( '/<h1[\s>]/i', $rendered_content, $matches );
 
 		if ( 0 === $h1_count ) {
@@ -467,7 +449,7 @@ class GravHub_SEO_Analyzer {
 		}
 
 		$keyword_lower   = mb_strtolower( $keyword );
-		$rendered        = $this->get_analyzable_content( $post );
+		$rendered        = GravHub_Content_Helper::get_analyzable_content( $post );
 		$stripped        = wp_strip_all_tags( $rendered );
 		$stripped_lower  = mb_strtolower( $stripped );
 		$title_lower     = mb_strtolower( $post->post_title );
@@ -616,7 +598,7 @@ class GravHub_SEO_Analyzer {
 	 * @return array Array of readability check results.
 	 */
 	public function analyze_readability( $post ) {
-		return $this->analyze_readability_content( $this->get_analyzable_content( $post ) );
+		return $this->analyze_readability_content( GravHub_Content_Helper::get_analyzable_content( $post ) );
 	}
 
 	/**

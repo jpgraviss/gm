@@ -72,7 +72,10 @@ class GravHub_Internal_Linking {
 
 		$focus_keyword    = trim( (string) get_post_meta( $post_id, '_gravhub_focus_keyword', true ) );
 		$title_words      = $this->tokenize( $post->post_title );
-		$already_linked   = $this->extract_linked_post_ids( $post->post_content );
+		// Elementor-aware — on an Elementor page, post_content is a hidden
+		// SEO-text fallback, so a raw post_content read here would see zero
+		// existing links and re-suggest ones already actually on the page.
+		$already_linked   = $this->extract_linked_post_ids( GravHub_Content_Helper::get_analyzable_content( $post ) );
 		$already_linked[] = $post_id; // Never suggest linking a post to itself.
 
 		$candidates = get_posts(
@@ -138,7 +141,11 @@ class GravHub_Internal_Linking {
 					__( 'Title contains your focus keyword "%s"', 'gravhub-seo' ),
 					$focus_keyword
 				);
-			} elseif ( false !== stripos( wp_strip_all_tags( $candidate->post_content ), $focus_keyword ) ) {
+				// Elementor-aware content check — more expensive than a
+				// plain post_content read (renders the candidate's real
+				// builder content), but a raw post_content check would
+				// silently never match on an Elementor candidate at all.
+			} elseif ( false !== stripos( wp_strip_all_tags( GravHub_Content_Helper::get_analyzable_content( $candidate ) ), $focus_keyword ) ) {
 				$score += 5;
 				if ( '' === $reason ) {
 					$reason = sprintf(

@@ -89,6 +89,9 @@ const ACTION_CONFIG_ADAPTERS: Record<string, (cfg: Record<string, unknown>) => R
   // the Contact Created trigger, whose trigger data (a crm_contacts row)
   // has no `unit` column to collide with.
   'Rotate Contact Owner': (cfg) => ({ unit: cfg.unit }),
+  // AUDIT.md #524 — previously had no adapter at all, so the builder's
+  // config had nowhere real to go even after a template picker was added.
+  'Apply Service Template': (cfg) => ({ templateId: cfg.templateId }),
 }
 
 function translateActionConfig(actionType: string, cfg: Record<string, unknown>): Record<string, unknown> {
@@ -870,25 +873,68 @@ async function executeAction(
     }
 
     case 'Apply Service Template': {
-      const templateName = (context.templateName as string) ?? String(context.trigger ?? '')
-      if (!templateName) break
-      // `content` isn't a real column on document_templates (it's `body`,
-      // never actually read here) — selecting it made this query fail on
-      // every call, so the action always silently no-op'd via `!template`.
+      // AUDIT.md #524 — the old version fuzzy-matched a template by name
+      // (name was almost always undefined, falling back to the trigger's
+      // own label, which essentially never matches a real template name)
+      // and, even on a match, only wrote an activity note claiming the
+      // template was "applied" — it never read `template.body`, so no
+      // actual document was ever generated or sent anywhere. This now
+      // requires a real templateId (set via the builder's template picker,
+      // see ACTION_CONFIG_ADAPTERS), fills the template's bracket
+      // placeholders with real data (same [KEY] convention as the AI
+      // chat's generate_document tool), and actually emails the result to
+      // the account's primary contact.
+      const templateId = context.templateId as string | undefined
+      if (!templateId) break
       const { data: template } = await db
         .from('document_templates')
-        .select('id, name')
-        .ilike('name', `%${templateName}%`)
-        .limit(1)
+        .select('id, name, body')
+        .eq('id', templateId)
         .maybeSingle()
-      if (!template) break
+      if (!template?.body) break
+
+      const contactId = await resolveContactId(context, company, db)
+      if (!contactId) break
+      const { data: contact } = await db
+        .from('crm_contacts')
+        .select('emails, full_name')
+        .eq('id', contactId)
+        .maybeSingle()
+      if (!contact?.emails?.[0]) break
+
+      const clientName = contact.full_name ?? company
+      const placeholderData: Record<string, string> = {
+        'CLIENT NAME': clientName,
+        'COMPANY': company,
+        'DATE': new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+      }
+      if (context.value != null) placeholderData['VALUE'] = `$${Number(context.value).toLocaleString()}`
+      const serviceType = (context.serviceType as string) ?? (context.service_type as string)
+      if (serviceType) placeholderData['SERVICE TYPE'] = serviceType
+
+      let filled = template.body as string
+      for (const [key, value] of Object.entries(placeholderData)) {
+        filled = filled.replace(new RegExp(`\\[${key}\\]`, 'gi'), value)
+      }
+
+      const subject = `${template.name} — ${company}`
+      const html = await wrapBrandedEmail(filled.replace(/\n/g, '<br>'), template.name)
+      const sendResult = await sendEmail({ to: contact.emails[0], subject, html })
+
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'note',
-        title: `[Auto] Applied service template "${template.name}" to ${company}`,
+        type: 'document',
+        title: sendResult.success
+          ? `[Auto] Sent "${template.name}" to ${clientName} (${contact.emails[0]})`
+          : `[Auto] Failed to send "${template.name}" to ${clientName}: ${sendResult.error ?? 'unknown error'}`,
+        body: filled,
+        contact_id: contactId,
+        contact_name: clientName,
         company_id: (context.companyId as string) ?? null,
+        company_name: company,
         timestamp: new Date().toISOString(),
         user_name: 'System',
+        outcome: sendResult.success ? 'success' : 'failed',
       })
       break
     }

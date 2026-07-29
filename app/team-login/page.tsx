@@ -67,9 +67,10 @@ export default function TeamLoginPage() {
   // AUDIT.md #440 — contexts/AuthContext.tsx's mount-time session restore
   // redirects here (rather than silently granting full authenticated UI
   // state) when it finds a live Supabase session for a staff member who
-  // hasn't completed 2FA yet. Land straight in the same code-entry step
-  // the normal Google Sign-In 2FA flow already uses, instead of making
-  // them re-trigger it from the login form.
+  // hasn't completed 2FA yet (magic-link path only — Google Sign-In is
+  // exempt from this app's 2FA step, see app/api/auth/google-verify).
+  // Land straight in the same code-entry step the magic-link 2FA flow
+  // already uses, instead of making them re-trigger it from the login form.
   useEffect(() => {
     if (searchParams.get('requires2FA') === '1') {
       const qEmail = searchParams.get('email')

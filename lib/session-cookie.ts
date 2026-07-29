@@ -10,6 +10,12 @@
 export const SESSION_COOKIE_NAME = 'gravhub-auth'
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 7 // 7 days — matches the old cookie's lifetime
 
+// "Remember me" checkbox on the password sign-in form (app/login/page.tsx)
+// — overrides the configured Session Timeout security setting with a fixed
+// 30-day cookie lifetime for that specific login, same override precedent
+// as sessionTimeoutToSeconds() below.
+export const REMEMBER_ME_SECONDS = 60 * 60 * 24 * 30
+
 export interface SessionPayload {
   id: string
   email: string

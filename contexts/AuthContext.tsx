@@ -203,11 +203,31 @@ async function autoProvisionTeamMember(
 // anyway via a separate, unrelated direct Supabase read. Now returns the
 // parsed response so every caller can actually see and react to
 // requires2FA before touching any client-side auth state.
+// "Remember me" checkbox on the password sign-in form (app/login/page.tsx)
+// — set right before supabase.auth.signInWithPassword() so the very next
+// establishSessionCookie() call (fired by the SIGNED_IN listener below,
+// same as any other sign-in method) picks it up. Read-once: cleared
+// immediately after reading so a later, unrelated sign-in (Google, magic
+// link — neither of which has this checkbox) never inherits a stale value.
+const REMEMBER_ME_FLAG = 'gravhub_remember_me'
+
+// Called by app/login/page.tsx's password form right before
+// supabase.auth.signInWithPassword().
+export function setRememberMeForNextLogin(remember: boolean) {
+  try { sessionStorage.setItem(REMEMBER_ME_FLAG, remember ? '1' : '0') } catch {/* ignore */}
+}
+
 async function establishSessionCookie(accessToken: string): Promise<{ requires2FA?: boolean; email?: string; error?: string } | null> {
+  let rememberMe = false
+  try {
+    rememberMe = sessionStorage.getItem(REMEMBER_ME_FLAG) === '1'
+    sessionStorage.removeItem(REMEMBER_ME_FLAG)
+  } catch {/* ignore */}
   try {
     const res = await fetch('/api/auth/session', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rememberMe }),
     })
     return await res.json().catch(() => null)
   } catch { return null }

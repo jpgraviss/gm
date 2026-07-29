@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth, setRememberMeForNextLogin } from '@/contexts/AuthContext'
 import Link from 'next/link'
 import { Mail, AlertCircle, ArrowRight, Globe, Lock, Wand2 } from 'lucide-react'
 import { GravissGMark } from '@/components/ui/GravissGMark'
@@ -50,6 +50,7 @@ export default function LoginPage() {
   const [authMethod, setAuthMethod] = useState<AuthMethod>('google')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
@@ -143,6 +144,9 @@ export default function LoginPage() {
     setError('')
     setSubmitting(true)
     try {
+      // Picked up by the SIGNED_IN listener's establishSessionCookie() call
+      // right after signInWithPassword() resolves — see AuthContext.tsx.
+      setRememberMeForNextLogin(rememberMe)
       const supabase = getSupabaseClient()
       const { error: signInErr } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
@@ -359,6 +363,17 @@ export default function LoginPage() {
                         />
                       </div>
                     </div>
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={e => setRememberMe(e.target.checked)}
+                        disabled={submitting}
+                        className="w-4 h-4 rounded border-gray-300 text-green-700 focus:ring-green-700"
+                        style={{ accentColor: '#015035' }}
+                      />
+                      <span className="text-xs text-gray-500">Remember me for 30 days</span>
+                    </label>
                     <button
                       type="submit"
                       disabled={submitting}

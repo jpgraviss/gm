@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
-import { buildSessionCookie, verifySessionCookie, sessionTimeoutToSeconds, SESSION_COOKIE_NAME } from '@/lib/session-cookie'
+import { buildSessionCookie, verifySessionCookie, sessionTimeoutToSeconds, REMEMBER_ME_SECONDS, SESSION_COOKIE_NAME } from '@/lib/session-cookie'
 import { getSecuritySettings } from '@/lib/settings'
 import { sendTwoFactorCode } from '@/lib/two-factor'
 
@@ -20,6 +20,12 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
   if (!token) {
     return NextResponse.json({ error: 'Missing bearer token' }, { status: 401 })
   }
+
+  // "Remember me" checkbox on the password sign-in form (app/login/page.tsx)
+  // — only that flow ever sends this; every other caller (magic-link
+  // confirm, routine session-restore/refresh) sends no body at all, so this
+  // defaults to false and behavior is unchanged for them.
+  const { rememberMe } = await req.json().catch(() => ({ rememberMe: false } as { rememberMe?: boolean }))
 
   const db = createServiceClient()
   const { data: { user: authUser }, error } = await db.auth.getUser(token)
@@ -63,9 +69,12 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
     }
   }
 
-  // AUDIT.md #207 — Session Timeout previously had zero effect.
+  // AUDIT.md #207 — Session Timeout previously had zero effect. "Remember
+  // me" (password sign-in only, see rememberMe above) overrides it with a
+  // fixed 30-day cookie regardless of the configured Session Timeout —
+  // that's the point of the checkbox.
   const security = await getSecuritySettings()
-  const maxAgeSeconds = sessionTimeoutToSeconds(security.sessionTimeout)
+  const maxAgeSeconds = rememberMe ? REMEMBER_ME_SECONDS : sessionTimeoutToSeconds(security.sessionTimeout)
 
   // AUDIT.md #343 — this route is called for both a fresh magic-link/OTP
   // login AND routine session-restore/token-refresh, and gating 2FA

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Header from '@/components/layout/Header'
 import {
@@ -326,6 +326,7 @@ export default function AdminPage() {
   const { toast } = useToast()
   const { user, loginAs } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [loading, setLoading] = useState(true)
 
@@ -341,6 +342,21 @@ export default function AdminPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [tab, setTab] = useState<AdminTab>('overview')
+
+  // OAuth-connect redirects (e.g. drive callback) land here with ?tab=
+  // and a connect result — previously ignored, so users landed back on
+  // Overview with no feedback on whether Connect actually worked.
+  useEffect(() => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam && tabList.some(t => t.id === tabParam)) setTab(tabParam as AdminTab)
+    const drive = searchParams.get('drive')
+    if (drive === 'connected') {
+      toast('Google Drive connected', 'success')
+    } else if (drive === 'error') {
+      toast(`Google Drive connection failed${searchParams.get('msg') ? `: ${searchParams.get('msg')}` : ''}`, 'error')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [showAddUser, setShowAddUser] = useState(false)
   const [editingUser, setEditingUser] = useState<string | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -1642,7 +1658,15 @@ export default function AdminPage() {
                 status={integrationHealth.googleDrive ? 'connected' : 'disconnected'}
                 logo="GD"
                 actions={['File Storage', 'Document Attachments', 'Auto-Folders', 'Sharing']}
-                onConnect={() => { window.location.href = '/api/drive?action=auth' }}
+                onConnect={() => {
+                  fetch('/api/drive?action=auth-url')
+                    .then(r => r.json())
+                    .then(data => {
+                      if (data.url) window.location.href = data.url
+                      else toast(data.error || 'Failed to start Google Drive auth.', 'error')
+                    })
+                    .catch(() => toast('Failed to start Google Drive auth.', 'error'))
+                }}
                 onConfigure={() => { router.push('/settings?tab=Integrations') }}
                 onRefresh={() => { toast('Google Drive files refreshed', 'success') }}
               />

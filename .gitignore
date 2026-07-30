@@ -36,3 +36,13 @@ next-env.d.ts
 # claude code
 .claude/
 .gstack/
+
+# Graviss SEO data layer — service-account/OAuth credentials, never committed.
+# clients.json is intentionally NOT ignored — property IDs are identifiers,
+# not secrets, and the registry is meant to be committed.
+*.json.key
+*-credentials.json
+analytics-key.json
+service-account*.json
+__pycache__/
+*.pyc

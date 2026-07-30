@@ -18,8 +18,10 @@ import PageLoadingOverlay from './PageLoadingOverlay'
 // app/api/portal-clients/invite) — a brand-new invitee has no session yet,
 // so leaving these off this list means the redirect effect below bounces
 // them to /login before the token/code-verification UI ever renders,
-// breaking every real onboarding link.
-const PUBLIC_ROUTES = ['/login', '/team-login', '/setup-account', '/portal/setup', '/portal/auth/verify']
+// breaking every real onboarding link. /what-we-do is the public product
+// explainer page — meant to be shared with people who have no GravHub
+// account at all, so it renders standalone with no sidebar/auth redirect.
+const PUBLIC_ROUTES = ['/login', '/team-login', '/setup-account', '/portal/setup', '/portal/auth/verify', '/what-we-do']
 
 // Pages restricted to specific units. Admins (isAdmin=true) always have full access.
 // If a route prefix is listed, users whose unit is NOT in the allowed list get redirected to /.

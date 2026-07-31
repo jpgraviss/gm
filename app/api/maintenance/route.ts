@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { validate, validationError } from '@/lib/validation'
+import { validate, validationError, MAINTENANCE_STATUSES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
@@ -53,6 +53,11 @@ export const POST = withErrorHandler('maintenance POST', async (req) => {
   const result = validate(body, {
     company: { required: true, type: 'string', maxLength: 200 },
     monthlyFee: { type: 'number', min: 0 },
+    // AUDIT #580 — mirrors #573's fix on PATCH: status was accepted as any
+    // string on create, same as the PATCH bug, and every tab filter in
+    // app/maintenance/page.tsx checks exact equality against the 5 real
+    // MaintenanceStatus values.
+    status: { type: 'string', enum: [...MAINTENANCE_STATUSES] },
   })
   if (!result.valid) return validationError(result.error)
   const db = createServiceClient()

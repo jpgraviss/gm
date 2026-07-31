@@ -160,7 +160,10 @@ describe('automations-engine: Apply Service Template', () => {
 
     expect(insertCalls['crm_activities']).toBeDefined()
     const activity = insertCalls['crm_activities'][0]
-    expect(activity.type).toBe('document')
+    // AUDIT #600 — 'document' isn't a real ActivityType; ActivityTimeline
+    // dereferences activityConfig[act.type] unguarded, crashing the
+    // Activity tab. 'email' is accurate — this action sends a real email.
+    expect(activity.type).toBe('email')
     expect(activity.outcome).toBe('success')
     expect(activity.body).toContain('Dear Jane Client')
     expect(activity.company_id).toBe('comp-1')

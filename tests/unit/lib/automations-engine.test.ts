@@ -265,6 +265,41 @@ describe('automations-engine', () => {
     expect(unitCall?.[1]).toBe('Delivery/Operations')
   })
 
+  // AUDIT #600 — Notify Sales Rep/Finance Team/Delivery Team/Assigned Rep,
+  // Log Touchpoint, and Flag in Dashboard resolved company_id/contact_id
+  // camelCase-only, unlike Log Activity/Send Notification's existing
+  // snake_case fallback — necessary because most real trigger contexts are
+  // built by spreading a raw (snake_case) DB row.
+  it('"Notify Sales Rep" falls back to snake_case company_id/contact_id when the context has no camelCase keys', async () => {
+    setupAutomations('Deal Stage Changed', ['Notify Sales Rep'])
+    fireAutomations('deal_stage_changed', { company: 'Echo Ltd', company_id: 'comp-snake', contact_id: 'contact-snake' })
+    await flushPromises()
+
+    expect(insertCalls['crm_activities'][0]).toEqual(
+      expect.objectContaining({ company_id: 'comp-snake', contact_id: 'contact-snake' }),
+    )
+  })
+
+  it('"Log Touchpoint" falls back to snake_case company_id/contact_id', async () => {
+    setupAutomations('Deal Stage Changed', ['Log Touchpoint'])
+    fireAutomations('deal_stage_changed', { company: 'Echo Ltd', company_id: 'comp-snake', contact_id: 'contact-snake' })
+    await flushPromises()
+
+    expect(insertCalls['crm_activities'][0]).toEqual(
+      expect.objectContaining({ company_id: 'comp-snake', contact_id: 'contact-snake' }),
+    )
+  })
+
+  it('"Flag in Dashboard" falls back to snake_case company_id', async () => {
+    setupAutomations('Deal Stage Changed', ['Flag in Dashboard'])
+    fireAutomations('deal_stage_changed', { company: 'Echo Ltd', company_id: 'comp-snake' })
+    await flushPromises()
+
+    expect(insertCalls['crm_activities'][0]).toEqual(
+      expect.objectContaining({ company_id: 'comp-snake' }),
+    )
+  })
+
   // AUDIT.md #554 — sequence_reply/sequence_bounce/sequence_completed are
   // inherently scoped to one sequence; without this guard, an automation
   // built for Sequence A's replies would fire for every sequence's replies

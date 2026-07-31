@@ -40,6 +40,15 @@ export const GET = withErrorHandler('tickets GET', async (req: NextRequest) => {
   return paginatedJson(rows.map(row => mapTicket(row, includeInternal)), nextCursor)
 })
 
+// AUDIT #586 — the fields app/client/page.tsx's Support tab "New Ticket"
+// form actually sends. Everything else (companyId, assignedTo, tags,
+// projectId, serviceType, status) is staff-only, mirroring the PATCH
+// sibling's PORTAL_CLIENT_EDITABLE_FIELDS pattern — without this, a portal
+// client could set companyId to a different real company while `company`
+// (the only field requirePortalClient checks) stays their own, or directly
+// target a specific staff member via assignedTo.
+const PORTAL_CLIENT_CREATABLE_FIELDS = new Set(['subject', 'priority', 'company', 'contactName', 'contactEmail', 'source', 'messages'])
+
 export const POST = withErrorHandler('tickets POST', async (req: NextRequest) => {
   // AUDIT.md #506 — this is the same route app/client/page.tsx's Support
   // tab uses to submit a new ticket on the client's behalf.
@@ -62,6 +71,21 @@ export const POST = withErrorHandler('tickets POST', async (req: NextRequest) =>
   // clients could never actually submit a ticket through this route.
   const denied = await requirePortalClient(req, body.company)
   if (denied) return denied
+
+  const staffCaller = await isStaffCaller(req)
+  if (!staffCaller) {
+    const disallowed = Object.keys(body).filter(k => !PORTAL_CLIENT_CREATABLE_FIELDS.has(k))
+    if (disallowed.length > 0) {
+      return NextResponse.json({ error: `Not permitted to set: ${disallowed.join(', ')}` }, { status: 403 })
+    }
+    // Never trust a client-submitted isInternal flag — force every message
+    // a portal client submits to be client-visible, matching the PATCH
+    // sibling's identical treatment of portal-client-submitted messages.
+    if (Array.isArray(body.messages)) {
+      body.messages = body.messages.map((m: Record<string, unknown>) => ({ ...m, isInternal: false }))
+    }
+  }
+
   const today = new Date().toISOString().split('T')[0]
   const db = createServiceClient()
 

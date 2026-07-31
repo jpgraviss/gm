@@ -21,6 +21,20 @@ export const POST = withErrorHandler('push/subscribe POST', async (req) => {
 
   const db = createServiceClient()
 
+  // AUDIT #579 — mirrors #572's fix on DELETE: the upsert's conflict target
+  // is `endpoint` alone, so without this check any authenticated user who
+  // subscribed with an `endpoint` colliding with someone else's existing
+  // row would silently hijack it away from its real owner.
+  const { data: existing } = await db
+    .from('push_subscriptions')
+    .select('user_id')
+    .eq('endpoint', endpoint)
+    .maybeSingle()
+
+  if (existing && existing.user_id !== user.userId) {
+    return NextResponse.json({ error: 'This subscription is already registered to a different user' }, { status: 409 })
+  }
+
   const { error } = await db.from('push_subscriptions').upsert(
     {
       id: `ps-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole, getAuthUser } from '@/lib/rbac'
+import { requireAdmin } from '@/lib/admin-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 import { logAudit } from '@/lib/audit'
 
@@ -32,6 +33,14 @@ export const GET = withErrorHandler('team-members GET', async (req: NextRequest)
   if (denied) return denied
   const db = createServiceClient()
   const includeInactive = req.nextUrl.searchParams.get('include_inactive') === 'true'
+  // AUDIT #582 — include_inactive=true returns suspendedReason/
+  // accessSchedule/suspendedUntil for every inactive member, HR-sensitive
+  // free text that mutating (PATCH, below) already correctly requires
+  // Super Admin for — but reading it only required the lowest staff tier.
+  if (includeInactive) {
+    const adminDenied = await requireAdmin(req)
+    if (adminDenied) return adminDenied
+  }
   let query = db.from('team_members').select('*').order('name')
   if (!includeInactive) {
     query = query.eq('status', 'active')

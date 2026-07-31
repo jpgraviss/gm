@@ -230,6 +230,22 @@ export async function executeWorkflow(
     return { runId: null, status: 'skipped' as const, steps: [] }
   }
 
+  // AUDIT.md #554 — sequence_reply/sequence_bounce/sequence_completed are
+  // inherently scoped to the one sequence a user configured them under
+  // (created via SequenceAutomateTab, never the general-purpose builder,
+  // which has no sequence picker). The trigger fetch above only matches on
+  // trigger label — same as every other trigger — so without this check an
+  // automation built for Sequence A's replies would fire for every
+  // sequence's replies company-wide. Requires an exact match rather than
+  // "skip only if set and different," so an automation somehow saved
+  // without a sequenceId can never fire broadly by accident.
+  if (
+    ['sequence_reply', 'sequence_bounce', 'sequence_completed'].includes(triggerType) &&
+    automation.config?.sequenceId !== triggerData.sequenceId
+  ) {
+    return { runId: null, status: 'skipped' as const, steps: [] }
+  }
+
   const supabase = db ?? createServiceClient()
   const runId = resumeRunId ?? `run-${uid()}`
   const startedAt = new Date().toISOString()
@@ -567,7 +583,7 @@ async function executeAction(
         const unitMap: Record<string, string> = {
           sales_team: 'Sales',
           finance_team: 'Billing/Finance',
-          delivery_team: 'Delivery',
+          delivery_team: 'Delivery/Operations',
           leadership: 'Leadership/Admin',
         }
         const unit = unitMap[target]
@@ -800,7 +816,7 @@ async function executeAction(
       const unitMap: Record<string, string> = {
         'Notify Sales Rep': 'Sales',
         'Notify Finance Team': 'Billing/Finance',
-        'Notify Delivery Team': 'Delivery',
+        'Notify Delivery Team': 'Delivery/Operations',
         'Notify Assigned Rep': '',
       }
       const targetUnit = unitMap[action]

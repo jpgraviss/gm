@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { requireRole, getAuthUser } from '@/lib/rbac'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -56,6 +56,10 @@ export const PUT = withErrorHandler('report-work-log PUT', async (req: NextReque
   })
   if (!result.valid) return validationError(result.error)
 
+  // AUDIT #589 — this client-visible "Prepared by" name must come from the
+  // authenticated caller, not the request body, matching the #438 pattern.
+  const user = await getAuthUser(req)
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('report_work_log')
@@ -67,7 +71,7 @@ export const PUT = withErrorHandler('report-work-log PUT', async (req: NextReque
       period_end:   body.periodEnd,
       categories:   body.categories ?? [],
       next_month:   body.nextMonth ?? [],
-      updated_by:   body.updatedBy ?? null,
+      updated_by:   user?.name ?? null,
       updated_at:   new Date().toISOString(),
     }, { onConflict: 'company_name,period_start' })
     .select()

@@ -20,10 +20,14 @@ export async function applyRoutingRules(
   serviceType: string,
 ): Promise<RoutingResult | null> {
   if (priority === 'Urgent' || priority === 'High') {
+    // AUDIT #618 — the real OccupationalUnit value is 'Leadership/Admin'
+    // (lib/types.ts); 'Leadership' never matches any team member, so this
+    // escalation silently never fired and every Urgent/High ticket fell
+    // through to deal-rep/unitMap routing instead.
     const { data: leader } = await db
       .from('team_members')
       .select('name')
-      .eq('unit', 'Leadership')
+      .eq('unit', 'Leadership/Admin')
       .eq('status', 'active')
       .limit(1)
       .maybeSingle()
@@ -39,12 +43,24 @@ export async function applyRoutingRules(
     .maybeSingle()
   if (rep?.assigned_rep) return { name: rep.assigned_rep, escalated: false }
 
+  // AUDIT #593 — keys must match lib/services.ts's real SERVICE_NAMES
+  // catalog (NewTicketPanel.tsx's dropdown is built from the same list);
+  // the old keys ('SEO', 'Web Design', 'PPC', 'Billing') drifted from it
+  // and matched nothing, so most staff-created tickets fell through
+  // unassigned. Marketing-lane services route to Delivery/Operations,
+  // Sales-lane services to Sales, matching the org's real unit structure.
   const unitMap: Record<string, string> = {
-    'SEO': 'Delivery/Operations',
-    'Web Design': 'Delivery/Operations',
+    'Website Build': 'Delivery/Operations',
+    'Website Management': 'Delivery/Operations',
+    'SEO / AEO': 'Delivery/Operations',
     'Social Media': 'Delivery/Operations',
-    'PPC': 'Delivery/Operations',
-    'Billing': 'Billing/Finance',
+    'Email Marketing': 'Delivery/Operations',
+    'Fractional CMO': 'Delivery/Operations',
+    'Sales Training': 'Sales',
+    'Sales Enablement': 'Sales',
+    'Sales Coaching': 'Sales',
+    'Sales Enablement Support': 'Sales',
+    'Fractional Sales Lead / CRO': 'Sales',
     'General': 'Sales',
   }
   const unit = unitMap[serviceType]

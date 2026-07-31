@@ -74,27 +74,27 @@ describe('applyRoutingRules', () => {
     dealRep = null
   })
 
-  it('escalates an Urgent ticket to an active Leadership member ahead of any deal rep', async () => {
-    teamMembersByUnit['Leadership'] = { name: 'Casey Lead' }
+  it('escalates an Urgent ticket to an active Leadership/Admin member ahead of any deal rep', async () => {
+    teamMembersByUnit['Leadership/Admin'] = { name: 'Casey Lead' }
     dealRep = { assigned_rep: 'Some Rep' }
 
-    const result = await applyRoutingRules(db, 'Acme Co', 'Urgent', 'SEO')
+    const result = await applyRoutingRules(db, 'Acme Co', 'Urgent', 'SEO / AEO')
 
     expect(result).toEqual({ name: 'Casey Lead', escalated: true })
   })
 
   it('escalates a High priority ticket the same as Urgent', async () => {
-    teamMembersByUnit['Leadership'] = { name: 'Casey Lead' }
+    teamMembersByUnit['Leadership/Admin'] = { name: 'Casey Lead' }
 
-    const result = await applyRoutingRules(db, 'Acme Co', 'High', 'Billing')
+    const result = await applyRoutingRules(db, 'Acme Co', 'High', 'Sales Training')
 
     expect(result).toEqual({ name: 'Casey Lead', escalated: true })
   })
 
-  it('falls through to the deal-assigned rep when an Urgent/High ticket has no active Leadership member', async () => {
+  it('falls through to the deal-assigned rep when an Urgent/High ticket has no active Leadership/Admin member', async () => {
     dealRep = { assigned_rep: 'Jamie Rep' }
 
-    const result = await applyRoutingRules(db, 'Acme Co', 'Urgent', 'SEO')
+    const result = await applyRoutingRules(db, 'Acme Co', 'Urgent', 'SEO / AEO')
 
     expect(result).toEqual({ name: 'Jamie Rep', escalated: false })
   })
@@ -103,7 +103,7 @@ describe('applyRoutingRules', () => {
     dealRep = { assigned_rep: 'Jamie Rep' }
     teamMembersByUnit['Delivery/Operations'] = { name: 'Ops Person' }
 
-    const result = await applyRoutingRules(db, 'Acme Co', 'Normal', 'SEO')
+    const result = await applyRoutingRules(db, 'Acme Co', 'Normal', 'SEO / AEO')
 
     expect(result).toEqual({ name: 'Jamie Rep', escalated: false })
   })
@@ -111,17 +111,17 @@ describe('applyRoutingRules', () => {
   it('falls back to the service-type unit when the company has no deal rep', async () => {
     teamMembersByUnit['Delivery/Operations'] = { name: 'Ops Person' }
 
-    const result = await applyRoutingRules(db, 'Acme Co', 'Normal', 'Web Design')
+    const result = await applyRoutingRules(db, 'Acme Co', 'Normal', 'Website Build')
 
     expect(result).toEqual({ name: 'Ops Person', escalated: false })
   })
 
-  it('maps a Billing service type to the Billing/Finance unit', async () => {
-    teamMembersByUnit['Billing/Finance'] = { name: 'Finance Person' }
+  it('maps a Sales-lane service type to the Sales unit', async () => {
+    teamMembersByUnit['Sales'] = { name: 'Sales Person' }
 
-    const result = await applyRoutingRules(db, 'Acme Co', 'Normal', 'Billing')
+    const result = await applyRoutingRules(db, 'Acme Co', 'Normal', 'Fractional Sales Lead / CRO')
 
-    expect(result).toEqual({ name: 'Finance Person', escalated: false })
+    expect(result).toEqual({ name: 'Sales Person', escalated: false })
   })
 
   it('maps a General service type to the Sales unit', async () => {
@@ -133,7 +133,7 @@ describe('applyRoutingRules', () => {
   })
 
   it('returns null when nothing matches — no leadership, no deal rep, and no unit member', async () => {
-    const result = await applyRoutingRules(db, 'Acme Co', 'Normal', 'PPC')
+    const result = await applyRoutingRules(db, 'Acme Co', 'Normal', 'Website Build')
 
     expect(result).toBeNull()
   })

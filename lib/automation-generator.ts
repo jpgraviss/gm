@@ -67,11 +67,6 @@ const ACTION_CATALOG: Record<string, string | null> = {
   'Apply Service Template': null,
   'Update Client Portal': null,
   'Escalate if 7+ Days': null,
-  // executeAction() only implements this for the Form Submitted trigger with
-  // a real formId in context (lib/automations-engine.ts) — under any other
-  // trigger it's a silent no-op, so both the prompt and normalizeAutomation()
-  // below must keep it scoped to that one trigger.
-  'Generate Proposal': null,
 }
 
 const VALID_ACTIONS = Object.keys(ACTION_CATALOG)
@@ -102,8 +97,7 @@ function buildSystemPrompt(dealStages: string[]): string {
         ? `dealName (string), stage (one of: ${stages.join('|')})`
         : fields
       const base = resolvedFields ? ` — config: {${resolvedFields}}` : ' — no config needed, pass config: {}'
-      const note = name === 'Generate Proposal' ? ' (ONLY valid when trigger is "Form Submitted" — never pair with any other trigger)' : ''
-      return `- "${name}"${base}${note}`
+      return `- "${name}"${base}`
     })
     .join('\n')
 
@@ -170,20 +164,9 @@ function normalizeAutomation(raw: any): GeneratedAutomation {
   }
 
   const rawActions = Array.isArray(raw.actions) ? raw.actions : []
-  let actions: GeneratedAutomationAction[] = rawActions
+  const actions: GeneratedAutomationAction[] = rawActions
     .map((a: unknown) => normalizeAction(a, warnings))
     .filter((a: GeneratedAutomationAction | null): a is GeneratedAutomationAction => a !== null)
-
-  // executeAction() no-ops 'Generate Proposal' for every trigger except Form
-  // Submitted (lib/automations-engine.ts) — never let it through under any
-  // other trigger, since it would sit "Active" and silently never run.
-  if (trigger !== 'Form Submitted') {
-    const droppedCount = actions.filter(a => a.type === 'Generate Proposal').length
-    if (droppedCount > 0) {
-      warnings.push('Dropped "Generate Proposal" — it only works under the "Form Submitted" trigger and would otherwise silently never run.')
-      actions = actions.filter(a => a.type !== 'Generate Proposal')
-    }
-  }
 
   if (actions.length === 0) {
     warnings.push('The AI didn\'t propose any real actions — add at least one manually before activating.')

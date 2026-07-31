@@ -103,7 +103,10 @@ export default function RevenueReportPage() {
   const totalWeighted = pipelineForecast.reduce((s, p) => s + p.weighted, 0)
   const closedWon = filteredDeals.filter(d => d.stage === 'Closed Won')
   const closedWonTotal = closedWon.reduce((s, d) => s + d.value, 0)
-  const collected = filteredInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0)
+  // AUDIT #587 — an invoice's amount can be edited after Stripe payment
+  // (#358); amountPaid records what was actually charged. Prefer it,
+  // falling back to amount only when unset (manual/non-Stripe payments).
+  const collected = filteredInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + (i.amountPaid ?? i.amount), 0)
 
   const topDeals = useMemo(() => {
     return [...filteredDeals]

@@ -15,6 +15,18 @@ export interface ClickTokenPayload {
   url: string
 }
 
+// AUDIT #591 — the browser extension's Gmail click-tracking token
+// (app/api/track/click/ext/[token]/route.ts) was minted client-side as
+// plain unsigned base64url JSON, an open redirect + forgeable-analytics
+// hole identical to what ClickTokenPayload above was signed to close.
+// Content scripts can't hold the HMAC signing key, so the extension now
+// asks POST /api/extension/track-send to sign each link's token server-side
+// and embeds the signed strings it gets back instead of computing its own.
+export interface ExtClickTokenPayload {
+  trackedEmailId: string
+  url: string
+}
+
 export function rewriteLinksForTracking(
   html: string,
   broadcastId: string,

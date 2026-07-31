@@ -6,6 +6,7 @@ import { fireAutomations } from '@/lib/automations-engine'
 import { getSettings, type AppSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
 import { departmentForUnit } from '@/lib/task-department'
+import { buildSequenceUnsubscribeUrl } from '@/lib/sequence-unsubscribe'
 import type { SequenceStep, SequenceHtmlTemplate } from '@/lib/types'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.gravissmarketing.com'
 
@@ -37,7 +38,7 @@ function replaceMergeFields(text: string, ctx: MergeContext): string {
 // ─── Unsubscribe link builder ────────────────────────────────────────────────
 
 function buildUnsubscribeLink(email: string, sequenceId: string): string {
-  return `${APP_URL}/api/sequences/unsubscribe?email=${encodeURIComponent(email)}&seq=${sequenceId}`
+  return buildSequenceUnsubscribeUrl(APP_URL, email, sequenceId)
 }
 
 function appendUnsubscribeFooter(html: string, email: string, sequenceId: string): string {

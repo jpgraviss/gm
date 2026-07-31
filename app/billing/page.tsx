@@ -651,7 +651,10 @@ export default function BillingPage() {
     awaitingInvoice: contracts.filter(c => c.status === 'Fully Executed').length,
     sent: localInvoices.filter(i => i.status === 'Sent').length,
     overdue: localInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + i.amount, 0),
-    collected: localInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0),
+    // AUDIT #587 — an invoice's amount can be edited after Stripe payment
+    // (#358); amountPaid records what was actually charged. Prefer it,
+    // falling back to amount only when unset (manual/non-Stripe payments).
+    collected: localInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + (i.amountPaid ?? i.amount), 0),
     outstanding: localInvoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0),
     mrr: computeMRR(contracts),
   }
@@ -660,7 +663,7 @@ export default function BillingPage() {
   const paidInvoices = localInvoices.filter(i => i.status === 'Paid')
   const serviceMap = new Map<string, number>()
   for (const inv of paidInvoices) {
-    serviceMap.set(inv.serviceType, (serviceMap.get(inv.serviceType) ?? 0) + inv.amount)
+    serviceMap.set(inv.serviceType, (serviceMap.get(inv.serviceType) ?? 0) + (inv.amountPaid ?? inv.amount))
   }
   const serviceBreakdown = Array.from(serviceMap.entries())
     .map(([service, amount]) => ({ service, amount }))

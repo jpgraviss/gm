@@ -2101,7 +2101,8 @@ export default function AdminPage() {
                   <div className="flex items-start justify-between py-2 border-b border-gray-50">
                     <div>
                       <p className="text-xs font-semibold text-gray-700">Two-Factor Auth</p>
-                      <p className="text-[11px] text-gray-400">Required = email code on every Google sign-in. Optional/Disabled = not enforced (no self-serve per-user opt-in yet).</p>
+                      {/* AUDIT #581 — this used to say "email code on every Google sign-in," but google-verify.ts deliberately exempts Google Sign-In from this setting (2FA moved to the magic-link path only); the copy was never updated to match. */}
+                      <p className="text-[11px] text-gray-400">Required = email code on magic-link sign-in (Google Sign-In is exempt). Optional/Disabled = not enforced (no self-serve per-user opt-in yet).</p>
                     </div>
                     <select value={String(sec.twoFactor)} onChange={e => updateSecurity('twoFactor', e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 ml-4">
                       <option value="disabled">Disabled</option>

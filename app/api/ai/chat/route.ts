@@ -260,7 +260,7 @@ const TOOLS = [
       properties: {
         company: { type: 'string', description: 'Company name (required)' },
         amount: { type: 'number', description: 'Invoice amount (required)' },
-        status: { type: 'string', enum: ['Pending', 'Sent', 'Overdue', 'Paid'], description: 'Invoice status (default: Pending)' },
+        status: { type: 'string', enum: ['Pending', 'Sent', 'Overdue', 'Paid'], description: 'Ignored — new invoices are always created as Pending. Status changes must be made in the app UI.' },
         due_date: { type: 'string', description: 'Due date (YYYY-MM-DD)' },
         service_type: { type: 'string', description: 'Type of service billed' },
         contract_id: { type: 'string', description: 'Associated contract ID' },
@@ -277,7 +277,7 @@ const TOOLS = [
         company: { type: 'string', description: 'Company name (required)' },
         value: { type: 'number', description: 'Proposal value in dollars' },
         service_type: { type: 'string', description: 'Type of service proposed' },
-        status: { type: 'string', enum: ['Draft', 'Pending Approval', 'Approved', 'Sent', 'Viewed', 'Accepted', 'Declined'], description: 'Proposal status (default: Draft)' },
+        status: { type: 'string', enum: ['Draft', 'Pending Approval', 'Approved', 'Sent', 'Viewed', 'Accepted', 'Declined'], description: 'Ignored — new proposals are always created as Draft. Status changes must be made in the app UI.' },
         assigned_rep: { type: 'string', description: 'Assigned representative (default: Graviss Marketing)' },
       },
       required: ['company'],
@@ -292,7 +292,7 @@ const TOOLS = [
         company: { type: 'string', description: 'Company name (required)' },
         value: { type: 'number', description: 'Contract value in dollars' },
         service_type: { type: 'string', description: 'Type of service' },
-        status: { type: 'string', enum: ['Draft', 'Sent', 'Viewed', 'Signed by Client', 'Fully Executed', 'Expired'], description: 'Contract status (default: Draft)' },
+        status: { type: 'string', enum: ['Draft', 'Sent', 'Viewed', 'Signed by Client', 'Fully Executed', 'Expired'], description: 'Ignored — new contracts are always created as Draft. Status changes must be made in the app UI.' },
         billing_structure: { type: 'string', description: 'Billing structure (e.g. Monthly, One-time, Milestone)' },
         start_date: { type: 'string', description: 'Contract start date (YYYY-MM-DD)' },
         duration: { type: 'string', description: 'Contract duration (e.g. "6 months", "1 year")' },
@@ -681,11 +681,16 @@ async function executeTool(name: string, input: Record<string, unknown>, actorNa
 
     case 'create_invoice': {
       const id = `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      // AUDIT #578 — status/amount are GOVERNED_FIELDS on this table for
+      // update_record; create must honor the same restriction or the AI
+      // could insert a brand-new invoice with status:'Paid' and skip the
+      // #357 audit log / Paid-Overdue automations entirely. Always create
+      // Pending regardless of what the caller asked for.
       const record = {
         id,
         company: input.company as string,
         amount: input.amount as number,
-        status: (input.status as string) || 'Pending',
+        status: 'Pending',
         due_date: (input.due_date as string) || null,
         service_type: (input.service_type as string) || null,
         contract_id: (input.contract_id as string) || null,
@@ -697,12 +702,17 @@ async function executeTool(name: string, input: Record<string, unknown>, actorNa
 
     case 'create_proposal': {
       const id = `proposal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      // AUDIT #578 — status is a GOVERNED_FIELD on this table for
+      // update_record; create must honor the same restriction or the AI
+      // could insert a brand-new proposal with status:'Accepted' and skip
+      // the #569 atomic-claim guard / auto-create-a-contract automation
+      // entirely. Always create Draft regardless of what the caller asked for.
       const record = {
         id,
         company: input.company as string,
         value: (input.value as number) || null,
         service_type: (input.service_type as string) || null,
-        status: (input.status as string) || 'Draft',
+        status: 'Draft',
         assigned_rep: (input.assigned_rep as string) || 'Graviss Marketing',
       }
       const { data, error } = await db.from('proposals').insert(record).select().single()
@@ -712,12 +722,17 @@ async function executeTool(name: string, input: Record<string, unknown>, actorNa
 
     case 'create_contract': {
       const id = `contract-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      // AUDIT #578 — status is a GOVERNED_FIELD on this table for
+      // update_record; create must honor the same restriction or the AI
+      // could insert a brand-new contract with status:'Fully Executed' and
+      // skip VALID_TRANSITIONS/the signature step entirely. Always create
+      // Draft regardless of what the caller asked for.
       const record = {
         id,
         company: input.company as string,
         value: (input.value as number) || null,
         service_type: (input.service_type as string) || null,
-        status: (input.status as string) || 'Draft',
+        status: 'Draft',
         billing_structure: (input.billing_structure as string) || null,
         start_date: (input.start_date as string) || null,
         duration: (input.duration as string) || null,
@@ -857,9 +872,8 @@ async function executeTool(name: string, input: Record<string, unknown>, actorNa
       // no PDF, nothing saved to the real Proposals feature). Two "write a
       // proposal" surfaces with very different output quality and no
       // relationship to each other. Now shares the same pipeline the
-      // Proposals page and the Generate Proposal automation use, so every
-      // proposal in the app — regardless of how it was started — is the
-      // same real, branded, saved artifact.
+      // Proposals page uses, so every proposal in the app — regardless of
+      // how it was started — is the same real, branded, saved artifact.
       const intakeText = `Company: ${company}\nServices requested: ${services}\nBudget: ${budget}\nTimeline: ${timeline}${context ? `\nAdditional context: ${context}` : ''}${companyContext}`
 
       let result

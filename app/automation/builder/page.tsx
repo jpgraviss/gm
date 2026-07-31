@@ -32,7 +32,6 @@ type ActionType =
   | 'send_email' | 'send_followup_email'
   | 'update_contact' | 'create_deal' | 'add_tag' | 'remove_tag' | 'rotate_owner'
   | 'create_task' | 'log_activity' | 'send_notification'
-  | 'generate_proposal'
   | 'create_draft_contract' | 'create_billing_task' | 'create_renewal_task'
   | 'create_project_record' | 'create_maintenance_record'
   | 'notify_sales_rep' | 'notify_finance_team' | 'notify_delivery_team' | 'notify_assigned_rep'
@@ -79,12 +78,6 @@ const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: s
       { value: 'add_tag',        label: 'Add Tag',          icon: <Tag size={18} />,        description: 'Add a tag to the contact' },
       { value: 'remove_tag',     label: 'Remove Tag',       icon: <Tag size={18} />,        description: 'Remove a tag from the contact' },
       { value: 'rotate_owner',   label: 'Rotate Contact Owner', icon: <RefreshCw size={18} />, description: 'Reassign the contact to the next rep in a unit’s round-robin rotation' },
-    ],
-  },
-  {
-    label: 'Proposals',
-    actions: [
-      { value: 'generate_proposal', label: 'Generate Proposal', icon: <FileText size={18} />, description: 'Draft a branded proposal PDF from the form submission and save it as a draft' },
     ],
   },
   {
@@ -165,7 +158,6 @@ const ACTION_TO_DB: Record<ActionType, string> = {
   create_task:           'Create Task',
   log_activity:          'Log Activity',
   send_notification:     'Send Notification',
-  generate_proposal:     'Generate Proposal',
   create_draft_contract:    'Create Draft Contract',
   create_billing_task:      'Create Billing Task',
   create_renewal_task:      'Create Renewal Task',
@@ -588,8 +580,6 @@ function NodeConfigPanel({ node, onChange, onClose }: {
             </FieldLabel>
           </>
         )
-      case 'generate_proposal':
-        return <p className="text-xs text-gray-500 italic">Uses this automation&apos;s Form Submitted trigger and its submitted answers as the intake — no additional configuration. Set &quot;Specific Form&quot; on the trigger above so this only fires for the intended intake form.</p>
       case 'apply_service_template':
         return (
           <>

@@ -104,7 +104,10 @@ vi.mock('@/lib/google-calendar', async (importOriginal) => {
   }
 })
 
-vi.mock('@/lib/rbac', () => ({ requireRole: vi.fn().mockResolvedValue(null) }))
+vi.mock('@/lib/rbac', () => ({
+  requireRole: vi.fn().mockResolvedValue(null),
+  getAuthUser: vi.fn().mockResolvedValue({ email: 'owner@example.com', name: 'Jonathan Graviss' }),
+}))
 
 import { PATCH } from '@/app/api/bookings/[id]/route'
 

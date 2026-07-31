@@ -56,7 +56,7 @@ const ACTION_OPTIONS = [
   'Send Email Reminder', 'Send Follow-up Email', 'Log Activity',
   'Log Touchpoint', 'Flag in Dashboard', 'Update Revenue Metrics',
   'Apply Service Template', 'Update Client Portal', 'Escalate if 7+ Days',
-  'Send Notification', 'Create Task', 'Generate Proposal',
+  'Send Notification', 'Create Task',
 ]
 
 // ─── Automation Templates ────────────────────────────────────────────────────
@@ -115,20 +115,6 @@ const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     icon: <ArrowRightLeft size={20} />,
     trigger: 'Proposal Accepted',
     actions: ['Create Draft Contract', 'Notify Finance Team'],
-  },
-  {
-    id: 'intake_form_generate_proposal',
-    name: 'Intake Form → Auto-Draft Proposal',
-    description: 'AI-draft a proposal PDF the moment a client submits an intake form. Pin it to your intake form and review before activating.',
-    icon: <Sparkles size={20} />,
-    trigger: 'Form Submitted',
-    actions: ['Generate Proposal'],
-    // "Form Submitted" fires for every form in the app unless pinned to one
-    // (see the "Which Form" picker below) — starting Active would mean this
-    // burns AI-provider spend and creates a Draft proposal on literally any
-    // form submission (a newsletter signup, a contact form) the instant it's
-    // created, before a human has picked the right form or reviewed it.
-    defaultStatus: 'Paused',
   },
 ]
 
@@ -258,7 +244,7 @@ function NewAutomationPanel({ onSave, onClose, initialName, initialTrigger, init
                 <option value="">Any form (fires for every form submission)</option>
                 {forms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
-              <p className="text-[11px] text-gray-400 mt-1">Pin this to one intake form, e.g. for Generate Proposal — otherwise it fires for every form in the app.</p>
+              <p className="text-[11px] text-gray-400 mt-1">Pin this to one form — otherwise it fires for every form in the app.</p>
             </div>
           )}
 

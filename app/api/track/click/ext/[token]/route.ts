@@ -2,13 +2,21 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { mirrorTrackedEmailActivity } from '@/lib/tracked-emails'
+import { verifyToken } from '@/lib/signed-token'
+import type { ExtClickTokenPayload } from '@/lib/email-tracking'
 
 /**
  * Click-redirect for links the browser extension rewrote before Gmail sent
- * the email. `token` is a base64url-encoded {trackedEmailId, url} payload
- * — unsigned, matching the same precedent as the existing broadcast click
- * endpoint (app/api/track/click/[token]/route.ts). Public: this is followed
- * by whoever the recipient is, not by GravHub.
+ * the email. `token` is an HMAC-signed {trackedEmailId, url} payload, minted
+ * server-side by POST /api/extension/track-send (the extension can't hold
+ * the signing key). Public: this is followed by whoever the recipient is,
+ * not by GravHub.
+ *
+ * AUDIT #591 — previously decoded unsigned base64 JSON built client-side by
+ * the extension, with no signature check and no redirect-scheme validation
+ * — an open redirect off the production domain, plus a way to forge fake
+ * "clicked" activity onto any guessed trackedEmailId. Now matches the
+ * sibling broadcast click endpoint's verifyToken + scheme-allowlist fix (#326).
  */
 export const GET = withErrorHandler('track/click/ext/[token] GET', async (
   _req,
@@ -16,16 +24,24 @@ export const GET = withErrorHandler('track/click/ext/[token] GET', async (
 ) => {
   const { token } = await params
 
-  let payload: { trackedEmailId: string; url: string }
-  try {
-    payload = JSON.parse(Buffer.from(token, 'base64url').toString('utf-8'))
-  } catch {
+  const payload = verifyToken<ExtClickTokenPayload>(token)
+  if (!payload) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
   }
 
   const { trackedEmailId, url } = payload
   if (!trackedEmailId || !url) {
     return NextResponse.json({ error: 'Invalid token payload' }, { status: 400 })
+  }
+
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(url)
+  } catch {
+    return NextResponse.json({ error: 'Invalid redirect URL' }, { status: 400 })
+  }
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    return NextResponse.json({ error: 'Invalid redirect URL' }, { status: 400 })
   }
 
   const db = createServiceClient()
@@ -48,5 +64,5 @@ export const GET = withErrorHandler('track/click/ext/[token] GET', async (
     await mirrorTrackedEmailActivity(db, tracked, `Clicked link in email${tracked.subject ? ` (${tracked.subject})` : ''}`)
   }
 
-  return NextResponse.redirect(url, 302)
+  return NextResponse.redirect(parsedUrl.toString(), 302)
 })

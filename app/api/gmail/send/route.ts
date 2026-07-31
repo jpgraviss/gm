@@ -6,6 +6,7 @@ import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { resolveGmailSettings } from '@/lib/gmail-settings'
 import { type EmailSignatureData, SIGNATURE_MARKER, generateSignatureHtml } from '@/lib/email-signature'
 import { rewriteLinksForExtensionTracking, trackingPixelTag } from '@/lib/tracked-emails'
+import { decrypt } from '@/lib/encryption'
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -132,7 +133,7 @@ export const POST = withErrorHandler('gmail/send POST', async (req) => {
     // ── Send the email ────────────────────────────────────────────────────
     const from = member.gmail_email ?? userEmail
     const { messageId, threadId } = await sendViaGmail({
-      accessToken: member.gmail_access_token,
+      accessToken: decrypt(member.gmail_access_token),
       from,
       to,
       subject,

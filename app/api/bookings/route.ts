@@ -12,6 +12,14 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { zonedWallTimeToUtc } from '@/lib/timezone'
 import { requireRole } from '@/lib/rbac'
 
+// AUDIT #602 — calendar_settings.title/user_name is self-service, set by
+// any Team Member for their own calendar, then interpolated straight into
+// this confirmation email's HTML body with no escaping — the same bug
+// class already fixed at #570/#307, never applied to the booking flow.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 // GET /api/bookings?slug=jaycee-graviss&status=confirmed
 // This route's prefix is in proxy.ts's PUBLIC_PREFIXES so guest POSTs (the
 // actual public booking flow) can reach it — but that makes GET public too,
@@ -279,8 +287,8 @@ export const POST = withErrorHandler('bookings POST', async (req) => {
     <div style="font-size:14px;font-weight:700;color:#fff;letter-spacing:0.2em">${appSettings.company.name.toUpperCase()}</div>
     <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px">BOOKING CONFIRMED</div>
   </div>
-  <h2 style="font-size:20px;font-weight:700;color:#1a1a1a;margin:0 0 8px">${settings.title}</h2>
-  <p style="color:#6b7280;font-size:14px;margin:0 0 24px">with ${settings.user_name}</p>
+  <h2 style="font-size:20px;font-weight:700;color:#1a1a1a;margin:0 0 8px">${escapeHtml(settings.title)}</h2>
+  <p style="color:#6b7280;font-size:14px;margin:0 0 24px">with ${escapeHtml(settings.user_name)}</p>
   <div style="background:#f9fafb;border-radius:8px;padding:16px;margin-bottom:24px">
     <div style="margin-bottom:10px"><strong style="font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em">Date</strong><br><span style="font-size:14px;color:#1f2937">${dateLabel}</span></div>
     <div style="margin-bottom:10px"><strong style="font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em">Time</strong><br><span style="font-size:14px;color:#1f2937">${timeLabel}</span></div>

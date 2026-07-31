@@ -8,6 +8,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { departmentForUnit } from '@/lib/task-department'
 import { buildSequenceUnsubscribeUrl } from '@/lib/sequence-unsubscribe'
 import type { SequenceStep, SequenceHtmlTemplate } from '@/lib/types'
+import { decrypt } from '@/lib/encryption'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.gravissmarketing.com'
 
 // ─── Merge-field replacement ─────────────────────────────────────────────────
@@ -179,7 +180,7 @@ async function lookupGmailToken(
     }
   }
 
-  return { accessToken: data.gmail_access_token, gmailEmail: data.gmail_email }
+  return { accessToken: decrypt(data.gmail_access_token), gmailEmail: data.gmail_email }
 }
 
 // ─── Rep lookup ──────────────────────────────────────────────────────────────

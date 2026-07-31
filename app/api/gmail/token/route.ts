@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { withErrorHandler } from '@/lib/api-handler'
+import { encrypt, decrypt } from '@/lib/encryption'
 
 async function verifyOwnership(req: NextRequest, targetEmail: string): Promise<NextResponse | null> {
   const callerEmail = await getAuthenticatedEmail(req)
@@ -79,7 +80,11 @@ export const GET = withErrorHandler('gmail/token GET', async (req) => {
   }
 
   return NextResponse.json({
-    gmailToken: data.gmail_access_token,
+    // AUDIT #605 — stored encrypted at rest since this fix; decrypt()
+    // gracefully passes through any still-plaintext legacy value (no
+    // colons in the ciphertext format), so no backfill migration is
+    // needed — these tokens are short-lived (~1hr) and self-replace.
+    gmailToken: data.gmail_access_token ? decrypt(data.gmail_access_token) : null,
     gmailEmail: data.gmail_email,
     gmailSettings: data.gmail_settings ?? null,
     bccEmail,
@@ -104,7 +109,7 @@ export const POST = withErrorHandler('gmail/token POST', async (req) => {
     const expiresAt = expiresIn
       ? new Date(Date.now() + expiresIn * 1000).toISOString()
       : new Date(Date.now() + 3600 * 1000).toISOString()
-    update.gmail_access_token = gmailToken
+    update.gmail_access_token = encrypt(gmailToken)
     update.gmail_email = gmailEmail ?? null
     update.gmail_token_expires_at = expiresAt
   }

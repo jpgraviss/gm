@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { withErrorHandler } from '@/lib/api-handler'
+import { decrypt } from '@/lib/encryption'
 
 interface GmailThread {
   id: string
@@ -86,7 +87,7 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
         const expiresAt = new Date(rep.gmail_token_expires_at)
         if (expiresAt < new Date(Date.now() + 5 * 60 * 1000)) continue
       }
-      repTokens.set(rep.id, rep.gmail_access_token)
+      repTokens.set(rep.id, decrypt(rep.gmail_access_token))
     }
   }
 

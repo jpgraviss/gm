@@ -50,7 +50,13 @@ export const POST = withErrorHandler('calendar/subscriptions POST', async (req) 
   }
 
   if (action === 'sync-all') {
-    return syncAllSubscriptions(userEmail)
+    // AUDIT #603 — ownership is only checked above when `userEmail` is
+    // present; omitting it reached syncAllSubscriptions(undefined), which
+    // queries every team member's subscriptions unscoped. Default
+    // non-privileged callers to their own email, matching GET's existing
+    // #451 scoping for the same unscoped-list risk.
+    const syncEmail = userEmail || (!user.isAdmin && user.role !== 'Leadership' ? user.email : undefined)
+    return syncAllSubscriptions(syncEmail)
   }
 
   if (!url || typeof url !== 'string') {

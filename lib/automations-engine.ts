@@ -24,7 +24,6 @@ const TRIGGER_MAP: Record<string, string> = {
   'sequence_reply':       'Sequence Contact Replied',
   'sequence_bounce':      'Sequence Contact Bounced',
   'sequence_completed':   'Sequence Completed',
-  'meeting_booked':       'Meeting Booked',
   'webhook_received':     'Webhook Received',
 }
 
@@ -962,7 +961,6 @@ async function executeAction(
 
     case 'Escalate if 7+ Days': {
       const dealId = (context.dealId as string) ?? null
-      const ticketId = (context.ticketId as string) ?? null
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       let shouldEscalate = false
       if (dealId) {
@@ -972,15 +970,6 @@ async function executeAction(
           .eq('id', dealId)
           .single()
         if (deal?.last_activity && new Date(deal.last_activity) < new Date(sevenDaysAgo)) {
-          shouldEscalate = true
-        }
-      } else if (ticketId) {
-        const { data: ticket } = await db
-          .from('tickets')
-          .select('created_date, status, company')
-          .eq('id', ticketId)
-          .single()
-        if (ticket?.created_date && new Date(ticket.created_date) < new Date(sevenDaysAgo)) {
           shouldEscalate = true
         }
       }

@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import { DemoSidebar, DemoMobileNav } from './DemoNav'
 
 export const metadata: Metadata = {
-  title: 'GravHub Demo — Graviss Marketing',
-  description: 'A walkthrough of GravHub using sample data — not a real client account.',
+  title: 'GravHub Demo',
+  description: 'A walkthrough of GravHub — pipeline, proposals, the client portal, and reporting.',
   robots: { index: false, follow: false },
 }
 

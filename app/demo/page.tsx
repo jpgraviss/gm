@@ -38,11 +38,11 @@ export default function DemoOverviewPage() {
         className="text-3xl sm:text-4xl font-bold text-[#012A1C] leading-tight"
         style={{ fontFamily: 'var(--font-heading)' }}
       >
-        Walk through GravHub with sample data.
+        Walk through GravHub.
       </h1>
       <p className="mt-5 text-[#1B211D]/70 max-w-xl leading-relaxed">
-        Everything on the next few pages — every company, deal, invoice, and number — is made
-        up for illustration. Pick a section below to see what it actually looks like.
+        Pipeline, proposals, the client portal, and reporting — pick a section below to see
+        it in action.
       </p>
 
       <div className="mt-12 grid sm:grid-cols-2 gap-4">

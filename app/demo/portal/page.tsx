@@ -18,7 +18,7 @@ export default function DemoPortalPage() {
 
   return (
     <div>
-      <DemoPageHeader title={`Welcome back, ${c.name}`} subtitle="Sample data — this is what a client sees" />
+      <DemoPageHeader title={`Welcome back, ${c.name}`} />
       <div className="p-6 sm:p-10 grid lg:grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl p-5 border border-black/5">
           <div className="flex items-center gap-1.5 mb-3">

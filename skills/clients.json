@@ -1,13 +1,13 @@
 {
   "clients": [
     {
-      "slug": "PLACEHOLDER-client-slug",
-      "name": "PLACEHOLDER Client Name",
-      "ga4_property_id": "000000000",
-      "gsc_property": "sc-domain:example.com",
+      "slug": "Graviss-marketing",
+      "name": "Graviss Marketing",
+      "ga4_property_id": "515046762",
+      "gsc_property": "https://gravissmarketing.com/",
       "gbp_location_id": null,
       "active": true,
-      "notes": "Seed placeholder from the build spec. Replace with a real client before use — this is not a real GA4/GSC property."
+      "notes": "Graviss Marketing's own site — first real entry, added to verify the data layer end-to-end before wiring up actual clients. gbp_location_id still null pending GBP API approval."
     },
     {
       "slug": "PLACEHOLDER-client-two",

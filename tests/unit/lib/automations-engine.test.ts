@@ -236,6 +236,82 @@ describe('automations-engine', () => {
     expect(insertCalls['crm_activities']).toBeUndefined()
   })
 
+  // Regression tests for a hardcoded 'Delivery' unit name that never
+  // matched the real OccupationalUnit value 'Delivery/Operations' —
+  // "Notify Delivery Team" and Send Notification's delivery_team target
+  // both silently notified zero people, with no error, since no
+  // team_members row has unit === 'Delivery'.
+  it('"Notify Delivery Team" queries team_members by the real "Delivery/Operations" unit, not the stale "Delivery" value', async () => {
+    setupAutomations('Deal Stage Changed', ['Notify Delivery Team'])
+    fireAutomations('deal_stage_changed', { company: 'Echo Ltd', companyId: 'comp-1' })
+    await flushPromises()
+
+    const callIndex = mockDb.from.mock.calls.findIndex(([table]) => table === 'team_members')
+    expect(callIndex).toBeGreaterThanOrEqual(0)
+    const teamMembersChain = mockDb.from.mock.results[callIndex].value as { eq: ReturnType<typeof vi.fn> }
+    const unitCall = teamMembersChain.eq.mock.calls.find((call: unknown[]) => call[0] === 'unit')
+    expect(unitCall?.[1]).toBe('Delivery/Operations')
+  })
+
+  it('Send Notification\'s delivery_team target resolves against "Delivery/Operations", not "Delivery"', async () => {
+    setupAutomations('Contact Created', [{ type: 'Send Notification', config: { target: 'delivery_team', message: 'New contact' } }])
+    fireAutomations('contact_created', { company: 'Echo Ltd' })
+    await flushPromises()
+
+    const callIndex = mockDb.from.mock.calls.findIndex(([table]) => table === 'team_members')
+    expect(callIndex).toBeGreaterThanOrEqual(0)
+    const teamMembersChain = mockDb.from.mock.results[callIndex].value as { eq: ReturnType<typeof vi.fn> }
+    const unitCall = teamMembersChain.eq.mock.calls.find((call: unknown[]) => call[0] === 'unit')
+    expect(unitCall?.[1]).toBe('Delivery/Operations')
+  })
+
+  // AUDIT.md #554 — sequence_reply/sequence_bounce/sequence_completed are
+  // inherently scoped to one sequence; without this guard, an automation
+  // built for Sequence A's replies would fire for every sequence's replies
+  // company-wide, since the trigger fetch only matches on trigger label.
+  describe('sequence-event scoping (#554)', () => {
+    const automation = {
+      id: 'auto-seq-1', name: 'Reply follow-up', trigger: 'Sequence Contact Replied',
+      actions: [{ type: 'Create Task', config: { title: 'Follow up' } }], status: 'Active', runs: 0,
+      config: { sequenceId: 'seq-A' },
+    }
+
+    it('fires when triggerData.sequenceId matches automation.config.sequenceId', async () => {
+      const result = await executeWorkflow(
+        automation, 'sequence_reply',
+        { sequenceId: 'seq-A', company: 'Acme Co', contactId: 'ct-1' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockDb as any,
+      )
+      await flushPromises()
+      expect(result.status).not.toBe('skipped')
+      expect(insertCalls['app_tasks']).toBeDefined()
+    })
+
+    it('skips when triggerData.sequenceId does not match — a different sequence\'s reply must not fire this automation', async () => {
+      const result = await executeWorkflow(
+        automation, 'sequence_reply',
+        { sequenceId: 'seq-B', company: 'Acme Co', contactId: 'ct-1' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockDb as any,
+      )
+      expect(result.status).toBe('skipped')
+      expect(insertCalls['app_tasks']).toBeUndefined()
+    })
+
+    it('skips when the automation has no sequenceId configured at all, rather than firing broadly', async () => {
+      const unscoped = { ...automation, config: {} }
+      const result = await executeWorkflow(
+        unscoped, 'sequence_reply',
+        { sequenceId: 'seq-A', company: 'Acme Co', contactId: 'ct-1' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockDb as any,
+      )
+      expect(result.status).toBe('skipped')
+      expect(insertCalls['app_tasks']).toBeUndefined()
+    })
+  })
+
   it('fires "Log Activity" on contact_created', async () => {
     setupAutomations('Contact Created', ['Log Activity'])
     fireAutomations('contact_created', {

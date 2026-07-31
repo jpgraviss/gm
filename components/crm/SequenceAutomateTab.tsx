@@ -8,6 +8,33 @@ import { useToast } from '@/components/ui/Toast'
 
 const ROTATION_UNITS: OccupationalUnit[] = ['Sales', 'Delivery/Operations', 'Billing/Finance']
 
+// AUDIT.md #554 — sequence_reply/sequence_bounce/sequence_completed fire
+// correctly from real events (lib/automations-engine.ts's TRIGGER_MAP) but
+// had no UI anywhere to build an automation off them. They belong here,
+// not the general-purpose builder (app/automation/builder/page.tsx), since
+// they're inherently scoped to one sequence — executeWorkflow() enforces
+// that scoping server-side by matching automation.config.sequenceId
+// against the fired event's sequenceId.
+const SEQUENCE_EVENT_OPTIONS = [
+  { key: 'sequence_reply' as const, trigger: 'Sequence Contact Replied', label: 'Contact replies to an email in this sequence', shortDesc: 'replies to an email in this sequence' },
+  { key: 'sequence_bounce' as const, trigger: 'Sequence Contact Bounced', label: 'Contact’s email in this sequence bounces', shortDesc: 'has an email bounce in this sequence' },
+  { key: 'sequence_completed' as const, trigger: 'Sequence Completed', label: 'Contact completes this sequence', shortDesc: 'completes this sequence' },
+]
+type TriggerKey = 'form_any' | 'form_specific' | typeof SEQUENCE_EVENT_OPTIONS[number]['key']
+
+const NOTIFY_UNITS: { unit: OccupationalUnit; label: string; actionType: string }[] = [
+  { unit: 'Sales', label: 'Sales team', actionType: 'Notify Sales Rep' },
+  { unit: 'Billing/Finance', label: 'Billing/Finance team', actionType: 'Notify Finance Team' },
+  { unit: 'Delivery/Operations', label: 'Delivery team', actionType: 'Notify Delivery Team' },
+]
+
+const TASK_DUE_OPTIONS = [
+  { days: 1, label: '1 day' },
+  { days: 2, label: '2 days' },
+  { days: 3, label: '3 days' },
+  { days: 7, label: '1 week' },
+]
+
 interface Automation {
   id: string
   name: string
@@ -41,7 +68,7 @@ function CreateAutomationModal({
 }) {
   const { toast } = useToast()
   const [step, setStep] = useState<'trigger' | 'action'>('trigger')
-  const [formScope, setFormScope] = useState<'any' | 'specific'>('any')
+  const [triggerKey, setTriggerKey] = useState<TriggerKey>('form_any')
   const [forms, setForms] = useState<FormOption[]>([])
   const [formId, setFormId] = useState('')
   const [action, setAction] = useState<'Enroll in Sequence' | 'Unenroll from Sequence'>('Enroll in Sequence')
@@ -49,8 +76,15 @@ function CreateAutomationModal({
   const [senderUserId, setSenderUserId] = useState('')
   const [rotateFirst, setRotateFirst] = useState(false)
   const [rotateUnit, setRotateUnit] = useState<OccupationalUnit>('Sales')
+  const [seqAction, setSeqAction] = useState<'task' | 'notify'>('task')
+  const [taskTitle, setTaskTitle] = useState('')
+  const [taskAssignee, setTaskAssignee] = useState('')
+  const [taskDueDays, setTaskDueDays] = useState(1)
+  const [notifyUnit, setNotifyUnit] = useState<OccupationalUnit>('Sales')
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [saving, setSaving] = useState(false)
+
+  const isSequenceEvent = triggerKey === 'sequence_reply' || triggerKey === 'sequence_bounce' || triggerKey === 'sequence_completed'
 
   useEffect(() => {
     fetch('/api/forms')
@@ -61,31 +95,53 @@ function CreateAutomationModal({
   }, [])
 
   async function save() {
-    if (formScope === 'specific' && !formId) return
-    if (action === 'Enroll in Sequence' && senderType === 'specific_user' && !senderUserId) return
+    if (triggerKey === 'form_specific' && !formId) return
+    if (!isSequenceEvent && action === 'Enroll in Sequence' && senderType === 'specific_user' && !senderUserId) return
+    if (isSequenceEvent && seqAction === 'task' && !taskTitle.trim()) return
     setSaving(true)
-    const formName = forms.find(f => f.id === formId)?.name
-    const triggerLabel = formScope === 'any' ? 'any form' : `"${formName}"`
-    const actions = rotateFirst && action === 'Enroll in Sequence' ? ['Rotate Contact Owner', action] : [action]
+
+    let body: Record<string, unknown>
+    if (isSequenceEvent) {
+      const eventOption = SEQUENCE_EVENT_OPTIONS.find(o => o.key === triggerKey)!
+      const notifyOption = NOTIFY_UNITS.find(o => o.unit === notifyUnit)!
+      const actionType = seqAction === 'task' ? 'Create Task' : notifyOption.actionType
+      const actionsPayload = seqAction === 'task'
+        ? [{ type: 'Create Task', config: { title: taskTitle.trim(), assignee: taskAssignee || undefined, dueDateOffset: taskDueDays } }]
+        : [actionType]
+      body = {
+        name: `Sequence contact ${eventOption.shortDesc} → ${actionType}`,
+        trigger: eventOption.trigger,
+        actions: actionsPayload,
+        status: 'Active',
+        config: { sequenceId },
+      }
+    } else {
+      const formScope = triggerKey === 'form_specific' ? 'specific' : 'any'
+      const formName = forms.find(f => f.id === formId)?.name
+      const triggerLabel = formScope === 'any' ? 'any form' : `"${formName}"`
+      const actions = rotateFirst && action === 'Enroll in Sequence' ? ['Rotate Contact Owner', action] : [action]
+      body = {
+        name: `Form submission (${triggerLabel}) → ${actions.join(' → ')}`,
+        trigger: 'Form Submitted',
+        actions,
+        status: 'Active',
+        config: {
+          sequenceId,
+          formScope,
+          formId: formScope === 'specific' ? formId : undefined,
+          formName: formScope === 'specific' ? formName : undefined,
+          senderType: action === 'Enroll in Sequence' ? senderType : undefined,
+          senderUserId: action === 'Enroll in Sequence' && senderType === 'specific_user' ? senderUserId : undefined,
+          unit: actions.includes('Rotate Contact Owner') ? rotateUnit : undefined,
+        },
+      }
+    }
+
     try {
       const res = await fetch('/api/automations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: `Form submission (${triggerLabel}) → ${actions.join(' → ')}`,
-          trigger: 'Form Submitted',
-          actions,
-          status: 'Active',
-          config: {
-            sequenceId,
-            formScope,
-            formId: formScope === 'specific' ? formId : undefined,
-            formName: formScope === 'specific' ? formName : undefined,
-            senderType: action === 'Enroll in Sequence' ? senderType : undefined,
-            senderUserId: action === 'Enroll in Sequence' && senderType === 'specific_user' ? senderUserId : undefined,
-            unit: actions.includes('Rotate Contact Owner') ? rotateUnit : undefined,
-          },
-        }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error('Failed')
       const created = await res.json()
@@ -122,25 +178,93 @@ function CreateAutomationModal({
         <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
           {step === 'trigger' ? (
             <>
-              <p className="text-xs text-gray-500">Enroll or unenroll contacts in this sequence when they submit a form.</p>
+              <p className="text-xs text-gray-500">Automatically act on this sequence when a contact submits a form, or reacts to an email in it.</p>
               <div>
                 <label className={labelCls}>Form submission</label>
                 <div className="flex flex-col gap-2 mt-1">
                   <label className="flex items-center gap-2 p-3 border border-gray-200 rounded-xl cursor-pointer">
-                    <input type="radio" checked={formScope === 'any'} onChange={() => setFormScope('any')} className="accent-emerald-600" />
+                    <input type="radio" checked={triggerKey === 'form_any'} onChange={() => setTriggerKey('form_any')} className="accent-emerald-600" />
                     <span className="text-sm text-gray-700">Contact submits any form</span>
                   </label>
                   <label className="flex items-center gap-2 p-3 border border-gray-200 rounded-xl cursor-pointer">
-                    <input type="radio" checked={formScope === 'specific'} onChange={() => setFormScope('specific')} className="accent-emerald-600" />
+                    <input type="radio" checked={triggerKey === 'form_specific'} onChange={() => setTriggerKey('form_specific')} className="accent-emerald-600" />
                     <span className="text-sm text-gray-700">Contact submits a specific form</span>
                   </label>
                 </div>
               </div>
-              {formScope === 'specific' && (
+              {triggerKey === 'form_specific' && (
                 <select value={formId} onChange={e => setFormId(e.target.value)} className={selectCls}>
                   <option value="">Select a form…</option>
                   {forms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
+              )}
+              <div>
+                <label className={labelCls}>Sequence activity</label>
+                <div className="flex flex-col gap-2 mt-1">
+                  {SEQUENCE_EVENT_OPTIONS.map(o => (
+                    <label key={o.key} className="flex items-center gap-2 p-3 border border-gray-200 rounded-xl cursor-pointer">
+                      <input type="radio" checked={triggerKey === o.key} onChange={() => setTriggerKey(o.key)} className="accent-emerald-600" />
+                      <span className="text-sm text-gray-700">{o.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : isSequenceEvent ? (
+            <>
+              <div>
+                <label className={labelCls}>Action</label>
+                <div className="flex flex-col gap-2 mt-1">
+                  <button
+                    onClick={() => setSeqAction('task')}
+                    className={`flex items-center gap-2 p-3 rounded-xl border text-left text-sm font-medium transition-colors ${
+                      seqAction === 'task' ? 'border-emerald-400 bg-emerald-50 text-emerald-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Zap size={14} /> Create a follow-up task
+                  </button>
+                  <button
+                    onClick={() => setSeqAction('notify')}
+                    className={`flex items-center gap-2 p-3 rounded-xl border text-left text-sm font-medium transition-colors ${
+                      seqAction === 'notify' ? 'border-emerald-400 bg-emerald-50 text-emerald-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Zap size={14} /> Notify a team
+                  </button>
+                </div>
+              </div>
+              {seqAction === 'task' ? (
+                <>
+                  <div>
+                    <label className={labelCls}>Task title</label>
+                    <input
+                      value={taskTitle}
+                      onChange={e => setTaskTitle(e.target.value)}
+                      placeholder="e.g. Follow up on sequence reply"
+                      className={selectCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Assign to</label>
+                    <select value={taskAssignee} onChange={e => setTaskAssignee(e.target.value)} className={selectCls}>
+                      <option value="">Unassigned</option>
+                      {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Due</label>
+                    <select value={taskDueDays} onChange={e => setTaskDueDays(Number(e.target.value))} className={selectCls}>
+                      {TASK_DUE_OPTIONS.map(o => <option key={o.days} value={o.days}>{o.label}</option>)}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className={labelCls}>Notify</label>
+                  <select value={notifyUnit} onChange={e => setNotifyUnit(e.target.value as OccupationalUnit)} className={selectCls}>
+                    {NOTIFY_UNITS.map(o => <option key={o.unit} value={o.unit}>{o.label}</option>)}
+                  </select>
+                </div>
               )}
             </>
           ) : (
@@ -203,7 +327,7 @@ function CreateAutomationModal({
           {step === 'trigger' ? (
             <button
               onClick={() => setStep('action')}
-              disabled={formScope === 'specific' && !formId}
+              disabled={triggerKey === 'form_specific' && !formId}
               className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
               style={{ background: '#015035' }}
             >
@@ -212,7 +336,12 @@ function CreateAutomationModal({
           ) : (
             <button
               onClick={save}
-              disabled={saving || (action === 'Enroll in Sequence' && senderType === 'specific_user' && !senderUserId)}
+              disabled={
+                saving ||
+                (isSequenceEvent
+                  ? seqAction === 'task' && !taskTitle.trim()
+                  : action === 'Enroll in Sequence' && senderType === 'specific_user' && !senderUserId)
+              }
               className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
               style={{ background: '#015035' }}
             >
@@ -271,6 +400,14 @@ export default function SequenceAutomateTab({ sequenceId }: { sequenceId: string
   }
 
   function describeAutomation(a: Automation): string {
+    const sequenceEvent = SEQUENCE_EVENT_OPTIONS.find(o => o.trigger === a.trigger)
+    if (sequenceEvent) {
+      const first = a.actions[0]
+      const actionDesc = first?.type === 'Create Task'
+        ? `Create a follow-up task${first.config?.title ? ` ("${first.config.title}")` : ''}${first.config?.assignee ? '' : ' (unassigned)'}`
+        : (first?.type ?? 'Run an action')
+      return `When a contact ${sequenceEvent.shortDesc} → ${actionDesc}`
+    }
     const triggerDesc = a.config?.formScope === 'specific' && a.config?.formName
       ? `submits "${a.config.formName}"`
       : 'submits any form'

@@ -137,8 +137,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setAssistantOpen(true)
   }
 
-  // /go/* routes are public — clients access booking pages, forms, and funnels without logging in
-  const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/') || pathname.startsWith('/unsubscribe/') || pathname.startsWith('/go/') || pathname === '/demo' || pathname.startsWith('/demo/')
+  // /go/* routes are public — clients access booking pages, forms, and funnels without logging in.
+  // "/" is conditionally public: an anonymous visitor sees the GravHub marketing homepage there
+  // (app/page.tsx branches on `user` itself), but a logged-in user still gets the real dashboard
+  // in the normal sidebar shell below — this clause must stay false once `user` exists, or every
+  // staff member would lose their sidebar on "/".
+  const isPublic = (pathname === '/' && !user) || PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/') || pathname.startsWith('/unsubscribe/') || pathname.startsWith('/go/') || pathname === '/demo' || pathname.startsWith('/demo/')
   // Inject brand CSS variables from shared settings (no duplicate fetch)
   useEffect(() => {
     const branding = settings?.branding

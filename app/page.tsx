@@ -19,6 +19,7 @@ import type { RevenueMonth } from '@/lib/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+import GravHubHome from '@/components/marketing/GravHubHome'
 
 // ─── Greeting ─────────────────────────────────────────────────────────────────
 
@@ -1337,7 +1338,7 @@ function ExecutiveView({ data, user }: { data: DashboardData; user: { name: stri
 // ─── Main Dashboard ──────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const settings = useSettings()
   const [data, setData] = useState<DashboardData>(emptyData)
@@ -1365,6 +1366,7 @@ export default function DashboardPage() {
   const [view, setView] = useState<DashboardView>(defaultView)
 
   useEffect(() => {
+    if (!user) return
     if (view === 'contractor') return
     if (view === 'operations') return
     if (view === 'marketing') return
@@ -1373,11 +1375,16 @@ export default function DashboardPage() {
       .then(d => { if (d?.metrics) setData(d) })
       .catch(() => toast('Failed to load dashboard data', 'error'))
       .finally(() => setLoading(false))
-  }, [view])
+  }, [view, user])
 
   const viewLabel = DASHBOARD_VIEWS.find(v => v.id === view)?.label ?? 'Dashboard'
   const showSpinner = loading && !['contractor', 'operations', 'marketing'].includes(view)
 
+  // "/" is publicly reachable now (see AppShell) so an anonymous visitor
+  // renders this component too — show the marketing homepage instead of
+  // ever attempting to load real dashboard data for them.
+  if (authLoading) return <LoadingScreen />
+  if (!user) return <GravHubHome />
   if (showSpinner) return <LoadingScreen />
 
   return (

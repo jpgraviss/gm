@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/email'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 
@@ -37,7 +37,15 @@ export const POST = withErrorHandler('sequences/[id]/test-send POST', async (req
     return NextResponse.json({ error: 'No email step found in sequence' }, { status: 400 })
   }
 
-  const subject = `[TEST] ${emailStep.subject || seq.name}`
+  const fromName = seq.from_name || 'Graviss Marketing'
+  const fromEmail = seq.from_email || 'noreply@gravissmarketing.com'
+
+  // AUDIT #615 — sender merge tokens were never replaced here, unlike the
+  // real send path (replaceMergeFields() in execute/route.ts), so a test
+  // preview showed literal `{{sender_name}}`/`{{sender_email}}` syntax.
+  const subject = `[TEST] ${(emailStep.subject || seq.name)
+    .replace(/\{\{sender_name\}\}/gi, fromName)
+    .replace(/\{\{sender_email\}\}/gi, fromEmail)}`
   let body = emailStep.body || ''
 
   body = body
@@ -46,6 +54,8 @@ export const POST = withErrorHandler('sequences/[id]/test-send POST', async (req
     .replace(/\{\{full_name\}\}/gi, 'Test User')
     .replace(/\{\{company\}\}/gi, 'Test Company')
     .replace(/\{\{email\}\}/gi, email)
+    .replace(/\{\{sender_name\}\}/gi, fromName)
+    .replace(/\{\{sender_email\}\}/gi, fromEmail)
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"></head>
@@ -65,16 +75,22 @@ export const POST = withErrorHandler('sequences/[id]/test-send POST', async (req
   </div>
 </body></html>`
 
-  const resend = new Resend(process.env.RESEND_API_KEY)
-  const fromName = seq.from_name || 'Graviss Marketing'
-  const fromEmail = seq.from_email || 'noreply@gravissmarketing.com'
-
-  await resend.emails.send({
-    from: `${fromName} <${fromEmail}>`,
+  // AUDIT #615 — this used to instantiate `new Resend()` directly and
+  // never check the returned {error}, unconditionally reporting success
+  // even on a real send failure (bad from-domain, invalid address) —
+  // defeating the one tool whose purpose is catching config problems
+  // before a sequence goes live. Every other send path in this module goes
+  // through sendEmail(), which correctly surfaces its result.
+  const result = await sendEmail({
     to: email,
+    from: `${fromName} <${fromEmail}>`,
     subject,
     html,
   })
+
+  if (!result.success) {
+    return NextResponse.json({ error: result.error || 'Failed to send test email' }, { status: 502 })
+  }
 
   return NextResponse.json({ success: true, subject })
 })

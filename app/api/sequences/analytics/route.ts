@@ -3,6 +3,27 @@ import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 
+// AUDIT #613 — a plain, unpaginated `.select()` silently truncates at
+// Supabase's default row cap for any sequence with meaningful volume,
+// understating every metric below with no error or truncation notice.
+// Matches the #612 fix applied to the same bug class in lib/broadcasts.ts.
+const FETCH_PAGE_SIZE = 1000
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+async function fetchAllRows(buildQuery: () => any): Promise<any[]> {
+  const rows: any[] = []
+  let offset = 0
+  for (;;) {
+    const { data, error } = await buildQuery().range(offset, offset + FETCH_PAGE_SIZE - 1)
+    if (error) throw new Error(error.message || 'Failed to fetch analytics')
+    rows.push(...(data ?? []))
+    if (!data || data.length < FETCH_PAGE_SIZE) break
+    offset += FETCH_PAGE_SIZE
+  }
+  return rows
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const GET = withErrorHandler('sequences/analytics GET', async (req: NextRequest) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
@@ -14,16 +35,9 @@ export const GET = withErrorHandler('sequences/analytics GET', async (req: NextR
   const db = createServiceClient()
 
   // Fetch all activities for this sequence
-  const { data: activities, error } = await db
-    .from('sequence_activities')
-    .select('event_type, step_index, created_at')
-    .eq('sequence_id', sequenceId)
-
-  if (error) {
-    throw new Error(error.message || 'Failed to fetch analytics')
-  }
-
-  const rows = activities ?? []
+  const rows = await fetchAllRows(() =>
+    db.from('sequence_activities').select('event_type, step_index, created_at').eq('sequence_id', sequenceId),
+  )
 
   // --- Overview ---
   const totalSent         = rows.filter(r => r.event_type === 'sent').length
@@ -106,11 +120,9 @@ export const GET = withErrorHandler('sequences/analytics GET', async (req: NextR
 
   // --- A/B results ---
   // Fetch activities that have a variant field
-  const { data: abActivities } = await db
-    .from('sequence_activities')
-    .select('event_type, step_index, variant')
-    .eq('sequence_id', sequenceId)
-    .not('variant', 'is', null)
+  const abActivities = await fetchAllRows(() =>
+    db.from('sequence_activities').select('event_type, step_index, variant').eq('sequence_id', sequenceId).not('variant', 'is', null),
+  )
 
   let abResults: Array<{
     stepIndex: number

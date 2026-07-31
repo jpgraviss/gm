@@ -71,16 +71,22 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
   // optional field on the chatbot form.
   if (chatbot.website_url) {
     const origin = req.headers.get('origin') || req.headers.get('referer')
-    if (origin) {
-      try {
-        const originHost = new URL(origin).hostname
-        const allowedHost = new URL(chatbot.website_url).hostname
-        if (originHost !== allowedHost) {
-          return NextResponse.json({ error: 'This chatbot is not permitted on this domain' }, { status: 403 })
-        }
-      } catch {
-        // Malformed Origin/Referer header — fall through rather than block
+    // AUDIT #616 — this only ran the check `if (origin)`, so a request with
+    // no Origin/Referer at all (trivial for a direct scripted/curl caller —
+    // a real browser embed always sends Origin on fetch/XHR) bypassed the
+    // check entirely, defeating the cross-tenant-abuse/AI-spend threat this
+    // guard exists for.
+    if (!origin) {
+      return NextResponse.json({ error: 'This chatbot is not permitted on this domain' }, { status: 403 })
+    }
+    try {
+      const originHost = new URL(origin).hostname
+      const allowedHost = new URL(chatbot.website_url).hostname
+      if (originHost !== allowedHost) {
+        return NextResponse.json({ error: 'This chatbot is not permitted on this domain' }, { status: 403 })
       }
+    } catch {
+      // Malformed Origin/Referer header — fall through rather than block
     }
   }
 

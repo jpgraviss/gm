@@ -172,22 +172,50 @@ const CHUNK_SIZE = 50 // Resend allows batches — we throttle to 50 per batch
  * it (status transitioned away from its prior state) to prevent a double
  * send.
  */
+// AUDIT #612 — a plain, unpaginated `.select()` silently truncates at
+// Supabase's default row cap, unlike the audience-preview endpoint
+// (deliberately capped at 5000 with an accurate exact count per #390).
+// Loops in pages until a short page signals the end, matching the
+// bug class already fixed across 10+ pages in this codebase (#48/#151/#212)
+// — just applied here to the actual send path instead of a frontend list.
+const FETCH_PAGE_SIZE = 1000
+
+// Rebuilds a fresh query per page (rather than re-awaiting one mutated
+// builder) so this works the same way regardless of whether the caller's
+// query-builder mock supports repeated `.range()` calls on one instance.
+/* eslint-disable @typescript-eslint/no-explicit-any */
+async function fetchAllContacts(buildQuery: () => any): Promise<any[]> {
+  const rows: any[] = []
+  let offset = 0
+  for (;;) {
+    const { data, error } = await buildQuery().range(offset, offset + FETCH_PAGE_SIZE - 1)
+    if (error) throw new Error(error.message)
+    rows.push(...(data ?? []))
+    if (!data || data.length < FETCH_PAGE_SIZE) break
+    offset += FETCH_PAGE_SIZE
+  }
+  return rows
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function sendBroadcastNow(db: any, broadcast: any): Promise<{ sent: number; skipped: number; failed: number; total: number }> {
   const id = broadcast.id
 
   // Fetch all contacts matching the audience filter
   const audienceFilter = broadcast.audience_filter ?? {}
-  let query = db
-    .from('crm_contacts')
-    .select('id, first_name, last_name, full_name, emails, company_name')
-    .not('emails', 'is', null)
-  query = applyAudienceFilter(query, audienceFilter)
+  const buildContactsQuery = () => applyAudienceFilter(
+    db.from('crm_contacts').select('id, first_name, last_name, full_name, emails, company_name').not('emails', 'is', null),
+    audienceFilter,
+  )
 
-  const { data: rawContacts, error: contactErr } = await query
-  if (contactErr) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let rawContacts: any[]
+  try {
+    rawContacts = await fetchAllContacts(buildContactsQuery)
+  } catch (err) {
     await db.from('broadcasts').update({ status: 'failed' }).eq('id', id)
-    throw new Error(contactErr.message)
+    throw err
   }
 
   const { includeContactIds, excludeContactIds } = await resolveEngagementFilters(db, audienceFilter)

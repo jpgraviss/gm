@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
 import { applyRoutingRules, notifyRoutedAssignee } from '@/lib/ticket-routing'
+import { decrypt } from '@/lib/encryption'
 
 type Db = ReturnType<typeof createServiceClient>
 
@@ -239,7 +240,7 @@ export const POST = withErrorHandler('tickets/from-email POST', async (req: Next
 
   for (const account of validAccounts) {
     try {
-      const result = await processInbox(db, account.gmail_access_token as string, contacts ?? [], companies ?? [])
+      const result = await processInbox(db, decrypt(account.gmail_access_token as string), contacts ?? [], companies ?? [])
       created += result.created
       skipped += result.skipped
     } catch (err) {

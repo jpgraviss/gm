@@ -9,6 +9,14 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 import { nowInZone, zonedWallTimeToUtc } from '@/lib/timezone'
 
+// AUDIT #602 — booking_types.name/calendar_settings.user_name are
+// self-service, staff-editable fields interpolated straight into this
+// confirmation email's HTML body with no escaping — the same bug class
+// already fixed at #570/#307, never applied to the booking flow.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 // AUDIT #228 — this route had none of the protections its legacy sibling
 // (app/api/bookings/route.ts) has. Same simple per-IP limiter, ported as-is
 // (not shared) since that's how the legacy route already implements it.
@@ -491,12 +499,12 @@ export const POST = withErrorHandler('calendar/bookings POST', async (req) => {
     <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:12px;padding:20px;margin-bottom:24px;">
       <tr><td>
         <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">What</div>
-        <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:16px;">${btName}</div>
+        <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:16px;">${escapeHtml(btName)}</div>
         <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">When</div>
         <div style="font-size:14px;color:#111827;margin-bottom:2px;">${formattedDate}</div>
         <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${formattedTime} (${tz})</div>
         <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Host</div>
-        <div style="font-size:14px;color:#111827;">${organizerName}</div>
+        <div style="font-size:14px;color:#111827;">${escapeHtml(organizerName)}</div>
       </td></tr>
     </table>
 

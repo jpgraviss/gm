@@ -19,6 +19,13 @@ function normalizeIcsUrl(url: string): string {
   return url.replace(/^webcal:\/\//, 'https://')
 }
 
+// AUDIT #604 — matches the sibling calendar/subscriptions route's
+// ownership check, missing here entirely: any Team Member could plant an
+// ICS subscription attributed to a different colleague via userEmail.
+function isOwnerOrAdmin(user: { email: string; isAdmin: boolean; role: string }, targetEmail: string): boolean {
+  return user.isAdmin || user.role === 'Leadership' || user.email.toLowerCase() === (targetEmail || '').toLowerCase()
+}
+
 export const POST = withErrorHandler('calendar/import-link POST', async (req) => {
   // Matches the sibling calendar/subscriptions route's gate — without it,
   // any authenticated caller (including a portal client) could trigger a
@@ -32,6 +39,9 @@ export const POST = withErrorHandler('calendar/import-link POST', async (req) =>
   const { link, userEmail, subscriptionName } = await req.json()
   if (!link || typeof link !== 'string') {
     return NextResponse.json({ error: 'Missing link' }, { status: 400 })
+  }
+  if (userEmail && !isOwnerOrAdmin(user, userEmail)) {
+    return NextResponse.json({ error: 'Cannot import a calendar for another team member' }, { status: 403 })
   }
 
   const db = createServiceClient()

@@ -232,6 +232,20 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
         )
       }
     }
+    // AUDIT #575 — the only public write route in this list with zero
+    // throttling; a scripted flood on one token could spam the
+    // increment_review_campaign_counts RPC and internal-feedback inserts
+    // indefinitely (the status='pending' claim guard stops double-counting
+    // a single token, but not a flood of failed/retried attempts).
+    if (pathname.startsWith('/api/reputation/review-request/') && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`review-request:${ip}`, 20, 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please wait a moment and try again.' },
+          { status: 429 }
+        )
+      }
+    }
     return NextResponse.next()
   }
 

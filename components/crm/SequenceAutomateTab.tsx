@@ -6,8 +6,6 @@ import { fetchTeamMembers } from '@/lib/supabase'
 import type { TeamMember, OccupationalUnit } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
 
-const ROTATION_UNITS: OccupationalUnit[] = ['Sales', 'Delivery/Operations', 'Billing/Finance']
-
 // AUDIT.md #554 — sequence_reply/sequence_bounce/sequence_completed fire
 // correctly from real events (lib/automations-engine.ts's TRIGGER_MAP) but
 // had no UI anywhere to build an automation off them. They belong here,
@@ -74,8 +72,6 @@ function CreateAutomationModal({
   const [action, setAction] = useState<'Enroll in Sequence' | 'Unenroll from Sequence'>('Enroll in Sequence')
   const [senderType, setSenderType] = useState<'contact_owner' | 'specific_user'>('contact_owner')
   const [senderUserId, setSenderUserId] = useState('')
-  const [rotateFirst, setRotateFirst] = useState(false)
-  const [rotateUnit, setRotateUnit] = useState<OccupationalUnit>('Sales')
   const [seqAction, setSeqAction] = useState<'task' | 'notify'>('task')
   const [taskTitle, setTaskTitle] = useState('')
   const [taskAssignee, setTaskAssignee] = useState('')
@@ -119,11 +115,10 @@ function CreateAutomationModal({
       const formScope = triggerKey === 'form_specific' ? 'specific' : 'any'
       const formName = forms.find(f => f.id === formId)?.name
       const triggerLabel = formScope === 'any' ? 'any form' : `"${formName}"`
-      const actions = rotateFirst && action === 'Enroll in Sequence' ? ['Rotate Contact Owner', action] : [action]
       body = {
-        name: `Form submission (${triggerLabel}) → ${actions.join(' → ')}`,
+        name: `Form submission (${triggerLabel}) → ${action}`,
         trigger: 'Form Submitted',
-        actions,
+        actions: [action],
         status: 'Active',
         config: {
           sequenceId,
@@ -132,7 +127,6 @@ function CreateAutomationModal({
           formName: formScope === 'specific' ? formName : undefined,
           senderType: action === 'Enroll in Sequence' ? senderType : undefined,
           senderUserId: action === 'Enroll in Sequence' && senderType === 'specific_user' ? senderUserId : undefined,
-          unit: actions.includes('Rotate Contact Owner') ? rotateUnit : undefined,
         },
       }
     }
@@ -246,9 +240,17 @@ function CreateAutomationModal({
                   </div>
                   <div>
                     <label className={labelCls}>Assign to</label>
+                    {/* AUDIT #566 — app_tasks.assigned_to is a plain-text name
+                        everywhere it's read (task ownership checks, filters,
+                        avatar labels — see app/api/tasks/[id]/route.ts and
+                        app/tasks/page.tsx), matching the free-text name input
+                        the general automation builder already uses for this
+                        same field. This select's value must be the team
+                        member's name, not their id, or the resulting task is
+                        invisible to/unowned by the rep who was actually picked. */}
                     <select value={taskAssignee} onChange={e => setTaskAssignee(e.target.value)} className={selectCls}>
                       <option value="">Unassigned</option>
-                      {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
                     </select>
                   </div>
                   <div>
@@ -286,35 +288,19 @@ function CreateAutomationModal({
                 </div>
               </div>
               {action === 'Enroll in Sequence' && (
-                <>
-                  <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={rotateFirst} onChange={e => setRotateFirst(e.target.checked)} className="accent-emerald-600 w-4 h-4" />
-                      <span className="text-sm font-medium text-gray-700">Round-robin assign the contact&apos;s owner first</span>
-                    </label>
-                    {rotateFirst && (
-                      <select value={rotateUnit} onChange={e => setRotateUnit(e.target.value as OccupationalUnit)} className={`${selectCls} mt-3`}>
-                        {ROTATION_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                    )}
-                  </div>
-                  <div>
-                    <label className={labelCls}>Sender</label>
-                    <select value={senderType} onChange={e => setSenderType(e.target.value as 'contact_owner' | 'specific_user')} className={selectCls}>
-                      <option value="contact_owner">Contact owner (the rep assigned to this contact)</option>
-                      <option value="specific_user">Specific user</option>
+                <div>
+                  <label className={labelCls}>Sender</label>
+                  <select value={senderType} onChange={e => setSenderType(e.target.value as 'contact_owner' | 'specific_user')} className={selectCls}>
+                    <option value="contact_owner">Contact owner (the rep assigned to this contact)</option>
+                    <option value="specific_user">Specific user</option>
+                  </select>
+                  {senderType === 'specific_user' && (
+                    <select value={senderUserId} onChange={e => setSenderUserId(e.target.value)} className={`${selectCls} mt-2`}>
+                      <option value="">Select a user…</option>
+                      {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
-                    {senderType === 'specific_user' && (
-                      <select value={senderUserId} onChange={e => setSenderUserId(e.target.value)} className={`${selectCls} mt-2`}>
-                        <option value="">Select a user…</option>
-                        {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    )}
-                    {rotateFirst && senderType === 'contact_owner' && (
-                      <p className="text-[11px] text-gray-400 mt-1.5">Will send from whoever round-robin just assigned.</p>
-                    )}
-                  </div>
-                </>
+                  )}
+                </div>
               )}
             </>
           )}

@@ -84,3 +84,8 @@ export const TICKET_PRIORITIES = ['Urgent', 'High', 'Medium', 'Low'] as const
 // except `filterTabs` (see that file).
 export const TICKET_STATUSES = ['Open', 'In Progress', 'Waiting on Client', 'Resolved', 'Closed'] as const
 export const RENEWAL_STATUSES = ['Upcoming', 'In Progress', 'Renewed', 'Churned'] as const
+// AUDIT #573 — mirrors lib/types.ts's MaintenanceStatus; PATCH previously
+// accepted any string, and every tab filter (app/maintenance/page.tsx)
+// checks exact equality against these 5 values, so a bad value would
+// silently drop the record out of every tab.
+export const MAINTENANCE_STATUSES = ['Active', 'Onboarding', 'Pending Cancellation', 'Cancelled', 'Past'] as const

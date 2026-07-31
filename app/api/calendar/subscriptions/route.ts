@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { parseICS } from '@/lib/ical-parser'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser } from '@/lib/rbac'
+import { fetchTextSafely } from '@/lib/ssrf-guard'
 
 function isOwnerOrAdmin(user: { email: string; isAdmin: boolean; role: string }, targetEmail: string): boolean {
   return user.isAdmin || user.role === 'Leadership' || user.email.toLowerCase() === (targetEmail || '').toLowerCase()
@@ -59,9 +60,7 @@ export const POST = withErrorHandler('calendar/subscriptions POST', async (req) 
   const fetchUrl = url.trim().replace(/^webcal:\/\//, 'https://')
   let icsText: string
   try {
-    const res = await fetch(fetchUrl, { headers: { Accept: 'text/calendar' } })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    icsText = await res.text()
+    icsText = await fetchTextSafely(fetchUrl, 'text/calendar')
   } catch (err) {
     return NextResponse.json({ error: `Failed to fetch ICS: ${err instanceof Error ? err.message : 'unknown'}` }, { status: 400 })
   }
@@ -154,9 +153,7 @@ export const DELETE = withErrorHandler('calendar/subscriptions DELETE', async (r
 })
 
 async function syncSubscription(db: ReturnType<typeof createServiceClient>, sub: { id: string; ical_url: string; name: string }) {
-  const res = await fetch(sub.ical_url, { headers: { Accept: 'text/calendar' } })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const icsText = await res.text()
+  const icsText = await fetchTextSafely(sub.ical_url, 'text/calendar')
   const cal = parseICS(icsText)
 
   const { data: existing } = await db

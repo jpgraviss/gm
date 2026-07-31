@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { validate, validationError } from '@/lib/validation'
+import { validate, validationError, MAINTENANCE_STATUSES } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 
@@ -36,6 +36,7 @@ export const PATCH = withErrorHandler('maintenance/[id] PATCH', async (req, { pa
   const result = validate(body, {
     company: { type: 'string', maxLength: 200 },
     monthlyFee: { type: 'number', min: 0 },
+    status: { type: 'string', enum: [...MAINTENANCE_STATUSES] },
   })
   if (!result.valid) return validationError(result.error)
   const db = createServiceClient()

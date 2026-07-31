@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { getValidAccessToken, deleteGoogleEvent, createGoogleEvent, type CalendarSettings } from '@/lib/google-calendar'
+import { getValidAccessToken, deleteGoogleEvent, createGoogleEvent, getGoogleBusySlots, computeAvailableSlots, type CalendarSettings } from '@/lib/google-calendar'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 
@@ -108,6 +108,76 @@ export const PATCH = withErrorHandler('bookings/[id] PATCH', async (req, { param
     const { data: reschBooking } = await db.from('bookings').select('*, calendar_settings(*)').eq('id', id).single()
     if (!reschBooking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
 
+    // AUDIT #571 — this branch previously deleted the old Google event and
+    // wrote the new date/time straight to the DB with none of the
+    // conflict-detection POST /api/bookings has: no re-check against
+    // available_days/business hours, no re-check against other confirmed
+    // bookings, no live Google Calendar busy-slot check, no past-date
+    // rejection. A caller could move a booking onto an already-double-booked
+    // slot, outside business hours, or into the past. Reuses the exact same
+    // computeAvailableSlots helper the slot picker and POST /api/bookings
+    // already use, so this can't drift from what's actually bookable — and
+    // runs entirely before any Google Calendar event is touched, so a
+    // rejected reschedule never deletes the original event.
+    if (!reschBooking.calendar_settings) {
+      return NextResponse.json({ error: 'Calendar not found' }, { status: 404 })
+    }
+    const calendarSettings = reschBooking.calendar_settings as unknown as CalendarSettings
+
+    const reschAccessToken = await getValidAccessToken(calendarSettings)
+    let reschGoogleBusySlots: { start: string; end: string }[] = []
+    if (reschAccessToken) {
+      try {
+        reschGoogleBusySlots = await getGoogleBusySlots(reschAccessToken, body.newDate, calendarSettings.timezone)
+      } catch (e) {
+        console.error('[bookings/[id] PATCH] Google Calendar busy check failed:', e)
+      }
+    }
+
+    const { data: existingBookingsForNewDate } = await db
+      .from('bookings')
+      .select('start_time, end_time')
+      .eq('calendar_slug', reschBooking.calendar_slug)
+      .eq('date', body.newDate)
+      .eq('status', 'confirmed')
+      .neq('id', id)
+
+    const reschAvailableSlots = computeAvailableSlots(
+      body.newDate,
+      calendarSettings,
+      reschGoogleBusySlots,
+      existingBookingsForNewDate ?? [],
+    )
+    const reschSlotIsAvailable = reschAvailableSlots.some(
+      s => s.start === body.newStartTime && s.end === body.newEndTime,
+    )
+    if (!reschSlotIsAvailable) {
+      return NextResponse.json(
+        { error: 'This time is outside available hours or no longer available. Please choose another.' },
+        { status: 409 },
+      )
+    }
+
+    // Race-recheck immediately before writing (same reasoning/boundaries as
+    // POST /api/bookings' equivalent check).
+    const { data: reschConflict } = await db
+      .from('bookings')
+      .select('id')
+      .eq('calendar_slug', reschBooking.calendar_slug)
+      .eq('date', body.newDate)
+      .eq('status', 'confirmed')
+      .neq('id', id)
+      .lt('start_time', body.newEndTime)
+      .gt('end_time', body.newStartTime)
+      .limit(1)
+
+    if (reschConflict && reschConflict.length > 0) {
+      return NextResponse.json(
+        { error: 'This time slot is no longer available. Please choose another.' },
+        { status: 409 },
+      )
+    }
+
     // Delete old Google event
     if (reschBooking.google_event_id && reschBooking.calendar_settings) {
       const accessToken = await getValidAccessToken(reschBooking.calendar_settings as unknown as CalendarSettings)
@@ -153,7 +223,18 @@ export const PATCH = withErrorHandler('bookings/[id] PATCH', async (req, { param
       .select()
       .single()
 
-    if (updateErr) throw new Error('Failed to reschedule')
+    if (updateErr) {
+      // 23505 = unique_violation from bookings_slot_unique — a final,
+      // narrow race window between the checks above and this write (same
+      // reasoning as POST /api/bookings' equivalent handling).
+      if ((updateErr as { code?: string }).code === '23505') {
+        return NextResponse.json(
+          { error: 'This time slot was just booked by someone else. Please choose another.' },
+          { status: 409 },
+        )
+      }
+      throw new Error('Failed to reschedule')
+    }
 
     // Send reschedule email (best-effort)
     try {

@@ -154,15 +154,38 @@ export const PATCH = withErrorHandler('proposals/[id] PATCH', async (req, ctx) =
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
   }
 
-  const { data, error } = await db.from('proposals').update(update).eq('id', id).select().single()
+  // AUDIT #569 — mirrors the atomic-claim pattern #496 already applies to
+  // the public-link proposal/signature routes (app/api/proposals/view/
+  // [token], app/api/signatures/[token]): this is the route the real
+  // authenticated portal-client Approvals page (app/client/approvals)
+  // calls to accept/decline. Two concurrent PATCHes — two browser tabs, or
+  // a client retrying after a timed-out request — could both read a
+  // non-terminal status and both succeed, double-firing
+  // proposal_accepted/proposal_declined below (duplicate notification
+  // emails, duplicate deal/contract-creation automations, whatever's
+  // configured on that trigger). Only guard the write when this PATCH is
+  // actually attempting one of those two terminal transitions — every
+  // other field update on this route keeps its original unconditional
+  // write, since there's nothing to race there.
+  const isTerminalTransition = body.status === 'Accepted' || body.status === 'Declined'
+  let updateQuery = db.from('proposals').update(update).eq('id', id)
+  if (isTerminalTransition) {
+    updateQuery = updateQuery.not('status', 'in', '(Accepted,Declined)')
+  }
+  const { data, error } = await updateQuery.select().maybeSingle()
   if (error) {
-    if (error.code === 'PGRST116') {
-      return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
-    }
     throw new Error(error?.message || 'Failed to update proposal')
   }
+  if (!data) {
+    return NextResponse.json(
+      { error: isTerminalTransition ? 'This proposal has already been responded to' : 'Proposal not found' },
+      { status: isTerminalTransition ? 409 : 404 },
+    )
+  }
 
-  // Fire automation triggers on status changes
+  // Fire automation triggers on status changes — only the request that
+  // actually claimed the row above (data is non-null) reaches here for a
+  // terminal transition, so these can no longer double-fire.
   if (body.status === 'Accepted') {
     fireAutomations('proposal_accepted', { proposalId: id, ...data })
   } else if (body.status === 'Declined') {

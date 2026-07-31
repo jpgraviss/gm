@@ -265,9 +265,18 @@ class GravHub_Meta_Manager {
 			'@graph'   => $graph,
 		);
 
+		// AUDIT #563 — JSON_UNESCAPED_SLASHES left a literal "</script>" byte
+		// sequence in the encoded output reachable if any field it's built
+		// from ever contains one, which the browser's HTML tokenizer reads
+		// as closing this script tag early — the tail becomes live markup.
+		// Standard JSON string escaping (the default, without this flag)
+		// escapes "/" as "\/", which breaks that exact match and closes the
+		// hole at the sink rather than relying on every caller to sanitize
+		// perfectly. URLs and other string values still decode correctly —
+		// this only affects how the raw JSON text looks, not its meaning.
 		printf(
 			'<script type="application/ld+json">%s</script>' . "\n",
-			wp_json_encode( $schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )
+			wp_json_encode( $schema, JSON_UNESCAPED_UNICODE )
 		);
 	}
 
@@ -393,9 +402,17 @@ class GravHub_Meta_Manager {
 			$schema['@context'] = 'https://schema.org';
 		}
 
+		// AUDIT #563 — see the matching comment in output_site_schema(): a
+		// post title (headline/name below) is not sanitized by WordPress
+		// core on save, so a "</script>" byte sequence in a title would
+		// otherwise close this tag early and let injected markup after it
+		// execute for every visitor. Dropping JSON_UNESCAPED_SLASHES
+		// restores standard "/" → "\/" JSON escaping, which breaks that
+		// exact match at the sink — safe for every field here, including
+		// the "url" values.
 		printf(
 			'<script type="application/ld+json">%s</script>' . "\n",
-			wp_json_encode( $schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )
+			wp_json_encode( $schema, JSON_UNESCAPED_UNICODE )
 		);
 	}
 

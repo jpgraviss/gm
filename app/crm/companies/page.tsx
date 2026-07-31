@@ -1955,10 +1955,23 @@ export default function CompaniesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      const saved = await res.json()
-      setLocalCompanies(prev => [saved, ...prev])
+      // AUDIT #567 — previously called res.json() unconditionally and
+      // pushed the result straight into localCompanies even on failure —
+      // the server's error body ({error: "..."}) has no id/name, and the
+      // search filter below does `c.name.toLowerCase()` on every render,
+      // so this threw "Cannot read properties of undefined" and crashed
+      // the whole Companies page. Same bug class already fixed for deal
+      // creation in app/crm/pipeline/page.tsx's handleNewDeal.
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        toast(body.error || 'Failed to create company', 'error')
+      } else {
+        const saved = await res.json()
+        setLocalCompanies(prev => [saved, ...prev])
+      }
     } catch {
       setLocalCompanies(prev => [{ ...payload, id: `co-${Date.now()}` } as CRMCompany, ...prev])
+      toast('Network error — company was not saved, please retry', 'error')
     }
     setCreatingCompany(false)
   }

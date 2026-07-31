@@ -5,6 +5,19 @@ import { getSettings, getSecuritySettings, passwordPolicyMinLength } from '@/lib
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
+// AUDIT #570 — displayName is free-text supplied by the portal client
+// completing setup, interpolated unescaped into an HTML email sent to
+// every admin inbox below. Matches the escapeHtml() convention already
+// used for this exact bug class in lib/portal-notify.ts and
+// app/api/forms/public/[slug]/route.ts.
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
 export const POST = withErrorHandler('portal-clients/complete-setup POST', async (req) => {
   const { email, code, password, displayName } = await req.json()
   if (!email || !code || !password) {
@@ -92,9 +105,14 @@ export const POST = withErrorHandler('portal-clients/complete-setup POST', async
     const configuredEmails = approvalConfig?.portalClientApprovals
     const adminEmails = (configuredEmails?.length ? configuredEmails : admins.map(a => a.email)).filter(Boolean)
     const clientName = displayName || client.contact || normalizedEmail
+    const safeName = escapeHtml(clientName)
+    const safeCompany = escapeHtml(client.company || '')
+    const safeEmail = escapeHtml(normalizedEmail)
     for (const adminEmail of adminEmails) {
       await sendEmail({
         to: adminEmail,
+        // Plain-text subject, not HTML-rendered — the raw name is correct
+        // here; only the HTML body below needs escapeHtml().
         subject: `Portal Client Pending Approval: ${clientName}`,
         html: `<!DOCTYPE html>
 <html>
@@ -124,17 +142,17 @@ export const POST = withErrorHandler('portal-clients/complete-setup POST', async
                     <tr>
                       <td width="50%">
                         <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;">Client Name</p>
-                        <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${clientName}</p>
+                        <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${safeName}</p>
                       </td>
                       <td width="50%">
                         <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;">Company</p>
-                        <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${client.company}</p>
+                        <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${safeCompany}</p>
                       </td>
                     </tr>
                     <tr>
                       <td colspan="2" style="padding-top:16px;">
                         <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;">Email</p>
-                        <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${normalizedEmail}</p>
+                        <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${safeEmail}</p>
                       </td>
                     </tr>
                   </table>

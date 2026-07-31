@@ -207,14 +207,20 @@ def run_for_client(slug: str, args) -> dict:
     warnings: list[str] = []
     date_range = None
     comparison_range = None
-    if args.report != "realtime":
-        date_range = dates.resolve_range(args.days, args.start, args.end)
-        if dates.is_end_today(date_range):
-            warnings.append("date_range.end is today — GA4 data for the current day is still incomplete.")
-        if args.compare:
-            comparison_range = dates.comparison_range(date_range)
-
+    # AUDIT #576 — dates.resolve_range() used to run outside this try/except,
+    # so a bad --start/--end (single-`--client` path) raised straight out of
+    # run_for_client with a bare traceback instead of the clean error
+    # envelope every other failure in this function produces. The
+    # --all-clients loop in main() was unaffected since it wraps this whole
+    # call in its own try/except.
     try:
+        if args.report != "realtime":
+            date_range = dates.resolve_range(args.days, args.start, args.end)
+            if dates.is_end_today(date_range):
+                warnings.append("date_range.end is today — GA4 data for the current day is still incomplete.")
+            if args.compare:
+                comparison_range = dates.comparison_range(date_range)
+
         rows, comparison_rows, sampled, api_warnings = _run_query(client_record, args)
     except Exception as e:
         return envelope.build_error_envelope(client=slug, source="ga4", report=args.report, error=str(e))

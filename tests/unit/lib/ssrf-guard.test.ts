@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import http from 'http'
 
 // `dns.lookup` is mocked so DNS-dependent tests are deterministic (no real
@@ -21,7 +21,7 @@ vi.mock('dns', async (importOriginal) => {
 })
 
 import { promises as dns } from 'dns'
-import { resolveSafeIp, isPrivateOrInternalUrl, createPinnedDispatcher } from '@/lib/ssrf-guard'
+import { resolveSafeIp, isPrivateOrInternalUrl, createPinnedDispatcher, fetchTextSafely } from '@/lib/ssrf-guard'
 
 describe('ssrf-guard', () => {
   beforeEach(() => {
@@ -84,6 +84,59 @@ describe('ssrf-guard', () => {
 
     it('rejects non-http(s) protocols', async () => {
       expect(await resolveSafeIp('file:///etc/passwd')).toEqual({ safe: false })
+    })
+  })
+
+  // AUDIT #568 — app/api/calendar/subscriptions and calendar/import-link
+  // both did a raw fetch(url) against a caller-supplied ICS URL with none
+  // of this module's protection. fetchTextSafely() centralizes the fix; the
+  // dispatcher-pinning mechanics themselves are already covered by
+  // createPinnedDispatcher's own test above, so these focus on the
+  // reject/success composition around resolveSafeIp + fetch.
+  describe('fetchTextSafely', () => {
+    const mockFetch = vi.fn()
+
+    beforeEach(() => {
+      mockFetch.mockReset()
+      vi.stubGlobal('fetch', mockFetch)
+    })
+
+    // Scoped to this describe block — without this, the stub leaks into
+    // createPinnedDispatcher's test below, which needs the real global
+    // fetch to hit its local test server.
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('rejects a private/internal target before ever calling fetch', async () => {
+      await expect(fetchTextSafely('http://169.254.169.254/', 'text/calendar')).rejects.toThrow('This URL cannot be fetched')
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('rejects a hostname that resolves to a private address before calling fetch', async () => {
+      vi.mocked(dns.lookup).mockResolvedValue([{ address: '127.0.0.1', family: 4 }] as never)
+      await expect(fetchTextSafely('http://evil.example.com/', 'text/calendar')).rejects.toThrow('This URL cannot be fetched')
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('throws with the HTTP status when the fetch itself fails', async () => {
+      vi.mocked(dns.lookup).mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as never)
+      mockFetch.mockResolvedValue({ ok: false, status: 404 })
+
+      await expect(fetchTextSafely('http://safe.example.com/cal.ics', 'text/calendar')).rejects.toThrow('HTTP 404')
+    })
+
+    it('returns the response text on success, with the requested Accept header', async () => {
+      vi.mocked(dns.lookup).mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as never)
+      mockFetch.mockResolvedValue({ ok: true, text: () => Promise.resolve('BEGIN:VCALENDAR\nEND:VCALENDAR') })
+
+      const result = await fetchTextSafely('http://safe.example.com/cal.ics', 'text/calendar')
+
+      expect(result).toBe('BEGIN:VCALENDAR\nEND:VCALENDAR')
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://safe.example.com/cal.ics',
+        expect.objectContaining({ headers: expect.objectContaining({ Accept: 'text/calendar' }), redirect: 'manual' }),
+      )
     })
   })
 

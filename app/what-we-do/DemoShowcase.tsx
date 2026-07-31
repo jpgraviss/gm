@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   Users, DollarSign, FileText, FolderKanban, BarChart3, Settings,
   Search, Bell, Download, MessageSquare,
-  TrendingUp, CheckCircle2, ArrowUpRight,
+  TrendingUp, CheckCircle2, ArrowUpRight, GripHorizontal,
 } from 'lucide-react'
 
 // ─── Fake demo data — no real client names, no real numbers, no real code.
@@ -74,10 +74,56 @@ const TAB_CAPTIONS: Record<TabKey, string> = {
   reporting: 'Pipeline, revenue, and win-rate — computed from the same records the team is already working in, not a separately maintained deck.',
 }
 
+// Drag range, in pixels, that the title bar can be pulled from its resting
+// spot in either direction — generous enough to feel free, bounded enough
+// that it can't be dragged off into the middle of unrelated page content.
+const DRAG_RANGE_X = 220
+const DRAG_RANGE_Y = 160
+
+function clampDrag(v: number, max: number) {
+  return Math.min(max, Math.max(-max, v))
+}
+
 function DeviceFrame({ url, children }: { url: string; children: React.ReactNode }) {
+  const [pos, setPos] = useState({ x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  const dragOrigin = useRef({ x: 0, y: 0 })
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    dragOrigin.current = { x: e.clientX - pos.x, y: e.clientY - pos.y }
+    setDragging(true)
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragging) return
+    setPos({
+      x: clampDrag(e.clientX - dragOrigin.current.x, DRAG_RANGE_X),
+      y: clampDrag(e.clientY - dragOrigin.current.y, DRAG_RANGE_Y),
+    })
+  }
+
+  function handlePointerUp() {
+    setDragging(false)
+  }
+
   return (
-    <div className="rounded-2xl bg-white shadow-[0_20px_60px_-15px_rgba(1,42,28,0.35)] ring-1 ring-black/5 overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-2.5 bg-[#F7F5F2] border-b border-black/5">
+    <div
+      className="rounded-2xl bg-white shadow-[0_20px_60px_-15px_rgba(1,42,28,0.35)] ring-1 ring-black/5 overflow-hidden relative"
+      style={{
+        transform: `translate3d(${pos.x}px, ${pos.y}px, 0)`,
+        transition: dragging ? 'none' : 'transform 0.4s cubic-bezier(0.22,1,0.36,1)',
+        zIndex: dragging ? 30 : 'auto',
+      }}
+    >
+      <div
+        className="flex items-center gap-3 px-4 py-2.5 bg-[#F7F5F2] border-b border-black/5 cursor-grab active:cursor-grabbing select-none"
+        style={{ touchAction: 'none' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      >
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-[#e5675a]" />
           <span className="w-2.5 h-2.5 rounded-full bg-[#e6b45a]" />
@@ -88,6 +134,7 @@ function DeviceFrame({ url, children }: { url: string; children: React.ReactNode
             {url}
           </span>
         </div>
+        <GripHorizontal size={13} className="text-[#1B211D]/25 flex-shrink-0" />
       </div>
       <div className="flex bg-white">
         <div className="hidden sm:flex flex-col items-center gap-4 w-12 py-4 bg-[#012A1C] flex-shrink-0">
@@ -331,6 +378,7 @@ export default function DemoShowcase() {
       </p>
       <p className="text-center text-[10px] text-[#1B211D]/35 mt-3">
         Illustrative screens with sample data — shown to demonstrate the product, not real client information.
+        Drag any window by its title bar.
       </p>
     </div>
   )

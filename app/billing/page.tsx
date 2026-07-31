@@ -257,6 +257,50 @@ function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: I
   )
 }
 
+// AUDIT #588 — the old `line.split(',')` had no quote-awareness, so a
+// quoted field containing a comma (`"Smith, Jones & Co."`) shifted every
+// later column's index for that row. Handles quoted fields with embedded
+// commas and escaped (`""`) quotes; does not support quoted newlines,
+// matching the existing per-line-split scope of this importer.
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = []
+  let cur = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++ }
+        else inQuotes = false
+      } else {
+        cur += ch
+      }
+    } else if (ch === '"') {
+      inQuotes = true
+    } else if (ch === ',') {
+      cells.push(cur.trim())
+      cur = ''
+    } else {
+      cur += ch
+    }
+  }
+  cells.push(cur.trim())
+  return cells
+}
+
+// AUDIT #588 — `parseFloat('1,234.56')` stops at the first non-numeric
+// character and returns `1`, which is truthy and silently passed the old
+// `!amount` skip check. Strips thousands separators first, then requires
+// the whole cleaned string to be a valid positive number — anything that
+// doesn't roundtrip cleanly (including the already-correctly-rejected
+// `$`-prefixed case) is treated as invalid rather than guessed at.
+function parseAmount(raw: string): number | null {
+  const cleaned = raw.trim().replace(/,/g, '')
+  if (!/^\d+(\.\d+)?$/.test(cleaned)) return null
+  const n = parseFloat(cleaned)
+  return n > 0 ? n : null
+}
+
 function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImported: (count: number, failed: number, skipped: number) => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [rows, setRows] = useState<string[][]>([])
@@ -303,7 +347,7 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
     const reader = new FileReader()
     reader.onload = (ev) => {
       const text = ev.target?.result as string
-      const lines = text.split('\n').map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g, '')))
+      const lines = text.split('\n').filter(l => l.length > 0).map(parseCsvLine)
       if (lines.length < 2) return
       const hdrs = lines[0]
       setHeaders(hdrs)
@@ -344,8 +388,8 @@ function CSVImportModal({ onClose, onImported }: { onClose: () => void; onImport
         return idx >= 0 ? row[idx] : ''
       }
       const company = getValue('company')
-      const amount = parseFloat(getValue('amount') || '0')
-      if (!company || !amount) { skipped++; continue }
+      const amount = parseAmount(getValue('amount'))
+      if (!company || amount === null) { skipped++; continue }
 
       try {
         const res = await fetch('/api/invoices', {

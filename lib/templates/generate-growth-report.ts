@@ -29,6 +29,14 @@ export interface GrowthReportData {
   nextMonth: NextMonthItem[]
 }
 
+// AUDIT #589 — workLog/nextMonth fields are staff-entered via the Work Log
+// modal with no server-side sanitization, then interpolated directly into
+// this HTML email with no escaping, matching the bug class already fixed
+// at #386/#529/#540/#570.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 function round1(n: number): number {
   return Math.round(n * 10) / 10
 }
@@ -109,9 +117,9 @@ export function generateGrowthReportHtml(data: GrowthReportData, settings?: AppS
   const cells = data.workLog.map(cat => `
       <td style="padding:8px;width:50%;vertical-align:top;">
         <div style="background:${brand.secondary};border-radius:10px;padding:16px;">
-          <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:${brand.primary};text-transform:uppercase;letter-spacing:0.05em;font-family:'Montserrat',sans-serif;">${cat.title}</p>
+          <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:${brand.primary};text-transform:uppercase;letter-spacing:0.05em;font-family:'Montserrat',sans-serif;">${escapeHtml(cat.title)}</p>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            ${cat.bullets.map(b => `<tr><td style="padding:2px 0;font-size:13px;color:${brand.ink};font-family:'Montserrat',sans-serif;"><span style="color:${brand.accent};margin-right:6px;">&#8226;</span>${b}</td></tr>`).join('')}
+            ${cat.bullets.map(b => `<tr><td style="padding:2px 0;font-size:13px;color:${brand.ink};font-family:'Montserrat',sans-serif;"><span style="color:${brand.accent};margin-right:6px;">&#8226;</span>${escapeHtml(b)}</td></tr>`).join('')}
           </table>
         </div>
       </td>`)
@@ -207,8 +215,8 @@ export function generateGrowthReportHtml(data: GrowthReportData, settings?: AppS
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
           <td style="width:32px;vertical-align:top;"><span style="display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;background:${brand.primary};color:#fff;font-size:11px;font-weight:700;font-family:'Montserrat',sans-serif;">${i + 1}</span></td>
           <td style="vertical-align:top;">
-            <p style="margin:0;font-size:13px;font-weight:700;color:${brand.ink};font-family:'Montserrat',sans-serif;">${item.title}</p>
-            <p style="margin:2px 0 0;font-size:12px;color:${brand.stone};font-family:'Montserrat',sans-serif;">${item.description}</p>
+            <p style="margin:0;font-size:13px;font-weight:700;color:${brand.ink};font-family:'Montserrat',sans-serif;">${escapeHtml(item.title)}</p>
+            <p style="margin:2px 0 0;font-size:12px;color:${brand.stone};font-family:'Montserrat',sans-serif;">${escapeHtml(item.description)}</p>
           </td>
         </tr></table>
       </td></tr>`).join('')
@@ -295,10 +303,10 @@ ${data.nextMonth.length > 0 ? `
 </html>`
 
   return renderTemplate(html, {
-    client_name: data.clientName,
-    prepared_by: data.preparedBy,
-    engagement: data.engagement,
-    period_label: data.period.label,
+    client_name: escapeHtml(data.clientName),
+    prepared_by: escapeHtml(data.preparedBy),
+    engagement: escapeHtml(data.engagement),
+    period_label: escapeHtml(data.period.label),
     generated_date: formatDate(new Date()),
   })
 }

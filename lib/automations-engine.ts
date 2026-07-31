@@ -750,8 +750,13 @@ async function executeAction(
         id: `act-auto-${uid()}`,
         type: 'note',
         title: `[Auto] ${notifMessage}`,
-        company_id: (context.companyId as string) ?? null,
-        contact_id: (context.contactId as string) ?? null,
+        // AUDIT #600 — most real trigger contexts are built by spreading a
+        // raw DB row (snake_case), matching the fallback Log Activity/Send
+        // Notification already use — camelCase-only left this null for any
+        // trigger fired that way, orphaning the activity off both the
+        // company's and deal's Activity tab.
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
+        contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
         timestamp: new Date().toISOString(),
         user_name: 'System',
       })
@@ -788,8 +793,8 @@ async function executeAction(
         id: `act-auto-${uid()}`,
         type: 'note',
         title: `[Auto] ${context.trigger ?? 'Automation'} for ${company}`,
-        company_id: (context.companyId as string) ?? null,
-        contact_id: (context.contactId as string) ?? null,
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
+        contact_id: (context.contactId as string) ?? (context.contact_id as string) ?? null,
         timestamp: new Date().toISOString(),
         user_name: 'System',
       })
@@ -801,7 +806,7 @@ async function executeAction(
         id: `act-auto-${uid()}`,
         type: 'note',
         title: `[Auto] Flagged for attention — ${context.trigger ?? action}`,
-        company_id: (context.companyId as string) ?? null,
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         timestamp: new Date().toISOString(),
         user_name: 'System',
       })
@@ -881,14 +886,19 @@ async function executeAction(
 
       await db.from('crm_activities').insert({
         id: `act-auto-${uid()}`,
-        type: 'document',
+        // AUDIT #600 — 'document' isn't a real ActivityType member
+        // (lib/types.ts); ActivityTimeline dereferences
+        // activityConfig[act.type] unguarded, so this crashed the Activity
+        // tab the moment this action ever ran. 'email' is the accurate
+        // type — this action sends a real email.
+        type: 'email',
         title: sendResult.success
           ? `[Auto] Sent "${template.name}" to ${clientName} (${contact.emails[0]})`
           : `[Auto] Failed to send "${template.name}" to ${clientName}: ${sendResult.error ?? 'unknown error'}`,
         body: filled,
         contact_id: contactId,
         contact_name: clientName,
-        company_id: (context.companyId as string) ?? null,
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         company_name: company,
         timestamp: new Date().toISOString(),
         user_name: 'System',

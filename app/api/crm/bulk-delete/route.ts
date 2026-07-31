@@ -62,6 +62,17 @@ export const POST = withErrorHandler('crm/bulk-delete POST', async (req) => {
       }
     }
   } else {
+    // AUDIT #599 — same denormalized-blob nulling DELETE
+    // /api/crm/contacts/[id] does (#147): deals.contact_id is
+    // ON DELETE SET NULL, but deals.contact is a separate
+    // {id,name,email,phone,title} blob the deal card renders directly,
+    // untouched by the FK. Without this, a bulk-deleted contact keeps
+    // showing on every deal that referenced them, indistinguishable from
+    // a live one.
+    if (type === 'contacts') {
+      await db.from('deals').update({ contact: null }).in('contact_id', ids)
+    }
+
     const { error, count } = await db.from(table).delete({ count: 'exact' }).in('id', ids)
     if (error) {
       throw new Error(error.message)

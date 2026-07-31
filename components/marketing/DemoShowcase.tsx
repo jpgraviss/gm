@@ -7,46 +7,49 @@ import {
   TrendingUp, CheckCircle2, ArrowUpRight, GripHorizontal,
 } from 'lucide-react'
 
-// ─── Fake demo data — no real client names, no real numbers, no real code.
-// Everything below exists purely to illustrate what the screens look like.
+// ─── Fake demo data — no real client names, no real numbers or pricing
+// structure, no real code. Dollar amounts are deliberately non-round (not
+// the kind of figure a real rate card would use) so nothing here could be
+// mistaken for actual pricing. Everything below exists purely to
+// illustrate what the screens look like.
 
 const PIPELINE_COLUMNS = [
   {
     name: 'Prospect',
     color: '#8C8478',
     deals: [
-      { company: 'Anchor Outdoor', value: '$4,200/mo', initials: 'AO' },
-      { company: 'Wayfinder Coffee', value: '$1,900/mo', initials: 'WC' },
+      { company: 'Anchor Outdoor', value: '$4,340/mo', initials: 'AO' },
+      { company: 'Wayfinder Coffee', value: '$1,760/mo', initials: 'WC' },
     ],
   },
   {
     name: 'Proposal Sent',
     color: '#CC7853',
     deals: [
-      { company: 'Riverside Dental', value: '$2,800/mo', initials: 'RD' },
-      { company: 'Blue Ridge Auto', value: '$5,400/mo', initials: 'BA' },
+      { company: 'Riverside Dental', value: '$2,690/mo', initials: 'RD' },
+      { company: 'Blue Ridge Auto', value: '$5,120/mo', initials: 'BA' },
     ],
   },
   {
     name: 'Negotiation',
     color: '#01673f',
     deals: [
-      { company: 'Meridian HVAC', value: '$6,500/mo', initials: 'MH' },
+      { company: 'Meridian HVAC', value: '$6,280/mo', initials: 'MH' },
     ],
   },
   {
     name: 'Closed Won',
     color: '#015035',
     deals: [
-      { company: 'Palmetto Realty', value: '$3,100/mo', initials: 'PR' },
+      { company: 'Palmetto Realty', value: '$2,970/mo', initials: 'PR' },
     ],
   },
 ]
 
 const PROPOSAL_LINE_ITEMS = [
-  { name: 'Website Redesign', detail: 'One-time build, 6-page site', price: '$3,500' },
-  { name: 'SEO Management', detail: 'Ongoing optimization & reporting', price: '$1,800/mo' },
-  { name: 'Content & Local SEO', detail: 'Blog + Google Business Profile', price: '$700/mo' },
+  { name: 'Website Redesign', detail: 'One-time build, 6-page site', price: '$4,150' },
+  { name: 'SEO Management', detail: 'Ongoing optimization & reporting', price: '$1,940/mo' },
+  { name: 'Content & Local SEO', detail: 'Blog + Google Business Profile', price: '$640/mo' },
 ]
 
 const REVENUE_TREND = [62, 68, 71, 79, 84, 91]
@@ -225,7 +228,7 @@ function ProposalMockup() {
           </div>
           <div className="flex items-center justify-between pt-1">
             <p className="text-[10px] text-[#1B211D]/50">Estimated monthly</p>
-            <p className="text-sm font-bold text-[#015035]">$2,500/mo</p>
+            <p className="text-sm font-bold text-[#015035]">$2,580/mo</p>
           </div>
         </div>
         <div className="flex items-center gap-2.5 mt-4">
@@ -259,7 +262,7 @@ function PortalMockup() {
             <DollarSign size={12} className="text-[#CC7853]" />
             <p className="text-[9.5px] font-bold text-[#1B211D]/60 uppercase tracking-wide">Next Invoice</p>
           </div>
-          <p className="text-xl font-bold text-[#012A1C]">$3,100</p>
+          <p className="text-xl font-bold text-[#012A1C]">$2,860</p>
           <p className="text-[9.5px] text-[#1B211D]/50">Due Aug 15</p>
         </div>
         <div className="col-span-2 bg-[#F7F5F2] rounded-xl p-3.5 border border-black/5 flex items-center justify-between">
@@ -296,9 +299,9 @@ function ReportingMockup() {
       <TopBar title="Revenue & Pipeline" />
       <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-1">
         {[
-          { label: 'MRR', value: '$184.5k', delta: '+6.2%' },
+          { label: 'MRR', value: '$176.3k', delta: '+6.2%' },
           { label: 'Win Rate', value: '38%', delta: '+3pt' },
-          { label: 'Avg Deal', value: '$3,850', delta: '+4.1%' },
+          { label: 'Avg Deal', value: '$3,690', delta: '+4.1%' },
           { label: 'Active Clients', value: '47', delta: '+2' },
         ].map(kpi => (
           <div key={kpi.label} className="bg-[#F7F5F2] rounded-lg p-2.5 border border-black/5">

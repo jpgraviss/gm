@@ -4,7 +4,9 @@ import { slugifyForm } from '@/lib/forms'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 
-export const GET = withErrorHandler('funnels/[id]/pages GET', async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withErrorHandler('funnels/[id]/pages GET', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const { id } = await params
   const db = createServiceClient()
   const { data, error } = await db

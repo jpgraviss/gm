@@ -10,6 +10,12 @@
 export const SESSION_COOKIE_NAME = 'gravhub-auth'
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 7 // 7 days — matches the old cookie's lifetime
 
+// "Remember me" checkbox on the password sign-in form (app/login/page.tsx)
+// — overrides the configured Session Timeout security setting with a fixed
+// 30-day cookie lifetime for that specific login, same override precedent
+// as sessionTimeoutToSeconds() below.
+export const REMEMBER_ME_SECONDS = 60 * 60 * 24 * 30
+
 export interface SessionPayload {
   id: string
   email: string
@@ -23,6 +29,13 @@ export interface SessionPayload {
   // gate in app/api/auth/session/route.ts for why this can't just be
   // "does a valid cookie for this email already exist."
   twoFactorVerifiedAt?: number
+  // "Remember me" checkbox (client-portal password login only). Carried
+  // forward in the cookie payload itself — not just a one-shot request
+  // flag — so a later reissue of this exact cookie (routine Supabase
+  // token-refresh, or a mount-time session restore) keeps the extended
+  // lifetime instead of silently reverting to the default Session Timeout
+  // on the very next refresh. See app/api/auth/session/route.ts.
+  rememberMe?: boolean
 }
 
 interface SignedBody extends SessionPayload {

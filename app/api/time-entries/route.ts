@@ -6,7 +6,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapEntry(row: any) {
+export function mapEntry(row: any) {
   return {
     id:          row.id,
     date:        row.date,

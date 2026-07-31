@@ -24,7 +24,7 @@ HubSpot's free Gmail tracking extension, but pointed at GravHub instead of HubSp
 3. Turn on **Developer mode** (top right).
 4. Click **Load unpacked** and select this `browser-extension/` folder.
 5. Click the new toolbar icon → **Set up** (or right-click the icon → Options).
-6. Paste in your GravHub base URL (e.g. `https://app.gravhub.com`) and the token from step 1,
+6. Paste in your GravHub base URL (`https://app.gravissmarketing.com`) and the token from step 1,
    then **Save**. The options page does a live test call before saving, so a bad token or
    unreachable URL is caught immediately instead of failing silently later.
 7. Open Gmail (`mail.google.com`) and start a new compose — you should see the tracking badge.
@@ -73,10 +73,10 @@ after a Gmail UI update, and are the first places to look if tracking silently s
 
 `manifest.json` currently requests `host_permissions: ["https://*/*"]` rather than scoping to a
 single GravHub domain. This was a deliberate shortcut to avoid making users go through an extra
-runtime permission grant while GravHub's own deployment URL isn't fixed yet (and to avoid
-re-editing/reloading the extension every time it changes). **Recommended hardening once the
-production GravHub URL is finalized**: narrow this to `["https://app.gravhub.com/*"]` (or
-whatever the real domain is) plus `https://mail.google.com/*`, and reload the unpacked extension.
+runtime permission grant while re-editing/reloading the extension during development. The
+production domain is `app.gravissmarketing.com` — **recommended hardening**: narrow this to
+`["https://app.gravissmarketing.com/*", "https://mail.google.com/*"]` and reload the unpacked
+extension.
 
 ## Files
 

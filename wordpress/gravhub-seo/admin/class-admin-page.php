@@ -590,7 +590,7 @@ class GravHub_Admin_Page {
 	public function render_api_url_field() {
 		$value = $this->api_client->get_api_url();
 		printf(
-			'<input type="url" id="gravhub_api_url" name="%s" value="%s" class="regular-text" placeholder="https://app.gravhub.io" />',
+			'<input type="url" id="gravhub_api_url" name="%s" value="%s" class="regular-text" placeholder="https://app.gravissmarketing.com" />',
 			esc_attr( GravHub_API_Client::OPTION_API_URL ),
 			esc_attr( $value )
 		);

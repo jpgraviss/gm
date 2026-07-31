@@ -68,8 +68,8 @@ class GravHub_SEO_Analyzer {
 		$issues = array();
 		$score  = 100;
 
-		// Get post content without shortcodes rendered.
-		$content = $post->post_content;
+		// Real, rendered content (Elementor-aware — see GravHub_Content_Helper).
+		$content = GravHub_Content_Helper::get_analyzable_content( $post );
 
 		// Get the post permalink for URL analysis.
 		$permalink = get_permalink( $post );
@@ -161,7 +161,10 @@ class GravHub_SEO_Analyzer {
 		}
 
 		// 3. H1 tag count check.
-		$rendered_content = apply_filters( 'the_content', $content );
+		// $content is already the real rendered content (Elementor's own
+		// output for Elementor pages, the_content-filtered post_content
+		// otherwise) — no need to run the_content a second time here.
+		$rendered_content = $content;
 		$h1_count         = preg_match_all( '/<h1[\s>]/i', $rendered_content, $matches );
 
 		if ( 0 === $h1_count ) {
@@ -446,8 +449,7 @@ class GravHub_SEO_Analyzer {
 		}
 
 		$keyword_lower   = mb_strtolower( $keyword );
-		$content         = $post->post_content;
-		$rendered        = apply_filters( 'the_content', $content );
+		$rendered        = GravHub_Content_Helper::get_analyzable_content( $post );
 		$stripped        = wp_strip_all_tags( $rendered );
 		$stripped_lower  = mb_strtolower( $stripped );
 		$title_lower     = mb_strtolower( $post->post_title );
@@ -596,7 +598,7 @@ class GravHub_SEO_Analyzer {
 	 * @return array Array of readability check results.
 	 */
 	public function analyze_readability( $post ) {
-		return $this->analyze_readability_content( $post->post_content );
+		return $this->analyze_readability_content( GravHub_Content_Helper::get_analyzable_content( $post ) );
 	}
 
 	/**

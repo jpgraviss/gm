@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser, requireRole } from '@/lib/rbac'
+import { mapEntry } from '../route'
 
 const APPROVAL_FIELDS = ['approvalStatus', 'approvedBy', 'approvedAt', 'rejectionNote']
 
@@ -144,7 +145,10 @@ export const PATCH = withErrorHandler('time-entries/[id] PATCH', async (req: Nex
   if (error) {
     throw new Error(error?.message || 'Failed to update time entry')
   }
-  return NextResponse.json(data)
+  // AUDIT — this used to return the raw snake_case DB row while GET/POST
+  // both correctly go through mapEntry(); same bug class already fixed for
+  // tickets (#202) and tasks (#537).
+  return NextResponse.json(mapEntry(data))
 })
 
 export const DELETE = withErrorHandler('time-entries/[id] DELETE', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {

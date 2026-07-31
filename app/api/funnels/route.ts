@@ -5,7 +5,9 @@ import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 
-export const GET = withErrorHandler('funnels GET', async () => {
+export const GET = withErrorHandler('funnels GET', async (req: NextRequest) => {
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
   const db = createServiceClient()
   const { data, error } = await db
     .from('funnels')

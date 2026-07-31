@@ -55,6 +55,7 @@ const PUBLIC_PREFIXES = [
   '/api/intelligence/script',
   '/api/reputation/review-request/',
   '/api/stripe/webhook',
+  '/api/automations/webhook/',
 ]
 
 async function proxyImpl(req: NextRequest): Promise<NextResponse> {
@@ -213,6 +214,20 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
       if (memoryLimited(`check-approval:${ip}`, 20, 60 * 60 * 1000)) {
         return NextResponse.json(
           { error: 'Too many requests. Please wait a while and try again.' },
+          { status: 429 }
+        )
+      }
+    }
+    // Newly public (was unreachable — missing from this list entirely, so
+    // real third-party webhook calls always 401'd before the route's own
+    // token check ever ran). The random per-automation token is the real
+    // auth boundary; this is just the same defense-in-depth throttle every
+    // other public write route above already has.
+    if (pathname.startsWith('/api/automations/webhook/') && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`automations-webhook:${ip}`, 60, 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please wait a moment and try again.' },
           { status: 429 }
         )
       }

@@ -18,8 +18,12 @@ import PageLoadingOverlay from './PageLoadingOverlay'
 // app/api/portal-clients/invite) — a brand-new invitee has no session yet,
 // so leaving these off this list means the redirect effect below bounces
 // them to /login before the token/code-verification UI ever renders,
-// breaking every real onboarding link.
-const PUBLIC_ROUTES = ['/login', '/team-login', '/setup-account', '/portal/setup', '/portal/auth/verify']
+// breaking every real onboarding link. /what-we-do is the public product
+// explainer page — meant to be shared with people who have no GravHub
+// account at all, so it renders standalone with no sidebar/auth redirect.
+// /demo/* (a multi-page fake-data walkthrough, prefix-matched below like
+// /book/ and /go/) is public for the same reason.
+const PUBLIC_ROUTES = ['/login', '/team-login', '/setup-account', '/portal/setup', '/portal/auth/verify', '/what-we-do']
 
 // Pages restricted to specific units. Admins (isAdmin=true) always have full access.
 // If a route prefix is listed, users whose unit is NOT in the allowed list get redirected to /.
@@ -133,8 +137,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setAssistantOpen(true)
   }
 
-  // /go/* routes are public — clients access booking pages, forms, and funnels without logging in
-  const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/') || pathname.startsWith('/unsubscribe/') || pathname.startsWith('/go/') 
+  // /go/* routes are public — clients access booking pages, forms, and funnels without logging in.
+  // "/" is conditionally public: an anonymous visitor sees the GravHub marketing homepage there
+  // (app/page.tsx branches on `user` itself), but a logged-in user still gets the real dashboard
+  // in the normal sidebar shell below — this clause must stay false once `user` exists, or every
+  // staff member would lose their sidebar on "/".
+  const isPublic = (pathname === '/' && !user) || PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/book/') || pathname.startsWith('/unsubscribe/') || pathname.startsWith('/go/') || pathname === '/demo' || pathname.startsWith('/demo/')
   // Inject brand CSS variables from shared settings (no duplicate fetch)
   useEffect(() => {
     const branding = settings?.branding

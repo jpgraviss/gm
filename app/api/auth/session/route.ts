@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
-import { buildSessionCookie, verifySessionCookie, sessionTimeoutToSeconds, SESSION_COOKIE_NAME } from '@/lib/session-cookie'
+import { buildSessionCookie, verifySessionCookie, sessionTimeoutToSeconds, REMEMBER_ME_SECONDS, SESSION_COOKIE_NAME } from '@/lib/session-cookie'
 import { getSecuritySettings } from '@/lib/settings'
 import { sendTwoFactorCode } from '@/lib/two-factor'
 
@@ -20,6 +20,20 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
   if (!token) {
     return NextResponse.json({ error: 'Missing bearer token' }, { status: 401 })
   }
+
+  // "Remember me" checkbox on the client-portal password sign-in form
+  // (app/login/page.tsx) — only that flow ever sends this; every other
+  // caller (magic-link confirm, routine session-restore/refresh) sends no
+  // body at all, so this defaults to false for them.
+  //
+  // AUDIT — this used to be honored unconditionally for BOTH staff and
+  // portal-client cookies, with nothing server-side restricting it to the
+  // one flow that actually has the checkbox: any authenticated caller
+  // (including a staff account, via a raw POST with {rememberMe: true})
+  // could self-grant a 30-day cookie regardless of the admin-configured
+  // Session Timeout security setting. Now only ever applied in the
+  // portal-client branch below.
+  const { rememberMe: requestedRememberMe } = await req.json().catch(() => ({ rememberMe: false } as { rememberMe?: boolean }))
 
   const db = createServiceClient()
   const { data: { user: authUser }, error } = await db.auth.getUser(token)
@@ -65,7 +79,7 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
 
   // AUDIT.md #207 — Session Timeout previously had zero effect.
   const security = await getSecuritySettings()
-  const maxAgeSeconds = sessionTimeoutToSeconds(security.sessionTimeout)
+  const staffMaxAgeSeconds = sessionTimeoutToSeconds(security.sessionTimeout)
 
   // AUDIT.md #343 — this route is called for both a fresh magic-link/OTP
   // login AND routine session-restore/token-refresh, and gating 2FA
@@ -119,7 +133,7 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
       // when 2FA wasn't required for this session (nothing to carry) or
       // the gate above already confirmed it was verified.
       twoFactorVerifiedAt: existingStaffCookieForThisUser?.twoFactorVerifiedAt,
-    }, maxAgeSeconds))
+    }, staffMaxAgeSeconds))
     return res
   }
 
@@ -141,6 +155,20 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
     return NextResponse.json({ error: 'Your portal access is awaiting admin approval.' }, { status: 403 })
   }
 
+  // AUDIT — "Remember me" used to be a pure request-body flag: the initial
+  // login correctly got a 30-day cookie, but the very next routine token
+  // refresh or mount-time session restore (neither of which re-sends the
+  // checkbox's one-shot sessionStorage flag) silently rebuilt the cookie at
+  // the default Session Timeout, defeating the feature almost immediately.
+  // Carry it forward from the existing cookie (same identity-scoped pattern
+  // twoFactorVerifiedAt already uses above) so once granted, it survives
+  // every later reissue for this session, not just the first one.
+  const existingClientCookieForThisUser = existingCookie?.email?.toLowerCase() === email && existingCookie.userType === 'client'
+    ? existingCookie
+    : null
+  const rememberMe = requestedRememberMe === true || existingClientCookieForThisUser?.rememberMe === true
+  const clientMaxAgeSeconds = rememberMe ? REMEMBER_ME_SECONDS : sessionTimeoutToSeconds(security.sessionTimeout)
+
   const res = NextResponse.json({ ok: true })
   res.cookies.set(await buildSessionCookie({
     id: clientRow.id,
@@ -148,7 +176,8 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
     role: 'Client',
     isAdmin: false,
     userType: 'client',
-  }, maxAgeSeconds))
+    rememberMe: rememberMe || undefined,
+  }, clientMaxAgeSeconds))
   return res
 })
 

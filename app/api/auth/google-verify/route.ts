@@ -4,7 +4,6 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { buildSessionCookie, sessionTimeoutToSeconds, type SessionPayload } from '@/lib/session-cookie'
 import { getSecuritySettings } from '@/lib/settings'
 import { isLockedOut, recordFailedAttempt, clearAttempts } from '@/lib/login-attempts'
-import { sendTwoFactorCode } from '@/lib/two-factor'
 
 async function respondWithUser(user: SessionPayload & { name: string; unit: string; initials: string; avatar?: string; company?: string }) {
   const res = NextResponse.json({ user })
@@ -179,13 +178,12 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
 
     clearAttempts(email)
 
-    // AUDIT.md #207 — "Two-Factor Auth: Required" previously had zero
-    // effect. When required, don't issue a session yet — email a code and
-    // have the client finish via /api/auth/2fa-verify.
-    if (security.twoFactor === 'required') {
-      await sendTwoFactorCode(teamRow.id, teamRow.email, teamRow.name)
-      return NextResponse.json({ requires2FA: true, email: teamRow.email })
-    }
+    // Product decision: Google Sign-In is exempt from "Two-Factor Auth:
+    // Required" — Google's own sign-in already requires the user to
+    // authenticate against their Google account (which most staff also have
+    // its own MFA on), so this app's email-code 2FA step is redundant on
+    // this path. The magic-link path (app/api/auth/session/route.ts) still
+    // enforces it, since a magic link only proves control of an inbox.
 
     return respondWithUser({
       id:       teamRow.id,

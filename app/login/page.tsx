@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth, setRememberMeForNextLogin } from '@/contexts/AuthContext'
 import Link from 'next/link'
 import { Mail, AlertCircle, ArrowRight, Globe, Lock, Wand2 } from 'lucide-react'
 import { GravissGMark } from '@/components/ui/GravissGMark'
@@ -50,6 +50,7 @@ export default function LoginPage() {
   const [authMethod, setAuthMethod] = useState<AuthMethod>('google')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
@@ -139,22 +140,39 @@ export default function LoginPage() {
 
   const handleEmailPassword = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Guards against a fast double-submit firing two concurrent sign-in
+    // attempts before React commits the disabled state — the `disabled`
+    // prop on the button isn't enough on its own since it only re-renders
+    // after this handler has already returned to the event loop once.
+    if (submitting) return
     if (!email || !password) { setError('Please enter email and password.'); return }
     setError('')
     setSubmitting(true)
     try {
+      // Picked up by the SIGNED_IN listener's establishSessionCookie() call
+      // right after signInWithPassword() resolves — see AuthContext.tsx.
+      setRememberMeForNextLogin(rememberMe)
       const supabase = getSupabaseClient()
       const { error: signInErr } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password,
       })
       if (signInErr) {
+        // AUDIT — setRememberMeForNextLogin() above already wrote '1' to
+        // sessionStorage; a failed sign-in never fires SIGNED_IN, so
+        // establishSessionCookie() (the only place that normally reads
+        // and clears it) never runs. Left uncleared, that stale '1' would
+        // silently attach to whatever this tab's NEXT successful sign-in
+        // turns out to be — Magic Link, a retry, anything — granting a
+        // 30-day session nobody asked for on that specific login.
+        setRememberMeForNextLogin(false)
         setError(signInErr.message === 'Invalid login credentials' ? 'Invalid email or password.' : signInErr.message)
         setSubmitting(false)
         return
       }
       router.push('/client')
     } catch {
+      setRememberMeForNextLogin(false)
       setError('Sign-in failed. Please try again.')
     }
     setSubmitting(false)
@@ -359,6 +377,17 @@ export default function LoginPage() {
                         />
                       </div>
                     </div>
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={e => setRememberMe(e.target.checked)}
+                        disabled={submitting}
+                        className="w-4 h-4 rounded border-gray-300 text-green-700 focus:ring-green-700"
+                        style={{ accentColor: '#015035' }}
+                      />
+                      <span className="text-xs text-gray-500">Remember me for 30 days</span>
+                    </label>
                     <button
                       type="submit"
                       disabled={submitting}

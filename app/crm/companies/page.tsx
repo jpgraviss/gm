@@ -26,7 +26,7 @@ import {
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
   ExternalLink, TrendingUp, FolderKanban, Pencil, Tag, Trash2, Upload, BarChart3,
   Monitor, Loader2, Sparkles, Wand2, Share2, Brain, Download, GitMerge, ArrowUpDown,
-  CheckSquare, Circle, CheckCircle2, UserCog,
+  CheckSquare, Circle, CheckCircle2, UserCog, Folder, HardDrive, AlertCircle,
 } from 'lucide-react'
 import ClientIntegrationsPanel from '@/components/crm/ClientIntegrationsPanel'
 import DuplicatesPanel from '@/components/crm/DuplicatesPanel'
@@ -130,6 +130,7 @@ function CompanyFilesTab({ companyId }: { companyId: string }) {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [filterCategory, setFilterCategory] = useState('all')
+  const [showDriveImport, setShowDriveImport] = useState(false)
 
   useEffect(() => {
     fetch(`/api/crm/companies/${companyId}/files`)
@@ -239,14 +240,31 @@ function CompanyFilesTab({ companyId }: { companyId: string }) {
             </button>
           ))}
         </div>
-        <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
-          uploading ? 'bg-gray-100 text-gray-400' : 'bg-[#015035] text-white hover:bg-[#012A1C]'
-        }`}>
-          {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-          <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Upload'}</span>
-          <input type="file" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
-        </label>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowDriveImport(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+          >
+            <HardDrive size={13} />
+            <span className="hidden sm:inline">Import from Drive</span>
+          </button>
+          <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
+            uploading ? 'bg-gray-100 text-gray-400' : 'bg-[#015035] text-white hover:bg-[#012A1C]'
+          }`}>
+            {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+            <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Upload'}</span>
+            <input type="file" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
+          </label>
+        </div>
       </div>
+
+      {showDriveImport && (
+        <DriveImportModal
+          companyId={companyId}
+          onClose={() => setShowDriveImport(false)}
+          onImported={saved => setFiles(prev => [saved, ...prev])}
+        />
+      )}
 
       {filteredFiles.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
@@ -297,6 +315,192 @@ function CompanyFilesTab({ companyId }: { companyId: string }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Google Drive import modal ────────────────────────────────────────────────
+
+interface DriveBrowseItem {
+  id: string
+  name: string
+  mimeType: string
+  size?: string
+}
+
+const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder'
+
+function DriveImportModal({ companyId, onClose, onImported }: { companyId: string; onClose: () => void; onImported: (file: CompanyFile) => void }) {
+  const { toast } = useToast()
+  const [status, setStatus] = useState<'checking' | 'disconnected' | 'ready'>('checking')
+  const [breadcrumbs, setBreadcrumbs] = useState<{ id: string; name: string }[]>([{ id: 'root', name: 'My Drive' }])
+  const [items, setItems] = useState<DriveBrowseItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [importingId, setImportingId] = useState<string | null>(null)
+
+  const loadFolder = useCallback((folderId: string) => {
+    setLoading(true)
+    fetch(`/api/drive?action=list&folderId=${encodeURIComponent(folderId)}`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => { if (Array.isArray(data)) setItems(data) })
+      .catch(() => toast('Failed to load Google Drive folder', 'error'))
+      .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/drive?action=status')
+      .then(r => r.ok ? r.json() : { connected: false })
+      .then(data => {
+        if (data.connected) {
+          setStatus('ready')
+          loadFolder('root')
+        } else {
+          setStatus('disconnected')
+        }
+      })
+      .catch(() => setStatus('disconnected'))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function openFolder(item: DriveBrowseItem) {
+    const next = [...breadcrumbs, { id: item.id, name: item.name }]
+    setBreadcrumbs(next)
+    loadFolder(item.id)
+  }
+
+  function goToBreadcrumb(index: number) {
+    const next = breadcrumbs.slice(0, index + 1)
+    setBreadcrumbs(next)
+    loadFolder(next[next.length - 1].id)
+  }
+
+  async function importItem(item: DriveBrowseItem) {
+    setImportingId(item.id)
+    try {
+      const res = await fetch(`/api/drive?action=download&fileId=${encodeURIComponent(item.id)}`)
+      if (!res.ok) {
+        toast(`Failed to download "${item.name}" from Drive`, 'error')
+        return
+      }
+      let filename = item.name
+      const disposition = res.headers.get('Content-Disposition')
+      const match = disposition?.match(/filename="([^"]+)"/)
+      if (match) { try { filename = decodeURIComponent(match[1]) } catch { filename = match[1] } }
+
+      const blob = await res.blob()
+      const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' })
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('category', 'contract')
+      formData.append('notes', 'Imported from Google Drive')
+
+      const uploadRes = await fetch(`/api/crm/companies/${companyId}/files`, { method: 'POST', body: formData })
+      if (uploadRes.ok) {
+        const saved = await uploadRes.json()
+        onImported(saved)
+        toast(`Imported "${filename}"`, 'success')
+      } else {
+        const err = await uploadRes.json().catch(() => ({}))
+        toast(err.error || `Failed to import "${filename}"`, 'error')
+      }
+    } catch {
+      toast(`Failed to import "${item.name}"`, 'error')
+    } finally {
+      setImportingId(null)
+    }
+  }
+
+  const folders = items.filter(i => i.mimeType === DRIVE_FOLDER_MIME)
+  const docs = items.filter(i => i.mimeType !== DRIVE_FOLDER_MIME)
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <HardDrive size={16} className="text-[#015035]" />
+            <h3 className="text-sm font-bold text-gray-800">Import from Google Drive</h3>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X size={16} /></button>
+        </div>
+
+        {status === 'checking' && (
+          <div className="flex items-center justify-center py-16"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
+        )}
+
+        {status === 'disconnected' && (
+          <div className="flex flex-col items-center text-center gap-3 py-12 px-6">
+            <AlertCircle size={24} className="text-amber-500" />
+            <p className="text-sm text-gray-600">Google Drive isn&apos;t connected yet. Connect it from Admin &gt; Integrations, then come back here to import files.</p>
+            <Link
+              href="/admin?tab=integrations"
+              className="text-sm font-medium px-3 py-1.5 rounded-lg bg-[#015035] text-white hover:bg-[#012A1C]"
+            >
+              Go to Integrations
+            </Link>
+          </div>
+        )}
+
+        {status === 'ready' && (
+          <>
+            <div className="flex items-center gap-1 px-5 py-2 border-b border-gray-100 text-xs text-gray-500 overflow-x-auto">
+              {breadcrumbs.map((b, i) => (
+                <span key={b.id} className="flex items-center gap-1 flex-shrink-0">
+                  {i > 0 && <ChevronRight size={11} className="text-gray-300" />}
+                  <button
+                    onClick={() => goToBreadcrumb(i)}
+                    disabled={i === breadcrumbs.length - 1}
+                    className={i === breadcrumbs.length - 1 ? 'font-semibold text-gray-700' : 'hover:text-[#015035]'}
+                  >
+                    {b.name}
+                  </button>
+                </span>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-2 py-2">
+              {loading ? (
+                <div className="flex items-center justify-center py-10"><Loader2 size={18} className="animate-spin text-gray-300" /></div>
+              ) : items.length === 0 ? (
+                <div className="text-center py-10 text-sm text-gray-400">This folder is empty</div>
+              ) : (
+                <div className="flex flex-col gap-0.5">
+                  {[...folders, ...docs].map(item => {
+                    const isFolder = item.mimeType === DRIVE_FOLDER_MIME
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 group"
+                      >
+                        {isFolder ? (
+                          <button onClick={() => openFolder(item)} className="flex items-center gap-2.5 flex-1 min-w-0 text-left">
+                            <Folder size={15} className="text-amber-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-700 truncate">{item.name}</span>
+                          </button>
+                        ) : (
+                          <>
+                            <FileText size={15} className="text-gray-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-700 truncate flex-1 min-w-0">{item.name}</span>
+                            <button
+                              onClick={() => importItem(item)}
+                              disabled={importingId === item.id}
+                              className="text-[11px] font-medium px-2 py-1 rounded-md bg-gray-100 text-gray-600 hover:bg-[#015035] hover:text-white flex-shrink-0 flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {importingId === item.id ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                              Import
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }

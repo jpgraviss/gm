@@ -27,10 +27,17 @@ export const POST = withErrorHandler('email/send-contract POST', async (req) => 
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
     }
 
-    const { data: contacts } = await db
-      .from('crm_contacts')
-      .select('*')
-      .eq('company_name', contract.company)
+    // AUDIT — crm_companies.name has no unique constraint (#96/#513); two
+    // companies sharing a name would send a real, potentially binding
+    // contract-review link to the wrong company's contact. company_id
+    // (now populated for new/backfilled rows, see
+    // supabase/migrations/add_company_id_fks.sql) is collision-proof —
+    // prefer it, falling back to the name match only for older rows that
+    // predate the backfill.
+    const contactQuery = contract.company_id
+      ? db.from('crm_contacts').select('*').eq('company_id', contract.company_id)
+      : db.from('crm_contacts').select('*').eq('company_name', contract.company)
+    const { data: contacts } = await contactQuery
       .order('is_primary', { ascending: false })
       .limit(1)
 

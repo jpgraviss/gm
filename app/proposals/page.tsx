@@ -607,6 +607,7 @@ export default function ProposalsPage() {
           const contractPayload = {
             proposalId: proposal.id,
             company: proposal.company,
+            companyId: proposal.companyId,
             status: 'Draft',
             value: proposal.value,
             billingStructure: 'Monthly',
@@ -690,6 +691,7 @@ export default function ProposalsPage() {
   function handleDuplicate(proposal: Proposal) {
     const duplicate: Omit<Proposal, 'id' | 'dealId' | 'createdDate'> = {
       company: proposal.company,
+      companyId: proposal.companyId,
       status: 'Draft',
       value: proposal.value,
       serviceType: proposal.serviceType,

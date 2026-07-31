@@ -617,7 +617,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			);
 			?>
 			&middot;
-			<a href="https://app.gravhub.io" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Open GravHub Platform', 'gravhub-seo' ); ?></a>
+			<a href="https://app.gravissmarketing.com" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Open GravHub Platform', 'gravhub-seo' ); ?></a>
 		</p>
 	</div>
 </div>

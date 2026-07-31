@@ -81,7 +81,10 @@ export const POST = withErrorHandler('invoices POST', async (req) => {
   const { data, error } = await db
     .from('invoices')
     .insert({
-      id:           `inv-${Date.now()}`,
+      // AUDIT #590 — missing the random suffix its sibling create routes
+      // (renewals, maintenance) both have; two requests landing in the
+      // same millisecond collided on this text primary key.
+      id:           `inv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       company_id:   body.companyId ?? null,
       company:      body.company,
       amount:       body.amount,

@@ -4,6 +4,8 @@ import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
+const FORM_STATUSES = new Set(['Active', 'Paused', 'Draft'])
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapForm(row: any) {
   return {
@@ -56,6 +58,10 @@ export const PATCH = withErrorHandler('forms/[id] PATCH', async (req: NextReques
   if (denied) return denied
   const { id } = await params
   const body = await req.json()
+  // AUDIT #595 — accepted body.status verbatim with no enum check.
+  if (body.status !== undefined && !FORM_STATUSES.has(body.status)) {
+    return NextResponse.json({ error: `Invalid status: ${body.status}` }, { status: 400 })
+  }
   const db = createServiceClient()
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }

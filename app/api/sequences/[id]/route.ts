@@ -3,6 +3,9 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import type { SequenceStatus } from '@/lib/types'
+
+const SEQUENCE_STATUSES: readonly SequenceStatus[] = ['Active', 'Paused', 'Draft', 'Completed']
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSequence(row: any) {
@@ -47,10 +50,12 @@ export const PATCH = withErrorHandler('sequences/[id] PATCH', async (req: NextRe
   const { id } = await params
   const body = await req.json()
 
+  // AUDIT #595 — accepted body.status verbatim with no enum check.
   const result = validate(body, {
     name:          { type: 'string', maxLength: 200 },
     trigger:       { type: 'string', maxLength: 200 },
     targetSegment: { type: 'string', maxLength: 200 },
+    status:        { type: 'string', enum: [...SEQUENCE_STATUSES] },
   })
   if (!result.valid) return validationError(result.error)
 

@@ -4,6 +4,8 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 
+const KB_STATUSES = new Set(['draft', 'published'])
+
 export const GET = withErrorHandler('knowledge-base/[id] GET', async (req, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
@@ -56,6 +58,11 @@ export const PATCH = withErrorHandler('knowledge-base/[id] PATCH', async (req, {
 
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
+
+  // AUDIT #595 — accepted body.status verbatim with no enum check.
+  if (body.status !== undefined && !KB_STATUSES.has(body.status)) {
+    return NextResponse.json({ error: `Invalid status: ${body.status}` }, { status: 400 })
+  }
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (body.title !== undefined) update.title = body.title

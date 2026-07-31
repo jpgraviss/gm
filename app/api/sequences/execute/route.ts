@@ -431,6 +431,15 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
     }
 
     // ── 2. One-at-a-time enforcement ───────────────────────────────────────
+    // AUDIT #617 — structurally unreachable in practice:
+    // add_race_condition_fixes.sql's idx_sequence_enrollments_one_active_per_contact
+    // is a *global* partial unique index on (contact_email) where
+    // status='active' (not scoped per sequence), so the enrollment being
+    // processed here is by definition the only active row for that email —
+    // no other active row with a different sequence_id can ever exist for
+    // this check to find. Kept as a defense-in-depth check (harmless,
+    // O(1) query) rather than removed, in case that DB-level guarantee is
+    // ever relaxed.
     if (await isActiveInOtherSequence(db, enrollment.contact_email, enrollment.sequence_id)) {
       console.log(`[sequences/execute] Skipping ${enrollment.contact_email}: active in another sequence`)
       await db

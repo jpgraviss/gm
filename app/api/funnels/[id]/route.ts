@@ -4,6 +4,8 @@ import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 
+const FUNNEL_STATUSES = new Set(['Draft', 'Published'])
+
 export const GET = withErrorHandler('funnels/[id] GET', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
@@ -40,6 +42,10 @@ export const PATCH = withErrorHandler('funnels/[id] PATCH', async (req: NextRequ
   if (denied) return denied
   const { id } = await params
   const body = await req.json()
+  // AUDIT #595 — accepted body.status verbatim with no enum check.
+  if (body.status !== undefined && !FUNNEL_STATUSES.has(body.status)) {
+    return NextResponse.json({ error: `Invalid status: ${body.status}` }, { status: 400 })
+  }
   const db = createServiceClient()
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }

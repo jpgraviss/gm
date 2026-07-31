@@ -5,6 +5,8 @@ import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
+const COURSE_STATUSES = new Set(['Draft', 'Published'])
+
 // AUDIT.md #491 — quiz modules store their questions as a JSON-stringified
 // `content` field (see QuizContent in app/courses/[id]/page.tsx), each with a
 // `correctIndex` answer key. This used to pass straight through to every
@@ -94,6 +96,10 @@ export const PATCH = withErrorHandler('courses/[id] PATCH', async (
   if (denied) return denied
   const { id } = await params
   const body = await req.json()
+  // AUDIT #595 — accepted body.status verbatim with no enum check.
+  if (body.status !== undefined && !COURSE_STATUSES.has(body.status)) {
+    return NextResponse.json({ error: `Invalid status: ${body.status}` }, { status: 400 })
+  }
   const db = createServiceClient()
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }

@@ -58,6 +58,17 @@ export const PATCH = withErrorHandler('bookings/[id] PATCH', async (req, { param
     const denied = await requireRole(req, 'Team Member')
     if (denied) return denied
 
+    // AUDIT #607 — {status:'rescheduled'} here would violate this table's
+    // own status CHECK constraint (confirmed/cancelled/completed only) and
+    // skip #571's conflict-checked reschedule logic entirely, which only
+    // runs for the legacy `bookings` table above. No frontend caller
+    // reschedules new-flow bookings via this route today — reject
+    // explicitly rather than let it 500 or silently corrupt data once one
+    // does.
+    if (body.status === 'rescheduled') {
+      return NextResponse.json({ error: 'Rescheduling is not supported for this booking type' }, { status: 400 })
+    }
+
     const { data, error } = await db
       .from('booking_type_bookings')
       .update({ status: body.status })

@@ -18,6 +18,13 @@ function escapeICSText(text: string): string {
     .replace(/\\/g, '\\\\')
     .replace(/;/g, '\\;')
     .replace(/,/g, '\\,')
+    // AUDIT #606 — a bare \r (not paired with \n) passed through
+    // unescaped; RFC 5545 requires strict CRLF, so a lone \r could let a
+    // crafted value inject additional bogus ICS lines in calendar clients
+    // lenient about CR-only line terminators. Stripped rather than
+    // escaped since it carries no meaningful content on its own — a real
+    // \r\n pair collapses cleanly to the \n escape below.
+    .replace(/\r/g, '')
     .replace(/\n/g, '\\n')
 }
 

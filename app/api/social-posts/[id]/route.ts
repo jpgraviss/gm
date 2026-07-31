@@ -4,7 +4,15 @@ import { createServiceClient } from '@/lib/supabase'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { requirePortalClient, isStaffCaller, blockIfPreview } from '@/lib/portal-auth'
 import { logAudit } from '@/lib/audit'
-import { mapPost } from '@/lib/social-media'
+import { mapPost, type PostStatus } from '@/lib/social-media'
+
+// AUDIT #594 — this route accepted arbitrary status/approvalStatus values
+// with no enum check, unlike POST's CREATABLE_STATUSES restriction. A bad
+// value silently drops the post out of every filter in app/social/page.tsx
+// and the client portal's social tab, and never matches the cron job's
+// .eq('status','scheduled') query.
+const POST_STATUSES: readonly PostStatus[] = ['draft', 'scheduled', 'pending_approval', 'approved', 'rejected', 'publishing', 'published', 'failed']
+const APPROVAL_STATUSES = new Set(['pending', 'approved', 'rejected'])
 
 // company_name can be null on older/malformed rows — requirePortalClient
 // requires a real string, and a null company has no legitimate portal
@@ -66,6 +74,13 @@ export const PATCH = withErrorHandler('social-posts/[id] PATCH', async (req, { p
     if (disallowed.length > 0) {
       return NextResponse.json({ error: `Not permitted to update: ${disallowed.join(', ')}` }, { status: 403 })
     }
+  }
+
+  if (body.status !== undefined && !POST_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: `Invalid status: ${body.status}` }, { status: 400 })
+  }
+  if (body.approvalStatus !== undefined && !APPROVAL_STATUSES.has(body.approvalStatus)) {
+    return NextResponse.json({ error: `Invalid approvalStatus: ${body.approvalStatus}` }, { status: 400 })
   }
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }

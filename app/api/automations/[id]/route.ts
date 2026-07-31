@@ -11,10 +11,12 @@ export const PATCH = withErrorHandler('automations/[id] PATCH', async (req, { pa
   const { id } = await params
   const body = await req.json()
 
+  // AUDIT #595 — accepted body.status verbatim with no enum check.
   const result = validate(body, {
     name:    { type: 'string', maxLength: 200 },
     trigger: { type: 'string', maxLength: 100 },
     actions: { type: 'array' },
+    status:  { type: 'string', enum: ['Active', 'Triggered', 'Paused'] },
   })
   if (!result.valid) return validationError(result.error)
 

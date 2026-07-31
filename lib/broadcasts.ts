@@ -4,6 +4,7 @@
  */
 
 import { sendEmail } from '@/lib/email'
+import { buildSequenceUnsubscribeUrl } from '@/lib/sequence-unsubscribe'
 
 export interface AudienceFilter {
   lifecycleStage?: string
@@ -229,7 +230,7 @@ export async function sendBroadcastNow(db: any, broadcast: any): Promise<{ sent:
           fullName:    contact.full_name ?? undefined,
           companyName: contact.company_name ?? undefined,
         })
-        const unsubUrl = `${appUrl}/api/sequences/unsubscribe?email=${encodeURIComponent(email)}`
+        const unsubUrl = buildSequenceUnsubscribeUrl(appUrl, email)
         const finalHtml = wrapWithFooter(renderedHtml, unsubUrl, `Graviss Marketing`)
 
         const recipientId = `br-${id}-${contact.id}`

@@ -246,6 +246,32 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
         )
       }
     }
+    // AUDIT #591 — /api/track/ (open/click pixel + redirect endpoints) had
+    // no throttle at all, unlike every other public route in this list —
+    // even with the click-redirect now signature-verified, an unthrottled
+    // GET still lets a scripted caller hammer the open-tracking RPC/insert.
+    if (pathname.startsWith('/api/track/')) {
+      const ip = getClientIp(req)
+      if (memoryLimited(`track:${ip}`, 60, 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please wait a moment and try again.' },
+          { status: 429 }
+        )
+      }
+    }
+    // AUDIT #608 — the only public write route in this list with zero
+    // throttling; even signed now (a token proves the caller received the
+    // real email), a scripted flood is still unwanted load on the
+    // suppression-list/enrollment-unenroll write path.
+    if (pathname === '/api/sequences/unsubscribe' && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`sequences-unsubscribe:${ip}`, 20, 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please wait a moment and try again.' },
+          { status: 429 }
+        )
+      }
+    }
     return NextResponse.next()
   }
 

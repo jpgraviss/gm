@@ -1,4 +1,5 @@
 import { renderTemplate } from './template-helpers'
+import { buildSequenceUnsubscribeUrl } from '@/lib/sequence-unsubscribe'
 
 export interface WelcomeEmailData {
   firstName: string
@@ -20,7 +21,7 @@ export function generateWelcomeEmail(data: WelcomeEmailData): string {
   // the separate, currently-orphaned token-based unsubscribe page.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
   const unsubscribeUrl = data.email
-    ? `${appUrl}/api/sequences/unsubscribe?email=${encodeURIComponent(data.email)}`
+    ? buildSequenceUnsubscribeUrl(appUrl, data.email)
     : `${data.portalUrl}/unsubscribe`
   const managerSection = data.accountManager
     ? `<tr><td style="padding:0 32px 32px;">

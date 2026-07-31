@@ -188,12 +188,28 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
   }
 
-  const { data, error } = await db.from('contracts').update(update).eq('id', id).select().single()
+  // AUDIT #597 — mirrors the #569 atomic-claim fix on the sibling proposals
+  // route: this PATCH previously did a plain read-then-write with no
+  // guard tying the write to the `current.status` snapshot read above. Two
+  // concurrent PATCHes to the same contract (double-click, two staff
+  // racing to countersign) could both pass the VALID_TRANSITIONS check and
+  // both write, each firing `contract_executed`/`contract_sent` for what
+  // should be a single real transition. Only applied when status is
+  // actually changing, so unrelated concurrent field edits aren't affected.
+  const isStatusChange = body.status !== undefined
+  let updateQuery = db.from('contracts').update(update).eq('id', id)
+  if (isStatusChange) {
+    updateQuery = updateQuery.eq('status', current.status)
+  }
+  const { data, error } = await updateQuery.select().maybeSingle()
   if (error) {
-    if (error.code === 'PGRST116') {
-      return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
-    }
     throw new Error(error?.message || 'Failed to update contract')
+  }
+  if (!data) {
+    return NextResponse.json(
+      { error: isStatusChange ? 'This contract was just updated by someone else. Please refresh and try again.' : 'Contract not found' },
+      { status: isStatusChange ? 409 : 404 },
+    )
   }
 
   if (body.status === 'Fully Executed') {

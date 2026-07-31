@@ -670,75 +670,18 @@ async function executeAction(
       break
     }
 
-    case 'Generate Proposal': {
-      // AUDIT — every early `break` below (except the 2 explicitly marked
-      // "not applicable") used to make a genuine failure (AI generation
-      // erroring, the PDF upload failing, or — previously not even
-      // checked — the DB insert failing) look identical to a real success
-      // in the automation's Runs tab, since executeWorkflow only marks a
-      // step 'failed' on a THROWN error, not a normal return. Throwing
-      // now means a broken run (e.g. Chromium failing to launch) is
-      // actually visible instead of silently reporting success forever.
-
-      // Not a Form Submitted trigger, or a public/spoofable trigger — this
-      // is the single most expensive action in the engine (a real AI API
-      // call, a headless Chromium render, a storage upload, a DB insert),
-      // so it gets the same public-source guard #46 gave Rotate Contact
-      // Owner: anyone who knows a form's public slug could otherwise spam
-      // submissions to burn AI-provider spend and flood the CRM with junk
-      // Draft proposals, fully unauthenticated.
-      const formId = context.formId as string | undefined
-      if (!formId) break // not applicable — this automation isn't form-triggered
-      if (context._publicSource) break // not applicable — refuse to run from a public, unauthenticated submission
-
-      const data = (context.data as Record<string, string | number | boolean>) ?? {}
-
-      const { data: formRow } = await db.from('forms').select('name, fields').eq('id', formId).maybeSingle()
-      if (!formRow) throw new Error(`Generate Proposal: form ${formId} not found`)
-
-      const fields = (formRow.fields ?? []) as { name: string; label: string; mapsTo?: string }[]
-      const { buildIntakeTextFromSubmission, generateProposal, parsePriceLabel } = await import('@/lib/proposal-generator')
-      const intakeText = buildIntakeTextFromSubmission(fields, data)
-      if (!intakeText.trim()) break // not applicable — submission had no usable fields to draft from
-
-      let clientName = ''
-      for (const f of fields) {
-        if (f.mapsTo === 'company' && data[f.name]) { clientName = String(data[f.name]); break }
-      }
-      if (!clientName) {
-        const contactId = await resolveContactId(context, company, db)
-        if (contactId) {
-          const { data: contactRow } = await db.from('crm_contacts').select('company_name').eq('id', contactId).maybeSingle()
-          clientName = contactRow?.company_name ?? ''
-        }
-      }
-      if (!clientName) clientName = company || (formRow.name as string)
-
-      const result = await generateProposal({ intakeText, clientName })
-
-      const pdfPath = `${clientName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}/${uid()}.pdf`
-      const { error: uploadErr } = await db.storage.from('proposal-pdfs').upload(pdfPath, result.pdf, { contentType: 'application/pdf' })
-      if (uploadErr) throw new Error(`Generate Proposal: PDF upload failed — ${String(uploadErr)}`)
-
-      const recommended = result.draft.options.find(o => o.recommended) ?? result.draft.options[0]
-      const value = parsePriceLabel(recommended?.priceLabel)
-
-      const { error: insertErr } = await db.from('proposals').insert({
-        id: `prop-auto-${uid()}`,
-        company: clientName,
-        status: 'Draft',
-        value,
-        service_type: 'Custom',
-        assigned_rep: '',
-        items: [],
-        form_submission_id: (context.submissionId as string) ?? null,
-        pdf_path: pdfPath,
-        generation_notes: result.notes || (result.source === 'template' ? 'Generated without an AI provider — placeholder draft, needs manual completion.' : ''),
-        created_date: today,
-      })
-      if (insertErr) throw new Error(`Generate Proposal: failed to save proposal — ${insertErr.message}`)
-      break
-    }
+    // AUDIT #609 — 'Generate Proposal' (formerly here) was removed as a
+    // selectable automation action entirely: it required 'Form Submitted'
+    // to supply formId, but both real routes that fire that trigger
+    // unconditionally set _publicSource (#46's anti-abuse guard), which
+    // this action refused to run under — the one trigger that could feed
+    // it and the guard it needed were permanently incompatible, so it could
+    // structurally never fire in any real configuration. Removed rather
+    // than loosening #46's guard, matching the #14/#143/#565 precedent for
+    // selectable-but-permanently-unreachable features. The standalone AI
+    // proposal generator (components/crm/GenerateProposalPanel.tsx,
+    // POST /api/proposals/generate) is a different, unaffected, working
+    // feature that happens to share the name.
 
     // Legacy actions from the simple automation panel
     case 'Create Draft Contract': {

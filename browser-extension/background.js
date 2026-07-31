@@ -32,11 +32,11 @@ async function gravhubFetch(path, options = {}) {
   return res.json()
 }
 
-async function trackSend(recipientEmail, subject) {
+async function trackSend(recipientEmail, subject, links) {
   return gravhubFetch('/api/extension/track-send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recipientEmail, subject }),
+    body: JSON.stringify({ recipientEmail, subject, links }),
   })
 }
 
@@ -106,7 +106,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
       switch (message.action) {
         case 'trackSend': {
-          const result = await trackSend(message.recipientEmail, message.subject)
+          const result = await trackSend(message.recipientEmail, message.subject, message.links)
           sendResponse({ ok: true, data: result })
           break
         }

@@ -302,7 +302,26 @@ export async function publishSocialPost(id: string): Promise<PublishPostResult> 
     return { post: mapPost(post), anySucceeded: false, partial: false, reason: 'no_platforms' }
   }
 
-  await db.from('social_posts').update({ status: 'publishing', updated_at: new Date().toISOString() }).eq('id', id)
+  // AUDIT #592 — previously an unconditional write with no claim, unlike
+  // every other job in this codebase's cron pipeline (dispatchScheduled
+  // ReviewCampaigns/Broadcasts, runUptimeChecks, spawnRecurringTasks,
+  // resumePendingAutomationSteps). Two overlapping cron ticks (or a tick
+  // racing the manual Publish button) could both pass the stale-read check
+  // above and both proceed to call publishToPlatform() for every platform —
+  // duplicate live posts. Condition the write on `status` still matching
+  // what was just read; only the request that actually claims the row
+  // proceeds to publish.
+  const { data: claimed } = await db
+    .from('social_posts')
+    .update({ status: 'publishing', updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('status', post.status)
+    .select()
+    .maybeSingle()
+
+  if (!claimed) {
+    return { post: mapPost(post), anySucceeded: false, partial: false, reason: 'already_done' }
+  }
 
   const platformPostIds: Record<string, string> = {}
   const platformErrors: Record<string, string> = {}

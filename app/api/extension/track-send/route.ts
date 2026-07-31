@@ -3,6 +3,8 @@ import { createServiceClient } from '@/lib/supabase'
 import { requireExtensionToken, isExtensionCaller } from '@/lib/extension-auth'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
+import { signToken } from '@/lib/signed-token'
+import type { ExtClickTokenPayload } from '@/lib/email-tracking'
 
 /**
  * Called by the browser extension right before it rewrites the compose
@@ -10,6 +12,11 @@ import { withErrorHandler } from '@/lib/api-handler'
  * Resolves the recipient against crm_contacts by email, best-effort — an
  * unmatched recipient still gets tracked, it just won't show up on any CRM
  * timeline (mirrorTrackedEmailActivity no-ops without a contact_id).
+ *
+ * AUDIT #591 — `links` (every href the extension found in the compose body)
+ * is now optional input here so each one can be HMAC-signed server-side —
+ * the extension itself can't hold the signing key. Returns a url->token map
+ * the extension embeds verbatim instead of building its own unsigned token.
  */
 export const POST = withErrorHandler('extension/track-send POST', async (req) => {
   const caller = await requireExtensionToken(req)
@@ -23,6 +30,7 @@ export const POST = withErrorHandler('extension/track-send POST', async (req) =>
   if (!result.valid) return validationError(result.error)
 
   const recipientEmail = (body.recipientEmail as string).trim().toLowerCase()
+  const links = Array.isArray(body.links) ? (body.links as unknown[]).filter((l): l is string => typeof l === 'string').slice(0, 200) : []
   const db = createServiceClient()
 
   const { data: contact } = await db
@@ -42,5 +50,10 @@ export const POST = withErrorHandler('extension/track-send POST', async (req) =>
   })
   if (error) throw new Error(error.message)
 
-  return NextResponse.json({ trackedEmailId: id }, { status: 201 })
+  const clickTokens: Record<string, string> = {}
+  for (const url of new Set(links)) {
+    clickTokens[url] = signToken<ExtClickTokenPayload>({ trackedEmailId: id, url })
+  }
+
+  return NextResponse.json({ trackedEmailId: id, clickTokens }, { status: 201 })
 })

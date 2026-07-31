@@ -1,10 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
+import { verifySequenceUnsubscribeToken } from '@/lib/sequence-unsubscribe'
+
+function invalidLinkPage(): NextResponse {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unsubscribe</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f4f4f5; color: #374151; }
+    .card { background: #fff; border-radius: 12px; padding: 48px; max-width: 480px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    h1 { font-size: 22px; margin: 0 0 12px; color: #012b1e; }
+    p { font-size: 15px; line-height: 1.6; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Invalid or expired link</h1>
+    <p>This unsubscribe link is no longer valid. Please contact us directly if you'd like to stop receiving emails.</p>
+  </div>
+</body>
+</html>`
+  return new NextResponse(html, { status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+}
 
 export const GET = withErrorHandler('sequences/unsubscribe GET', async (req: NextRequest) => {
-  const email = req.nextUrl.searchParams.get('email') ?? ''
-  const seq = req.nextUrl.searchParams.get('seq') ?? ''
+  const token = req.nextUrl.searchParams.get('token') ?? ''
+  const payload = verifySequenceUnsubscribeToken(token)
+  if (!payload) return invalidLinkPage()
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -28,7 +54,7 @@ export const GET = withErrorHandler('sequences/unsubscribe GET', async (req: Nex
   <div class="card">
     <div class="form" id="formSection">
       <h1>Unsubscribe</h1>
-      <p>Click the button below to unsubscribe <strong>${escapeHtml(email)}</strong> from future sequence emails.</p>
+      <p>Click the button below to unsubscribe <strong>${escapeHtml(payload.email)}</strong> from future sequence emails.</p>
       <button id="unsubBtn" onclick="doUnsubscribe()">Unsubscribe</button>
     </div>
     <div class="done" id="doneSection">
@@ -45,7 +71,7 @@ export const GET = withErrorHandler('sequences/unsubscribe GET', async (req: Nex
         await fetch('/api/sequences/unsubscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: ${JSON.stringify(email)}, seq: ${JSON.stringify(seq)} }),
+          body: JSON.stringify({ token: ${JSON.stringify(token)} }),
         });
       } catch (e) { /* proceed anyway */ }
       document.getElementById('formSection').classList.add('hide');
@@ -69,18 +95,19 @@ function escapeHtml(str: string): string {
 }
 
 export const POST = withErrorHandler('sequences/unsubscribe POST', async (req: NextRequest) => {
-  let body: { email?: string; seq?: string }
+  let body: { token?: string }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const email = body.email?.trim().toLowerCase()
-  if (!email) {
-    return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+  const payload = body.token ? verifySequenceUnsubscribeToken(body.token) : null
+  if (!payload) {
+    return NextResponse.json({ error: 'Invalid or expired link' }, { status: 400 })
   }
 
+  const email = payload.email
   const db = createServiceClient()
 
   // Add to global suppression list (unique on email)
@@ -89,7 +116,7 @@ export const POST = withErrorHandler('sequences/unsubscribe POST', async (req: N
       id: `sup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       email,
       reason: 'unsubscribed',
-      source: body.seq || null,
+      source: payload.seq || null,
       created_at: new Date().toISOString(),
     },
     { onConflict: 'email' },

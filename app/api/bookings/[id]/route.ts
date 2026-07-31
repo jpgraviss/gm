@@ -2,16 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getValidAccessToken, deleteGoogleEvent, createGoogleEvent, getGoogleBusySlots, computeAvailableSlots, type CalendarSettings } from '@/lib/google-calendar'
 import { withErrorHandler } from '@/lib/api-handler'
-import { requireRole } from '@/lib/rbac'
+import { requireRole, getAuthUser } from '@/lib/rbac'
 
+// AUDIT #601 — previously authenticated by reading a raw `Authorization:
+// Bearer` header and calling `db.auth.getUser(token)` directly, instead of
+// the app's real session transport (the signed httpOnly `gravhub-auth`
+// cookie every other route uses via getAuthUser/requireRole). The only real
+// callers (app/calendar/page.tsx's Cancel/Delete handlers) fetch same-origin
+// with no Authorization header at all, and Google Sign-In staff never hold a
+// Supabase JWT to send even if they tried — every Cancel/Delete/Reschedule
+// on a legacy booking 401'd unconditionally. Same bug shape already fixed
+// once at #152 (push/subscribe), missed here.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function verifyCalendarOwnership(req: NextRequest, db: any, calendarSlug: string): Promise<NextResponse | null> {
-  const authHeader = req.headers.get('authorization')
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-  if (!token) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
-  const { data: { user } } = await db.auth.getUser(token)
+  const denied = await requireRole(req, 'Team Member')
+  if (denied) return denied
+
+  const user = await getAuthUser(req)
   if (!user?.email) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
   }

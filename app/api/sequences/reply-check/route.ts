@@ -42,6 +42,24 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
     return NextResponse.json({ checked: 0, replies: 0 })
   }
 
+  // AUDIT #610 — this route never read a sequence's thread_mode (made real,
+  // working state at #434) and always treated messageIds[0] as "the"
+  // Gmail thread. For an unthreaded sequence (thread_mode: false) each step
+  // sends as its own standalone Gmail thread (no In-Reply-To/References),
+  // so only messageIds[0]'s own 1-message thread was ever polled — replies
+  // to step 2+ were never checked at all, and even a genuine reply to step
+  // 1 stopped being detected once 2+ steps had sent (the length comparison
+  // used the ever-growing messageIds.length as its denominator against a
+  // thread that only ever contains that one step's own message + reply).
+  const sequenceIds = Array.from(new Set(enrollments.map(e => e.sequence_id)))
+  const { data: sequenceRows } = await db
+    .from('sequences')
+    .select('id, thread_mode')
+    .in('id', sequenceIds)
+  // Same `?? true` default execute/route.ts uses, so an enrollment/sequence
+  // predating the thread_mode column keeps its existing threaded behavior.
+  const threadModeBySequence = new Map((sequenceRows ?? []).map(s => [s.id, s.thread_mode ?? true]))
+
   // Group enrollments by assigned rep to batch Gmail lookups
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const byRep = new Map<string, any[]>()
@@ -88,15 +106,41 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
       if (!messageIds.length) continue
       checked++
 
-      // Use the first message ID as the thread ID
-      const threadId = messageIds[0]
+      const threadMode = threadModeBySequence.get(enrollment.sequence_id) ?? true
 
       try {
-        const thread = await fetchGmailThread(accessToken, threadId)
-        if (!thread || !thread.messages) continue
+        let replied = false
+        let matchedThreadId = messageIds[0]
+        let matchedThreadMessageCount = 0
 
-        // If thread has more messages than we sent, there is a reply
-        if (thread.messages.length > messageIds.length) {
+        if (threadMode) {
+          // Threaded: every step's send carries In-Reply-To/References back
+          // to the first message, so Gmail bundles the whole exchange
+          // (every step we sent + any reply) into messageIds[0]'s thread —
+          // fetching that one thread and comparing against how many we sent
+          // is sufficient.
+          const thread = await fetchGmailThread(accessToken, messageIds[0])
+          if (!thread || !thread.messages) continue
+          matchedThreadMessageCount = thread.messages.length
+          replied = thread.messages.length > messageIds.length
+        } else {
+          // Unthreaded: each step sent as its own standalone Gmail thread
+          // (no In-Reply-To/References), so a reply to ANY step lands in
+          // that step's own thread, not messageIds[0]'s — check each one.
+          for (const id of messageIds) {
+            const thread = await fetchGmailThread(accessToken, id)
+            if (!thread || !thread.messages) continue
+            if (thread.messages.length > 1) {
+              replied = true
+              matchedThreadId = id
+              matchedThreadMessageCount = thread.messages.length
+              break
+            }
+          }
+        }
+
+        // If a thread has more messages than we sent to it, there is a reply
+        if (replied) {
           // AUDIT #523 — atomic claim before any real side effect (activity
           // insert, reply-rate recompute, active_count decrement, automation
           // fire). This used to be an unconditional update, so an
@@ -125,7 +169,7 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
             contact_email: enrollment.contact_email,
             step_index: enrollment.current_step ?? 0,
             event_type: 'replied',
-            metadata: { thread_id: threadId, thread_message_count: thread.messages.length },
+            metadata: { thread_id: matchedThreadId, thread_message_count: matchedThreadMessageCount },
             created_at: new Date().toISOString(),
             variant: enrollment.ab_variant ?? null,
           })
@@ -187,7 +231,7 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
           })
         }
       } catch (err) {
-        console.warn(`[reply-check] Failed to check thread ${threadId}:`, err)
+        console.warn(`[reply-check] Failed to check thread(s) for enrollment ${enrollment.id}:`, err)
       }
     }
   }

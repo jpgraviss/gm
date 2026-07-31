@@ -37,13 +37,6 @@ async function getBaseUrl() {
   return cachedBaseUrl
 }
 
-function base64UrlEncode(str) {
-  return btoa(unescape(encodeURIComponent(str)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
-}
-
 // --- Finding compose windows --------------------------------------------
 
 function findComposeBodies() {
@@ -100,12 +93,28 @@ function injectToggleBadge(composeEl) {
 
 // --- Pixel + link injection ------------------------------------------------
 
-async function injectTracking(bodyEl, trackedEmailId, baseUrl) {
+// AUDIT #591 — content scripts can't hold the server's HMAC signing key, so
+// a click token can no longer be built here. Instead every trackable link's
+// href is collected up front (collectTrackableLinks) and sent to
+// POST /api/extension/track-send, which signs one token per link and hands
+// back a url->token map; injectTracking below only ever embeds a token the
+// server itself signed.
+function collectTrackableLinks(bodyEl, baseUrl) {
+  const hrefs = []
+  bodyEl.querySelectorAll('a[href]').forEach((a) => {
+    const original = a.getAttribute('href')
+    if (original && !original.startsWith(`${baseUrl}/api/track/`)) hrefs.push(original)
+  })
+  return hrefs
+}
+
+async function injectTracking(bodyEl, trackedEmailId, clickTokens, baseUrl) {
   const links = bodyEl.querySelectorAll('a[href]')
   links.forEach((a) => {
     const original = a.getAttribute('href')
     if (!original || original.startsWith(`${baseUrl}/api/track/`)) return
-    const token = base64UrlEncode(JSON.stringify({ trackedEmailId, url: original }))
+    const token = clickTokens && clickTokens[original]
+    if (!token) return // server didn't sign this link — leave it untouched rather than send an unsigned one
     a.setAttribute('href', `${baseUrl}/api/track/click/ext/${token}`)
   })
 
@@ -137,9 +146,10 @@ function attachSendInterceptor(composeEl, bodyEl) {
         const recipientEmail = extractRecipientEmail(composeEl)
         if (baseUrl && recipientEmail) {
           const subject = extractSubject(composeEl)
-          const result = await sendMessage('trackSend', { recipientEmail, subject })
+          const links = collectTrackableLinks(bodyEl, baseUrl)
+          const result = await sendMessage('trackSend', { recipientEmail, subject, links })
           if (result.ok) {
-            await injectTracking(bodyEl, result.data.trackedEmailId, baseUrl)
+            await injectTracking(bodyEl, result.data.trackedEmailId, result.data.clickTokens, baseUrl)
           } else {
             console.warn('[GravHub Tracking] track-send failed, sending untracked:', result.error)
           }

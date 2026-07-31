@@ -32,7 +32,7 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
   // on the implicit default. Same convention as app/api/reports/attribution.
   const [dealsRes, invoicesRes, contractsRes, renewalsRes, activityRes, automationsRes, activeClientsRes] = await Promise.all([
     db.from('deals').select('id,stage,value,company,assigned_rep,last_activity,service_type,close_date,created_at').order('created_at', { ascending: false }).limit(5000),
-    db.from('invoices').select('id,company,amount,status,due_date,issued_date,paid_date,service_type,contract_id,created_at').order('created_at', { ascending: false }).limit(5000),
+    db.from('invoices').select('id,company,amount,amount_paid,status,due_date,issued_date,paid_date,service_type,contract_id,created_at').order('created_at', { ascending: false }).limit(5000),
     db.from('contracts').select('id,company,status,value,renewal_date,service_type,assigned_rep,billing_structure,created_at').order('created_at', { ascending: false }).limit(5000),
     db.from('renewals').select('id,company,status,days_until_expiry,expiration_date').order('expiration_date', { ascending: true }).limit(5000),
     db.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(20),
@@ -49,7 +49,10 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
   const activeClients   = activeClientsRes.count ?? 0
   const openDeals       = deals.filter(d => !d.stage.startsWith('Closed')).length
   const pipelineValue   = deals.filter(d => !d.stage.startsWith('Closed')).reduce((s: number, d: { value: number }) => s + (d.value ?? 0), 0)
-  const totalCollected  = invoices.filter((i: { status: string }) => i.status === 'Paid').reduce((s: number, i: { amount: number }) => s + (i.amount ?? 0), 0)
+  // AUDIT #587 — an invoice's `amount` can be edited after Stripe payment
+  // (#358); `amount_paid` records what was actually charged. Prefer it,
+  // falling back to `amount` only when unset (manual/non-Stripe payments).
+  const totalCollected  = invoices.filter((i: { status: string }) => i.status === 'Paid').reduce((s: number, i: { amount: number; amount_paid: number | null }) => s + (i.amount_paid ?? i.amount ?? 0), 0)
   const overdueInvoices = invoices.filter((i: { status: string }) => i.status === 'Overdue').length
 
   const now = Date.now()
@@ -123,7 +126,9 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
       const month = issuedDate ? issuedDate.slice(0, 7) : null
       const bucket = month ? revenueByMonthMap.get(month) : undefined
       if (!bucket) return // outside the trailing 12-month window
-      const amount = Number(i.amount) || 0
+      // AUDIT #587 — prefer amount_paid (what Stripe actually charged) over
+      // the editable amount field, same fix as totalCollected above.
+      const amount = Number(i.amount_paid ?? i.amount) || 0
       bucket.revenue += amount
       const contract = i.contract_id ? contractById.get(i.contract_id as string) : undefined
       if (contract && contractMonthlyValue({

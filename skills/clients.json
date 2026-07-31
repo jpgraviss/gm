@@ -16,7 +16,7 @@
       "gsc_property": "https://example-two.com/",
       "gbp_location_id": null,
       "active": true,
-      "notes": "Second placeholder — exercises the URL-prefix gsc_property form (sc-domain: above covers the domain-property form). Not a real property."
+      "notes": "Second placeholder — exercises the URL-prefix gsc_property form (sc-domain: below, on the third/churned entry, covers the domain-property form). Not a real property."
     },
     {
       "slug": "PLACEHOLDER-client-churned",

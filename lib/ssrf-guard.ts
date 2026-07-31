@@ -138,3 +138,43 @@ export function createPinnedDispatcher(ip: string, family: 4 | 6): Agent {
     },
   })
 }
+
+// AUDIT #568 — app/api/calendar/subscriptions/route.ts (POST, and
+// syncSubscription() shared by PATCH + the sync-all cron path) and
+// app/api/calendar/import-link/route.ts both did a raw fetch(url) against a
+// caller-supplied ICS URL with none of the private/internal-range
+// protection every other user-supplied-URL fetch in this codebase has —
+// the exact SSRF gap #260/#414 closed for monitored-sites. Once a
+// malicious ical_url is saved, syncSubscription() re-fetches it on every
+// future manual sync and cron sync-all tick with no re-validation, so a
+// single successful plant keeps hitting the target indefinitely. This
+// helper centralizes the fix: validate + pin the connection to the
+// validated address, same as lib/uptime.ts's checkSite(), and throw a
+// plain Error the caller can catch and turn into its own error response.
+export async function fetchTextSafely(url: string, acceptHeader: string): Promise<string> {
+  const resolution = await resolveSafeIp(url)
+  if (!resolution.safe) {
+    throw new Error('This URL cannot be fetched')
+  }
+  const dispatcher = createPinnedDispatcher(resolution.ip, resolution.family)
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10000)
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: acceptHeader, 'User-Agent': 'GravHub-Calendar/1.0 (+https://app.gravissmarketing.com)' },
+      // A redirect to an internal/private address would bypass the
+      // validation above entirely if followed automatically — same
+      // reasoning as lib/uptime.ts's checkSite(). ICS feed providers don't
+      // rely on redirects for this use case, so refusing to follow one is
+      // an acceptable trade-off for closing that gap.
+      redirect: 'manual',
+      signal: controller.signal,
+      dispatcher,
+    } as RequestInit & { dispatcher: Agent })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return await res.text()
+  } finally {
+    clearTimeout(timeout)
+    await dispatcher.destroy()
+  }
+}

@@ -114,17 +114,22 @@ def run_for_client(slug: str, args) -> dict:
         return envelope.build_error_envelope(client=slug, source="gsc", report=args.report, error=str(e))
 
     warnings: list[str] = []
-    date_range = dates.resolve_range(args.days, args.start, args.end, default_end_offset_days=GSC_LAG_DAYS)
-    if not args.end:
-        warnings.append(
-            f"--end not given — defaulted to {date_range['end']} (today minus {GSC_LAG_DAYS} days) "
-            "because Search Console data lags roughly 2-3 days and a request ending today "
-            "would return zero or partial rows."
-        )
-
     dims = REPORT_DIMENSIONS[args.report]
 
+    # AUDIT #576 — dates.resolve_range() used to run outside this try/except,
+    # so a bad --start/--end (single-`--client` path) raised straight out of
+    # run_for_client with a bare traceback instead of the clean error
+    # envelope every other failure in this function produces. The
+    # --all-clients loop in main() was unaffected since it wraps this whole
+    # call in its own try/except.
     try:
+        date_range = dates.resolve_range(args.days, args.start, args.end, default_end_offset_days=GSC_LAG_DAYS)
+        if not args.end:
+            warnings.append(
+                f"--end not given — defaulted to {date_range['end']} (today minus {GSC_LAG_DAYS} days) "
+                "because Search Console data lags roughly 2-3 days and a request ending today "
+                "would return zero or partial rows."
+            )
         rows = _run_query(client_record, date_range, dims, args.limit)
     except Exception as e:
         return envelope.build_error_envelope(client=slug, source="gsc", report=args.report, error=str(e))

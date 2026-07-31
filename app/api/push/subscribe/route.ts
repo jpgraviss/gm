@@ -44,6 +44,11 @@ export const DELETE = withErrorHandler('push/subscribe DELETE', async (req) => {
   const denied = await requireRole(req, 'Client')
   if (denied) return denied
 
+  const user = await getAuthUser(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const body = await req.json()
   const { endpoint } = body
 
@@ -52,7 +57,13 @@ export const DELETE = withErrorHandler('push/subscribe DELETE', async (req) => {
   }
 
   const db = createServiceClient()
-  const { error } = await db.from('push_subscriptions').delete().eq('endpoint', endpoint)
+  // AUDIT #572 — previously deleted by endpoint alone, so any authenticated
+  // user who knew/guessed another user's endpoint could unsubscribe them.
+  const { error } = await db
+    .from('push_subscriptions')
+    .delete()
+    .eq('endpoint', endpoint)
+    .eq('user_id', user.userId)
 
   if (error) {
     throw new Error(error?.message || 'Failed to remove subscription')

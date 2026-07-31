@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { parseICS } from '@/lib/ical-parser'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser } from '@/lib/rbac'
+import { fetchTextSafely } from '@/lib/ssrf-guard'
 
 function isIcsUrl(link: string): boolean {
   return (
@@ -39,9 +40,7 @@ export const POST = withErrorHandler('calendar/import-link POST', async (req) =>
     const fetchUrl = normalizeIcsUrl(link.trim())
     let icsText: string
     try {
-      const res = await fetch(fetchUrl, { headers: { Accept: 'text/calendar' } })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      icsText = await res.text()
+      icsText = await fetchTextSafely(fetchUrl, 'text/calendar')
     } catch (err) {
       return NextResponse.json({ error: `Failed to fetch ICS URL: ${err instanceof Error ? err.message : 'unknown error'}` }, { status: 400 })
     }

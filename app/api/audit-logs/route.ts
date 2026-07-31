@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
+import { getAuthUser } from '@/lib/rbac'
+import { getSecuritySettings } from '@/lib/settings'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -44,12 +46,27 @@ export const POST = withErrorHandler('audit-logs POST', async (req) => {
   const denied = await requireAdmin(req)
   if (denied) return denied
   const body = await req.json()
+
+  // AUDIT #564 — this previously took user_name straight from the request
+  // body, so any authenticated admin caller could forge the internal audit
+  // trail's own "who did this" field to attribute an action to someone
+  // else, or plant a benign-looking entry to bury a real one. Every other
+  // write to this table (lib/audit.ts's logAudit(), used by ~60+ real call
+  // sites) derives attribution from the verified session instead — match
+  // that here, and honor the same Audit Logging security-setting toggle
+  // logAudit() already respects, since this raw insert path bypassed it too.
+  const actor = await getAuthUser(req)
+  const security = await getSecuritySettings()
+  if (!security.auditLogging) {
+    return NextResponse.json({ error: 'Audit logging is currently disabled' }, { status: 409 })
+  }
+
   const db = createServiceClient()
   const { data, error } = await db
     .from('audit_logs')
     .insert({
       id:        `al-${Date.now()}`,
-      user_name: body.user ?? '',
+      user_name: actor?.name || actor?.email || 'system',
       action:    body.action,
       module:    body.module ?? '',
       type:      body.type ?? 'action',

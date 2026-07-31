@@ -107,4 +107,37 @@ describe('generateAutomation', () => {
     expect(result.automation!.actions).toEqual([])
     expect(result.automation!.warnings.length).toBeGreaterThan(0)
   })
+
+  // AUDIT.md #508 — executeAction() (lib/automations-engine.ts) silently
+  // no-ops 'Generate Proposal' for every trigger except 'Form Submitted'.
+  // Left unguarded here, the AI could produce a clean, "Active"-looking
+  // automation that never actually fires — normalizeAutomation() must drop
+  // it under any other trigger rather than let it through.
+  it('drops "Generate Proposal" under any trigger other than Form Submitted, and warns', async () => {
+    mockChatCompletion.mockResolvedValue({
+      text: JSON.stringify({
+        name: 'x', trigger: 'Deal Stage Changed',
+        actions: [{ type: 'Generate Proposal', config: {} }, { type: 'Log Activity', config: { note: 'ok' } }],
+        warnings: [],
+      }),
+      toolCalls: [], finishReason: 'stop', source: 'groq',
+    })
+    const result = await generateAutomation('generate a proposal when a deal closes won')
+    expect(result.automation!.actions).toEqual([{ type: 'Log Activity', config: { note: 'ok' } }])
+    expect(result.automation!.warnings.some(w => w.includes('Generate Proposal'))).toBe(true)
+  })
+
+  it('keeps "Generate Proposal" when paired with the Form Submitted trigger', async () => {
+    mockChatCompletion.mockResolvedValue({
+      text: JSON.stringify({
+        name: 'x', trigger: 'Form Submitted',
+        actions: [{ type: 'Generate Proposal', config: {} }],
+        warnings: [],
+      }),
+      toolCalls: [], finishReason: 'stop', source: 'groq',
+    })
+    const result = await generateAutomation('generate a proposal when the intake form is submitted')
+    expect(result.automation!.actions).toEqual([{ type: 'Generate Proposal', config: {} }])
+    expect(result.automation!.warnings).toEqual([])
+  })
 })

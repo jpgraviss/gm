@@ -388,13 +388,22 @@ const TOOLS = [
 
 // Fields with a real governed transition graph/audit-log requirement in
 // their dedicated PATCH route (VALID_TRANSITIONS for contracts, the
-// status/amount audit log for invoices) — update_record's generic
-// db.update() bypasses all of that with no field validation at all, so
-// these are blocked here rather than allowing the AI to jump a contract
-// straight to "Fully Executed" or silently change invoice amounts.
+// status/amount audit log for invoices, the #569 atomic-claim guard +
+// fireAutomations('proposal_accepted'|'proposal_declined', ...) for
+// proposals) — update_record's generic db.update() bypasses all of that
+// with no field validation at all, so these are blocked here rather than
+// allowing the AI to jump a contract straight to "Fully Executed," silently
+// change invoice amounts, or race/skip automations on a proposal Accept.
 const GOVERNED_FIELDS: Record<string, string[]> = {
   contracts: ['status'],
   invoices: ['status', 'amount'],
+  proposals: ['status'],
+}
+
+const GOVERNED_FIELD_REASONS: Record<string, string> = {
+  contracts: 'contract status changes must go through the app UI, which enforces valid status transitions and fires the related automations',
+  invoices: 'invoice status/amount changes must go through the app UI, which keeps the audit trail and payment records accurate',
+  proposals: "proposal status changes must go through the app UI, which safely handles concurrent updates and fires the related automations (e.g. auto-creating a contract on Accept)",
 }
 
 async function executeTool(name: string, input: Record<string, unknown>, actorName: string): Promise<string> {
@@ -730,7 +739,7 @@ async function executeTool(name: string, input: Record<string, unknown>, actorNa
 
       const blocked = (GOVERNED_FIELDS[table] ?? []).filter(f => f in updates)
       if (blocked.length > 0) {
-        return `Can't update ${blocked.join(', ')} on ${table} through this tool — ${table === 'contracts' ? 'contract status changes must go through the app UI, which enforces valid status transitions and fires the related automations' : 'invoice status/amount changes must go through the app UI, which keeps the audit trail and payment records accurate'}. Ask the user to make this change directly in GravHub, or update the other fields you have and leave ${blocked.join(', ')} out of the request.`
+        return `Can't update ${blocked.join(', ')} on ${table} through this tool — ${GOVERNED_FIELD_REASONS[table]}. Ask the user to make this change directly in GravHub, or update the other fields you have and leave ${blocked.join(', ')} out of the request.`
       }
 
       const { data, error } = await db.from(table).update(updates).eq('id', id).select().single()

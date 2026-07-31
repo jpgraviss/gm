@@ -506,7 +506,24 @@ async function executeAction(
         source: 'source',
       }
       const dbField = fieldMap[field] ?? field
-      await db.from('crm_contacts').update({ [dbField]: value }).eq('id', contactId)
+      const update: Record<string, unknown> = { [dbField]: value }
+      // AUDIT #611 — the "Owner" field only wrote the display-only `owner`
+      // text column, never the real `owner_id` FK that dynamic
+      // sequence-sender resolution (senderType: 'contact_owner') and the
+      // "Recently engaged leads" widget actually read, matching the
+      // owner_id write 'Rotate Contact Owner' already does. If the typed
+      // name doesn't match an active team member, leave owner_id
+      // untouched rather than nulling out a previously-valid one.
+      if (dbField === 'owner' && value) {
+        const { data: matchedOwner } = await db
+          .from('team_members')
+          .select('id')
+          .eq('name', value)
+          .eq('status', 'active')
+          .maybeSingle()
+        if (matchedOwner) update.owner_id = matchedOwner.id
+      }
+      await db.from('crm_contacts').update(update).eq('id', contactId)
       break
     }
 

@@ -9,6 +9,7 @@ import { departmentForUnit } from '@/lib/task-department'
 import { buildSequenceUnsubscribeUrl } from '@/lib/sequence-unsubscribe'
 import type { SequenceStep, SequenceHtmlTemplate } from '@/lib/types'
 import { decrypt } from '@/lib/encryption'
+import { zonedWallTimeToUtc, nowInZone } from '@/lib/timezone'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.gravissmarketing.com'
 
 // ─── Merge-field replacement ─────────────────────────────────────────────────
@@ -256,9 +257,15 @@ function isWithinSendingWindow(seq: {
 async function getDailySendCount(
   db: ReturnType<typeof createServiceClient>,
   sequenceId: string,
+  timezone: string,
 ): Promise<number> {
-  const todayStart = new Date()
-  todayStart.setUTCHours(0, 0, 0, 0)
+  // AUDIT #614 — this used to reset at UTC midnight regardless of the
+  // sequence's own configured timezone, unlike the sibling
+  // isWithinSendingWindow() check just below, which correctly resolves it.
+  // A sequence configured for e.g. America/Los_Angeles had its
+  // deliverability-protecting daily cap silently reset mid-afternoon
+  // Pacific time instead of at local midnight.
+  const todayStart = zonedWallTimeToUtc(`${nowInZone(timezone).date}T00:00`, timezone)
 
   const { count } = await db
     .from('sequence_activities')
@@ -387,7 +394,8 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
   // Pre-fetch daily send counts per sequence for throttling
   const dailySendCounts = new Map<string, number>()
   for (const seqId of seqIds) {
-    dailySendCounts.set(seqId, await getDailySendCount(db, seqId))
+    const seqTz = (seqMap.get(seqId) as { timezone?: string } | undefined)?.timezone || 'America/New_York'
+    dailySendCounts.set(seqId, await getDailySendCount(db, seqId, seqTz))
   }
 
   // Pre-fetch rep info cache

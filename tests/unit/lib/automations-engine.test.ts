@@ -7,7 +7,7 @@ function createSupabaseChain(defaultResult = { data: null, error: null }) {
   const state = { _result: defaultResult as { data: unknown; error: unknown } }
 
   const chain: Record<string, unknown> = {}
-  const methods = ['select', 'insert', 'update', 'eq', 'order', 'limit', 'single']
+  const methods = ['select', 'insert', 'update', 'eq', 'order', 'limit', 'single', 'maybeSingle']
   for (const m of methods) {
     chain[m] = vi.fn().mockImplementation(() => chain)
   }
@@ -20,6 +20,10 @@ function createSupabaseChain(defaultResult = { data: null, error: null }) {
 }
 
 let automationsResult: { data: unknown; error: unknown }
+// AUDIT #611 test support — team_members lookup result for Update Contact's
+// owner-name-to-owner_id resolution. Defaults to "no match" so existing
+// tests that never touch this table are unaffected.
+let teamMemberResult: { data: unknown; error: unknown } = { data: null, error: null }
 const insertCalls: Record<string, unknown[]> = {}
 const updateCalls: Record<string, unknown[]> = {}
 
@@ -28,6 +32,11 @@ const mockDb = {
     if (table === 'automations') {
       const chain = createSupabaseChain();
       (chain._state as { _result: unknown })._result = automationsResult
+      return chain
+    }
+    if (table === 'team_members') {
+      const chain = createSupabaseChain();
+      (chain._state as { _result: unknown })._result = teamMemberResult
       return chain
     }
     // For any other table, capture inserts and updates
@@ -62,6 +71,7 @@ describe('automations-engine', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     automationsResult = { data: [], error: null }
+    teamMemberResult = { data: null, error: null }
     for (const key of Object.keys(insertCalls)) delete insertCalls[key]
     for (const key of Object.keys(updateCalls)) delete updateCalls[key]
   })
@@ -344,6 +354,36 @@ describe('automations-engine', () => {
       )
       expect(result.status).toBe('skipped')
       expect(insertCalls['app_tasks']).toBeUndefined()
+    })
+  })
+
+  // AUDIT #611 — Update Contact's "Owner" field only wrote the
+  // display-only `owner` text column, never the real `owner_id` FK that
+  // dynamic sequence-sender resolution and the "Recently engaged leads"
+  // widget actually read.
+  describe('Update Contact owner field writes owner_id (#611)', () => {
+    it('resolves the typed name to an active team member and writes both owner and owner_id', async () => {
+      teamMemberResult = { data: { id: 'tm-1' }, error: null }
+
+      setupAutomations('Contact Created', [{ type: 'Update Contact', config: { field: 'owner', value: 'Jamie Rep' } }])
+      fireAutomations('contact_created', { company: 'Acme Co', contactId: 'ct-1' })
+      await flushPromises()
+
+      expect(updateCalls['crm_contacts']).toBeDefined()
+      expect(updateCalls['crm_contacts'][0]).toEqual(
+        expect.objectContaining({ owner: 'Jamie Rep', owner_id: 'tm-1' }),
+      )
+    })
+
+    it('leaves owner_id untouched when the typed name matches no active team member', async () => {
+      teamMemberResult = { data: null, error: null }
+
+      setupAutomations('Contact Created', [{ type: 'Update Contact', config: { field: 'owner', value: 'Nobody Real' } }])
+      fireAutomations('contact_created', { company: 'Acme Co', contactId: 'ct-1' })
+      await flushPromises()
+
+      expect(updateCalls['crm_contacts'][0]).toEqual(expect.objectContaining({ owner: 'Nobody Real' }))
+      expect(updateCalls['crm_contacts'][0]).not.toHaveProperty('owner_id')
     })
   })
 

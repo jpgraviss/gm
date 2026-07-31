@@ -70,9 +70,27 @@ const STAT_STRIP = [
   { icon: Wrench, label: 'Built and maintained in-house' },
 ]
 
+const STRUCTURED_DATA = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'GravHub',
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Web',
+  description: 'The operating system for running an agency end to end — pipeline, proposals, delivery, billing, SEO operations, and the client relationship, all in one place.',
+  creator: {
+    '@type': 'Organization',
+    name: 'Graviss Marketing',
+    url: 'https://www.gravissmarketing.com',
+  },
+}
+
 export default function GravHubHome() {
   return (
     <div className="min-h-screen bg-white text-[#1B211D] overflow-x-hidden" style={{ fontFamily: 'var(--font-body)' }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
+      />
       {/* Nav */}
       <header className="sticky top-0 z-30 bg-[#012A1C]/95 backdrop-blur border-b border-white/10">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -108,7 +126,15 @@ export default function GravHubHome() {
           <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-14 items-center">
             <div>
               <p className="text-[#CC7853] text-xs font-bold tracking-[0.2em] uppercase mb-5">
-                Built by Graviss Marketing
+                Built by{' '}
+                <a
+                  href="https://www.gravissmarketing.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-[#b8694a] underline decoration-[#CC7853]/30 hover:decoration-[#b8694a] transition-colors"
+                >
+                  Graviss Marketing
+                </a>
               </p>
               <h1
                 className="text-4xl md:text-6xl leading-[1.05] font-bold"
@@ -214,7 +240,7 @@ export default function GravHubHome() {
             What it actually looks like
           </h2>
           <p className="mt-4 text-[#1B211D]/60 text-center max-w-xl mx-auto">
-            Four screens, sample data, the real design language of the app.
+            Four screens, the real design language of the app.
           </p>
           <div className="mt-12">
             <DemoShowcase />
@@ -322,10 +348,17 @@ export default function GravHubHome() {
           <div className="flex items-center gap-2.5">
             <Image src="/icon-192.png" alt="GravHub" width={22} height={22} className="rounded-md" />
             <span className="text-xs">
-              <span className="text-white font-semibold">GravHub</span> — built by Graviss Marketing
+              <span className="text-white font-semibold">GravHub</span> — built by{' '}
+              <a
+                href="https://www.gravissmarketing.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-white underline decoration-white/20 hover:decoration-white/50 transition-colors"
+              >
+                Graviss Marketing
+              </a>
             </span>
           </div>
-          <p className="text-xs text-white/40">Product demo screens shown use sample data.</p>
         </div>
       </footer>
     </div>

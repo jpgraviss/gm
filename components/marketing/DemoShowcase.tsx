@@ -1,10 +1,10 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import {
   Users, DollarSign, FileText, FolderKanban, BarChart3, Settings,
   Search, Bell, Download, MessageSquare,
-  TrendingUp, CheckCircle2, ArrowUpRight, GripHorizontal,
+  TrendingUp, CheckCircle2, ArrowUpRight,
 } from 'lucide-react'
 
 // ─── Fake demo data — no real client names, no real numbers or pricing
@@ -77,56 +77,10 @@ const TAB_CAPTIONS: Record<TabKey, string> = {
   reporting: 'Pipeline, revenue, and win-rate — computed from the same records the team is already working in, not a separately maintained deck.',
 }
 
-// Drag range, in pixels, that the title bar can be pulled from its resting
-// spot in either direction — generous enough to feel free, bounded enough
-// that it can't be dragged off into the middle of unrelated page content.
-const DRAG_RANGE_X = 220
-const DRAG_RANGE_Y = 160
-
-function clampDrag(v: number, max: number) {
-  return Math.min(max, Math.max(-max, v))
-}
-
 function DeviceFrame({ url, children }: { url: string; children: React.ReactNode }) {
-  const [pos, setPos] = useState({ x: 0, y: 0 })
-  const [dragging, setDragging] = useState(false)
-  const dragOrigin = useRef({ x: 0, y: 0 })
-
-  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    dragOrigin.current = { x: e.clientX - pos.x, y: e.clientY - pos.y }
-    setDragging(true)
-    e.currentTarget.setPointerCapture(e.pointerId)
-  }
-
-  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!dragging) return
-    setPos({
-      x: clampDrag(e.clientX - dragOrigin.current.x, DRAG_RANGE_X),
-      y: clampDrag(e.clientY - dragOrigin.current.y, DRAG_RANGE_Y),
-    })
-  }
-
-  function handlePointerUp() {
-    setDragging(false)
-  }
-
   return (
-    <div
-      className="rounded-2xl bg-white shadow-[0_20px_60px_-15px_rgba(1,42,28,0.35)] ring-1 ring-black/5 overflow-hidden relative"
-      style={{
-        transform: `translate3d(${pos.x}px, ${pos.y}px, 0)`,
-        transition: dragging ? 'none' : 'transform 0.4s cubic-bezier(0.22,1,0.36,1)',
-        zIndex: dragging ? 30 : 'auto',
-      }}
-    >
-      <div
-        className="flex items-center gap-3 px-4 py-2.5 bg-[#F7F5F2] border-b border-black/5 cursor-grab active:cursor-grabbing select-none"
-        style={{ touchAction: 'none' }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-      >
+    <div className="rounded-2xl bg-white shadow-[0_20px_60px_-15px_rgba(1,42,28,0.35)] ring-1 ring-black/5 overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-[#F7F5F2] border-b border-black/5">
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-[#e5675a]" />
           <span className="w-2.5 h-2.5 rounded-full bg-[#e6b45a]" />
@@ -137,7 +91,6 @@ function DeviceFrame({ url, children }: { url: string; children: React.ReactNode
             {url}
           </span>
         </div>
-        <GripHorizontal size={13} className="text-[#1B211D]/25 flex-shrink-0" />
       </div>
       <div className="flex bg-white">
         <div className="hidden sm:flex flex-col items-center gap-4 w-12 py-4 bg-[#012A1C] flex-shrink-0">
@@ -203,6 +156,8 @@ function PipelineMockup() {
 }
 
 function ProposalMockup() {
+  const [signed, setSigned] = useState(false)
+
   return (
     <DeviceFrame url="app.gravissmarketing.com/proposals/view">
       <TopBar title="Proposal" />
@@ -213,7 +168,13 @@ function ProposalMockup() {
               <p className="text-[9px] font-bold tracking-[0.15em] text-[#CC7853] uppercase mb-1">Proposal</p>
               <h5 className="text-sm font-bold text-[#012A1C]">Meridian HVAC — Website + SEO</h5>
             </div>
-            <span className="text-[9px] font-semibold px-2 py-1 rounded-full bg-[#e6f0ec] text-[#015035]">Awaiting Signature</span>
+            <span
+              className={`text-[9px] font-semibold px-2 py-1 rounded-full transition-colors ${
+                signed ? 'bg-[#015035] text-white' : 'bg-[#e6f0ec] text-[#015035]'
+              }`}
+            >
+              {signed ? 'Signed' : 'Awaiting Signature'}
+            </span>
           </div>
           <div className="flex flex-col gap-2.5 mb-4">
             {PROPOSAL_LINE_ITEMS.map(item => (
@@ -232,10 +193,18 @@ function ProposalMockup() {
           </div>
         </div>
         <div className="flex items-center gap-2.5 mt-4">
-          <button className="flex-1 flex items-center justify-center gap-1.5 bg-[#015035] text-white text-[11px] font-semibold py-2.5 rounded-lg">
-            <CheckCircle2 size={13} /> Sign &amp; Accept
+          <button
+            onClick={() => setSigned(true)}
+            disabled={signed}
+            className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold py-2.5 rounded-lg transition-colors ${
+              signed
+                ? 'bg-[#e6f0ec] text-[#015035] cursor-default'
+                : 'bg-[#015035] text-white hover:bg-[#013d28]'
+            }`}
+          >
+            <CheckCircle2 size={13} /> {signed ? 'Signed' : 'Sign & Accept'}
           </button>
-          <button className="flex items-center justify-center gap-1.5 bg-white border border-black/10 text-[#1B211D]/60 text-[11px] font-semibold py-2.5 px-3.5 rounded-lg">
+          <button className="flex items-center justify-center gap-1.5 bg-white border border-black/10 text-[#1B211D]/60 text-[11px] font-semibold py-2.5 px-3.5 rounded-lg hover:border-black/20">
             <Download size={13} />
           </button>
         </div>
@@ -245,6 +214,8 @@ function ProposalMockup() {
 }
 
 function PortalMockup() {
+  const [approved, setApproved] = useState(false)
+
   return (
     <DeviceFrame url="app.gravissmarketing.com/client">
       <TopBar title="Welcome back, Palmetto Realty" />
@@ -279,11 +250,21 @@ function PortalMockup() {
         </div>
         <div className="col-span-2 bg-[#F7F5F2] rounded-xl p-3.5 border border-black/5 flex items-center justify-between">
           <div>
-            <p className="text-[9.5px] font-bold text-[#1B211D]/60 uppercase tracking-wide mb-1">Pending Your Approval</p>
+            <p className="text-[9.5px] font-bold text-[#1B211D]/60 uppercase tracking-wide mb-1">
+              {approved ? 'Approved' : 'Pending Your Approval'}
+            </p>
             <p className="text-[11px] font-semibold text-[#012A1C]">Instagram post — “Fall Listings”</p>
           </div>
-          <button className="bg-[#015035] text-white text-[10px] font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1">
-            <CheckCircle2 size={11} /> Approve
+          <button
+            onClick={() => setApproved(true)}
+            disabled={approved}
+            className={`text-[10px] font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors ${
+              approved
+                ? 'bg-[#e6f0ec] text-[#015035] cursor-default'
+                : 'bg-[#015035] text-white hover:bg-[#013d28]'
+            }`}
+          >
+            <CheckCircle2 size={11} /> {approved ? 'Approved' : 'Approve'}
           </button>
         </div>
       </div>
@@ -378,10 +359,6 @@ export default function DemoShowcase() {
       <Mockup />
       <p className="text-center text-sm text-[#1B211D]/55 max-w-xl mx-auto mt-6 leading-relaxed">
         {TAB_CAPTIONS[active]}
-      </p>
-      <p className="text-center text-[10px] text-[#1B211D]/35 mt-3">
-        Illustrative screens with sample data — shown to demonstrate the product, not real client information.
-        Drag any window by its title bar.
       </p>
     </div>
   )

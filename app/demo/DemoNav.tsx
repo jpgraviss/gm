@@ -31,7 +31,7 @@ export function DemoSidebar() {
       </div>
       <div className="px-5 pt-4">
         <span className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.1em] uppercase text-[#CC7853] bg-[#CC7853]/10 border border-[#CC7853]/30 rounded-full px-2.5 py-1">
-          Demo &middot; sample data
+          Demo
         </span>
       </div>
       <nav className="flex-1 px-3 py-6 flex flex-col gap-1">

@@ -11,7 +11,7 @@ function formatMoney(n: number) {
 export default function DemoPipelinePage() {
   return (
     <div>
-      <DemoPageHeader title="Pipeline" subtitle="Sample data — not a real pipeline" />
+      <DemoPageHeader title="Pipeline" />
       <div className="p-6 sm:p-10">
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {PIPELINE_STAGES.map(stage => {

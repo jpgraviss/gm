@@ -11,7 +11,7 @@ export default function DemoReportingPage() {
 
   return (
     <div>
-      <DemoPageHeader title="Revenue & Pipeline" subtitle="Sample data — not real revenue figures" />
+      <DemoPageHeader title="Revenue & Pipeline" />
       <div className="p-6 sm:p-10">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           {KPIS.map(kpi => (

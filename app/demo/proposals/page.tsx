@@ -17,7 +17,7 @@ export default function DemoProposalsPage() {
 
   return (
     <div>
-      <DemoPageHeader title="Proposals" subtitle="Sample data — not real proposals" />
+      <DemoPageHeader title="Proposals" />
       <div className="p-6 sm:p-10 grid lg:grid-cols-[280px_1fr] gap-6">
         <div className="flex flex-col gap-2.5">
           <p className="text-[10.5px] font-bold text-[#1B211D]/50 uppercase tracking-wide px-1 mb-1">All proposals</p>

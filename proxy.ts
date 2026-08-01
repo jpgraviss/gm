@@ -287,6 +287,20 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
         )
       }
     }
+    // AUDIT #650 — these two Resend webhook receivers had no throttle at
+    // all, unlike every other public write route in this list, despite the
+    // real signature check (verifyResendSignature) leaving forged-payload
+    // brute-force attempts as a real, if bounded, cost — defense-in-depth
+    // alongside the fail-closed-signature fix made the same pass.
+    if ((pathname === '/api/sequences/webhooks' || pathname === '/api/email/inbound') && req.method === 'POST') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`resend-webhook:${ip}`, 120, 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please wait a moment and try again.' },
+          { status: 429 }
+        )
+      }
+    }
     return NextResponse.next()
   }
 

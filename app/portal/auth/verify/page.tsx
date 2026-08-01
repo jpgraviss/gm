@@ -1,11 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 
 function VerifyContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
   const [error, setError] = useState('')
@@ -39,14 +38,20 @@ function VerifyContent() {
           // by /api/portal-clients/magic-link/verify.
         } catch {/* ignore */}
 
-        router.replace('/client')
+        // AUDIT #651 — a client-side router.replace() never syncs
+        // AuthContext, so AppShell's route guard reads a still-null
+        // AuthContext.user and immediately bounces back to /login. A full
+        // reload re-triggers AuthProvider's normal initial-mount session
+        // restore, matching app/auth/confirm/page.tsx's established fix
+        // for the identical gap.
+        window.location.href = '/client'
       } catch {
         setError('Network error. Please try again.')
       }
     }
 
     verify()
-  }, [token, router])
+  }, [token])
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--page-bg)', fontFamily: 'var(--font-body)' }}>

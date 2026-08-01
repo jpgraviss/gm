@@ -6,9 +6,17 @@ interface CsvColumn {
   format?: (value: unknown) => string
 }
 
+// AUDIT #649 — a cell starting with =/+/-/@/tab/CR is treated as a live
+// formula by Excel/Google Sheets when the CSV is opened (e.g.
+// `=HYPERLINK(...)`). Prefixing with a leading `'` is the standard
+// mitigation — it forces the cell to render as text in every spreadsheet
+// app while leaving the underlying value (visually) unchanged.
 function escapeCell(value: unknown): string {
   if (value == null) return ''
-  const str = String(value)
+  let str = String(value)
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`
+  }
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`
   }

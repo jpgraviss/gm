@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { parseICS } from '@/lib/ical-parser'
+import { parseICS, icalDateToUtc } from '@/lib/ical-parser'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser } from '@/lib/rbac'
 import { fetchTextSafely } from '@/lib/ssrf-guard'
+import { dateAndTimeInZone } from '@/lib/timezone'
+
+// AUDIT #620 — the booking-availability check (calendar/bookings GET)
+// compares imported rows' start_time/end_time against the connected staff
+// Google Calendar's own configured timezone, not the server's — resolve
+// and store in that same zone so the two sides agree.
+async function resolveImportTimezone(db: ReturnType<typeof createServiceClient>): Promise<string> {
+  const { data } = await db
+    .from('calendar_settings')
+    .select('timezone')
+    .not('google_refresh_token', 'is', null)
+    .limit(1)
+  return data?.[0]?.timezone || 'America/Chicago'
+}
 
 function isOwnerOrAdmin(user: { email: string; isAdmin: boolean; role: string }, targetEmail: string): boolean {
   return user.isAdmin || user.role === 'Leadership' || user.email.toLowerCase() === (targetEmail || '').toLowerCase()
@@ -95,16 +109,15 @@ export const POST = withErrorHandler('calendar/subscriptions POST', async (req) 
   // surface a failure count if any occurred.
   let imported = 0
   let failed = 0
+  const importTz = await resolveImportTimezone(db)
   for (const event of cal.events) {
     if (!event.dtstart) continue
-    const startDate = new Date(event.dtstart)
-    const endDate = event.dtend ? new Date(event.dtend) : startDate
-    const date = startDate.toISOString().split('T')[0]
-    const startHHMM = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`
-    let endHHMM = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`
-    if (endHHMM === startHHMM) {
-      const e = new Date(startDate.getTime() + 3600000)
-      endHHMM = `${String(e.getHours()).padStart(2, '0')}:${String(e.getMinutes()).padStart(2, '0')}`
+    const startUtc = icalDateToUtc(event.dtstart, event.dtstartTzid)
+    const endUtc = event.dtend ? icalDateToUtc(event.dtend, event.dtendTzid) : startUtc
+    const start = dateAndTimeInZone(startUtc, importTz)
+    let end = dateAndTimeInZone(endUtc, importTz)
+    if (end.time === start.time) {
+      end = dateAndTimeInZone(new Date(startUtc.getTime() + 3600000), importTz)
     }
 
     const { error: upsertError } = await db.from('bookings').upsert({
@@ -112,10 +125,10 @@ export const POST = withErrorHandler('calendar/subscriptions POST', async (req) 
       calendar_slug: 'imported',
       client_name: event.summary,
       client_email: '',
-      date,
-      start_time: startHHMM,
-      end_time: endHHMM,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      date: start.date,
+      start_time: start.time,
+      end_time: end.time,
+      timezone: importTz,
       status: 'confirmed',
       notes: event.description || (event.location ? `Location: ${event.location}` : `Imported from ${subName}`),
       subscription_id: subId,
@@ -176,19 +189,18 @@ async function syncSubscription(db: ReturnType<typeof createServiceClient>, sub:
   // successful sync.
   let imported = 0
   let failed = 0
+  const importTz = await resolveImportTimezone(db)
   for (const event of cal.events) {
     if (!event.dtstart) continue
     const bookingId = `ics-${sub.id}-${event.uid}`
     newIds.add(bookingId)
 
-    const startDate = new Date(event.dtstart)
-    const endDate = event.dtend ? new Date(event.dtend) : startDate
-    const date = startDate.toISOString().split('T')[0]
-    const startHHMM = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`
-    let endHHMM = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`
-    if (endHHMM === startHHMM) {
-      const e = new Date(startDate.getTime() + 3600000)
-      endHHMM = `${String(e.getHours()).padStart(2, '0')}:${String(e.getMinutes()).padStart(2, '0')}`
+    const startUtc = icalDateToUtc(event.dtstart, event.dtstartTzid)
+    const endUtc = event.dtend ? icalDateToUtc(event.dtend, event.dtendTzid) : startUtc
+    const start = dateAndTimeInZone(startUtc, importTz)
+    let end = dateAndTimeInZone(endUtc, importTz)
+    if (end.time === start.time) {
+      end = dateAndTimeInZone(new Date(startUtc.getTime() + 3600000), importTz)
     }
 
     const { error: upsertError } = await db.from('bookings').upsert({
@@ -196,10 +208,10 @@ async function syncSubscription(db: ReturnType<typeof createServiceClient>, sub:
       calendar_slug: 'imported',
       client_name: event.summary,
       client_email: '',
-      date,
-      start_time: startHHMM,
-      end_time: endHHMM,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      date: start.date,
+      start_time: start.time,
+      end_time: end.time,
+      timezone: importTz,
       status: 'confirmed',
       notes: event.description || (event.location ? `Location: ${event.location}` : `Imported from ${sub.name}`),
       subscription_id: sub.id,

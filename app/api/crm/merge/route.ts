@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
-import { requireRole } from '@/lib/rbac'
+import { requireRole, getAuthUser } from '@/lib/rbac'
 
 export const POST = withErrorHandler('crm/merge POST', async (req) => {
   const denied = await requireRole(req, 'Dept Manager')
   if (denied) return denied
+
+  // AUDIT #626 — both logAudit() calls below hardcoded userName: 'System'
+  // despite requireRole already resolving a real authenticated caller —
+  // the exact fake-attribution bug class #177 fixed everywhere else.
+  const actor = await getAuthUser(req)
+  const actorName = actor?.name || actor?.email || 'system'
 
   const body = await req.json() as {
     type: 'contacts' | 'companies'
@@ -83,7 +89,7 @@ export const POST = withErrorHandler('crm/merge POST', async (req) => {
     if (deleteErr) throw new Error(deleteErr.message || 'Merge delete failed')
 
     await logAudit({
-      userName: 'System',
+      userName: actorName,
       action: `Merged ${mergeIds.length} contact(s) into ${primary.full_name ?? primaryId}`,
       module: 'CRM',
       type: 'action',
@@ -158,7 +164,7 @@ export const POST = withErrorHandler('crm/merge POST', async (req) => {
     if (deleteErr) throw new Error(deleteErr.message || 'Merge delete failed')
 
     await logAudit({
-      userName: 'System',
+      userName: actorName,
       action: `Merged ${mergeIds.length} company(ies) into ${primary.name ?? primaryId}`,
       module: 'CRM',
       type: 'action',

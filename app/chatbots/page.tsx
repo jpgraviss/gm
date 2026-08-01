@@ -199,6 +199,10 @@ export default function ChatbotsPage() {
     try {
       const res = await fetch(`/api/chatbots/${id}`, { method: 'DELETE' })
       if (res.ok) { toast('Chatbot deleted', 'success'); fetchBots() }
+      // AUDIT #643 — this had no else branch, so a rejected delete (a
+      // permission check, a 500) produced zero feedback — the click just
+      // appeared to do nothing. Matches the #521 fix on the sibling toggleActive.
+      else toast('Failed to delete chatbot', 'error')
     } catch { toast('Failed to delete', 'error') }
   }
 

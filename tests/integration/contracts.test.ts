@@ -17,6 +17,7 @@ const MOCK_CONTRACT_ROW = {
   client_signed: null,
   internal_signed: null,
   created_at: '2026-04-08T00:00:00Z',
+  client_notes: 'Please adjust the payment terms',
 }
 
 vi.mock('@/lib/supabase', () => ({
@@ -50,6 +51,18 @@ describe('GET /api/contracts', () => {
     expect(data[0].company).toBe('Test Company')
     expect(data[0].billingStructure).toBe('Monthly')
     expect(data[0].proposalId).toBe('p-456')
+  })
+
+  // AUDIT #625 — this mapper used to omit clientNotes entirely, unlike the
+  // sibling [id] route's own mapContract(), so the #470 "Client Requested
+  // Changes" banner (gated on this field) could never render for the
+  // staff Contracts page, which populates its whole list from this route.
+  it('includes clientNotes so the #470 "Requested Changes" banner can render', async () => {
+    const req = new NextRequest(new URL('http://localhost/api/contracts'))
+    const res = await GET(req)
+    const data = await res.json()
+
+    expect(data[0].clientNotes).toBe('Please adjust the payment terms')
   })
 })
 

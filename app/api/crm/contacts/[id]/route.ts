@@ -94,6 +94,21 @@ export const PUT = withErrorHandler('crm/contacts/[id] PUT', async (req, ctx) =>
     await db.from('crm_companies').update({ status: 'Active Client' }).eq('id', body.companyId)
   }
 
+  // AUDIT #628 — deals.contact is a denormalized {id,name,email,phone,title}
+  // blob the deal card renders directly (separate from the real contact_id
+  // FK). #147 nulls it on delete and #95 rewrites it on merge, but a normal
+  // edit through this route never touched it, so every deal linked to this
+  // contact kept showing pre-edit info indefinitely with stale mailto:/tel: links.
+  await db.from('deals').update({
+    contact: {
+      id: data.id,
+      name: data.full_name ?? '',
+      email: (data.emails ?? [])[0] ?? '',
+      phone: (data.phones ?? [])[0] ?? '',
+      title: data.title ?? '',
+    },
+  }).eq('contact_id', id)
+
   return NextResponse.json(mapContact(data))
 })
 

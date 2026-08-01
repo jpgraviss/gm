@@ -18,6 +18,8 @@ const mockDb = {
     })
     chain.select = vi.fn(() => chain)
     chain.single = vi.fn(() => Promise.resolve({ data: { id: 'b-1' }, error: null }))
+    chain.not = vi.fn(() => chain)
+    chain.limit = vi.fn(() => Promise.resolve({ data: [], error: null }))
     return chain
   }),
 }

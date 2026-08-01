@@ -1,8 +1,16 @@
+import { zonedWallTimeToUtc } from '@/lib/timezone'
+
 export interface ICalEvent {
   uid: string
   summary: string
   dtstart: string
   dtend: string
+  // IANA zone the corresponding *start/end wall-clock string should be
+  // interpreted in, from a `TZID=` param on the source DTSTART/DTEND line.
+  // 'UTC' when the value carried a trailing Z. Undefined for a "floating"
+  // value with neither (AUDIT #620 — this used to be silently discarded).
+  dtstartTzid?: string
+  dtendTzid?: string
   description: string
   location: string
 }
@@ -10,6 +18,26 @@ export interface ICalEvent {
 export interface ICalCalendar {
   name: string
   events: ICalEvent[]
+}
+
+/**
+ * Resolves an ICS wall-clock value + its (possibly absent) TZID into the
+ * real UTC instant it represents. A `tzid` of `'UTC'` (a Z-suffixed value)
+ * or a real IANA zone is converted properly; a floating value (no TZID)
+ * falls back to the pre-#620 behavior of treating it as server-local, since
+ * a floating time has no well-defined meaning to convert from.
+ */
+export function icalDateToUtc(value: string, tzid: string | undefined): Date {
+  if (!value) return new Date(NaN)
+  if (tzid === 'UTC') return new Date(value)
+  if (tzid) {
+    try {
+      return zonedWallTimeToUtc(value.replace(/Z$/, ''), tzid)
+    } catch {
+      return new Date(value)
+    }
+  }
+  return new Date(value)
 }
 
 function unfold(text: string): string {
@@ -24,17 +52,22 @@ function unescapeValue(val: string): string {
     .replace(/\\\\/g, '\\')
 }
 
-function parseICalDate(val: string): string {
+function parseICalDate(val: string): { value: string; tzid?: string } {
   const clean = val.replace(/^.*:/, '')
+  // e.g. "DTSTART;TZID=America/Chicago:20260315T140000" — the TZID param
+  // sits before the ':' that separates params from the value.
+  const tzidMatch = val.slice(0, val.indexOf(':')).match(/TZID=([^;:]+)/)
+  const tzid = tzidMatch?.[1]
+
   if (clean.length === 8) {
-    return `${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}T00:00:00`
+    return { value: `${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}T00:00:00`, tzid }
   }
   if (clean.length >= 15) {
     const iso = `${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}T${clean.slice(9, 11)}:${clean.slice(11, 13)}:${clean.slice(13, 15)}`
-    if (clean.endsWith('Z')) return iso + 'Z'
-    return iso
+    if (clean.endsWith('Z')) return { value: iso + 'Z', tzid: 'UTC' }
+    return { value: iso, tzid }
   }
-  return clean
+  return { value: clean, tzid }
 }
 
 function getPropertyValue(line: string): string {
@@ -61,6 +94,8 @@ export function parseICS(raw: string): ICalCalendar {
           summary: current.summary || 'Untitled Event',
           dtstart: current.dtstart || '',
           dtend: current.dtend || current.dtstart || '',
+          dtstartTzid: current.dtstartTzid,
+          dtendTzid: current.dtendTzid ?? current.dtstartTzid,
           description: current.description || '',
           location: current.location || '',
         })
@@ -81,9 +116,13 @@ export function parseICS(raw: string): ICalCalendar {
     } else if (line.startsWith('SUMMARY:') || line.startsWith('SUMMARY;')) {
       current.summary = unescapeValue(getPropertyValue(line))
     } else if (line.startsWith('DTSTART')) {
-      current.dtstart = parseICalDate(line)
+      const { value, tzid } = parseICalDate(line)
+      current.dtstart = value
+      current.dtstartTzid = tzid
     } else if (line.startsWith('DTEND')) {
-      current.dtend = parseICalDate(line)
+      const { value, tzid } = parseICalDate(line)
+      current.dtend = value
+      current.dtendTzid = tzid
     } else if (line.startsWith('DESCRIPTION:') || line.startsWith('DESCRIPTION;')) {
       current.description = unescapeValue(getPropertyValue(line))
     } else if (line.startsWith('LOCATION:') || line.startsWith('LOCATION;')) {

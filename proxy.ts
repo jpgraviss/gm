@@ -272,6 +272,21 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
         )
       }
     }
+    // AUDIT #630 — the GravIntel tracking-pixel endpoint was the one
+    // remaining public write route with zero throttling; it's on this
+    // fast path (returns before the generic authenticated-route limit
+    // below is ever reached), and each call does 2 upserts + an insert +
+    // 1-2 RPCs, so an unthrottled flood against a known/guessed
+    // visitorId/siteId can grow gi_events/gi_visitors unbounded.
+    if (pathname === '/api/intelligence/track') {
+      const ip = getClientIp(req)
+      if (memoryLimited(`intelligence-track:${ip}`, 60, 60 * 1000)) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please wait a moment and try again.' },
+          { status: 429 }
+        )
+      }
+    }
     return NextResponse.next()
   }
 

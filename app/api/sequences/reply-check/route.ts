@@ -204,11 +204,13 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
             // read-then-write here would lose a decrement whenever two
             // replies for the same sequence are processed in the same
             // reply-check batch.
-            await db.rpc('adjust_sequence_counts', {
+            // AUDIT #638 — matches #125's fix for increment_review_campaign_counts.
+            const { error: adjustErr } = await db.rpc('adjust_sequence_counts', {
               p_sequence_id: enrollment.sequence_id,
               p_enrolled_delta: 0,
               p_active_delta: -1,
             })
+            if (adjustErr) console.error(`[sequences/reply-check] adjust_sequence_counts failed for sequence ${enrollment.sequence_id}:`, adjustErr.message)
           }
 
           // Reset contact in_sequence flag

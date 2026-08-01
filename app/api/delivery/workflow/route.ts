@@ -35,7 +35,7 @@ function toStepStatus(raw: string | null | undefined): 'completed' | 'in_progres
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapWorkflow(row: any) {
+export function mapWorkflow(row: any) {
   const steps = STEP_NAMES.map((name, i) => {
     const stepNum = i + 1
     const status = toStepStatus(row[STEP_STATUS_COLUMNS[i]])

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireRole } from '@/lib/rbac'
+import { requireRole, getAuthUser } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getCompanyRelatedCounts, hasBlockingRelatedRecords, describeRelatedCounts, deleteCompanyActivities } from '@/lib/crm-cascade'
+import { logAudit } from '@/lib/audit'
 
 const TABLE_MAP: Record<string, string> = {
   companies: 'crm_companies',
@@ -16,6 +17,9 @@ const TABLE_MAP: Record<string, string> = {
 export const POST = withErrorHandler('crm/bulk-delete POST', async (req) => {
   const denied = await requireRole(req, 'Leadership')
   if (denied) return denied
+
+  const actor = await getAuthUser(req)
+  const actorName = actor?.name || actor?.email || 'system'
 
   const { type, ids } = await req.json() as { type: string; ids: string[] }
 
@@ -80,13 +84,19 @@ export const POST = withErrorHandler('crm/bulk-delete POST', async (req) => {
     deleted = count ?? 0
   }
 
-  await db.from('audit_logs').insert({
-    id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+  // AUDIT #627 — this used to be a raw db.from('audit_logs').insert() that
+  // (a) never set user_name, landing on the schema's `not null default ''`
+  // — the exact regression #177 explicitly called out this route for — and
+  // (b) bypassed getSecuritySettings().auditLogging, inserting unconditionally
+  // even when an admin has turned the Audit Logging toggle off. Routing
+  // through the shared logAudit() helper fixes both at once.
+  await logAudit({
+    userName: actorName,
     action: 'bulk_delete',
     module: type,
     type: 'action',
     metadata: { entity_type: type, entity_ids: ids, count: deleted, skipped: skipped.length },
-  }).then(() => {}, () => {})
+  })
 
   return NextResponse.json({ deleted, skipped })
 })

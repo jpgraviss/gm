@@ -7,10 +7,19 @@ export function formatDate(date: Date | string): string {
   return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+// AUDIT #621 — this used to substitute values with zero HTML escaping,
+// bitten 4 separate callers (#589 fixed generate-growth-report.ts locally
+// rather than here; generate-welcome/usage-guide/monthly-report were still
+// exposed). Escaping here, not per-caller, so the next new template
+// generator gets it for free instead of needing its own local fix.
 export function renderTemplate(html: string, variables: Record<string, string>): string {
   let result = html
   for (const [key, value] of Object.entries(variables)) {
-    result = result.replaceAll(`{${key}}`, value)
+    result = result.replaceAll(`{${key}}`, escapeHtml(value))
   }
   return result
 }

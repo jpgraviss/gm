@@ -106,12 +106,14 @@ export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: N
   }
 
   if (enrolledCount > 0) {
-    await db.rpc('adjust_sequence_counts', {
+    // AUDIT #638 — matches #125's fix for increment_review_campaign_counts.
+    const { error: adjustErr } = await db.rpc('adjust_sequence_counts', {
       p_sequence_id: id,
       p_enrolled_delta: enrolledCount,
       p_active_delta: enrolledCount,
       p_last_modified: now.toISOString().split('T')[0],
     })
+    if (adjustErr) console.error(`[sequences/enroll] adjust_sequence_counts failed for sequence ${id}:`, adjustErr.message)
   }
 
   return NextResponse.json({ enrolled: enrolledCount })

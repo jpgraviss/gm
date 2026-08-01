@@ -2,6 +2,14 @@ import { renderTemplate, formatDate } from './template-helpers'
 import type { AppSettings } from '@/lib/settings'
 import { BRAND_COLORS } from '@/lib/brand'
 
+// AUDIT #621 — recommendations/changelog are interpolated directly into
+// the template literal below (not via renderTemplate's variables map), and
+// are reachable from a fully free-form POST /api/delivery/send-template
+// body — need their own escaping.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 export interface MonthlyReportMetrics {
   traffic?: {
     sessions: number
@@ -214,13 +222,13 @@ export function generateMonthlyReportHtml(data: MonthlyReportData, settings?: Ap
 
   const recommendationsHtml = data.recommendations.length
     ? data.recommendations
-        .map((r) => `<tr><td style="padding:4px 0;font-size:14px;color:${brand.ink};font-family:'Montserrat',sans-serif;"><span style="color:${brand.accent};font-weight:700;margin-right:8px;">&#8226;</span>${r}</td></tr>`)
+        .map((r) => `<tr><td style="padding:4px 0;font-size:14px;color:${brand.ink};font-family:'Montserrat',sans-serif;"><span style="color:${brand.accent};font-weight:700;margin-right:8px;">&#8226;</span>${escapeHtml(r)}</td></tr>`)
         .join('')
     : `<tr><td style="padding:4px 0;font-size:14px;color:${brand.stone};font-family:'Montserrat',sans-serif;">No recommendations this period.</td></tr>`
 
   const changelogHtml = data.changelog.length
     ? data.changelog
-        .map((c) => `<tr><td style="padding:4px 0;font-size:14px;color:${brand.ink};font-family:'Montserrat',sans-serif;"><span style="color:${primaryColor};font-weight:700;margin-right:8px;">&#10003;</span>${c}</td></tr>`)
+        .map((c) => `<tr><td style="padding:4px 0;font-size:14px;color:${brand.ink};font-family:'Montserrat',sans-serif;"><span style="color:${primaryColor};font-weight:700;margin-right:8px;">&#10003;</span>${escapeHtml(c)}</td></tr>`)
         .join('')
     : `<tr><td style="padding:4px 0;font-size:14px;color:${brand.stone};font-family:'Montserrat',sans-serif;">No changes logged this period.</td></tr>`
 

@@ -86,7 +86,12 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
         return NextResponse.json({ error: 'This chatbot is not permitted on this domain' }, { status: 403 })
       }
     } catch {
-      // Malformed Origin/Referer header — fall through rather than block
+      // AUDIT #633 — this used to fall through and allow the request on a
+      // malformed (not merely absent) Origin/Referer, e.g. "Origin: not-a-url"
+      // — just as easy for a scripted caller to send as omitting the header
+      // entirely, and #616 only closed the latter. A real browser embed
+      // always sends a well-formed Origin, so legitimate traffic is unaffected.
+      return NextResponse.json({ error: 'This chatbot is not permitted on this domain' }, { status: 403 })
     }
   }
 

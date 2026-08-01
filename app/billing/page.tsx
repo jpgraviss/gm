@@ -888,7 +888,10 @@ export default function BillingPage() {
                   <Upload size={13} /> Import CSV
                 </button>
                 <span className="text-xs text-gray-400">
-                  {filtered.length} · {formatCurrency(filtered.reduce((s, i) => s + i.amount, 0))}
+                  {/* AUDIT #635 — always summed raw, editable amount; a Paid
+                      invoice's amount can drift from what Stripe actually
+                      collected (#358/#587), so prefer amountPaid for Paid rows. */}
+                  {filtered.length} · {formatCurrency(filtered.reduce((s, i) => s + (i.status === 'Paid' ? (i.amountPaid ?? i.amount) : i.amount), 0))}
                 </span>
               </div>
             </div>

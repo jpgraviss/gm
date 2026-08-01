@@ -188,7 +188,12 @@ async function fetchAllContacts(buildQuery: () => any): Promise<any[]> {
   const rows: any[] = []
   let offset = 0
   for (;;) {
-    const { data, error } = await buildQuery().range(offset, offset + FETCH_PAGE_SIZE - 1)
+    // AUDIT #632 — without a stable ORDER BY, Postgres/PostgREST doesn't
+    // guarantee row order is preserved across repeated SELECTs, so two
+    // sequential .range() pages could legitimately overlap or gap rows —
+    // the exact silent-truncation failure mode #612 was built to close,
+    // just via a different mechanism. `id` is a stable, always-present key.
+    const { data, error } = await buildQuery().order('id', { ascending: true }).range(offset, offset + FETCH_PAGE_SIZE - 1)
     if (error) throw new Error(error.message)
     rows.push(...(data ?? []))
     if (!data || data.length < FETCH_PAGE_SIZE) break

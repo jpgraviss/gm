@@ -309,10 +309,16 @@ export default function DeliveryDashboardPage() {
       return mul * (new Date(a.lastUpdated).getTime() - new Date(b.lastUpdated).getTime())
     })
 
-  function handleMarkComplete(workflowId: string, stepNum: number) {
-    setWorkflows(prev => prev.map(w => {
-      if (w.id !== workflowId) return w
-      const newSteps = w.steps.map(s => {
+  // AUDIT #631 — these optimistic PATCH calls only had a `.catch()` (a
+  // network-level rejection), never a `res.ok` check, so a rejected
+  // request (validation, 404, 500) left the UI showing the step done with
+  // no error and no revert. Snapshot the prior state and restore it on a
+  // non-2xx response, matching handleCreateWorkflow's own revert pattern.
+  async function handleMarkComplete(workflowId: string, stepNum: number) {
+    const prev = workflows
+    setWorkflows(w => w.map(wf => {
+      if (wf.id !== workflowId) return wf
+      const newSteps = wf.steps.map(s => {
         if (s.step !== stepNum) return s
         return { ...s, status: 'completed' as const, completedDate: new Date().toISOString().split('T')[0] }
       })
@@ -321,13 +327,19 @@ export default function DeliveryDashboardPage() {
         ? newSteps.map(s => s.step === nextPending.step ? { ...s, status: 'in_progress' as const } : s)
         : newSteps
       const newCurrent = nextPending ? nextPending.step : totalSteps
-      return { ...w, steps: updatedSteps, currentStep: newCurrent, lastUpdated: new Date().toISOString().split('T')[0] }
+      return { ...wf, steps: updatedSteps, currentStep: newCurrent, lastUpdated: new Date().toISOString().split('T')[0] }
     }))
-    fetch(`/api/delivery/workflow/${workflowId}/step`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ step: stepNum, status: 'Completed' }),
-    }).catch(() => toast('Failed to update step', 'error'))
+    try {
+      const res = await fetch(`/api/delivery/workflow/${workflowId}/step`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: stepNum, status: 'Completed' }),
+      })
+      if (!res.ok) { setWorkflows(prev); toast('Failed to update step', 'error') }
+    } catch {
+      setWorkflows(prev)
+      toast('Failed to update step', 'error')
+    }
   }
 
   const STEP_TEMPLATE_MAP: Record<number, string> = { 3: 'welcome', 6: 'usage_guide', 8: 'monthly_report' }
@@ -442,33 +454,51 @@ export default function DeliveryDashboardPage() {
     }
   }
 
-  function handleSkipStep(workflowId: string) {
-    setWorkflows(prev => prev.map(w => {
-      if (w.id !== workflowId) return w
-      const currentIdx = w.steps.findIndex(s => s.step === w.currentStep)
-      if (currentIdx === -1) return w
-      const newSteps = w.steps.map((s, i) => {
+  async function handleSkipStep(workflowId: string) {
+    const prev = workflows
+    const currentStep = workflows.find(w => w.id === workflowId)?.currentStep ?? 1
+    setWorkflows(w => w.map(wf => {
+      if (wf.id !== workflowId) return wf
+      const currentIdx = wf.steps.findIndex(s => s.step === wf.currentStep)
+      if (currentIdx === -1) return wf
+      const newSteps = wf.steps.map((s, i) => {
         if (i === currentIdx) return { ...s, status: 'completed' as const, completedDate: new Date().toISOString().split('T')[0] }
         if (i === currentIdx + 1) return { ...s, status: 'in_progress' as const }
         return s
       })
-      const nextStep = currentIdx + 1 < w.steps.length ? w.steps[currentIdx + 1].step : totalSteps
-      return { ...w, steps: newSteps, currentStep: nextStep, lastUpdated: new Date().toISOString().split('T')[0] }
+      const nextStep = currentIdx + 1 < wf.steps.length ? wf.steps[currentIdx + 1].step : totalSteps
+      return { ...wf, steps: newSteps, currentStep: nextStep, lastUpdated: new Date().toISOString().split('T')[0] }
     }))
-    const currentStep = workflows.find(w => w.id === workflowId)?.currentStep ?? 1
-    fetch(`/api/delivery/workflow/${workflowId}/step`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ step: currentStep, status: 'Skipped' }),
-    }).catch(() => toast('Failed to skip step', 'error'))
+    try {
+      const res = await fetch(`/api/delivery/workflow/${workflowId}/step`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: currentStep, status: 'Skipped' }),
+      })
+      if (!res.ok) { setWorkflows(prev); toast('Failed to skip step', 'error') }
+    } catch {
+      setWorkflows(prev)
+      toast('Failed to skip step', 'error')
+    }
   }
 
-  function handleRemoveWorkflow(workflowId: string) {
-    setWorkflows(prev => prev.filter(w => w.id !== workflowId))
-    fetch(`/api/delivery/workflow/${workflowId}`, {
-      method: 'DELETE',
-    }).catch(() => toast('Failed to remove workflow', 'error'))
-    toast('Workflow removed from pipeline', 'success')
+  // AUDIT #623 — this unconditionally showed a success toast even when the
+  // server rejected the delete (e.g. the DELETE route's Leadership-only
+  // gate, since the Delivery nav item has no matching role restriction) —
+  // fetch doesn't reject on a non-2xx response, so the old `.catch()`-only
+  // handling never caught it either. Restore the removed row and show a
+  // real error instead of a false "success."
+  async function handleRemoveWorkflow(workflowId: string) {
+    const prev = workflows
+    setWorkflows(w => w.filter(wf => wf.id !== workflowId))
+    try {
+      const res = await fetch(`/api/delivery/workflow/${workflowId}`, { method: 'DELETE' })
+      if (!res.ok) { setWorkflows(prev); toast('Failed to remove workflow', 'error'); return }
+      toast('Workflow removed from pipeline', 'success')
+    } catch {
+      setWorkflows(prev)
+      toast('Failed to remove workflow', 'error')
+    }
   }
 
   function toggleSort(field: 'company' | 'lastUpdated') {

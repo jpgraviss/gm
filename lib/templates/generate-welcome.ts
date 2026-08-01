@@ -1,6 +1,13 @@
 import { renderTemplate } from './template-helpers'
 import { buildSequenceUnsubscribeUrl } from '@/lib/sequence-unsubscribe'
 
+// AUDIT #621 — accountManager fields are interpolated directly into the
+// template literal below (not via renderTemplate's variables map), so
+// they need their own escaping.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 export interface WelcomeEmailData {
   firstName: string
   companyName: string
@@ -31,12 +38,12 @@ export function generateWelcomeEmail(data: WelcomeEmailData): string {
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="width:44px;vertical-align:top;">
-                  <div style="width:40px;height:40px;border-radius:50%;background:#015035;color:#ffffff;font-size:16px;font-weight:700;line-height:40px;text-align:center;">${data.accountManager.name.charAt(0)}</div>
+                  <div style="width:40px;height:40px;border-radius:50%;background:#015035;color:#ffffff;font-size:16px;font-weight:700;line-height:40px;text-align:center;">${escapeHtml(data.accountManager.name.charAt(0))}</div>
                 </td>
                 <td style="padding-left:14px;vertical-align:top;">
-                  <p style="margin:0;font-size:15px;font-weight:600;color:#1f2937;">${data.accountManager.name}</p>
-                  <p style="margin:3px 0 0;font-size:13px;color:#6b7280;">${data.accountManager.email}</p>
-                  <p style="margin:2px 0 0;font-size:13px;color:#6b7280;">${data.accountManager.phone}</p>
+                  <p style="margin:0;font-size:15px;font-weight:600;color:#1f2937;">${escapeHtml(data.accountManager.name)}</p>
+                  <p style="margin:3px 0 0;font-size:13px;color:#6b7280;">${escapeHtml(data.accountManager.email)}</p>
+                  <p style="margin:2px 0 0;font-size:13px;color:#6b7280;">${escapeHtml(data.accountManager.phone)}</p>
                 </td>
               </tr>
             </table>

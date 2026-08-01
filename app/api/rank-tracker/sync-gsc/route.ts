@@ -46,10 +46,14 @@ export const POST = withErrorHandler('rank-tracker/sync-gsc POST', async (req) =
 
   const db = createServiceClient()
 
+  // AUDIT #642 — relied on the implicit PostgREST cap with no explicit
+  // limit; a site with more tracked keywords than that could silently miss
+  // older keywords in the dedup set and insert duplicates on repeated syncs.
   const { data: existing } = await db
     .from('tracked_keywords')
     .select('keyword')
     .eq('site_url', siteUrl)
+    .limit(5000)
 
   const existingSet = new Set(
     (existing ?? []).map((r: { keyword: string }) => r.keyword.toLowerCase()),

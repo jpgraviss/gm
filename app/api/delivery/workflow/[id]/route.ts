@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { mapWorkflow } from '../route'
 
 export const GET = withErrorHandler('delivery/workflow/[id] GET', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
@@ -24,8 +25,11 @@ export const GET = withErrorHandler('delivery/workflow/[id] GET', async (req: Ne
     throw new Error(workflowRes.error.message || 'Failed to fetch workflow')
   }
 
+  // AUDIT #645 — this used to spread the raw DB row instead of routing
+  // through the sibling list route's mapWorkflow() (built for #8, which
+  // fixed a crash from this exact shape mismatch).
   return NextResponse.json({
-    ...workflowRes.data,
+    ...mapWorkflow(workflowRes.data),
     events: eventsRes.data ?? [],
   })
 })

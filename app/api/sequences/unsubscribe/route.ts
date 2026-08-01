@@ -141,11 +141,13 @@ export const POST = withErrorHandler('sequences/unsubscribe POST', async (req: N
     const sequenceIds = Array.from(new Set(activeEnrollments.map((e: { sequence_id: string }) => e.sequence_id)))
     for (const seqId of sequenceIds) {
       const countInSeq = activeEnrollments.filter((e: { sequence_id: string }) => e.sequence_id === seqId).length
-      await db.rpc('adjust_sequence_counts', {
+      // AUDIT #638 — matches #125's fix for increment_review_campaign_counts.
+      const { error: adjustErr } = await db.rpc('adjust_sequence_counts', {
         p_sequence_id: seqId,
         p_enrolled_delta: 0,
         p_active_delta: -countInSeq,
       })
+      if (adjustErr) console.error(`[sequences/unsubscribe] adjust_sequence_counts failed for sequence ${seqId}:`, adjustErr.message)
     }
 
     // Insert activity records

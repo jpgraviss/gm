@@ -319,11 +319,13 @@ export const POST = withErrorHandler('sequences/webhooks POST', async (req: Next
       .eq('id', seqId)
       .single()
 
-    await db.rpc('adjust_sequence_counts', {
+    // AUDIT #638 — matches #125's fix for increment_review_campaign_counts.
+    const { error: adjustErrBounced } = await db.rpc('adjust_sequence_counts', {
       p_sequence_id: seqId,
       p_enrolled_delta: 0,
       p_active_delta: -1,
     })
+    if (adjustErrBounced) console.error(`[sequences/webhooks] adjust_sequence_counts failed for sequence ${seqId}:`, adjustErrBounced.message)
 
     // Reset contact in_sequence flag
     if (enrollment.contact_id) {
@@ -364,11 +366,13 @@ export const POST = withErrorHandler('sequences/webhooks POST', async (req: Next
       .update({ status: 'unenrolled', unenroll_reason: 'complained' })
       .eq('id', enrollment.id)
 
-    await db.rpc('adjust_sequence_counts', {
+    // AUDIT #638 — matches #125's fix for increment_review_campaign_counts.
+    const { error: adjustErrComplained } = await db.rpc('adjust_sequence_counts', {
       p_sequence_id: seqId,
       p_enrolled_delta: 0,
       p_active_delta: -1,
     })
+    if (adjustErrComplained) console.error(`[sequences/webhooks] adjust_sequence_counts failed for sequence ${seqId}:`, adjustErrComplained.message)
 
     // Reset contact in_sequence flag
     if (enrollment.contact_id) {

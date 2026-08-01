@@ -14,7 +14,10 @@ async function fetchAllRows(buildQuery: () => any): Promise<any[]> {
   const rows: any[] = []
   let offset = 0
   for (;;) {
-    const { data, error } = await buildQuery().range(offset, offset + FETCH_PAGE_SIZE - 1)
+    // AUDIT #632 — without a stable ORDER BY, repeated .range() calls have
+    // no guaranteed row order, so pages could overlap or gap — same fix as
+    // lib/broadcasts.ts's fetchAllContacts.
+    const { data, error } = await buildQuery().order('id', { ascending: true }).range(offset, offset + FETCH_PAGE_SIZE - 1)
     if (error) throw new Error(error.message || 'Failed to fetch analytics')
     rows.push(...(data ?? []))
     if (!data || data.length < FETCH_PAGE_SIZE) break

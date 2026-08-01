@@ -277,9 +277,6 @@ async function getDailySendCount(
   return count ?? 0
 }
 
-// Per-sequence in-memory per-minute counters (reset each invocation is fine for cron)
-const perMinuteCounts = new Map<string, number>()
-
 // ─── Activity logging ────────────────────────────────────────────────────────
 
 async function logActivity(
@@ -390,6 +387,11 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const seqMap = new Map((sequences ?? []).map((s: any) => [s.id as string, s]))
+
+  // Per-sequence in-memory per-minute counters — declared per-invocation (not
+  // module-scoped) so a warm serverless container doesn't carry a tripped
+  // limit forward into the next cron tick (AUDIT #619)
+  const perMinuteCounts = new Map<string, number>()
 
   // Pre-fetch daily send counts per sequence for throttling
   const dailySendCounts = new Map<string, number>()
@@ -791,12 +793,14 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
       // once before this loop, so a plain read-then-write here would lose
       // increments whenever two enrollments in the same sequence complete
       // within the same batch (not just across concurrent requests).
-      await db.rpc('adjust_sequence_counts', {
+      // AUDIT #638 — matches #125's fix for increment_review_campaign_counts.
+      const { error: adjustErr } = await db.rpc('adjust_sequence_counts', {
         p_sequence_id: seq.id,
         p_enrolled_delta: 0,
         p_active_delta: -1,
         p_completed_delta: 1,
       })
+      if (adjustErr) console.error(`[sequences/execute] adjust_sequence_counts failed for sequence ${seq.id}:`, adjustErr.message)
 
       // Reset contact in_sequence flag
       if (enrollment.contact_id) {

@@ -6,6 +6,11 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { encrypt } from '@/lib/encryption'
 import { isPrivateOrInternalUrl } from '@/lib/ssrf-guard'
 
+// AUDIT #641 — matches lib/uptime.ts's real MonitoredSiteStatus union;
+// #595 added this same enum-check pattern to 6 other routes but missed
+// this one.
+const MONITORED_SITE_STATUSES = ['up', 'down', 'degraded', 'paused'] as const
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSite(row: any) {
   return {
@@ -72,6 +77,9 @@ export const PATCH = withErrorHandler('monitored-sites/[id] PATCH', async (req, 
 
   const { id } = await params
   const body = await req.json()
+  if (body.status !== undefined && !MONITORED_SITE_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: `status must be one of: ${MONITORED_SITE_STATUSES.join(', ')}` }, { status: 400 })
+  }
   const db = createServiceClient()
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }

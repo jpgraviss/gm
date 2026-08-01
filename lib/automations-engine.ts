@@ -5,6 +5,7 @@ import { wrapBrandedEmail } from '@/lib/email-template'
 import { getSettings } from '@/lib/settings'
 import { shouldSendPushForEvent } from '@/lib/notification-preferences'
 import { contractMonthlyValue } from '@/lib/metrics'
+import { getFirstPipelineStageName } from '@/lib/pipelines'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 const TRIGGER_MAP: Record<string, string> = {
@@ -514,14 +515,22 @@ async function executeAction(
       // owner_id write 'Rotate Contact Owner' already does. If the typed
       // name doesn't match an active team member, leave owner_id
       // untouched rather than nulling out a previously-valid one.
-      if (dbField === 'owner' && value) {
-        const { data: matchedOwner } = await db
-          .from('team_members')
-          .select('id')
-          .eq('name', value)
-          .eq('status', 'active')
-          .maybeSingle()
-        if (matchedOwner) update.owner_id = matchedOwner.id
+      if (dbField === 'owner') {
+        if (value) {
+          const { data: matchedOwner } = await db
+            .from('team_members')
+            .select('id')
+            .eq('name', value)
+            .eq('status', 'active')
+            .maybeSingle()
+          if (matchedOwner) update.owner_id = matchedOwner.id
+        } else {
+          // AUDIT #646 — clearing the Owner field only blanked the display
+          // `owner` column, leaving `owner_id` (read by sequence-sender
+          // resolution and the "Recently engaged leads" widget) pointing
+          // at the previous owner.
+          update.owner_id = null
+        }
       }
       await db.from('crm_contacts').update(update).eq('id', contactId)
       break
@@ -543,7 +552,12 @@ async function executeAction(
         }
       }
       const dealName = (context.dealName as string) ?? `Deal for ${dealCompany}`
-      const stage = (context.dealStage as string) ?? 'Lead'
+      // AUDIT #629 — matches #516's fix for the builder dropdown/AI
+      // generator, applied to the engine's own runtime default: pipeline
+      // stages are user-renamable (#42), so a deal created with a hardcoded
+      // 'Lead' after the first stage is renamed becomes invisible on the
+      // Pipeline board (which groups strictly by d.stage === s.name).
+      const stage = (context.dealStage as string) ?? await getFirstPipelineStageName(db)
       await db.from('deals').insert({
         id: `deal-auto-${uid()}`,
         company: dealCompany,
@@ -1059,11 +1073,14 @@ async function executeAction(
         throw new Error(enrollErr.message || 'Failed to enroll contact')
       }
 
-      await db.rpc('adjust_sequence_counts', {
+      // AUDIT #638 — matches #125's fix for increment_review_campaign_counts:
+      // check the RPC's own error instead of letting a failure pass silently.
+      const { error: adjustErr1 } = await db.rpc('adjust_sequence_counts', {
         p_sequence_id: targetSeq.id,
         p_enrolled_delta: 1,
         p_active_delta: 1,
       })
+      if (adjustErr1) console.error(`[automations-engine] adjust_sequence_counts failed for sequence ${targetSeq.id}:`, adjustErr1.message)
       break
     }
 
@@ -1086,11 +1103,12 @@ async function executeAction(
           .update({ status: 'unenrolled', unenroll_reason: 'automation' })
           .eq('id', enr.id)
 
-        await db.rpc('adjust_sequence_counts', {
+        const { error: adjustErr2 } = await db.rpc('adjust_sequence_counts', {
           p_sequence_id: enr.sequence_id,
           p_enrolled_delta: 0,
           p_active_delta: -1,
         })
+        if (adjustErr2) console.error(`[automations-engine] adjust_sequence_counts failed for sequence ${enr.sequence_id}:`, adjustErr2.message)
       }
       break
     }

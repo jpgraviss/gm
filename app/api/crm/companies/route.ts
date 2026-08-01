@@ -66,7 +66,9 @@ export const POST = withErrorHandler('crm/companies POST', async (req) => {
   const { data, error } = await db
     .from('crm_companies')
     .insert({
-      id:               `co-${Date.now()}`,
+      // AUDIT #634 — no random suffix, unlike deals/contracts/invoices;
+      // two creates in the same millisecond collided on the primary key.
+      id:               `co-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name:             body.name,
       industry:         body.industry,
       website:          body.website ?? null,

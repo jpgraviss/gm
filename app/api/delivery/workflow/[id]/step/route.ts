@@ -4,6 +4,7 @@ import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
 import { requireRole } from '@/lib/rbac'
+import { mapWorkflow } from '../../route'
 
 const STEP_STATUSES = ['Pending', 'In Progress', 'Completed', 'Skipped']
 
@@ -97,5 +98,8 @@ export const PATCH = withErrorHandler('delivery/workflow/[id]/step PATCH', async
     metadata: body,
   })
 
-  return NextResponse.json(data)
+  // AUDIT #645 — this used to return the raw DB row instead of routing
+  // through the sibling list route's mapWorkflow(), the same shape-mismatch
+  // class #8 already fixed once.
+  return NextResponse.json(mapWorkflow(data))
 })

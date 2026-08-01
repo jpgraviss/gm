@@ -13,10 +13,16 @@ export const GET = withErrorHandler('knowledge-base GET', async (req) => {
   const status = searchParams.get('status')
   const db = createServiceClient()
 
+  // AUDIT #640 — relied entirely on the implicit PostgREST default row cap
+  // with no explicit limit; a real one bounds the query instead of leaving
+  // it accidentally unbounded. Full cursor pagination (matching
+  // courses/brand-kits) is a larger change deferred until KB article
+  // volume actually approaches this ceiling.
   let query = db
     .from('knowledge_articles')
     .select('*')
     .order('created_at', { ascending: false })
+    .limit(2000)
 
   if (category) query = query.eq('category', category)
   if (status) query = query.eq('status', status)

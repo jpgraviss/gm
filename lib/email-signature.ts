@@ -25,6 +25,15 @@ export const DEFAULT_SIGNATURE: EmailSignatureData = {
 // adding a second one.
 export const SIGNATURE_MARKER = '<!--gravhub:signature-->'
 
+// AUDIT #639 — every field here used to interpolate raw into HTML text and
+// attributes (including hrefs/srcs) with no escaping at all, the same
+// unescaped-template bug class as #621, just narrower reach (a live preview
+// via dangerouslySetInnerHTML in the settings editor's own browser, and
+// auto-appending to a Super-Admin-gated user's outbound Gmail sends).
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 export function generateSignatureHtml(sig: EmailSignatureData): string {
   const FOREST = '#015035'
   const CREAM = '#FFF3EA'
@@ -37,27 +46,27 @@ export function generateSignatureHtml(sig: EmailSignatureData): string {
   const phoneLine = sig.phone
     ? `<tr><td style="padding:2px 0;font-size:13px;color:${STONE};font-family:'Montserrat',Arial,sans-serif;">
         <span style="color:${TERRACOTTA};font-weight:600;">P</span>&nbsp;
-        <a href="tel:${sig.phone.replace(/[^\d+]/g, '')}" style="color:${INK};text-decoration:none;">${sig.phone}</a>
+        <a href="tel:${escapeHtml(sig.phone.replace(/[^\d+]/g, ''))}" style="color:${INK};text-decoration:none;">${escapeHtml(sig.phone)}</a>
       </td></tr>`
     : ''
 
   const emailLine = sig.email
     ? `<tr><td style="padding:2px 0;font-size:13px;color:${STONE};font-family:'Montserrat',Arial,sans-serif;">
         <span style="color:${TERRACOTTA};font-weight:600;">E</span>&nbsp;
-        <a href="mailto:${sig.email}" style="color:${INK};text-decoration:none;">${sig.email}</a>
+        <a href="mailto:${escapeHtml(sig.email)}" style="color:${INK};text-decoration:none;">${escapeHtml(sig.email)}</a>
       </td></tr>`
     : ''
 
   const websiteLine = sig.website
     ? `<tr><td style="padding:2px 0;font-size:13px;color:${STONE};font-family:'Montserrat',Arial,sans-serif;">
         <span style="color:${TERRACOTTA};font-weight:600;">W</span>&nbsp;
-        <a href="https://${sig.website.replace(/^https?:\/\//, '')}" style="color:${INK};text-decoration:none;">${sig.website.replace(/^https?:\/\//, '')}</a>
+        <a href="https://${escapeHtml(sig.website.replace(/^https?:\/\//, ''))}" style="color:${INK};text-decoration:none;">${escapeHtml(sig.website.replace(/^https?:\/\//, ''))}</a>
       </td></tr>`
     : ''
 
   const linkedInLine = sig.linkedIn
     ? `<tr><td style="padding:2px 0;font-size:13px;color:${STONE};font-family:'Montserrat',Arial,sans-serif;">
-        <a href="${sig.linkedIn.startsWith('http') ? sig.linkedIn : `https://linkedin.com/in/${sig.linkedIn}`}" style="color:${INK};text-decoration:none;">
+        <a href="${escapeHtml(sig.linkedIn.startsWith('http') ? sig.linkedIn : `https://linkedin.com/in/${sig.linkedIn}`)}" style="color:${INK};text-decoration:none;">
           <img src="https://cdn-icons-png.flaticon.com/512/174/174857.png" width="14" height="14" style="vertical-align:middle;margin-right:4px;" alt="LinkedIn" />LinkedIn
         </a>
       </td></tr>`
@@ -69,12 +78,12 @@ export function generateSignatureHtml(sig: EmailSignatureData): string {
       <table cellpadding="0" cellspacing="0" border="0" style="border-top:3px solid ${FOREST};padding-top:14px;">
         <tr>
           ${sig.photoUrl ? `<td style="vertical-align:top;padding-right:14px;">
-            <img src="${sig.photoUrl}" width="72" height="72" style="border-radius:8px;object-fit:cover;" alt="${sig.name}" />
+            <img src="${escapeHtml(sig.photoUrl)}" width="72" height="72" style="border-radius:8px;object-fit:cover;" alt="${escapeHtml(sig.name)}" />
           </td>` : ''}
           <td style="vertical-align:top;">
             <table cellpadding="0" cellspacing="0" border="0">
-              <tr><td style="font-size:16px;font-weight:700;color:${FOREST};padding-bottom:2px;font-family:'Montserrat',Arial,sans-serif;letter-spacing:0.3px;">${sig.name || 'Your Name'}</td></tr>
-              ${sig.title ? `<tr><td style="font-size:13px;font-weight:500;color:${TERRACOTTA};padding-bottom:8px;font-family:'Montserrat',Arial,sans-serif;">${sig.title}</td></tr>` : ''}
+              <tr><td style="font-size:16px;font-weight:700;color:${FOREST};padding-bottom:2px;font-family:'Montserrat',Arial,sans-serif;letter-spacing:0.3px;">${escapeHtml(sig.name) || 'Your Name'}</td></tr>
+              ${sig.title ? `<tr><td style="font-size:13px;font-weight:500;color:${TERRACOTTA};padding-bottom:8px;font-family:'Montserrat',Arial,sans-serif;">${escapeHtml(sig.title)}</td></tr>` : ''}
               ${phoneLine}
               ${emailLine}
               ${websiteLine}

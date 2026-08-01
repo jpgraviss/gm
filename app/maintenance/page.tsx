@@ -724,12 +724,17 @@ export default function MaintenancePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-      if (!res.ok) throw new Error('Failed')
+      if (!res.ok) {
+        // AUDIT #637 — this used to discard the server's real validation
+        // message in favor of a generic "Failed to add record" toast.
+        const json = await res.json().catch(() => null)
+        throw new Error(json?.error || 'Failed')
+      }
       const saved = await res.json()
       setRecords(prev => [saved, ...prev])
       setAddingRecord(false)
-    } catch {
-      toast('Failed to add record', 'error')
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'Failed' ? err.message : 'Failed to add record', 'error')
     }
   }
 

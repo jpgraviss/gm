@@ -793,12 +793,14 @@ export const POST = withErrorHandler('sequences/execute POST', async (req: NextR
       // once before this loop, so a plain read-then-write here would lose
       // increments whenever two enrollments in the same sequence complete
       // within the same batch (not just across concurrent requests).
-      await db.rpc('adjust_sequence_counts', {
+      // AUDIT #638 — matches #125's fix for increment_review_campaign_counts.
+      const { error: adjustErr } = await db.rpc('adjust_sequence_counts', {
         p_sequence_id: seq.id,
         p_enrolled_delta: 0,
         p_active_delta: -1,
         p_completed_delta: 1,
       })
+      if (adjustErr) console.error(`[sequences/execute] adjust_sequence_counts failed for sequence ${seq.id}:`, adjustErr.message)
 
       // Reset contact in_sequence flag
       if (enrollment.contact_id) {

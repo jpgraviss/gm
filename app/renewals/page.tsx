@@ -710,7 +710,11 @@ export default function RenewalsPage() {
       const expDate = new Date(r.expirationDate)
       return expDate >= thisMonthStart && expDate <= thisMonthEnd
     }).length,
-    renewalValue: localRenewals.filter(r => r.status !== 'Churned').reduce((s, r) => s + r.renewalValue, 0),
+    // AUDIT #636 — this used to include already-closed 'Renewed' renewals
+    // alongside genuinely open ones, overstating the "pipeline" subtitle
+    // with realized value (same bug class as the now-fixed Revenue Report
+    // Closed-Won-in-pipeline issue).
+    renewalValue: localRenewals.filter(r => r.status !== 'Churned' && r.status !== 'Renewed').reduce((s, r) => s + r.renewalValue, 0),
   }), [localRenewals])
 
   const filtered = useMemo(() => {

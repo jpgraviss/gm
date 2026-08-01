@@ -75,12 +75,14 @@ export const DELETE = withErrorHandler('sequences/[id]/enrollments DELETE', asyn
 
   // Update sequence counts
   if (totalRemoved > 0) {
-    await db.rpc('adjust_sequence_counts', {
+    // AUDIT #638 — matches #125's fix for increment_review_campaign_counts.
+    const { error: adjustErr } = await db.rpc('adjust_sequence_counts', {
       p_sequence_id: id,
       p_enrolled_delta: -totalRemoved,
       p_active_delta: -activeRemoved,
       p_last_modified: new Date().toISOString().split('T')[0],
     })
+    if (adjustErr) console.error(`[sequences/enrollments] adjust_sequence_counts failed for sequence ${id}:`, adjustErr.message)
   }
 
   return NextResponse.json({ removed: totalRemoved })

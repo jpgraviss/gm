@@ -395,6 +395,16 @@ describe('automations-engine', () => {
       expect(updateCalls['crm_contacts'][0]).toEqual(expect.objectContaining({ owner: 'Nobody Real' }))
       expect(updateCalls['crm_contacts'][0]).not.toHaveProperty('owner_id')
     })
+
+    // AUDIT #646 — clearing the Owner field (empty string) only blanked the
+    // display `owner` column, leaving `owner_id` stale at the previous owner.
+    it('nulls owner_id when the Owner field is explicitly cleared', async () => {
+      setupAutomations('Contact Created', [{ type: 'Update Contact', config: { field: 'owner', value: '' } }])
+      fireAutomations('contact_created', { company: 'Acme Co', contactId: 'ct-1' })
+      await flushPromises()
+
+      expect(updateCalls['crm_contacts'][0]).toEqual(expect.objectContaining({ owner: '', owner_id: null }))
+    })
   })
 
   it('fires "Log Activity" on contact_created', async () => {

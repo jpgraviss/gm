@@ -3,8 +3,8 @@ import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 import { requirePortalClient, blockIfPreview } from '@/lib/portal-auth'
+import { CLIENT_FILES_BUCKET as BUCKET, resolveFolder } from '@/lib/file-storage'
 
-const BUCKET = 'client-files'
 const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
 const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
@@ -38,32 +38,39 @@ export const GET = withErrorHandler('files GET', async (req: NextRequest) => {
   if (denied) return denied
 
   const db = createServiceClient()
-  const folder = sanitizePath(company)
+  const { folder, legacyFolder } = await resolveFolder(db, company)
 
-  const { data, error } = await db.storage.from(BUCKET).list(folder, {
-    limit: 1000,
-    sortBy: { column: 'created_at', order: 'desc' },
-  })
-
-  if (error) {
-    throw new Error(String(error) || 'Failed to list files')
+  // AUDIT #584 — read from both the company_id-keyed folder (current) and
+  // the old sanitized-name folder (pre-migration files, or a company with
+  // no crm_companies match) so nothing goes invisible mid-migration. Once
+  // the storage migration script has moved everything, the legacy listing
+  // is just empty and this is a harmless no-op extra call.
+  const folders = folder === legacyFolder ? [folder] : [folder, legacyFolder]
+  const listed = await Promise.all(
+    folders.map(f => db.storage.from(BUCKET).list(f, { limit: 1000, sortBy: { column: 'created_at', order: 'desc' } }))
+  )
+  const firstError = listed.find(r => r.error)?.error
+  if (firstError) {
+    throw new Error(String(firstError) || 'Failed to list files')
   }
 
   // Generate signed URLs for each file
   const files = await Promise.all(
-    (data ?? [])
-      .filter(f => f.name !== '.emptyFolderPlaceholder')
-      .map(async f => {
-        const path = `${folder}/${f.name}`
-        const { data: urlData } = await db.storage.from(BUCKET).createSignedUrl(path, 3600)
-        return {
-          name: f.name,
-          size: f.metadata?.size ?? 0,
-          createdAt: f.created_at,
-          url: urlData?.signedUrl ?? null,
-          path,
-        }
-      })
+    folders.flatMap((f, i) =>
+      (listed[i].data ?? [])
+        .filter(entry => entry.name !== '.emptyFolderPlaceholder')
+        .map(async entry => {
+          const path = `${f}/${entry.name}`
+          const { data: urlData } = await db.storage.from(BUCKET).createSignedUrl(path, 3600)
+          return {
+            name: entry.name,
+            size: entry.metadata?.size ?? 0,
+            createdAt: entry.created_at,
+            url: urlData?.signedUrl ?? null,
+            path,
+          }
+        })
+    )
   )
 
   return NextResponse.json(files)
@@ -98,7 +105,10 @@ export const POST = withErrorHandler('files POST', async (req: NextRequest) => {
   }
 
   const db = createServiceClient()
-  const folder = sanitizePath(company)
+  // AUDIT #584 — new uploads always land under the company_id-keyed
+  // folder (never the lossy sanitized-name one), so the collision this
+  // finding describes can't recur for anything uploaded from here on.
+  const { folder } = await resolveFolder(db, company)
   const filePath = `${folder}/${file.name}`
 
   const { error } = await db.storage.from(BUCKET).upload(filePath, file, {
@@ -144,7 +154,3 @@ export const DELETE = withErrorHandler('files DELETE', async (req: NextRequest) 
 
   return NextResponse.json({ ok: true })
 })
-
-function sanitizePath(input: string): string {
-  return input.replace(/[^a-zA-Z0-9-_ ]/g, '').trim().replace(/\s+/g, '-')
-}

@@ -54,18 +54,21 @@ export const GET = withErrorHandler('tasks GET', async (req: NextRequest) => {
   if (projectId)  query = query.eq('project_id', projectId)
   if (companyId)  query = query.eq('company_id', companyId)
 
-  // Department visibility: Leadership/Super Admin/admins see everything.
-  // Everyone else only sees CRM/General/untagged tasks (cross-functional,
-  // company-scoped work), tasks in their own mapped department, and
-  // anything explicitly assigned to them — never another department's
-  // internal task list (e.g. Operations never sees Finance tasks).
+  // Department visibility: Leadership/Super Admin/Department Manager/admins
+  // see everything (2026-08-01: Department Manager was previously scoped to
+  // just their own department — user decision to make every leadership tier
+  // unrestricted). Everyone else only sees CRM/General/untagged tasks
+  // (cross-functional, company-scoped work), tasks in their own mapped
+  // department, and anything explicitly assigned to them — never another
+  // department's internal task list (e.g. Operations never sees Finance
+  // tasks).
   //
   // Service-line visibility layers on top: a task tagged with
   // team_service_line (Website Build, SEO / AEO, etc.) is private to its
   // assignee, not broadcast to the rest of its department the way an
   // untagged task is — leaving Service Line unset is what makes a task
   // "open" and shareable within the department rule above.
-  const unrestricted = user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin'
+  const unrestricted = user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin' || user.role === 'Department Manager'
   if (!unrestricted) {
     const dept = departmentForUnit(user.unit)
     const safeDepts = Array.from(new Set(['CRM', 'General', ...(dept ? [dept] : [])]))

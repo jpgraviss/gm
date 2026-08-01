@@ -14,7 +14,7 @@ import { VALID_STATUSES, VALID_PRIORITIES, VALID_CATEGORIES, mapTask } from '../
 // the department list in the first place.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function canTouchTask(user: any, taskDepartment: string | null, taskServiceLine: string | null, assignedTo: string): Promise<boolean> {
-  if (user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin') return true
+  if (user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin' || user.role === 'Department Manager') return true
   if (assignedTo === user.name) return true
   if (taskServiceLine) return false
   if (!taskDepartment || taskDepartment === 'CRM' || taskDepartment === 'General') return true

@@ -507,15 +507,34 @@ export default function DeliveryDashboardPage() {
   // fetch doesn't reject on a non-2xx response, so the old `.catch()`-only
   // handling never caught it either. Restore the removed row and show a
   // real error instead of a false "success."
+  //
+  // AUDIT #664 (adversarial-review follow-up) — this still reverted via a
+  // full pre-call array snapshot, the same bug #664 fixed for
+  // handleMarkComplete/handleSkipStep in this same file: if a different
+  // workflow's step update committed successfully while this delete was
+  // in flight, restoring the stale `prev` snapshot on failure would
+  // silently discard that concurrent success too. Reinserting the
+  // removed row at its original index via a functional update reverts
+  // only this call's own change.
   async function handleRemoveWorkflow(workflowId: string) {
-    const prev = workflows
+    const prevIndex = workflows.findIndex(w => w.id === workflowId)
+    const removedWorkflow = workflows[prevIndex]
     setWorkflows(w => w.filter(wf => wf.id !== workflowId))
+    function revert() {
+      if (!removedWorkflow) return
+      setWorkflows(w => {
+        if (w.some(wf => wf.id === workflowId)) return w
+        const next = [...w]
+        next.splice(Math.min(prevIndex, next.length), 0, removedWorkflow)
+        return next
+      })
+    }
     try {
       const res = await fetch(`/api/delivery/workflow/${workflowId}`, { method: 'DELETE' })
-      if (!res.ok) { setWorkflows(prev); toast('Failed to remove workflow', 'error'); return }
+      if (!res.ok) { revert(); toast('Failed to remove workflow', 'error'); return }
       toast('Workflow removed from pipeline', 'success')
     } catch {
-      setWorkflows(prev)
+      revert()
       toast('Failed to remove workflow', 'error')
     }
   }

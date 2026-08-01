@@ -65,6 +65,13 @@ const SERVICES_RAW = [
     aliases: ['SEO'],
   },
   {
+    name: 'GEO',
+    lane: 'Marketing', layer: 'Foundation', category: 'Ongoing MRR',
+    color: 'bg-sky-100 text-sky-700',
+    // Bundled under SEO / AEO engagements rather than sold on its own — no
+    // standalone tiers/pricing (per 2026-08-01 decision).
+  },
+  {
     name: 'Social Media',
     lane: 'Marketing', layer: 'Foundation', category: 'Ongoing MRR',
     color: 'bg-pink-100 text-pink-700',

@@ -127,7 +127,7 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
   const OWNERS = useTeamMembers()
   const [company, setCompany] = useState('')
   const [companyId, setCompanyId] = useState<string | undefined>(undefined)
-  const [serviceType, setServiceType] = useState<Project['serviceType']>('Website Build')
+  const [serviceTypes, setServiceTypes] = useState<string[]>(['Website Build'])
   const [startDate, setStartDate] = useState('')
   const [launchDate, setLaunchDate] = useState('')
   const [projectStatus, setProjectStatus] = useState<ProjectStatus>('Not Started')
@@ -143,7 +143,8 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
       contractId: '',
       company: company.trim(),
       companyId: companyId ?? null,
-      serviceType,
+      serviceType: serviceTypes[0] ?? 'General',
+      serviceTypes,
       status: projectStatus,
       startDate,
       launchDate,
@@ -188,13 +189,16 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
             <CompanySelect value={company} onChange={(name, id) => { setCompany(name); setCompanyId(id) }} />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
-            <select value={serviceType} onChange={e => setServiceType(e.target.value as Project['serviceType'])}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Services</label>
+            <div className="flex flex-wrap gap-2">
               {SERVICE_NAMES.map(s => (
-                <option key={s} value={s}>{s}</option>
+                <label key={s} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border cursor-pointer transition-colors ${serviceTypes.includes(s) ? 'bg-emerald-50 border-emerald-600 text-emerald-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                  <input type="checkbox" checked={serviceTypes.includes(s)} className="hidden"
+                    onChange={e => setServiceTypes(prev => e.target.checked ? [...prev, s] : prev.filter(x => x !== s))} />
+                  {s}
+                </label>
               ))}
-            </select>
+            </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Status</label>

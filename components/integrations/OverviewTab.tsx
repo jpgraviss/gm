@@ -27,6 +27,11 @@ interface KPI {
   value: string | null
   icon: React.ReactNode
   gray?: boolean
+  // AUDIT #657 — a configured-but-failed fetch (expired token, upstream
+  // 500, timeout) used to be indistinguishable from a still-loading or
+  // genuinely-empty result, both rendering as a bare "—". This flag lets
+  // the card show a distinct "couldn't load" state instead.
+  failed?: boolean
 }
 
 interface Props {
@@ -99,27 +104,24 @@ export default function OverviewTab({ clientName, allBindings, onSelectClient, o
       const bindings = bindRes.ok ? await bindRes.json() : []
       const b: Binding = Array.isArray(bindings) && bindings.length > 0 ? bindings[0] : {}
 
-      const [gsc, ga4, ads, gbp, kw, sites] = await Promise.all([
-        b.gscSiteUrl
-          ? fetch(`/api/integrations/gsc/report?site=${encodeURIComponent(b.gscSiteUrl)}&days=28`)
-              .then((r) => (r.ok ? r.json() : null))
-              .catch(() => null)
-          : Promise.resolve(null),
-        b.ga4PropertyId
-          ? fetch(`/api/integrations/ga4/report?propertyId=${encodeURIComponent(b.ga4PropertyId)}&days=28`)
-              .then((r) => (r.ok ? r.json() : null))
-              .catch(() => null)
-          : Promise.resolve(null),
-        b.adsCustomerId
-          ? fetch(`/api/integrations/ads/report?customerId=${encodeURIComponent(b.adsCustomerId)}&days=28`)
-              .then((r) => (r.ok ? r.json() : null))
-              .catch(() => null)
-          : Promise.resolve(null),
-        b.gbpLocationName
-          ? fetch(`/api/integrations/gbp/reviews?location=${encodeURIComponent(b.gbpLocationName)}&days=28`)
-              .then((r) => (r.ok ? r.json() : null))
-              .catch(() => null)
-          : Promise.resolve(null),
+      // AUDIT #657 — distinguish "the fetch failed" from "there's genuinely
+      // no data" so a configured-but-broken integration doesn't render
+      // identically to a healthy, empty one.
+      async function fetchOptional(url: string): Promise<{ data: Record<string, unknown> | null; failed: boolean }> {
+        try {
+          const r = await fetch(url)
+          if (!r.ok) return { data: null, failed: true }
+          return { data: await r.json(), failed: false }
+        } catch {
+          return { data: null, failed: true }
+        }
+      }
+
+      const [gscR, ga4R, adsR, gbpR, kw, sites] = await Promise.all([
+        b.gscSiteUrl ? fetchOptional(`/api/integrations/gsc/report?site=${encodeURIComponent(b.gscSiteUrl)}&days=28`) : Promise.resolve({ data: null, failed: false }),
+        b.ga4PropertyId ? fetchOptional(`/api/integrations/ga4/report?propertyId=${encodeURIComponent(b.ga4PropertyId)}&days=28`) : Promise.resolve({ data: null, failed: false }),
+        b.adsCustomerId ? fetchOptional(`/api/integrations/ads/report?customerId=${encodeURIComponent(b.adsCustomerId)}&days=28`) : Promise.resolve({ data: null, failed: false }),
+        b.gbpLocationName ? fetchOptional(`/api/integrations/gbp/reviews?location=${encodeURIComponent(b.gbpLocationName)}&days=28`) : Promise.resolve({ data: null, failed: false }),
         fetch(`/api/tracked-keywords?company=${encodeURIComponent(clientName!)}`)
           .then((r) => (r.ok ? r.json() : []))
           .catch(() => []),
@@ -127,6 +129,10 @@ export default function OverviewTab({ clientName, allBindings, onSelectClient, o
           .then((r) => (r.ok ? r.json() : []))
           .catch(() => []),
       ])
+      const gsc = gscR.data as { summary?: { totalClicks?: number } } | null
+      const ga4 = ga4R.data as { summary?: { sessions?: number } } | null
+      const ads = adsR.data as { summary?: { totalCost?: number } } | null
+      const gbp = gbpR.data as { averageRating?: number } | null
 
       if (cancelled) return
 
@@ -152,12 +158,14 @@ export default function OverviewTab({ clientName, allBindings, onSelectClient, o
           icon: <MousePointerClick size={18} />,
           value: gsc ? fmt(gsc.summary?.totalClicks ?? 0) : null,
           gray: !b.gscSiteUrl,
+          failed: !!b.gscSiteUrl && gscR.failed,
         },
         {
           label: 'Sessions',
           icon: <Users size={18} />,
           value: ga4 ? fmt(ga4.summary?.sessions ?? 0) : null,
           gray: !b.ga4PropertyId,
+          failed: !!b.ga4PropertyId && ga4R.failed,
         },
         {
           label: 'Ad Spend',
@@ -166,12 +174,14 @@ export default function OverviewTab({ clientName, allBindings, onSelectClient, o
             ? `$${Number(ads.summary?.totalCost ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             : null,
           gray: !b.adsCustomerId,
+          failed: !!b.adsCustomerId && adsR.failed,
         },
         {
           label: 'Avg Rating',
           icon: <Star size={18} />,
           value: gbp ? `${Number(gbp.averageRating ?? 0).toFixed(1)} ★` : null,
           gray: !b.gbpLocationName,
+          failed: !!b.gbpLocationName && gbpR.failed,
         },
         {
           label: 'Keywords Tracked',
@@ -360,6 +370,8 @@ export default function OverviewTab({ clientName, allBindings, onSelectClient, o
                   </div>
                   {c.gray && c.value === null ? (
                     <span className="text-lg font-semibold text-gray-300">Not connected</span>
+                  ) : c.failed ? (
+                    <span className="text-sm font-semibold text-red-500">Couldn&apos;t load</span>
                   ) : (
                     <span className="text-2xl font-bold" style={{ color: '#015035' }}>
                       {c.value ?? '—'}

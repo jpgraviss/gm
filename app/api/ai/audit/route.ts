@@ -6,6 +6,7 @@ import { getGSCCoreWebVitals } from '@/lib/google-search-console'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import type { AuditSectionResult, AuditType } from '@/lib/types'
 
 async function fetchPageHtml(url: string): Promise<string> {
@@ -342,14 +343,20 @@ export const GET = withErrorHandler('ai/audit GET', async (req) => {
       return NextResponse.json(data)
     }
 
-    const { data, error } = await supabase
+    // AUDIT #661 — this used to hard-cap at .limit(50) with no
+    // cursor/pagination at all, so once more than 50 audits had ever been
+    // run, the oldest ones became permanently unreachable through this
+    // endpoint. Now routed through the shared cursor-pagination helpers,
+    // matching every other list endpoint in the app.
+    const pag = parsePagination(req)
+    let query = supabase
       .from('audits')
       .select('id, website_url, company_name, audit_type, status, overall_score, overall_grade, created_at, completed_at')
-      .order('created_at', { ascending: false })
-      .limit(50)
-
+    query = applyCursor(query, pag)
+    const { data, error } = await query
     if (error) throw error
-    return NextResponse.json(data ?? [])
+    const { rows, nextCursor } = slicePage(data ?? [], pag.limit, 'created_at')
+    return paginatedJson(rows, nextCursor)
 })
 
 export const DELETE = withErrorHandler('ai/audit DELETE', async (req) => {

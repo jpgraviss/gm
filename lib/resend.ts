@@ -1,11 +1,15 @@
 import { Resend } from 'resend'
 
-let client: Resend | null = null
-let cachedKey: string | null = null
-
+// AUDIT #655 — this used to cache the decrypted key in a module-level
+// variable forever once resolved, with no invalidation on write. If an
+// admin rotated the key in Settings, every warm serverless instance kept
+// using the old key until it happened to cold-start. Not a hot path (a
+// handful of email sends per request, not per-item), so dropping the
+// cache and always resolving fresh is the safe fix — an extra DB
+// round-trip per call is negligible next to the network cost of the
+// Resend API call it precedes.
 async function getApiKey(): Promise<string | null> {
   if (process.env.RESEND_API_KEY) return process.env.RESEND_API_KEY
-  if (cachedKey) return cachedKey
   try {
     const { createServiceClient } = await import('@/lib/supabase')
     const { decrypt } = await import('@/lib/encryption')
@@ -17,9 +21,7 @@ async function getApiKey(): Promise<string | null> {
       .maybeSingle()
     const encryptedKey = (data?.resend as { apiKey?: string })?.apiKey
     if (encryptedKey) {
-      const key = decrypt(encryptedKey)
-      cachedKey = key
-      return key
+      return decrypt(encryptedKey)
     }
   } catch { /* fall through */ }
   return null
@@ -28,8 +30,5 @@ async function getApiKey(): Promise<string | null> {
 export async function getResend(): Promise<Resend> {
   const key = await getApiKey()
   if (!key) throw new Error('RESEND_API_KEY is not configured')
-  if (!client || cachedKey !== key) {
-    client = new Resend(key)
-  }
-  return client
+  return new Resend(key)
 }

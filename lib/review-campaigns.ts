@@ -155,12 +155,24 @@ export async function resolveCampaignAudience(db: DB, audience: string): Promise
     byCompany.set(contact.company_id, list)
   }
 
+  // AUDIT #662 — this used to never consult sequence_suppression_list,
+  // unlike the sibling mass-send paths that share the same contact pool
+  // (lib/broadcasts.ts's sendBroadcastNow, sequences/[id]/enroll). A
+  // contact who unsubscribed or hard-bounced out of marketing
+  // sequences/broadcasts could still receive an automated review-request
+  // campaign email.
+  const { data: suppressedRows } = await db
+    .from('sequence_suppression_list')
+    .select('email')
+  const suppressedSet = new Set((suppressedRows ?? []).map((s: { email: string }) => s.email))
+
   const recipients: CampaignRecipient[] = []
   for (const company of matched) {
     const companyContacts = byCompany.get(company.id) ?? []
     const primary = companyContacts.find(c => c.is_primary) ?? companyContacts[0]
     const email = primary?.emails?.[0]
     if (!primary || !email) continue
+    if (suppressedSet.has(email.toLowerCase())) continue
     recipients.push({
       companyId: company.id,
       companyName: company.name,

@@ -22,15 +22,24 @@ export default function SeoTab({ gscSiteUrl, days: defaultDays }: { gscSiteUrl?:
   const [days, setDays] = useState(defaultDays ?? 28)
   const [data, setData] = useState<GscReport | null>(null)
   const [loading, setLoading] = useState(false)
+  // AUDIT #658 — a failed fetch (expired token, upstream error, network)
+  // used to be coalesced into the exact same all-zero shape a genuinely
+  // empty-traffic site produces, rendering a fake-healthy "0 clicks / 0
+  // impressions" report with no indication the GSC call itself failed.
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     if (!gscSiteUrl) return
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
+    setError(false)
     fetch(`/api/integrations/gsc/report?site=${encodeURIComponent(gscSiteUrl)}&days=${days}&dimension=query`)
-      .then(r => r.ok ? r.json() : { rows: [], totals: { clicks: 0, impressions: 0, ctr: 0, position: 0 } })
+      .then(r => {
+        if (!r.ok) { setError(true); return { rows: [], totals: { clicks: 0, impressions: 0, ctr: 0, position: 0 } } }
+        return r.json()
+      })
       .then(d => setData(d))
-      .catch(() => setData({ rows: [], totals: { clicks: 0, impressions: 0, ctr: 0, position: 0 } }))
+      .catch(() => { setError(true); setData({ rows: [], totals: { clicks: 0, impressions: 0, ctr: 0, position: 0 } }) })
       .finally(() => setLoading(false))
   }, [gscSiteUrl, days])
 
@@ -82,6 +91,11 @@ export default function SeoTab({ gscSiteUrl, days: defaultDays }: { gscSiteUrl?:
         </div>
       ) : (
         <>
+          {error && (
+            <div className="px-3 py-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg">
+              Couldn&apos;t load Search Console data — this doesn&apos;t reflect actual traffic. Try again shortly.
+            </div>
+          )}
           {/* KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {kpis.map(k => (

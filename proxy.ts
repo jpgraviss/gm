@@ -345,6 +345,23 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
     )
   }
 
+  // AUDIT #660 — this route's own code comment calls it "the most
+  // LLM-call-heavy route in the codebase" (up to 8 sections x up to 3
+  // retries each, plus a summary call — 25+ possible LLM calls per POST),
+  // yet it only ever fell back to the generic 200/min authenticated-route
+  // ceiling above, shared across every route. A tighter per-route cap
+  // bounds worst-case AI-provider spend from one compromised/careless
+  // session, matching the dedicated-throttle pattern used for every other
+  // cost-sensitive route in this file.
+  if (pathname === '/api/ai/audit' && req.method === 'POST') {
+    if (memoryLimited(`ai-audit:${ip}`, 10, 60 * 1000)) {
+      return NextResponse.json(
+        { error: 'Too many audit requests. Please wait a moment and try again.' },
+        { status: 429 }
+      )
+    }
+  }
+
   return NextResponse.next()
 }
 

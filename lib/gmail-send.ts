@@ -15,6 +15,15 @@ export interface GmailSendOptions {
   references?: string // Space-separated Message-IDs for threading
 }
 
+// AUDIT #648 — a `\r`/`\n` in any header-bound field let a caller inject
+// arbitrary extra headers (e.g. a forged Bcc) or splice content into the
+// body via an early blank line, the same bug class already fixed at #606
+// for lib/ics-generator.ts. Strips CR/LF entirely rather than escaping —
+// header field values are never expected to legitimately contain them.
+function sanitizeHeader(value: string): string {
+  return value.replace(/[\r\n]+/g, ' ').trim()
+}
+
 /**
  * Build an RFC 2822 email message, base64url-encode it,
  * and send via the Gmail API.
@@ -22,7 +31,15 @@ export interface GmailSendOptions {
 export async function sendViaGmail(
   options: GmailSendOptions,
 ): Promise<{ messageId: string; threadId: string }> {
-  const { accessToken, from, to, subject, htmlBody, replyTo, cc, bcc, inReplyTo, references } = options
+  const { accessToken, htmlBody } = options
+  const from = sanitizeHeader(options.from)
+  const to = sanitizeHeader(options.to)
+  const subject = sanitizeHeader(options.subject)
+  const replyTo = options.replyTo ? sanitizeHeader(options.replyTo) : options.replyTo
+  const cc = options.cc ? sanitizeHeader(options.cc) : options.cc
+  const bcc = options.bcc ? sanitizeHeader(options.bcc) : options.bcc
+  const inReplyTo = options.inReplyTo ? sanitizeHeader(options.inReplyTo) : options.inReplyTo
+  const references = options.references ? sanitizeHeader(options.references) : options.references
 
   // ── Build RFC 2822 message ──────────────────────────────────────────────
   const lines: string[] = [

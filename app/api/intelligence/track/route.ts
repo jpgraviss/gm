@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { isGeolocationConfigured, lookupIpGeolocation } from '@/lib/geolocation'
+import { getClientIp } from '@/lib/request-ip'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -22,9 +23,12 @@ export const POST = withErrorHandler('intelligence/track POST', async (req) => {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS_HEADERS })
   }
 
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    ?? req.headers.get('x-real-ip')
-    ?? null
+  // AUDIT #653 — this used to reimplement request-ip.ts's IP extraction
+  // inline, taking the client-spoofable leftmost x-forwarded-for entry;
+  // now shares the same helper (Vercel-set headers preferred, last hop of
+  // x-forwarded-for as the fallback) as proxy.ts/lib/rbac.ts.
+  const resolvedIp = getClientIp(req)
+  const ip = resolvedIp === 'unknown' ? null : resolvedIp
   const userAgent = req.headers.get('user-agent') ?? null
 
   const db = createServiceClient()

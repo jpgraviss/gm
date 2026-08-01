@@ -110,6 +110,9 @@ export default function IntelligencePage() {
   const [tab, setTab] = useState<'visitors' | 'companies'>('visitors')
   const [people, setPeople] = useState<Person[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
+  const [peopleTruncated, setPeopleTruncated] = useState(false)
+  const [companiesTruncated, setCompaniesTruncated] = useState(false)
+  const [giTruncated, setGiTruncated] = useState(false)
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -127,25 +130,55 @@ export default function IntelligencePage() {
   const [giEventsLoading, setGiEventsLoading] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  // AUDIT #652 — these used to hardcode limit=100 and never follow the
+  // cursor/offset pagination the backing routes genuinely support, so any
+  // site active enough to have identified more than 100 visitors silently
+  // lost real hot leads with zero signal anything was missing. Capped at
+  // MAX_PAGES (500 rows/endpoint) rather than truly unbounded — this is a
+  // browser-rendered table, not a bulk export, and a hard cap plus an
+  // honest truncation banner is safer than an unbounded loop against a
+  // paid third-party API (Maverick) if a site somehow has tens of
+  // thousands of visitors.
+  const PAGE_LIMIT = 100
+  const MAX_PAGES = 5
+
   const fetchData = useCallback(async () => {
     try {
-      const [pRes, cRes, sRes] = await Promise.all([
-        fetch('/api/intelligence/visitors?limit=100'),
-        fetch('/api/intelligence/companies?limit=100'),
+      async function fetchAllCursor(path: string): Promise<{ data: unknown[]; error?: string; truncated: boolean }> {
+        const rows: unknown[] = []
+        let cursor: string | undefined
+        let error: string | undefined
+        let truncated = false
+        for (let page = 0; page < MAX_PAGES; page++) {
+          const url = `${path}${path.includes('?') ? '&' : '?'}limit=${PAGE_LIMIT}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+          const res = await fetch(url)
+          const json = await res.json()
+          if (json.error) { error = json.error; break }
+          if (Array.isArray(json.data)) rows.push(...json.data)
+          cursor = json.pagination?.nextCursor
+          if (!cursor) break
+          if (page === MAX_PAGES - 1) truncated = true
+        }
+        return { data: rows, error, truncated }
+      }
+
+      const [pResult, cResult, sRes] = await Promise.all([
+        fetchAllCursor('/api/intelligence/visitors'),
+        fetchAllCursor('/api/intelligence/companies'),
         fetch('/api/intelligence/stats'),
       ])
-      const pData = await pRes.json()
-      const cData = await cRes.json()
       const sData = await sRes.json()
-      if (pData.data) setPeople(pData.data)
-      if (cData.data) setCompanies(cData.data)
+      setPeople(pResult.data as Person[])
+      setCompanies(cResult.data as Company[])
       if (sData.data) setStats(sData.data)
+      setPeopleTruncated(pResult.truncated)
+      setCompaniesTruncated(cResult.truncated)
       // AUDIT #249 — only the visitors/people call's failure ever surfaced;
       // companies/stats failures (e.g. Maverick misconfigured/rate-limited)
       // were silently dropped, rendering as an honest-looking empty section
       // with the specific error reason lost.
-      if (pData.error) toast(pData.error, 'error')
-      if (cData.error) toast(cData.error, 'error')
+      if (pResult.error) toast(pResult.error, 'error')
+      if (cResult.error) toast(cResult.error, 'error')
       if (sData.error) toast(sData.error, 'error')
     } catch { toast('Failed to load intelligence data', 'error') }
     finally { setLoading(false); setRefreshing(false) }
@@ -153,9 +186,22 @@ export default function IntelligencePage() {
 
   const fetchGiData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/intelligence/identify?limit=100&search=${encodeURIComponent(search)}`)
-      const data = await res.json()
-      if (data.data) { setGiVisitors(data.data); setGiTotal(data.total ?? 0) }
+      const rows: GiVisitor[] = []
+      let total = 0
+      let truncated = false
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const offset = page * PAGE_LIMIT
+        const res = await fetch(`/api/intelligence/identify?limit=${PAGE_LIMIT}&offset=${offset}&search=${encodeURIComponent(search)}`)
+        const data = await res.json()
+        if (!Array.isArray(data.data)) break
+        rows.push(...data.data)
+        total = data.total ?? rows.length
+        if (data.data.length < PAGE_LIMIT || rows.length >= total) break
+        if (page === MAX_PAGES - 1) truncated = true
+      }
+      setGiVisitors(rows)
+      setGiTotal(total)
+      setGiTruncated(truncated)
     } catch { /* no self-hosted data yet is normal */ }
   }, [search])
 
@@ -340,6 +386,11 @@ GravIntel.track('pricing_viewed', { plan: 'premium' });`}
                 </div>
                 <span className="text-[11px] text-gray-400">{giTotal} visitors tracked</span>
               </div>
+              {giTruncated && (
+                <div className="px-4 py-2 text-[11px] text-amber-700 bg-amber-50 border-b border-amber-100">
+                  Showing the first {giVisitors.length} of {giTotal} visitors — refine your search to narrow results.
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
@@ -573,6 +624,11 @@ GravIntel.track('pricing_viewed', { plan: 'premium' });`}
           )}
         </div>
 
+        {((tab === 'visitors' && peopleTruncated) || (tab === 'companies' && companiesTruncated)) && (
+          <div className="mb-3 px-3 py-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg">
+            Showing the first {tab === 'visitors' ? people.length : companies.length} {tab} — refine your search to narrow results.
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <RefreshCw size={20} className="animate-spin text-gray-400" />

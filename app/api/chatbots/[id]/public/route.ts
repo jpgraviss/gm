@@ -27,18 +27,27 @@ export const GET = withErrorHandler('chatbots/[id]/public GET', async (req, { pa
 
   // AUDIT — same origin-binding gap as /chat: without this, any site could
   // discover and embed another tenant's chatbot config off-domain.
+  //
+  // AUDIT #663 — this route had the same two fail-open gaps already fixed
+  // on the sibling /chat route (#616/#633) but was never updated to
+  // match: a request with no Origin/Referer at all bypassed the check
+  // entirely, and a malformed (non-URL-parseable) Origin fell through to
+  // allow instead of being rejected. Both are now rejected the same way
+  // /chat does.
   if (data.website_url) {
     const origin = req.headers.get('origin') || req.headers.get('referer')
-    if (origin) {
-      try {
-        const originHost = new URL(origin).hostname
-        const allowedHost = new URL(data.website_url).hostname
-        if (originHost !== allowedHost) {
-          return NextResponse.json({ error: 'Chatbot not found' }, { status: 404 })
-        }
-      } catch {
-        // Malformed Origin/Referer header — fall through rather than block
+    if (!origin) {
+      return NextResponse.json({ error: 'Chatbot not found' }, { status: 404 })
+    }
+    try {
+      const originHost = new URL(origin).hostname
+      const allowedHost = new URL(data.website_url).hostname
+      if (originHost !== allowedHost) {
+        return NextResponse.json({ error: 'Chatbot not found' }, { status: 404 })
       }
+    } catch {
+      // Malformed Origin/Referer header — reject rather than fall through.
+      return NextResponse.json({ error: 'Chatbot not found' }, { status: 404 })
     }
   }
 

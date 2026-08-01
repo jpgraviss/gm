@@ -1,10 +1,11 @@
 const BASE = 'https://api-v1.maverickintelligence.co'
 
-let _cachedMaverickKey: string | null = null
-
+// AUDIT #655 — same stale-key-cache bug class as lib/resend.ts, fixed
+// alongside it: the module-level cache never invalidated on a key
+// rotation in Settings. Not a hot path, so resolving fresh each call is
+// the safe fix.
 async function getApiKey(): Promise<string> {
   if (process.env.MAVERICK_API_KEY) return process.env.MAVERICK_API_KEY
-  if (_cachedMaverickKey) return _cachedMaverickKey
   try {
     const { createServiceClient } = await import('@/lib/supabase')
     const { decrypt } = await import('@/lib/encryption')
@@ -16,9 +17,7 @@ async function getApiKey(): Promise<string> {
       .maybeSingle()
     const encryptedKey = (data?.maverick as { apiKey?: string })?.apiKey
     if (encryptedKey) {
-      const key = decrypt(encryptedKey)
-      _cachedMaverickKey = key
-      return key
+      return decrypt(encryptedKey)
     }
   } catch { /* fall through */ }
   throw new Error('MAVERICK_API_KEY not set')

@@ -37,9 +37,26 @@ export const POST = withErrorHandler('reputation/send-request POST', async (req)
   const settings = await getSettings()
   const companyName = reqCompanyName?.trim() || settings.company.name
 
+  const db = createServiceClient()
+
+  // AUDIT #662 — same suppression-list gap as the automated campaign
+  // path (lib/review-campaigns.ts). A staff-typed target here can still
+  // be someone who unsubscribed/hard-bounced out of marketing; block
+  // with a clear reason rather than silently sending.
+  const { data: suppressedRow } = await db
+    .from('sequence_suppression_list')
+    .select('email')
+    .eq('email', email.trim().toLowerCase())
+    .maybeSingle()
+  if (suppressedRow) {
+    return NextResponse.json(
+      { error: 'This email address is on the suppression list (unsubscribed or bounced) and cannot be sent a review request.' },
+      { status: 409 },
+    )
+  }
+
   // Get Google review URL from app_settings
   let googleReviewUrl: string | null = null
-  const db = createServiceClient()
   try {
     const { data } = await db
       .from('app_settings')

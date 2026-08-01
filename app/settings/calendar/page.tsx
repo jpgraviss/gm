@@ -271,8 +271,15 @@ export default function CalendarSettingsPage() {
         if (data.failed) {
           alert(`Imported ${data.imported} of ${data.total} events — ${data.failed} failed to save.`)
         }
+      } else {
+        // AUDIT #659 — a failed add used to be a silent no-op with zero
+        // feedback; the new subscription just never appeared.
+        const err = await res.json().catch(() => null)
+        alert(err?.error || 'Failed to add calendar subscription.')
       }
-    } catch { /* ignore */ }
+    } catch {
+      alert('Failed to add calendar subscription. Check your connection and try again.')
+    }
     setAddingSub(false)
   }
 
@@ -292,22 +299,40 @@ export default function CalendarSettingsPage() {
         if (data.failed) {
           alert(`Synced ${data.synced} events — ${data.failed} failed to save.`)
         }
+      } else {
+        // AUDIT #659 — a failed sync used to be a silent no-op.
+        const err = await res.json().catch(() => null)
+        alert(err?.error || 'Failed to sync calendar subscription.')
       }
-    } catch { /* ignore */ }
+    } catch {
+      alert('Failed to sync calendar subscription. Check your connection and try again.')
+    }
     setSyncingSubId(null)
   }
 
   async function handleDeleteSubscription(id: string) {
     if (!confirm('Remove this calendar subscription and all its imported events?')) return
     setDeletingSubId(id)
+    // AUDIT #659 — this used to remove the row from local state
+    // unconditionally, without checking res.ok, so a failed server-side
+    // delete (403, 500) still made the row vanish from the UI — false
+    // confidence it was gone while it stayed live in the DB. Now the row
+    // is only removed once the server confirms success.
     try {
-      await fetch('/api/calendar/subscriptions', {
+      const res = await fetch('/api/calendar/subscriptions', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       })
-      setSubscriptions(prev => prev.filter(s => s.id !== id))
-    } catch { /* ignore */ }
+      if (res.ok) {
+        setSubscriptions(prev => prev.filter(s => s.id !== id))
+      } else {
+        const err = await res.json().catch(() => null)
+        alert(err?.error || 'Failed to remove calendar subscription.')
+      }
+    } catch {
+      alert('Failed to remove calendar subscription. Check your connection and try again.')
+    }
     setDeletingSubId(null)
   }
 

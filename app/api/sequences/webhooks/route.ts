@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
-import * as crypto from 'crypto'
 import { withErrorHandler } from '@/lib/api-handler'
+import { verifyResendSignature } from '@/lib/webhook-verify'
 
 // Resend webhook event types we handle
 type ResendEventType =
@@ -31,60 +31,22 @@ function extractHeader(headers: { name: string; value: string }[] | undefined, n
   return h?.value ?? null
 }
 
-function verifySignature(body: string, req: NextRequest, secret: string): boolean {
-  // Resend uses Svix for webhooks — check svix headers first
-  const svixId = req.headers.get('svix-id')
-  const svixTimestamp = req.headers.get('svix-timestamp')
-  const svixSignature = req.headers.get('svix-signature')
-
-  if (svixId && svixTimestamp && svixSignature) {
-    // Svix signature format: v1,<base64-signature>
-    // Signed content: "{svix-id}.{svix-timestamp}.{body}"
-    const signedContent = `${svixId}.${svixTimestamp}.${body}`
-    const secretBytes = Buffer.from(secret.startsWith('whsec_') ? secret.slice(6) : secret, 'base64')
-    const expectedSignature = crypto
-      .createHmac('sha256', secretBytes)
-      .update(signedContent)
-      .digest('base64')
-
-    // svix-signature can contain multiple signatures separated by spaces
-    const signatures = svixSignature.split(' ')
-    for (const sig of signatures) {
-      const sigValue = sig.startsWith('v1,') ? sig.slice(3) : sig
-      try {
-        if (crypto.timingSafeEqual(Buffer.from(sigValue), Buffer.from(expectedSignature))) {
-          return true
-        }
-      } catch {
-        // Length mismatch — continue
-      }
-    }
-    return false
-  }
-
-  // Fallback: simple HMAC for resend-signature header
-  const resendSig = req.headers.get('resend-signature')
-  if (resendSig) {
-    const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')
-    try {
-      return crypto.timingSafeEqual(Buffer.from(resendSig), Buffer.from(expected))
-    } catch {
-      return false
-    }
-  }
-
-  return false
-}
-
 export const POST = withErrorHandler('sequences/webhooks POST', async (req: NextRequest) => {
   const rawBody = await req.text()
 
-  // Optional signature verification
+  // AUDIT #650 — this used to reimplement lib/webhook-verify.ts's
+  // verifyResendSignature() inline and fail OPEN (accept unauthenticated
+  // payloads) whenever RESEND_WEBHOOK_SECRET was unset, in any environment.
+  // Now shares the same helper and the same fail-closed-in-production
+  // behavior as the sibling app/api/email/inbound/route.ts (the #1 fix).
   const webhookSecret = process.env.RESEND_WEBHOOK_SECRET
-  if (webhookSecret) {
-    if (!verifySignature(rawBody, req, webhookSecret)) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+  if (!webhookSecret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('RESEND_WEBHOOK_SECRET must be set in production')
     }
+    console.warn('[sequences/webhooks] RESEND_WEBHOOK_SECRET not set — accepting unsigned payloads (dev only)')
+  } else if (!verifyResendSignature(rawBody, req, webhookSecret)) {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
   }
 
   let payload: ResendWebhookPayload

@@ -160,7 +160,7 @@ export function generateMonthlyReportHtml(data: MonthlyReportData, settings?: Ap
       .map((k) => {
         const changeColor = k.change > 0 ? '#059669' : k.change < 0 ? '#dc2626' : brand.stone
         const changeText = k.change !== 0 ? ` <span style="color:${changeColor};font-size:11px;">(${k.change > 0 ? '+' : ''}${k.change})</span>` : ''
-        return cssBar(`${k.keyword}${changeText}`, k.position, maxPos, primaryColor)
+        return cssBar(`${escapeHtml(k.keyword)}${changeText}`, k.position, maxPos, primaryColor)
       })
       .join('')
     rankingSection = `
@@ -197,13 +197,18 @@ export function generateMonthlyReportHtml(data: MonthlyReportData, settings?: Ap
   if (metrics.wordpressSeo) {
     const wp = metrics.wordpressSeo
     const scoreColor = wp.averageScore >= 80 ? '#059669' : wp.averageScore >= 50 ? '#d97706' : '#dc2626'
+    // AUDIT #654 — k.keyword/p.title/p.path/securityIssues[] all originate
+    // from customizationData.metrics (a fully free-form Record<string,
+    // unknown> on POST /api/delivery/send-template), the same source
+    // recommendations[]/changelog[] were escaped for at #621 — these
+    // sibling fields were missed in that pass.
     const worstPagesHtml = wp.worstPages.length
       ? wp.worstPages.slice(0, 3).map(p =>
-          `<tr><td style="padding:3px 0;font-size:13px;color:${brand.ink};font-family:'Montserrat',sans-serif;">${p.title || p.path}</td><td style="padding:3px 0;font-size:13px;color:${brand.stone};text-align:right;font-family:'Montserrat',sans-serif;">${p.score}/100</td></tr>`
+          `<tr><td style="padding:3px 0;font-size:13px;color:${brand.ink};font-family:'Montserrat',sans-serif;">${escapeHtml(p.title || p.path)}</td><td style="padding:3px 0;font-size:13px;color:${brand.stone};text-align:right;font-family:'Montserrat',sans-serif;">${p.score}/100</td></tr>`
         ).join('')
       : ''
     const securityHtml = wp.securityIssues.length
-      ? `<p style="margin:10px 0 0;font-size:12px;color:#dc2626;font-family:'Montserrat',sans-serif;">&#9888; ${wp.securityIssues.join(' &middot; ')}</p>`
+      ? `<p style="margin:10px 0 0;font-size:12px;color:#dc2626;font-family:'Montserrat',sans-serif;">&#9888; ${wp.securityIssues.map(escapeHtml).join(' &middot; ')}</p>`
       : ''
     wordpressSeoSection = `
     <tr><td style="padding:24px 32px 0;">

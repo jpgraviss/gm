@@ -9,6 +9,7 @@ import {
   FileSearch, ChevronRight, Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 interface AuditRow {
   id: string
@@ -56,8 +57,9 @@ export default function AuditsPage() {
 
   async function loadAudits() {
     try {
-      const res = await fetch('/api/ai/audit')
-      if (res.ok) setAudits(await res.json())
+      // AUDIT #661 — GET /api/ai/audit is now cursor-paginated (was a hard
+      // .limit(50)); follow every page so past-50 audits stay reachable.
+      setAudits(await fetchAllPages<AuditRow>('/api/ai/audit'))
     } catch {
       toast('Failed to load audits', 'error')
     } finally {

@@ -314,8 +314,17 @@ export default function DeliveryDashboardPage() {
   // request (validation, 404, 500) left the UI showing the step done with
   // no error and no revert. Snapshot the prior state and restore it on a
   // non-2xx response, matching handleCreateWorkflow's own revert pattern.
+  // AUDIT #664 — handleMarkComplete/handleSkipStep used to capture the
+  // *entire* workflows array into `prev` at call time and, on failure,
+  // unconditionally restore that full stale snapshot. If a second call
+  // (a different workflow's step update, or a delete) committed its own
+  // successful state change in the window between this call's optimistic
+  // update and its failure response, that revert silently discarded the
+  // second call's already-successful change too. Reverting only the one
+  // workflow this call touched avoids clobbering unrelated concurrent
+  // updates.
   async function handleMarkComplete(workflowId: string, stepNum: number) {
-    const prev = workflows
+    const prevWorkflow = workflows.find(w => w.id === workflowId)
     setWorkflows(w => w.map(wf => {
       if (wf.id !== workflowId) return wf
       const newSteps = wf.steps.map(s => {
@@ -329,15 +338,19 @@ export default function DeliveryDashboardPage() {
       const newCurrent = nextPending ? nextPending.step : totalSteps
       return { ...wf, steps: updatedSteps, currentStep: newCurrent, lastUpdated: new Date().toISOString().split('T')[0] }
     }))
+    function revert() {
+      if (!prevWorkflow) return
+      setWorkflows(w => w.map(wf => (wf.id === workflowId ? prevWorkflow : wf)))
+    }
     try {
       const res = await fetch(`/api/delivery/workflow/${workflowId}/step`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: stepNum, status: 'Completed' }),
       })
-      if (!res.ok) { setWorkflows(prev); toast('Failed to update step', 'error') }
+      if (!res.ok) { revert(); toast('Failed to update step', 'error') }
     } catch {
-      setWorkflows(prev)
+      revert()
       toast('Failed to update step', 'error')
     }
   }
@@ -455,8 +468,8 @@ export default function DeliveryDashboardPage() {
   }
 
   async function handleSkipStep(workflowId: string) {
-    const prev = workflows
-    const currentStep = workflows.find(w => w.id === workflowId)?.currentStep ?? 1
+    const prevWorkflow = workflows.find(w => w.id === workflowId)
+    const currentStep = prevWorkflow?.currentStep ?? 1
     setWorkflows(w => w.map(wf => {
       if (wf.id !== workflowId) return wf
       const currentIdx = wf.steps.findIndex(s => s.step === wf.currentStep)
@@ -469,15 +482,21 @@ export default function DeliveryDashboardPage() {
       const nextStep = currentIdx + 1 < wf.steps.length ? wf.steps[currentIdx + 1].step : totalSteps
       return { ...wf, steps: newSteps, currentStep: nextStep, lastUpdated: new Date().toISOString().split('T')[0] }
     }))
+    // AUDIT #664 — revert only this one workflow, not the whole array
+    // snapshot; see handleMarkComplete's comment above for why.
+    function revert() {
+      if (!prevWorkflow) return
+      setWorkflows(w => w.map(wf => (wf.id === workflowId ? prevWorkflow : wf)))
+    }
     try {
       const res = await fetch(`/api/delivery/workflow/${workflowId}/step`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: currentStep, status: 'Skipped' }),
       })
-      if (!res.ok) { setWorkflows(prev); toast('Failed to skip step', 'error') }
+      if (!res.ok) { revert(); toast('Failed to skip step', 'error') }
     } catch {
-      setWorkflows(prev)
+      revert()
       toast('Failed to skip step', 'error')
     }
   }

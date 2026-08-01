@@ -59,12 +59,20 @@ export const GET = withErrorHandler('tasks GET', async (req: NextRequest) => {
   // company-scoped work), tasks in their own mapped department, and
   // anything explicitly assigned to them — never another department's
   // internal task list (e.g. Operations never sees Finance tasks).
+  //
+  // Service-line visibility layers on top: a task tagged with
+  // team_service_line (Website Build, SEO / AEO, etc.) is private to its
+  // assignee, not broadcast to the rest of its department the way an
+  // untagged task is — leaving Service Line unset is what makes a task
+  // "open" and shareable within the department rule above.
   const unrestricted = user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin'
   if (!unrestricted) {
     const dept = departmentForUnit(user.unit)
     const safeDepts = Array.from(new Set(['CRM', 'General', ...(dept ? [dept] : [])]))
     const safeName = user.name.replace(/[,()]/g, '')
-    query = query.or(`department.is.null,department.in.(${safeDepts.join(',')}),assigned_to.eq.${safeName}`)
+    query = query.or(
+      `assigned_to.eq.${safeName},and(team_service_line.is.null,department.is.null),and(team_service_line.is.null,department.in.(${safeDepts.join(',')}))`
+    )
   }
 
   query = applyCursor(query, pag)

@@ -44,4 +44,11 @@ describe('renderMarkdown (#585)', () => {
     expect(html).toContain('<a href="/settings"')
     expect(html).toContain('<a href="#section"')
   })
+
+  // AUDIT #622 — #585 fixed the URL but missed the alt attribute itself.
+  it('escapes a double-quote in image alt text instead of letting it break out of the attribute', () => {
+    const html = renderMarkdown('![x" onerror="alert(1)](https://example.com/a.png)')
+    expect(html).not.toContain('onerror="alert(1)"')
+    expect(html).toContain('alt="x&quot; onerror=&quot;alert(1)"')
+  })
 })

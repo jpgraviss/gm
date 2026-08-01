@@ -60,8 +60,11 @@ describe('generateGrowthReportHtml — HTML escaping (#589)', () => {
   it('escapes a malicious preparedBy name', () => {
     const html = generateGrowthReportHtml(buildData({ preparedBy: '<img src=x onerror="1">' }))
 
+    // preparedBy now flows through the shared renderTemplate() (AUDIT
+    // #621), which also escapes quotes — a strictly safer superset of the
+    // file's own local escapeHtml() the workLog/nextMonth fields still use.
     expect(html).not.toContain('<img src=x onerror="1">')
-    expect(html).toContain('&lt;img src=x onerror="1"&gt;')
+    expect(html).toContain('&lt;img src=x onerror=&quot;1&quot;&gt;')
   })
 
   it('renders plain workLog/nextMonth content unescaped-looking (no stray entities)', () => {

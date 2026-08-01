@@ -48,10 +48,13 @@ export function renderMarkdown(text: string): string {
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
   // Inline code
   html = html.replace(/`([^`]+)`/g, '<code class="bg-gray-100 text-[13px] px-1.5 py-0.5 rounded font-mono text-gray-800">$1</code>')
-  // Images ![alt](url) — rejected/unsafe URLs render with no src at all
+  // Images ![alt](url) — rejected/unsafe URLs render with no src at all.
+  // AUDIT #622 — `alt` already had &/</> escaped by the top-level pass
+  // above, but never `"`, so it could still break out of the attribute;
+  // only quote-escape it here to avoid double-escaping the rest.
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) =>
     isSafeUrl(url, MEDIA_PROTOCOLS)
-      ? `<img src="${escapeAttr(url)}" alt="${alt}" class="rounded-lg max-w-full my-3" />`
+      ? `<img src="${escapeAttr(url)}" alt="${alt.replace(/"/g, '&quot;')}" class="rounded-lg max-w-full my-3" />`
       : '')
   // Links [text](url) — rejected/unsafe URLs render as plain text instead of a link
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, url) =>

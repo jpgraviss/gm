@@ -302,11 +302,14 @@ ${data.nextMonth.length > 0 ? `
 </body>
 </html>`
 
+  // AUDIT #621 — renderTemplate() itself now escapes every value it
+  // substitutes, so these no longer need a pre-escaped value (double-
+  // escaping otherwise turns "&amp;" into "&amp;amp;").
   return renderTemplate(html, {
-    client_name: escapeHtml(data.clientName),
-    prepared_by: escapeHtml(data.preparedBy),
-    engagement: escapeHtml(data.engagement),
-    period_label: escapeHtml(data.period.label),
+    client_name: data.clientName,
+    prepared_by: data.preparedBy,
+    engagement: data.engagement,
+    period_label: data.period.label,
     generated_date: formatDate(new Date()),
   })
 }

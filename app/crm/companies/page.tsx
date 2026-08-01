@@ -20,6 +20,7 @@ import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/New
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMCompany, CRMContact, CompanyStatus, Deal, Contract, Invoice, Project, CRMActivity, AppTask } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
+import { useAuth } from '@/contexts/AuthContext'
 import { downloadCsv } from '@/lib/csv-export'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
@@ -509,6 +510,7 @@ function DriveImportModal({ companyId, onClose, onImported }: { companyId: strin
 
 function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, crmContacts, deals, contracts, invoices, projects, crmActivities }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void; onOpenIntegrations?: () => void; crmContacts: CRMContact[]; deals: Deal[]; contracts: Contract[]; invoices: Invoice[]; projects: Project[]; crmActivities: CRMActivity[] }) {
   const { toast } = useToast()
+  const { user } = useAuth()
   const router = useRouter()
   const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'files' | 'activity' | 'tasks'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
@@ -1510,6 +1512,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
           <LogActivityForm
             onSave={handleSaveActivity}
             onCancel={() => setLoggingActivity(false)}
+            authorName={user?.name || user?.email || 'You'}
           />
         ) : (
           <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">

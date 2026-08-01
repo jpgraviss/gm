@@ -72,4 +72,12 @@ describe('POST /api/chatbots/[id]/chat — origin domain-lock (#616)', () => {
 
     expect(res.status).toBe(200)
   })
+
+  // AUDIT #633 — the malformed-header case fell through and allowed the
+  // request instead of rejecting it, same bypass #616 fixed for a missing header.
+  it('rejects a request with a malformed (non-URL-parseable) Origin header', async () => {
+    const res = await chat('Hi there', { origin: 'not-a-url' })
+
+    expect(res.status).toBe(403)
+  })
 })

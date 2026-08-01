@@ -25,6 +25,11 @@ function mapContract(row: any) {
     internalSigned:   row.internal_signed ?? undefined,
     terminatedReason: row.terminated_reason ?? undefined,
     terminatedDate:   row.terminated_date ?? undefined,
+    // AUDIT #625 — omitted here (unlike the [id] route's own mapContract())
+    // meant the #470 "Client Requested Changes" banner, gated on this
+    // field, could never render for `app/contracts/page.tsx`, which
+    // populates its whole list from this route and never re-fetches per-id.
+    clientNotes:      row.client_notes ?? undefined,
   }
 }
 

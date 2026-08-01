@@ -14,6 +14,7 @@ import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
 import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
+import { useAuth } from '@/contexts/AuthContext'
 import { downloadCsv } from '@/lib/csv-export'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
@@ -281,6 +282,7 @@ function DealPanel({
   contracts: Contract[]
 }) {
   const { toast } = useToast()
+  const { user } = useAuth()
   const ALL_REPS = useTeamMembers()
   const [tab, setTab] = useState<'overview' | 'activity' | 'tasks'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
@@ -808,7 +810,7 @@ function DealPanel({
         {/* Footer */}
         <div className="flex-shrink-0">
           {loggingActivity ? (
-            <LogActivityForm onSave={handleSaveActivity} onCancel={() => setLoggingActivity(false)} />
+            <LogActivityForm onSave={handleSaveActivity} onCancel={() => setLoggingActivity(false)} authorName={user?.name || user?.email || 'You'} />
           ) : (
             <div className="p-4 border-t border-gray-100 flex gap-2 flex-wrap">
               <button

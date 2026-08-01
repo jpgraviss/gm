@@ -24,6 +24,10 @@ let automationsResult: { data: unknown; error: unknown }
 // owner-name-to-owner_id resolution. Defaults to "no match" so existing
 // tests that never touch this table are unaffected.
 let teamMemberResult: { data: unknown; error: unknown } = { data: null, error: null }
+// AUDIT #629 test support — app_settings.pipelines lookup for "Create
+// Deal"'s stage fallback. Defaults to "no custom pipeline saved" (falls
+// back to DEFAULT_PIPELINES) so existing tests are unaffected.
+let appSettingsResult: { data: unknown; error: unknown } = { data: null, error: null }
 const insertCalls: Record<string, unknown[]> = {}
 const updateCalls: Record<string, unknown[]> = {}
 
@@ -37,6 +41,11 @@ const mockDb = {
     if (table === 'team_members') {
       const chain = createSupabaseChain();
       (chain._state as { _result: unknown })._result = teamMemberResult
+      return chain
+    }
+    if (table === 'app_settings') {
+      const chain = createSupabaseChain();
+      (chain._state as { _result: unknown })._result = appSettingsResult
       return chain
     }
     // For any other table, capture inserts and updates
@@ -72,6 +81,7 @@ describe('automations-engine', () => {
     vi.clearAllMocks()
     automationsResult = { data: [], error: null }
     teamMemberResult = { data: null, error: null }
+    appSettingsResult = { data: null, error: null }
     for (const key of Object.keys(insertCalls)) delete insertCalls[key]
     for (const key of Object.keys(updateCalls)) delete updateCalls[key]
   })
@@ -626,5 +636,42 @@ describe('automations-engine', () => {
     await flushPromises()
 
     expect(mockDb.from).toHaveBeenCalledWith('team_members')
+  })
+
+  // AUDIT #629 — "Create Deal"'s runtime default stage was hardcoded to
+  // the literal 'Lead' instead of reading the real, saved pipeline's first
+  // stage (matching #516's fix for the builder dropdown/AI generator).
+  // Since pipeline stages are user-renamable, a deal created this way after
+  // an admin renames the first stage would land on a non-existent stage
+  // name and become invisible on the Pipeline board.
+  describe('Create Deal stage fallback (#629)', () => {
+    const automation = {
+      id: 'auto-deal-1', name: 'Auto-create deal', trigger: 'Form Submitted',
+      actions: [{ type: 'Create Deal', config: {} }], status: 'Active', runs: 0,
+      config: {},
+    }
+
+    it('reads the real first pipeline stage instead of hardcoding "Lead"', async () => {
+      appSettingsResult = {
+        data: {
+          pipelines: [{
+            id: 'client-acquisition',
+            name: 'Client Acquisition',
+            stages: [{ id: 'ca-0', name: 'New Lead In', color: '#000', probability: 10 }],
+          }],
+        },
+        error: null,
+      }
+
+      await executeWorkflow(
+        automation, 'form_submitted',
+        { company: 'Acme Co', contactId: 'ct-1' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockDb as any,
+      )
+      await flushPromises()
+
+      expect(insertCalls['deals'][0]).toEqual(expect.objectContaining({ stage: 'New Lead In' }))
+    })
   })
 })

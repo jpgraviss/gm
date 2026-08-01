@@ -5,6 +5,7 @@ import { wrapBrandedEmail } from '@/lib/email-template'
 import { getSettings } from '@/lib/settings'
 import { shouldSendPushForEvent } from '@/lib/notification-preferences'
 import { contractMonthlyValue } from '@/lib/metrics'
+import { getFirstPipelineStageName } from '@/lib/pipelines'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 const TRIGGER_MAP: Record<string, string> = {
@@ -543,7 +544,12 @@ async function executeAction(
         }
       }
       const dealName = (context.dealName as string) ?? `Deal for ${dealCompany}`
-      const stage = (context.dealStage as string) ?? 'Lead'
+      // AUDIT #629 — matches #516's fix for the builder dropdown/AI
+      // generator, applied to the engine's own runtime default: pipeline
+      // stages are user-renamable (#42), so a deal created with a hardcoded
+      // 'Lead' after the first stage is renamed becomes invisible on the
+      // Pipeline board (which groups strictly by d.stage === s.name).
+      const stage = (context.dealStage as string) ?? await getFirstPipelineStageName(db)
       await db.from('deals').insert({
         id: `deal-auto-${uid()}`,
         company: dealCompany,

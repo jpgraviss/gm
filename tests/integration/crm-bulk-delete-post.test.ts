@@ -42,7 +42,10 @@ vi.mock('@/lib/supabase', () => ({
   createServiceClient: () => mockDb,
 }))
 
-vi.mock('@/lib/rbac', () => ({ requireRole: vi.fn().mockResolvedValue(null) }))
+vi.mock('@/lib/rbac', () => ({
+  requireRole: vi.fn().mockResolvedValue(null),
+  getAuthUser: vi.fn().mockResolvedValue({ name: 'Jamie Rivera', email: 'jamie@gravissmarketing.com' }),
+}))
 
 vi.mock('@/lib/crm-cascade', () => ({
   getCompanyRelatedCounts: vi.fn(),
@@ -51,7 +54,10 @@ vi.mock('@/lib/crm-cascade', () => ({
   deleteCompanyActivities: vi.fn(),
 }))
 
+vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }))
+
 import { POST } from '@/app/api/crm/bulk-delete/route'
+import { logAudit } from '@/lib/audit'
 
 function bulkDelete(type: string, ids: string[]) {
   const req = new NextRequest(new URL('http://localhost/api/crm/bulk-delete'), {
@@ -83,5 +89,17 @@ describe('POST /api/crm/bulk-delete — contacts nulls deals.contact blob (#599)
 
     expect(res.status).toBe(200)
     expect(dealsUpdateCalls).toHaveLength(0)
+  })
+
+  // AUDIT #627 — this route used to write a raw audit_logs insert that
+  // never set user_name (the exact regression #177 called out this route
+  // for) and bypassed the Audit Logging toggle. Now routes through the
+  // shared logAudit() helper, matching every other audited mutation.
+  it('logs the bulk-delete under the real authenticated caller via logAudit()', async () => {
+    await bulkDelete('tickets', ['tkt-1'])
+
+    expect(logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ userName: 'Jamie Rivera', action: 'bulk_delete', module: 'tickets' }),
+    )
   })
 })

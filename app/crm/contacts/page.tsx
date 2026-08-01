@@ -21,6 +21,7 @@ import type { CRMContact, ContactNote, ContactTask, CRMCompany, Deal, Contract, 
 import { useToast } from '@/components/ui/Toast'
 import { downloadCsv } from '@/lib/csv-export'
 import { useTeamMembers } from '@/lib/useTeamMembers'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   X, Phone, Mail, User, Search, Plus, ScrollText, Filter,
   ChevronRight, ChevronLeft, Linkedin, StickyNote, CheckSquare,
@@ -402,6 +403,7 @@ function EditContactPanel({
 
 function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts, projects, crmActivities }: { contact: CRMContact; onClose: () => void; onEdit?: () => void; crmCompanies: CRMCompany[]; deals: Deal[]; contracts: Contract[]; projects: Project[]; crmActivities: CRMActivity[] }) {
   const { toast } = useToast()
+  const { user } = useAuth()
   const [tab, setTab] = useState<'activity' | 'associations' | 'about'>('activity')
   const [taskDone, setTaskDone] = useState<Set<string>>(
     new Set((contact.contactTasks ?? []).filter(t => t.completed).map(t => t.id))
@@ -914,7 +916,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                   <LogActivityForm
                     onSave={handleSaveActivity}
                     onCancel={() => setLoggingActivity(false)}
-                    authorName="You"
+                    authorName={user?.name || user?.email || 'You'}
                   />
                 )}
 

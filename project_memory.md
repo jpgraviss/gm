@@ -133,6 +133,23 @@ here is generated output.
   is no longer permanently empty — keywords compute live from real
   `tracked_keywords` data, other metrics are a real admin-editable section.
   See `AUDIT.md` #666-#689 for the full list.
+- Full-app audit sweep (8 agents, widest scope yet) at the user's request to
+  audit the whole app and assess how much is left. Only 10 new findings
+  (#691-700) surfaced — this app has been through 8+ full/coverage-gap
+  sweeps and is genuinely mature. 7 fixed directly, including a real
+  regression in this session's own #675 `ClientIntegrationsPanel` rewrite
+  (dead recovery button, caught by the adversarial-review lane) and a
+  missing `fireAutomations('contract_executed', ...)` call on the real
+  e-signature completion path. One agent's finding (a push-notification
+  claim referencing #152) didn't hold up under investigation — traced
+  `AppShell.tsx`'s actual render branches and confirmed portal clients never
+  reach `PushNotificationBanner` regardless, so `#152`'s stale claim was
+  corrected in place instead of "fixing" a non-existent bug. 2 left open as
+  genuine feature-completion/product-decision work, not bugs: #693 (client
+  Delivery Timeline's per-step detail panel needs real data threaded from
+  several tables) and #699 (calendar-sync pushes public bookings to an
+  arbitrary staff calendar — `booking_types` has no owner concept in the
+  schema at all). See `AUDIT.md` #691-#700 for the full list.
 
 ## Where to look first
 

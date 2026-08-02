@@ -88,6 +88,7 @@ function PickerField({
   const [options, setOptions] = useState<PickerOption[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [manualEntry, setManualEntry] = useState(false)
+  const [forceDropdown, setForceDropdown] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -107,7 +108,14 @@ function PickerField({
   // A previously-saved value that isn't in the live list (removed account,
   // typed before this dropdown existed) still needs to show — falls back
   // to manual entry automatically rather than silently clearing it.
-  const valueMissingFromList = !!value && options && !options.some(o => o.id === value)
+  // AUDIT #692 — this auto-fallback left the "Choose from connected accounts
+  // instead" recovery button underneath dead: its onClick only reset
+  // `manualEntry`, but `manualEntry` was never true in this branch (it's
+  // `valueMissingFromList` keeping it here), so the click did nothing and
+  // there was no way back into the dropdown short of clearing the field
+  // entirely. `forceDropdown` lets that button actually override the
+  // auto-fallback once the user explicitly asks to see the list.
+  const valueMissingFromList = !!value && options && !options.some(o => o.id === value) && !forceDropdown
 
   if (showDropdown && !valueMissingFromList) {
     return (
@@ -146,7 +154,11 @@ function PickerField({
         <p className="text-[10px] text-gray-400">Couldn&apos;t load the connected account list (check Settings → Integrations) — enter the ID directly.</p>
       )}
       {options && options.length > 0 && (
-        <button type="button" onClick={() => setManualEntry(false)} className="text-[11px] text-emerald-700 hover:underline self-start">
+        <button
+          type="button"
+          onClick={() => { setManualEntry(false); setForceDropdown(true) }}
+          className="text-[11px] text-emerald-700 hover:underline self-start"
+        >
           Choose from connected accounts instead
         </button>
       )}

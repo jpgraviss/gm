@@ -13,7 +13,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GRAVHUB_SEO_VERSION', '1.5.5' );
+// AUDIT #700 — this drifted out of sync with the header above (commit
+// 8338086, the #563 XSS fix, bumped the header but not this constant),
+// leaving WP core's Plugins list showing 1.5.6 while the plugin's own
+// settings-page footer and asset cache-busting query string still read
+// 1.5.5 from here. Keep these two in lockstep on every version bump.
+define( 'GRAVHUB_SEO_VERSION', '1.5.6' );
 define( 'GRAVHUB_SEO_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'GRAVHUB_SEO_PLUGIN_FILE', __FILE__ );

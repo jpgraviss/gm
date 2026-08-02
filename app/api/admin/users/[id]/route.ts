@@ -33,7 +33,16 @@ export const PUT = withErrorHandler('admin/users/[id] PUT', async (req, { params
   if (body.role !== undefined)            update.role = body.role
   if (body.unit !== undefined)            update.unit = body.unit
   if (body.status !== undefined)          update.status = body.status
-  if (body.isAdmin !== undefined)         update.is_admin = body.isAdmin
+  // AUDIT #696 — same fix as #667 on the sibling PUT /api/team-members/[id]
+  // route, missed here: deriving is_admin from role whenever role changes is
+  // the only way the two independent columns can't drift regardless of
+  // which caller changes them. A direct API caller changing only isAdmin
+  // (no role in the same call) is still honored, for completeness.
+  if (body.role !== undefined) {
+    update.is_admin = body.role === 'Super Admin'
+  } else if (body.isAdmin !== undefined) {
+    update.is_admin = body.isAdmin
+  }
   if (body.suspendedAt !== undefined)     update.suspended_at = body.suspendedAt
   if (body.suspendedUntil !== undefined)  update.suspended_until = body.suspendedUntil
   if (body.suspendedReason !== undefined) update.suspended_reason = body.suspendedReason

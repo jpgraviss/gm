@@ -92,13 +92,49 @@ function downloadReceipt(invoice: Invoice) {
   w.document.close()
 }
 
-function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: Invoice; onClose: () => void; contracts: Contract[]; allInvoices: Invoice[] }) {
+function InvoicePanel({ invoice, onClose, onUpdate, contracts, allInvoices }: { invoice: Invoice; onClose: () => void; onUpdate: (id: string, patch: Partial<Invoice>) => void; contracts: Contract[]; allInvoices: Invoice[] }) {
   const { toast } = useToast()
   const [generatingLink, setGeneratingLink] = useState(false)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
   const linkedContract = contracts.find(c => c.id === invoice.contractId)
   const relatedInvoices = allInvoices.filter(i => i.contractId === invoice.contractId && i.id !== invoice.id)
   const isOverdue = invoice.status === 'Overdue'
   const isPaid = invoice.status === 'Paid'
+
+  // AUDIT #694 — this panel had no way to change an invoice's status at
+  // all (only "Copy Payment Link" / "Download Receipt"). The only place in
+  // the app such a control existed was app/contracts/page.tsx's
+  // ContractPanel → "Linked Invoices", only reachable for an invoice that
+  // resolves to some contract — invoices created via "Create Invoice from
+  // Unbilled Time" or CSV import never set contractId, and a company with
+  // no contract had nowhere for such an invoice to surface at all. Staff
+  // had no in-app way to record a non-Stripe payment (check/wire/cash) as
+  // Paid, or move Pending → Sent, for a real subset of invoices. Mirrors
+  // ContractPanel's handleInvoiceAction pattern.
+  async function handleStatusChange(next: InvoiceStatus) {
+    setUpdatingStatus(true)
+    try {
+      const body: Record<string, unknown> = { status: next }
+      const patch: Partial<Invoice> = { status: next }
+      if (next === 'Paid') {
+        const today = new Date().toISOString().split('T')[0]
+        body.paidDate = today
+        patch.paidDate = today
+      }
+      const res = await fetch(`/api/invoices/${invoice.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error('Failed to update invoice')
+      onUpdate(invoice.id, patch)
+      toast(`${invoice.id.toUpperCase()} marked as ${next}`, 'success')
+    } catch {
+      toast('Failed to update invoice status. Please try again.', 'error')
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
 
   async function handleCopyPaymentLink() {
     setGeneratingLink(true)
@@ -231,6 +267,26 @@ function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: I
         </div>
 
         <div className="flex-shrink-0 p-4 border-t border-gray-100 flex flex-col gap-2">
+          {(invoice.status === 'Pending' || (invoice.status !== 'Paid' && invoice.status !== 'Cancelled')) && (
+            <div className="flex gap-2">
+              {invoice.status === 'Pending' && (
+                <button
+                  onClick={() => handleStatusChange('Sent')}
+                  disabled={updatingStatus}
+                  className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-700 text-xs font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  {updatingStatus ? 'Updating...' : 'Mark as Sent'}
+                </button>
+              )}
+              <button
+                onClick={() => handleStatusChange('Paid')}
+                disabled={updatingStatus}
+                className="flex-1 py-2 rounded-xl border border-emerald-200 text-emerald-700 text-xs font-semibold hover:bg-emerald-50 transition-colors disabled:opacity-50"
+              >
+                {updatingStatus ? 'Updating...' : 'Mark as Paid'}
+              </button>
+            </div>
+          )}
           <div className="flex gap-2">
             {invoice.status === 'Paid' && (
               <button onClick={() => downloadReceipt(invoice)} className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
@@ -1030,6 +1086,10 @@ export default function BillingPage() {
         <InvoicePanel
           invoice={selectedInvoice}
           onClose={() => setSelectedInvoice(null)}
+          onUpdate={(id, patch) => {
+            setLocalInvoices(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
+            setSelectedInvoice(prev => prev && prev.id === id ? { ...prev, ...patch } : prev)
+          }}
           contracts={contracts}
           allInvoices={localInvoices}
         />

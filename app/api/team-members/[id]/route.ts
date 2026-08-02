@@ -73,10 +73,21 @@ export const DELETE = withErrorHandler('team-members/[id] DELETE', async (req: N
   if (denied) return denied
   const actor = await getAuthUser(req)
   const db = createServiceClient()
-  const { error } = await db.from('team_members').delete().eq('id', id)
+  // AUDIT #673 — this used to hard-delete (row permanently gone,
+  // irreversible), while the identically-worded "Remove user" action on
+  // DELETE /api/admin/users/[id] soft-deletes (status: 'deleted',
+  // deleted_at, row preserved and reversible) — two admin surfaces, same
+  // label, opposite real behavior, with neither UI disclosing which.
+  // Now matches the safer, reversible admin/users/[id] behavior.
+  const { data, error } = await db
+    .from('team_members')
+    .update({ status: 'deleted', deleted_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
   if (error) {
     throw new Error(error?.message || 'Failed to delete team member')
   }
   logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_team_member', module: 'admin', type: 'warning', metadata: { memberId: id } })
-  return NextResponse.json({ deleted: id })
+  return NextResponse.json(data)
 })

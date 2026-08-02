@@ -105,6 +105,10 @@ here is generated output.
   correctly scoped, and list/download dual-read the legacy folder so
   nothing's invisible in the meantime — but pre-existing files stay under
   their old (collision-prone) path until this script actually runs.
+- **`supabase/migrations/add_dismiss_duplicate_rpc.sql`** — adds the
+  `dismiss_duplicate()` RPC `POST /api/crm/duplicates/ignore` now calls.
+  Not yet confirmed applied — until it runs, "Ignore" on the CRM Duplicates
+  page will 500.
 
 ## Recently shipped this session
 
@@ -116,12 +120,23 @@ here is generated output.
 - Service-line task visibility: a task tagged with a Service Line is
   private to its assignee; leaving it unset keeps the task "open" under the
   existing department-sharing rule. Leadership/Super Admin/Department
-  Manager/admins are unrestricted.
+  Manager/admins are unrestricted (including the `'Dept Manager'` role
+  alias, not just the long-form `'Department Manager'` string).
 - Fixed AUDIT `#584` (cross-tenant file-storage collision) in code —
   `lib/file-storage.ts`'s `resolveFolder()` keys the `client-files` bucket
   path off `crm_companies.id` instead of a lossy sanitized-name slug. Data
   migration for existing files is still pending — see "Pending user action"
   below.
+- Full coverage-gap audit sweep (7 agents) + a "just do the work" follow-up
+  pass — 22 of 24 new findings fixed directly, including a HIGH `role`/
+  `is_admin` desync between two admin surfaces (Settings vs Admin Panel)
+  that could silently leave a demoted Super Admin with full admin access,
+  and a CSRF block that likely broke the browser extension's Gmail
+  tracking feature entirely since it shipped. `ClientIntegrationsPanel.tsx`
+  now has real dropdown pickers instead of free-text ID entry. `/client/seo`
+  is no longer permanently empty — keywords compute live from real
+  `tracked_keywords` data, other metrics are a real admin-editable section.
+  See `AUDIT.md` #666-#689 for the full list.
 
 ## Where to look first
 

@@ -73,18 +73,34 @@ here is generated output.
   `npx vitest run` before committing — this repo's CI expects all three
   clean.
 
-## Current business-data import state (as of 2026-08-01)
+## Current business-data import state (as of 2026-08-02)
 
 - ~30 real Graviss Marketing clients imported into `crm_companies` from an
-  Asana export + the "Master Client Register" document.
-- 55 real Asana tasks live in `app_tasks` with `project_id` set (migrated
-  off the dead `projects.tasks` JSONB — see "Two task systems" above).
+  Asana export + the "Master Client Register" document. Confirmed run by
+  the user (v1/v2/v3 scripts all reported back "Success").
 - Deliberately deferred, not done: Master Client Register Part 7
   contract $ amounts/dates (only BMV Service Pro and ADCO Outdoor have real
   numbers documented in the register; the rest would be guesses); 6
   archived/inactive companies (Greenville Outdoors, Street Smart Media, Big
   Dog Partners Hardware, Midha Realty, Neighborhood TV, Lead Outdoor)
   intentionally excluded per "old or finished, do not add."
+
+## Pending user action (delivered, not yet confirmed run)
+
+- **`asana_import_v4_migrate_to_app_tasks.sql`** — moves the 55 Asana tasks
+  out of the dead `projects.tasks` JSONB into real `app_tasks` rows with
+  `project_id` set, so they actually render on each project's task board.
+  Delivered to the user; no "Success"/error report back yet as of this
+  writing. Until it's run, those 55 tasks are still sitting inert in
+  `projects.tasks` — don't assume they're live in `app_tasks`.
+- **`migrate_file_storage_to_company_id.mjs`** — standalone Node script
+  (needs the user's real `SUPABASE_SERVICE_ROLE_KEY`, run outside this
+  sandbox) that moves existing `client-files` Storage objects from their
+  old sanitized-name folder to the new `company_id` folder. The *code* fix
+  (AUDIT `#584`) is live and pushed regardless — new uploads are already
+  correctly scoped, and list/download dual-read the legacy folder so
+  nothing's invisible in the meantime — but pre-existing files stay under
+  their old (collision-prone) path until this script actually runs.
 
 ## Recently shipped this session
 
@@ -97,11 +113,11 @@ here is generated output.
   private to its assignee; leaving it unset keeps the task "open" under the
   existing department-sharing rule. Leadership/Super Admin/Department
   Manager/admins are unrestricted.
-- Fixed AUDIT `#584` (cross-tenant file-storage collision) —
+- Fixed AUDIT `#584` (cross-tenant file-storage collision) in code —
   `lib/file-storage.ts`'s `resolveFolder()` keys the `client-files` bucket
-  path off `crm_companies.id` instead of a lossy sanitized-name slug, with a
-  dual-read fallback to the legacy folder until the (separately delivered)
-  storage migration script actually runs.
+  path off `crm_companies.id` instead of a lossy sanitized-name slug. Data
+  migration for existing files is still pending — see "Pending user action"
+  below.
 
 ## Where to look first
 

@@ -17,6 +17,14 @@ export const GET = withErrorHandler('calendar/bookings/[id]/ics GET', async (_re
   if (!booking) {
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
   }
+  // AUDIT #687 — this served an .ics for any booking id regardless of
+  // status, so a guest could still download calendar content for a
+  // booking cancelled elsewhere. Link itself is unguessable (keyed by a
+  // gen_random_uuid() primary key, no outbound fetch), so this is a
+  // data-freshness fix, not an access-control one.
+  if (booking.status === 'cancelled') {
+    return NextResponse.json({ error: 'This booking has been cancelled' }, { status: 404 })
+  }
 
   const btName = (booking.booking_types as { name: string } | null)?.name ?? 'Meeting'
 

@@ -83,6 +83,7 @@ function mapProjectResponse(proj: any): Project {
     contractId: proj.contract_id ?? proj.contractId ?? '',
     company: proj.company,
     serviceType: proj.service_type ?? proj.serviceType,
+    serviceTypes: proj.service_types ?? proj.serviceTypes ?? [],
     status: proj.status,
     startDate: proj.start_date ?? proj.startDate ?? '',
     launchDate: proj.launch_date ?? proj.launchDate ?? '',
@@ -557,7 +558,9 @@ function ProjectSettingsModal({
   const teamMembers = useTeamMembers()
   const [company, setCompany] = useState(project.company)
   const [companyId, setCompanyId] = useState<string | null | undefined>(project.companyId)
-  const [serviceType, setServiceType] = useState(project.serviceType)
+  const [selectedServices, setSelectedServices] = useState<string[]>(
+    project.serviceTypes && project.serviceTypes.length > 0 ? project.serviceTypes : [project.serviceType]
+  )
   const [status, setStatus] = useState(project.status)
   const [startDate, setStartDate] = useState(project.startDate)
   const [launchDate, setLaunchDate] = useState(project.launchDate)
@@ -589,19 +592,23 @@ function ProjectSettingsModal({
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Overview</label>
             <textarea value={overview} onChange={e => setOverview(e.target.value.slice(0, 5000))} rows={4} maxLength={5000} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-600 resize-y" placeholder="Longer-form project overview, shown on the Overview tab..." />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Type</label>
-              <select value={serviceType} onChange={e => setServiceType(e.target.value as Project['serviceType'])} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none bg-white">
-                {SERVICE_NAMES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Services</label>
+            <div className="flex flex-wrap gap-2">
+              {SERVICE_NAMES.map(s => (
+                <label key={s} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border cursor-pointer transition-colors ${selectedServices.includes(s) ? 'bg-emerald-50 border-emerald-600 text-emerald-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                  <input type="checkbox" checked={selectedServices.includes(s)} className="hidden"
+                    onChange={e => setSelectedServices(prev => e.target.checked ? [...prev, s] : prev.filter(x => x !== s))} />
+                  {s}
+                </label>
+              ))}
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Status</label>
-              <select value={status} onChange={e => setStatus(e.target.value as ProjectStatus)} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none bg-white">
-                {statusOrder.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Status</label>
+            <select value={status} onChange={e => setStatus(e.target.value as ProjectStatus)} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none bg-white">
+              {statusOrder.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -641,7 +648,11 @@ function ProjectSettingsModal({
         <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancel</button>
           <button
-            onClick={() => { onUpdate({ company, companyId, serviceType, status, startDate, launchDate, color, assignedTeam: selectedTeam, description, overview }); onClose() }}
+            onClick={() => {
+              const services = selectedServices.length > 0 ? selectedServices : ['General']
+              onUpdate({ company, companyId, serviceType: services[0] as Project['serviceType'], serviceTypes: services as Project['serviceTypes'], status, startDate, launchDate, color, assignedTeam: selectedTeam, description, overview })
+              onClose()
+            }}
             className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold"
             style={{ background: color }}
           >
@@ -1013,7 +1024,9 @@ export default function ProjectDetailPage() {
                 <div className="w-3 h-3 rounded" style={{ background: projectColor }} />
                 <h1 className="text-lg font-bold text-gray-900 truncate">{project.company}</h1>
                 <StatusBadge label={project.status} colorClass={projectStatusColors[project.status]} />
-                <StatusBadge label={project.serviceType} colorClass={serviceTypeColors[project.serviceType]} />
+                {(project.serviceTypes && project.serviceTypes.length > 0 ? project.serviceTypes : [project.serviceType]).map(st => (
+                  <StatusBadge key={st} label={st} colorClass={serviceTypeColors[st] ?? 'bg-gray-100 text-gray-600'} />
+                ))}
               </div>
               {project.description && <p className="text-xs text-gray-400 mt-1 truncate">{project.description}</p>}
             </div>
@@ -1246,7 +1259,7 @@ export default function ProjectDetailPage() {
                 {[
                   { label: 'Start Date', value: project.startDate ? formatDate(project.startDate) : 'Not set' },
                   { label: 'Launch Date', value: project.launchDate ? formatDate(project.launchDate) : 'Not set' },
-                  { label: 'Service', value: project.serviceType },
+                  { label: 'Service', value: (project.serviceTypes && project.serviceTypes.length > 0 ? project.serviceTypes : [project.serviceType]).join(', ') },
                 ].map(item => (
                   <div key={item.label} className="p-3 bg-gray-50 rounded-xl">
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">{item.label}</p>

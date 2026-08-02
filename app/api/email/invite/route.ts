@@ -22,13 +22,20 @@ export const POST = withErrorHandler('email/invite POST', async (req: NextReques
   const verificationCode = Math.floor(100000 + Math.random() * 900000).toString()
   const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
+  // AUDIT #684 — `_` is a valid, unremarkable character in a real email
+  // local-part (e.g. jane_doe@company.com) but is also Postgres LIKE's
+  // single-char wildcard. Unescaped, an invite/resend to such an address
+  // could match and overwrite a DIFFERENT team member's verification
+  // code/expiry (whoever's email differs by exactly one character in that
+  // position), silently corrupting their pending setup state. Escaping
+  // `%`/`_` makes this an exact (still case-insensitive) match.
   await db
     .from('team_members')
     .update({
       verification_code: verificationCode,
       verification_expires: verificationExpires,
     })
-    .ilike('email', email.toLowerCase().trim())
+    .ilike('email', email.toLowerCase().trim().replace(/[%_]/g, '\\$&'))
 
   const setupUrl = `${appUrl}/setup-account?email=${encodeURIComponent(email)}&token=${verificationCode}`
 
@@ -241,7 +248,7 @@ function adminNotificationHtml({
           <td style="padding:32px 40px;">
             <h2 style="margin:0 0 16px;color:#111827;font-size:18px;font-weight:700;">New Team Member Setup</h2>
             <p style="margin:0 0 20px;color:#6b7280;font-size:14px;line-height:1.6;">
-              <strong>${name}</strong> (${email}) is setting up their ${settings.branding.appName} account. Please review and approve their access in the admin panel.
+              <strong>${name}</strong> (${email}) has been invited to set up their ${settings.branding.appName} account. You'll be able to review and approve their access in the admin panel once they've entered their verification code.
             </p>
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:20px;">
               <tr>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { getGBPReviews, replyToGBPReview, STAR_TO_NUMBER } from '@/lib/google-business-profile'
+import { getGBPReviews, STAR_TO_NUMBER } from '@/lib/google-business-profile'
 import type { GBPStarRating } from '@/lib/google-business-profile'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
@@ -77,25 +77,9 @@ async function fetchAndReturn(locationName: string) {
   return NextResponse.json(mapped)
 }
 
-export const POST = withErrorHandler('integrations/google-reviews POST', async (req) => {
-  const denied = await requireRole(req, 'Team Member')
-  if (denied) return denied
-
-  let body: { location?: string; reviewId?: string; comment?: string }
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-  }
-
-  const { location, reviewId, comment } = body
-  if (!location || !reviewId || !comment) {
-    return NextResponse.json(
-      { error: 'location, reviewId, and comment are required' },
-      { status: 400 },
-    )
-  }
-
-  const reply = await replyToGBPReview(location, reviewId, comment)
-  return NextResponse.json({ ok: true, reply })
-})
+// AUDIT #680 — this route's POST (review-reply) was a dead duplicate of
+// `app/api/integrations/gbp/reply/route.ts`, which is the real path
+// `ReputationTab.tsx` actually calls and which logs the reply via
+// `logAudit()`. This one never did, and had no caller — removed rather
+// than kept as a second live-write path that would silently bypass the
+// audit trail if anything were ever pointed at it.

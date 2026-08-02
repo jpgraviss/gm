@@ -8,13 +8,19 @@ import { VALID_STATUSES, VALID_PRIORITIES, VALID_CATEGORIES, mapTask } from '../
 // Mirrors the department-visibility rule in tasks GET (Operations should
 // never touch a Finance task by id just because they know/guessed its id) —
 // PATCH/DELETE previously had no such scoping despite the list route
-// deliberately hiding these tasks from the same caller.
+// deliberately hiding these tasks from the same caller. Service-line
+// scoping mirrors the same GET rule too: a service-tagged task is private
+// to its assignee regardless of department, since it never broadcast to
+// the department list in the first place.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function canTouchTask(user: any, taskDepartment: string | null, assignedTo: string): Promise<boolean> {
-  if (user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin') return true
+async function canTouchTask(user: any, taskDepartment: string | null, taskServiceLine: string | null, assignedTo: string): Promise<boolean> {
+  // AUDIT #670 — same 'Dept Manager'/'Department Manager' alias gap as
+  // the GET filter in this file's sibling route.
+  if (user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin' || user.role === 'Department Manager' || user.role === 'Dept Manager') return true
+  if (assignedTo === user.name) return true
+  if (taskServiceLine) return false
   if (!taskDepartment || taskDepartment === 'CRM' || taskDepartment === 'General') return true
-  if (departmentForUnit(user.unit) === taskDepartment) return true
-  return assignedTo === user.name
+  return departmentForUnit(user.unit) === taskDepartment
 }
 
 export const PATCH = withErrorHandler('tasks/[id] PATCH', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
@@ -43,8 +49,8 @@ export const PATCH = withErrorHandler('tasks/[id] PATCH', async (req: NextReques
   }
 
   const user = await getAuthUser(req)
-  const { data: existing } = await db.from('app_tasks').select('department, assigned_to').eq('id', id).maybeSingle()
-  if (existing && user && !(await canTouchTask(user, existing.department, existing.assigned_to))) {
+  const { data: existing } = await db.from('app_tasks').select('department, assigned_to, team_service_line').eq('id', id).maybeSingle()
+  if (existing && user && !(await canTouchTask(user, existing.department, existing.team_service_line, existing.assigned_to))) {
     return NextResponse.json({ error: 'Forbidden: task belongs to another department' }, { status: 403 })
   }
 
@@ -81,8 +87,8 @@ export const DELETE = withErrorHandler('tasks/[id] DELETE', async (req: NextRequ
   const db = createServiceClient()
 
   const user = await getAuthUser(req)
-  const { data: existing } = await db.from('app_tasks').select('department, assigned_to').eq('id', id).maybeSingle()
-  if (existing && user && !(await canTouchTask(user, existing.department, existing.assigned_to))) {
+  const { data: existing } = await db.from('app_tasks').select('department, assigned_to, team_service_line').eq('id', id).maybeSingle()
+  if (existing && user && !(await canTouchTask(user, existing.department, existing.team_service_line, existing.assigned_to))) {
     return NextResponse.json({ error: 'Forbidden: task belongs to another department' }, { status: 403 })
   }
 

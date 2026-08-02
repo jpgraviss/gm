@@ -29,9 +29,24 @@ export const PUT = withErrorHandler('team-members/[id] PUT', async (req: NextReq
   if (body.role !== undefined)     update.role = body.role
   if (body.unit !== undefined)     update.unit = body.unit
   if (body.status !== undefined)   update.status = body.status
-  if (body.isAdmin !== undefined)  update.is_admin = body.isAdmin
   if (body.initials !== undefined) update.initials = body.initials
   if (body.emailSignature !== undefined) update.email_signature = body.emailSignature
+  // AUDIT #667 — role and is_admin are two independent columns that two
+  // different admin surfaces (app/admin/page.tsx, app/settings/page.tsx)
+  // both PUT to this same route. Only the former computed isAdmin itself
+  // client-side before sending it; the latter never sent it at all, so a
+  // role change made there left is_admin silently stale — most dangerous
+  // on demotion, where a former Super Admin kept full requireAdmin access
+  // (the Admin Panel itself, user CRUD, pending-approval queue) indefinitely
+  // with no visible sign anything was wrong. Deriving is_admin here, once,
+  // whenever role changes is the only way it can't drift regardless of
+  // which caller changes it. A direct API caller changing only isAdmin
+  // (no role in the same call) is still honored, for completeness.
+  if (body.role !== undefined) {
+    update.is_admin = body.role === 'Super Admin'
+  } else if (body.isAdmin !== undefined) {
+    update.is_admin = body.isAdmin
+  }
   const { data, error } = await db.from('team_members').update(update).eq('id', id).select().single()
   if (error) {
     throw new Error(error?.message || 'Failed to update team member')
@@ -58,10 +73,21 @@ export const DELETE = withErrorHandler('team-members/[id] DELETE', async (req: N
   if (denied) return denied
   const actor = await getAuthUser(req)
   const db = createServiceClient()
-  const { error } = await db.from('team_members').delete().eq('id', id)
+  // AUDIT #673 — this used to hard-delete (row permanently gone,
+  // irreversible), while the identically-worded "Remove user" action on
+  // DELETE /api/admin/users/[id] soft-deletes (status: 'deleted',
+  // deleted_at, row preserved and reversible) — two admin surfaces, same
+  // label, opposite real behavior, with neither UI disclosing which.
+  // Now matches the safer, reversible admin/users/[id] behavior.
+  const { data, error } = await db
+    .from('team_members')
+    .update({ status: 'deleted', deleted_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
   if (error) {
     throw new Error(error?.message || 'Failed to delete team member')
   }
   logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_team_member', module: 'admin', type: 'warning', metadata: { memberId: id } })
-  return NextResponse.json({ deleted: id })
+  return NextResponse.json(data)
 })

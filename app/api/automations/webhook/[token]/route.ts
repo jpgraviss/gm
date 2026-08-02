@@ -1,7 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { fireAutomations } from '@/lib/automations-engine'
+
+// AUDIT #686 — matches lib/webhook-verify.ts's established constant-time
+// pattern for this class of secret comparison, instead of the naive `===`
+// this route used. Practical risk was low (192 bits of client-generated
+// randomness, brute force is infeasible regardless of timing), but it's a
+// real deviation from the app's own convention for comparing a webhook
+// secret. Requires equal-length buffers; a length mismatch (never a real
+// match) is treated as a non-match without calling timingSafeEqual.
+function tokensMatch(a: string, b: string): boolean {
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) return false
+  return crypto.timingSafeEqual(bufA, bufB)
+}
 
 // Public, unauthenticated by necessity — this is the URL a third-party
 // system (Zapier, Stripe, an ad platform, a client's own tooling) POSTs to.
@@ -26,9 +41,10 @@ export const POST = withErrorHandler('automations/webhook/[token] POST', async (
     .select('id, status, config')
     .eq('trigger', 'Webhook Received')
 
-  const automation = (automations ?? []).find(
-    (a) => (a.config as Record<string, unknown> | null)?.webhookToken === token,
-  )
+  const automation = (automations ?? []).find((a) => {
+    const configToken = (a.config as Record<string, unknown> | null)?.webhookToken
+    return typeof configToken === 'string' && tokensMatch(configToken, token)
+  })
 
   if (!automation) {
     return NextResponse.json({ error: 'Unknown webhook' }, { status: 404 })

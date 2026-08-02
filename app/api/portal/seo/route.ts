@@ -45,8 +45,42 @@ export const GET = withErrorHandler('portal/seo GET', async (req) => {
 
   const showSeo = visibility?.showSeoStrategy === true || config.show_seo === true
 
+  // AUDIT #672 — the page rendering this (app/client/seo/page.tsx) shows
+  // Keyword Rankings, 4 KPI cards, and a Monthly Deliverables checklist,
+  // but nothing ever wrote most of those fields — every client saw an
+  // empty page. organicTraffic/domainAuthority/backlinks/deliverables
+  // have no internal data source, so they're now admin-editable
+  // (portal_config.seoMetrics, app/admin/portal-management/page.tsx).
+  // keywords/keywordsRanking are NOT hand-entered — they compute live
+  // from the real tracked_keywords table below, the same GSC-backed data
+  // staff already see, only visible to the client if explicitly marked
+  // portal_visible (same rule GET /api/tracked-keywords enforces).
+  const seoMetrics = (config.seoMetrics as Record<string, unknown> | undefined) ?? {}
+  const { data: trackedKeywords } = await db
+    .from('tracked_keywords')
+    .select('keyword, current_position, previous_position')
+    .eq('company_name', company)
+    .eq('portal_visible', true)
+    .order('current_position', { ascending: true, nullsFirst: false })
+    .limit(20)
+  const keywords = (trackedKeywords ?? []).map(k => ({
+    keyword: k.keyword,
+    currentRank: k.current_position ?? 0,
+    previousRank: k.previous_position ?? k.current_position ?? 0,
+  }))
+
+  const mergedStrategy = {
+    ...(seoStrategy ?? {}),
+    organicTraffic: typeof seoMetrics.organicTraffic === 'number' ? seoMetrics.organicTraffic : 0,
+    domainAuthority: typeof seoMetrics.domainAuthority === 'number' ? seoMetrics.domainAuthority : 0,
+    backlinks: typeof seoMetrics.backlinks === 'number' ? seoMetrics.backlinks : 0,
+    deliverables: Array.isArray(seoMetrics.deliverables) ? seoMetrics.deliverables : [],
+    keywords,
+    keywordsRanking: keywords.length,
+  }
+
   return NextResponse.json({
-    strategy: seoStrategy,
+    strategy: mergedStrategy,
     showSeo,
   })
 })

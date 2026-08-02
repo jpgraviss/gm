@@ -54,17 +54,33 @@ export const GET = withErrorHandler('tasks GET', async (req: NextRequest) => {
   if (projectId)  query = query.eq('project_id', projectId)
   if (companyId)  query = query.eq('company_id', companyId)
 
-  // Department visibility: Leadership/Super Admin/admins see everything.
-  // Everyone else only sees CRM/General/untagged tasks (cross-functional,
-  // company-scoped work), tasks in their own mapped department, and
-  // anything explicitly assigned to them — never another department's
-  // internal task list (e.g. Operations never sees Finance tasks).
-  const unrestricted = user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin'
+  // Department visibility: Leadership/Super Admin/Department Manager/admins
+  // see everything (2026-08-01: Department Manager was previously scoped to
+  // just their own department — user decision to make every leadership tier
+  // unrestricted). Everyone else only sees CRM/General/untagged tasks
+  // (cross-functional, company-scoped work), tasks in their own mapped
+  // department, and anything explicitly assigned to them — never another
+  // department's internal task list (e.g. Operations never sees Finance
+  // tasks).
+  //
+  // Service-line visibility layers on top: a task tagged with
+  // team_service_line (Website Build, SEO / AEO, etc.) is private to its
+  // assignee, not broadcast to the rest of its department the way an
+  // untagged task is — leaving Service Line unset is what makes a task
+  // "open" and shareable within the department rule above.
+  // AUDIT #670 — 'Dept Manager' and 'Department Manager' are two distinct
+  // role strings lib/rbac.ts treats as aliases at the same hierarchy level
+  // (app/admin/page.tsx's role editor assigns the literal 'Dept Manager'),
+  // but only the long form was covered here — matching app/time-tracking/
+  // page.tsx's existing special-case for the same alias gap.
+  const unrestricted = user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin' || user.role === 'Department Manager' || user.role === 'Dept Manager'
   if (!unrestricted) {
     const dept = departmentForUnit(user.unit)
     const safeDepts = Array.from(new Set(['CRM', 'General', ...(dept ? [dept] : [])]))
     const safeName = user.name.replace(/[,()]/g, '')
-    query = query.or(`department.is.null,department.in.(${safeDepts.join(',')}),assigned_to.eq.${safeName}`)
+    query = query.or(
+      `assigned_to.eq.${safeName},and(team_service_line.is.null,department.is.null),and(team_service_line.is.null,department.in.(${safeDepts.join(',')}))`
+    )
   }
 
   query = applyCursor(query, pag)

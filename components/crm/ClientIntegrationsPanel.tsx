@@ -37,6 +37,123 @@ const ALL_WIDGETS = [
   { id: 'uptime',     label: 'Site uptime' },
 ]
 
+// AUDIT #675 — id/idField/labelField, plus a `map` to normalize each
+// integration's real, differently-shaped list response into one common
+// {id, label} option shape this panel's single <PickerField> renders.
+interface PickerOption {
+  id: string
+  label: string
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapGscOptions(rows: any[]): PickerOption[] {
+  return rows.map(r => ({ id: r.siteUrl, label: r.siteUrl }))
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapGa4Options(rows: any[]): PickerOption[] {
+  return rows.map(r => ({ id: r.propertyId ?? r.id, label: `${r.displayName} — ${r.accountName}` }))
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapAdsOptions(rows: any[]): PickerOption[] {
+  return rows.map(r => ({ id: r.id, label: `${r.descriptiveName || r.name} (${r.id})` }))
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapMetaOptions(rows: any[]): PickerOption[] {
+  return rows.map(r => ({ id: r.id, label: `${r.name} (${r.id})` }))
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapGbpOptions(rows: any[]): PickerOption[] {
+  return rows.map(r => ({ id: r.locationName, label: `${r.title}${r.address ? ` — ${r.address}` : ''}` }))
+}
+
+// A real dropdown backed by the account's already-working list endpoint
+// when it loads successfully, falling back to the original free-text
+// input when the integration isn't connected, the fetch fails, or the
+// account genuinely isn't in the returned list — so a typo can't happen
+// for the common case, but nothing is blocked when the list can't load.
+function PickerField({
+  endpoint,
+  mapOptions,
+  value,
+  onChange,
+  placeholder,
+}: {
+  endpoint: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  mapOptions: (rows: any[]) => PickerOption[]
+  value: string
+  onChange: (id: string, label?: string) => void
+  placeholder: string
+}) {
+  const [options, setOptions] = useState<PickerOption[] | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [manualEntry, setManualEntry] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(endpoint)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('failed'))))
+      .then((rows) => {
+        if (cancelled) return
+        if (!Array.isArray(rows)) throw new Error('unexpected shape')
+        setOptions(mapOptions(rows))
+      })
+      .catch(() => { if (!cancelled) setLoadFailed(true) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endpoint])
+
+  const showDropdown = options && options.length > 0 && !manualEntry
+  // A previously-saved value that isn't in the live list (removed account,
+  // typed before this dropdown existed) still needs to show — falls back
+  // to manual entry automatically rather than silently clearing it.
+  const valueMissingFromList = !!value && options && !options.some(o => o.id === value)
+
+  if (showDropdown && !valueMissingFromList) {
+    return (
+      <div className="flex items-center gap-2">
+        <select
+          value={value}
+          onChange={(e) => {
+            const selected = options.find(o => o.id === e.target.value)
+            onChange(e.target.value, selected?.label)
+          }}
+          className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+        >
+          <option value="">Select…</option>
+          {options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+        <button
+          type="button"
+          onClick={() => setManualEntry(true)}
+          className="text-[11px] text-gray-400 hover:text-gray-600 whitespace-nowrap flex-shrink-0"
+        >
+          Enter manually
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+      />
+      {loadFailed && (
+        <p className="text-[10px] text-gray-400">Couldn&apos;t load the connected account list (check Settings → Integrations) — enter the ID directly.</p>
+      )}
+      {options && options.length > 0 && (
+        <button type="button" onClick={() => setManualEntry(false)} className="text-[11px] text-emerald-700 hover:underline self-start">
+          Choose from connected accounts instead
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function ClientIntegrationsPanel({ companyName, companyId, onClose }: Props) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -126,84 +243,57 @@ export default function ClientIntegrationsPanel({ companyName, companyId, onClos
 
               <div>
                 <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Search Console site URL</label>
-                <input
+                <PickerField
+                  endpoint="/api/integrations/gsc/properties"
+                  mapOptions={mapGscOptions}
                   value={binding.gscSiteUrl ?? ''}
-                  onChange={(e) => setBinding((b) => ({ ...b, gscSiteUrl: e.target.value }))}
+                  onChange={(id) => setBinding((b) => ({ ...b, gscSiteUrl: id }))}
                   placeholder="sc-domain:site.com or https://site.com/"
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">GA4 property ID</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    value={binding.ga4PropertyId ?? ''}
-                    onChange={(e) => setBinding((b) => ({ ...b, ga4PropertyId: e.target.value }))}
-                    placeholder="123456789"
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
-                  />
-                  <input
-                    value={binding.ga4PropertyLabel ?? ''}
-                    onChange={(e) => setBinding((b) => ({ ...b, ga4PropertyLabel: e.target.value }))}
-                    placeholder="Label (optional)"
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">GA4 property</label>
+                <PickerField
+                  endpoint="/api/integrations/ga4/properties"
+                  mapOptions={mapGa4Options}
+                  value={binding.ga4PropertyId ?? ''}
+                  onChange={(id, label) => setBinding((b) => ({ ...b, ga4PropertyId: id, ga4PropertyLabel: label ?? b.ga4PropertyLabel }))}
+                  placeholder="123456789"
+                />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Google Ads customer ID</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    value={binding.adsCustomerId ?? ''}
-                    onChange={(e) => setBinding((b) => ({ ...b, adsCustomerId: e.target.value }))}
-                    placeholder="123-456-7890"
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
-                  />
-                  <input
-                    value={binding.adsCustomerLabel ?? ''}
-                    onChange={(e) => setBinding((b) => ({ ...b, adsCustomerLabel: e.target.value }))}
-                    placeholder="Label (optional)"
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Google Ads account</label>
+                <PickerField
+                  endpoint="/api/integrations/ads/accounts"
+                  mapOptions={mapAdsOptions}
+                  value={binding.adsCustomerId ?? ''}
+                  onChange={(id, label) => setBinding((b) => ({ ...b, adsCustomerId: id, adsCustomerLabel: label ?? b.adsCustomerLabel }))}
+                  placeholder="123-456-7890"
+                />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Meta ad account ID</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    value={binding.metaAdAccountId ?? ''}
-                    onChange={(e) => setBinding((b) => ({ ...b, metaAdAccountId: e.target.value }))}
-                    placeholder="act_1234567890"
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
-                  />
-                  <input
-                    value={binding.metaAdAccountLabel ?? ''}
-                    onChange={(e) => setBinding((b) => ({ ...b, metaAdAccountLabel: e.target.value }))}
-                    placeholder="Label (optional)"
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Meta ad account</label>
+                <PickerField
+                  endpoint="/api/integrations/meta/accounts"
+                  mapOptions={mapMetaOptions}
+                  value={binding.metaAdAccountId ?? ''}
+                  onChange={(id, label) => setBinding((b) => ({ ...b, metaAdAccountId: id, metaAdAccountLabel: label ?? b.metaAdAccountLabel }))}
+                  placeholder="act_1234567890"
+                />
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Business Profile location</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    value={binding.gbpLocationName ?? ''}
-                    onChange={(e) => setBinding((b) => ({ ...b, gbpLocationName: e.target.value }))}
-                    placeholder="accounts/xxx/locations/yyy"
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
-                  />
-                  <input
-                    value={binding.gbpLocationLabel ?? ''}
-                    onChange={(e) => setBinding((b) => ({ ...b, gbpLocationLabel: e.target.value }))}
-                    placeholder="Label (optional)"
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
+                <PickerField
+                  endpoint="/api/integrations/gbp/locations"
+                  mapOptions={mapGbpOptions}
+                  value={binding.gbpLocationName ?? ''}
+                  onChange={(id, label) => setBinding((b) => ({ ...b, gbpLocationName: id, gbpLocationLabel: label ?? b.gbpLocationLabel }))}
+                  placeholder="accounts/xxx/locations/yyy"
+                />
               </div>
 
               <div className="border-t border-gray-100 pt-4">

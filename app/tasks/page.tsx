@@ -217,11 +217,14 @@ function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
             <div>
               <label className={labelCls}>Service Line (optional)</label>
               <select value={serviceLine} onChange={e => setServiceLine(e.target.value as TeamServiceLine | '')} className={selectCls}>
-                <option value="">No service line</option>
+                <option value="">No service line — open, visible to the team</option>
                 {([...SERVICE_NAMES, 'General'] as TeamServiceLine[]).map(s => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
+              {serviceLine && (
+                <p className="text-[11px] text-gray-400 mt-1">Only visible to the assignee and Leadership/Dept Managers/Admin — not the rest of the team.</p>
+              )}
             </div>
           </div>
 

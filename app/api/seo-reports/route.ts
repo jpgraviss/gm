@@ -13,6 +13,8 @@ export const GET = withErrorHandler('seo-reports GET', async (req: NextRequest) 
     .from('client_integrations')
     .select('id, company_name, company_id, gsc_site_url, ga4_property_id, gbp_location_name, portal_enabled, seo_reports_enabled, seo_report_recipients, last_seo_report_at')
     .order('company_name')
+    // AUDIT #681 — was relying on the implicit PostgREST default row cap.
+    .limit(2000)
 
   if (error) {
     throw new Error(error.message || 'Failed to fetch integrations')

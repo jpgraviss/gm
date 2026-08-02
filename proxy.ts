@@ -69,7 +69,17 @@ async function proxyImpl(req: NextRequest): Promise<NextResponse> {
   // ── CSRF protection for state-changing requests ─────────────────────────
   // Public routes are intentionally exempt — they're embedded on external
   // sites (forms, booking widgets) and must allow cross-origin POSTs.
-  if (!isPublicRoute && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+  // AUDIT #668 — the browser extension's core track-send call is
+  // necessarily cross-origin (chrome-extension://<id> → this app's
+  // domain), so it was unconditionally 403'd here, breaking the entire
+  // Gmail email-tracking feature end-to-end. Bearer-token auth (unlike
+  // the session cookie every other route relies on) isn't automatically
+  // attached by the browser to a forged cross-site request, so it isn't
+  // vulnerable to the CSRF this Origin check exists to stop — exempt it
+  // the same way the WordPress plugin's key-header auth already
+  // implicitly is (it never sends an Origin header at all).
+  const isExtensionBearer = req.headers.get('authorization')?.startsWith('Bearer ghext_') ?? false
+  if (!isPublicRoute && !isExtensionBearer && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     const origin = req.headers.get('origin')
     const host = req.headers.get('host')
     if (origin && host) {

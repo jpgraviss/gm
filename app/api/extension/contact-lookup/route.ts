@@ -29,11 +29,16 @@ export const GET = withErrorHandler('extension/contact-lookup GET', async (req) 
     return NextResponse.json({ found: false })
   }
 
+  // AUDIT #678 — hardcoded exact-match against only the two default stage
+  // names misses custom pipeline stages (e.g. a "Closed - Duplicate"
+  // stage), showing them as still-open deals. Matches the established
+  // !stage.startsWith('Closed') convention (lib/deal-score.ts,
+  // lib/guided-actions.ts, AUDIT #53).
   const { data: deals } = await db
     .from('deals')
     .select('id, stage, value')
     .eq('contact_id', contact.id)
-    .not('stage', 'in', '("Closed Won","Closed Lost")')
+    .not('stage', 'like', 'Closed%')
 
   return NextResponse.json({
     found: true,

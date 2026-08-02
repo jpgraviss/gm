@@ -87,6 +87,19 @@ interface PortalConfig {
   }
   welcomeMessage: string
   seoStrategy: string
+  // AUDIT #672 — the client-facing /client/seo page renders Organic
+  // Traffic/Domain Authority/Backlinks KPI cards and a Monthly
+  // Deliverables checklist, but nothing ever wrote these fields — every
+  // client saw an empty page. Keywords/Keywords Ranking are NOT here:
+  // those are computed live server-side from the real tracked_keywords
+  // table (app/api/portal/seo/route.ts), not hand-entered, since that
+  // data already exists and stays accurate on its own.
+  seoMetrics: {
+    organicTraffic: number
+    domainAuthority: number
+    backlinks: number
+    deliverables: { name: string; completed: boolean }[]
+  }
   client_logo_url: string
   client_brand_color: string
   services_config: Record<string, ServiceConfig>
@@ -127,10 +140,31 @@ const defaultConfig: PortalConfig = {
   },
   welcomeMessage: '',
   seoStrategy: '',
+  seoMetrics: {
+    organicTraffic: 0,
+    domainAuthority: 0,
+    backlinks: 0,
+    deliverables: [],
+  },
   client_logo_url: '',
   client_brand_color: '',
   services_config: {},
   reports: [],
+}
+
+function parseSeoMetrics(raw: unknown): PortalConfig['seoMetrics'] {
+  if (!raw || typeof raw !== 'object') return { ...defaultConfig.seoMetrics }
+  const obj = raw as Record<string, unknown>
+  return {
+    organicTraffic: typeof obj.organicTraffic === 'number' ? obj.organicTraffic : 0,
+    domainAuthority: typeof obj.domainAuthority === 'number' ? obj.domainAuthority : 0,
+    backlinks: typeof obj.backlinks === 'number' ? obj.backlinks : 0,
+    deliverables: Array.isArray(obj.deliverables)
+      ? obj.deliverables.filter((d): d is { name: string; completed: boolean } =>
+          !!d && typeof d === 'object' && typeof (d as Record<string, unknown>).name === 'string',
+        )
+      : [],
+  }
 }
 
 function parseConfig(raw: unknown): PortalConfig {
@@ -147,6 +181,7 @@ function parseConfig(raw: unknown): PortalConfig {
     },
     welcomeMessage: typeof obj.welcomeMessage === 'string' ? obj.welcomeMessage : '',
     seoStrategy: typeof obj.seoStrategy === 'string' ? obj.seoStrategy : '',
+    seoMetrics: parseSeoMetrics(obj.seoMetrics),
     client_logo_url: typeof obj.client_logo_url === 'string' ? obj.client_logo_url : '',
     client_brand_color: typeof obj.client_brand_color === 'string' ? obj.client_brand_color : '',
     services_config: (obj.services_config && typeof obj.services_config === 'object') ? obj.services_config as Record<string, ServiceConfig> : {},
@@ -204,6 +239,7 @@ export default function PortalManagementPage() {
   // page's ManageClientPanel (Tickets + Notifications tabs were real; its
   // Files tab was a no-op stub that only showed a toast — not ported).
   const [inviteStatus, setInviteStatus] = useState<Record<string, string>>({}) // memberId -> 'sending' | 'sent' | error message
+  const [newDeliverableInput, setNewDeliverableInput] = useState<Record<string, string>>({}) // groupKey -> draft deliverable name
   const [showLoginList, setShowLoginList] = useState(false)
   const [notifyMember, setNotifyMember] = useState<{ member: PortalMember; company: string } | null>(null)
   const [notifyForm, setNotifyForm] = useState({ title: '', message: '', link: '' })
@@ -1220,6 +1256,103 @@ export default function PortalManagementPage() {
                             placeholder="Monthly SEO strategy notes for this client. Supports plain text and will be displayed in the client's portal..."
                             className="w-full h-40 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-gray-400 bg-white resize-y"
                           />
+                        </div>
+
+                        {/* AUDIT #672 — SEO Metrics + Deliverables, the fields
+                            /client/seo actually renders that nothing ever
+                            populated. Keywords/Keywords Ranking aren't here —
+                            those compute live from real tracked_keywords data,
+                            see app/api/portal/seo/route.ts. */}
+                        <div className="lg:col-span-2">
+                          <div className="flex items-center gap-2 mb-3">
+                            <BarChart3 size={14} style={{ color: '#015035' }} />
+                            <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">SEO Metrics</h3>
+                          </div>
+                          <div className="grid grid-cols-3 gap-3 mb-4">
+                            {([
+                              ['organicTraffic', 'Organic Traffic'],
+                              ['domainAuthority', 'Domain Authority'],
+                              ['backlinks', 'Backlinks'],
+                            ] as const).map(([key, label]) => (
+                              <div key={key}>
+                                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{label}</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={group.portalConfig.seoMetrics[key]}
+                                  onChange={e => updateConfig(group.groupKey, prev => ({
+                                    ...prev,
+                                    seoMetrics: { ...prev.seoMetrics, [key]: Math.max(0, parseInt(e.target.value) || 0) },
+                                  }))}
+                                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                                />
+                              </div>
+                            ))}
+                          </div>
+
+                          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Monthly Deliverables</label>
+                          <div className="flex flex-col gap-1.5 mb-2">
+                            {group.portalConfig.seoMetrics.deliverables.map((d, i) => (
+                              <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 bg-white">
+                                <input
+                                  type="checkbox"
+                                  checked={d.completed}
+                                  onChange={e => updateConfig(group.groupKey, prev => ({
+                                    ...prev,
+                                    seoMetrics: {
+                                      ...prev.seoMetrics,
+                                      deliverables: prev.seoMetrics.deliverables.map((x, xi) => xi === i ? { ...x, completed: e.target.checked } : x),
+                                    },
+                                  }))}
+                                  className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                                <span className="flex-1 text-sm text-gray-700">{d.name}</span>
+                                <button
+                                  onClick={() => updateConfig(group.groupKey, prev => ({
+                                    ...prev,
+                                    seoMetrics: { ...prev.seoMetrics, deliverables: prev.seoMetrics.deliverables.filter((_, xi) => xi !== i) },
+                                  }))}
+                                  className="text-gray-300 hover:text-red-500 text-xs"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={newDeliverableInput[group.groupKey] ?? ''}
+                              onChange={e => setNewDeliverableInput(prev => ({ ...prev, [group.groupKey]: e.target.value }))}
+                              onKeyDown={e => {
+                                if (e.key !== 'Enter') return
+                                const name = (newDeliverableInput[group.groupKey] ?? '').trim()
+                                if (!name) return
+                                updateConfig(group.groupKey, prev => ({
+                                  ...prev,
+                                  seoMetrics: { ...prev.seoMetrics, deliverables: [...prev.seoMetrics.deliverables, { name, completed: false }] },
+                                }))
+                                setNewDeliverableInput(prev => ({ ...prev, [group.groupKey]: '' }))
+                              }}
+                              placeholder="Add a deliverable (e.g. Monthly blog post published)…"
+                              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                            />
+                            <button
+                              onClick={() => {
+                                const name = (newDeliverableInput[group.groupKey] ?? '').trim()
+                                if (!name) return
+                                updateConfig(group.groupKey, prev => ({
+                                  ...prev,
+                                  seoMetrics: { ...prev.seoMetrics, deliverables: [...prev.seoMetrics.deliverables, { name, completed: false }] },
+                                }))
+                                setNewDeliverableInput(prev => ({ ...prev, [group.groupKey]: '' }))
+                              }}
+                              className="px-3 py-2 rounded-lg text-xs font-semibold text-white"
+                              style={{ background: '#015035' }}
+                            >
+                              Add
+                            </button>
+                          </div>
                         </div>
                       </div>
 

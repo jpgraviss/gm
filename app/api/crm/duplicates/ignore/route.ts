@@ -3,8 +3,6 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { requireRole } from '@/lib/rbac'
 
-const SETTINGS_ID = 'global'
-
 export const POST = withErrorHandler('crm/duplicates/ignore POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
@@ -21,23 +19,15 @@ export const POST = withErrorHandler('crm/duplicates/ignore POST', async (req) =
 
   const db = createServiceClient()
 
-  // Fetch current dismissed_duplicates
-  const { data: settings } = await db
-    .from('app_settings')
-    .select('dismissed_duplicates')
-    .eq('id', SETTINGS_ID)
-    .maybeSingle()
-
-  const dismissed: Record<string, string[]> = (settings?.dismissed_duplicates as Record<string, string[]>) ?? {}
-  const list = dismissed[type] ?? []
-  if (!list.includes(groupKey)) {
-    list.push(groupKey)
-  }
-  dismissed[type] = list
-
-  const { error } = await db
-    .from('app_settings')
-    .upsert({ id: SETTINGS_ID, dismissed_duplicates: dismissed }, { onConflict: 'id' })
+  // AUDIT #683 — this used to be a non-atomic read (SELECT), modify (push
+  // groupKey into the array in application code), write (upsert the whole
+  // row back) — two concurrent "Ignore" calls on different duplicate
+  // groups could both read the same pre-update array, and the second
+  // upsert silently clobbered the first's addition. dismiss_duplicate()
+  // (supabase/migrations/add_dismiss_duplicate_rpc.sql) does the same
+  // read-modify-write inside a single statement, under the row lock the
+  // UPSERT already holds, same pattern as #43/#44/#45's RPCs.
+  const { error } = await db.rpc('dismiss_duplicate', { p_type: type, p_group_key: groupKey })
 
   if (error) {
     throw new Error(error.message || 'Failed to ignore duplicate')

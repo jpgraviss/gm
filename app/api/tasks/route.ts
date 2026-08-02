@@ -68,7 +68,12 @@ export const GET = withErrorHandler('tasks GET', async (req: NextRequest) => {
   // assignee, not broadcast to the rest of its department the way an
   // untagged task is — leaving Service Line unset is what makes a task
   // "open" and shareable within the department rule above.
-  const unrestricted = user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin' || user.role === 'Department Manager'
+  // AUDIT #670 — 'Dept Manager' and 'Department Manager' are two distinct
+  // role strings lib/rbac.ts treats as aliases at the same hierarchy level
+  // (app/admin/page.tsx's role editor assigns the literal 'Dept Manager'),
+  // but only the long form was covered here — matching app/time-tracking/
+  // page.tsx's existing special-case for the same alias gap.
+  const unrestricted = user.isAdmin || user.role === 'Leadership' || user.role === 'Super Admin' || user.role === 'Department Manager' || user.role === 'Dept Manager'
   if (!unrestricted) {
     const dept = departmentForUnit(user.unit)
     const safeDepts = Array.from(new Set(['CRM', 'General', ...(dept ? [dept] : [])]))

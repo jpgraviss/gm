@@ -54,23 +54,37 @@ export const GET = withErrorHandler('files GET', async (req: NextRequest) => {
     throw new Error(String(firstError) || 'Failed to list files')
   }
 
+  // AUDIT #671 — dedupe by filename before generating signed URLs. Since
+  // `folders` is ordered [folder, legacyFolder], a name seen in the new
+  // company_id folder wins over the same name still sitting in the old
+  // legacy folder (e.g. a file re-uploaded post-migration) — otherwise a
+  // client re-uploading a same-named file would see it listed twice with
+  // no way to tell which copy is current.
+  const seenNames = new Set<string>()
+  const entries = folders.flatMap((f, i) =>
+    (listed[i].data ?? [])
+      .filter(entry => entry.name !== '.emptyFolderPlaceholder')
+      .filter(entry => {
+        if (seenNames.has(entry.name)) return false
+        seenNames.add(entry.name)
+        return true
+      })
+      .map(entry => ({ folder: f, entry }))
+  )
+
   // Generate signed URLs for each file
   const files = await Promise.all(
-    folders.flatMap((f, i) =>
-      (listed[i].data ?? [])
-        .filter(entry => entry.name !== '.emptyFolderPlaceholder')
-        .map(async entry => {
-          const path = `${f}/${entry.name}`
-          const { data: urlData } = await db.storage.from(BUCKET).createSignedUrl(path, 3600)
-          return {
-            name: entry.name,
-            size: entry.metadata?.size ?? 0,
-            createdAt: entry.created_at,
-            url: urlData?.signedUrl ?? null,
-            path,
-          }
-        })
-    )
+    entries.map(async ({ folder: f, entry }) => {
+      const path = `${f}/${entry.name}`
+      const { data: urlData } = await db.storage.from(BUCKET).createSignedUrl(path, 3600)
+      return {
+        name: entry.name,
+        size: entry.metadata?.size ?? 0,
+        createdAt: entry.created_at,
+        url: urlData?.signedUrl ?? null,
+        path,
+      }
+    })
   )
 
   return NextResponse.json(files)

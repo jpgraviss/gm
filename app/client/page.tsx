@@ -179,7 +179,7 @@ export default function ClientPortalPage() {
   const [replySending, setReplySending] = useState(false)
   const [replyAttachments, setReplyAttachments] = useState<ClientFileAttachment[]>([])
   const [replyAttachUploading, setReplyAttachUploading] = useState(false)
-  const [files, setFiles] = useState<{ name: string; size: number; createdAt: string; url: string | null }[]>([])
+  const [files, setFiles] = useState<{ name: string; size: number; createdAt: string; url: string | null; path: string }[]>([])
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null)
@@ -1215,7 +1215,7 @@ export default function ClientPortalPage() {
                         // label with zero explanation.
                         if (res.ok) {
                           const saved = await res.json()
-                          setFiles(prev => [{ name: saved.name, size: saved.size, createdAt: new Date().toISOString(), url: saved.url }, ...prev])
+                          setFiles(prev => [{ name: saved.name, size: saved.size, createdAt: new Date().toISOString(), url: saved.url, path: saved.path }, ...prev])
                         } else {
                           const err = await res.json().catch(() => ({}))
                           toast(err.error || 'Failed to upload file', 'error')
@@ -1233,7 +1233,7 @@ export default function ClientPortalPage() {
               {files.length > 0 ? (
                 <div className="divide-y divide-gray-100">
                   {files.map(f => (
-                    <div key={f.name} className="flex items-center gap-3 px-5 py-3.5">
+                    <div key={f.path} className="flex items-center gap-3 px-5 py-3.5">
                       <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
                         <FileText size={14} className="text-gray-400" />
                       </div>

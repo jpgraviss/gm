@@ -36,11 +36,15 @@ here is generated output.
   `.tasks` off a project). Always write real tasks into `app_tasks` with
   `project_id` set. Don't trust "tasks show under the company/project page"
   claims without checking which of the two systems actually renders.
-- **Schema drift**: migration files exist in `supabase/migrations/*.sql`
-  that were written but never applied to the live DB (e.g.
-  `add_projects_service_types.sql` for `projects.service_types`). Check that
-  directory for a ready-made fix before hand-writing new SQL from scratch —
-  it's happened more than once that the exact fix was already sitting there.
+- **Schema drift**: migration files can exist in `supabase/migrations/*.sql`
+  that were written but never applied to the live DB — `add_projects_
+  service_types.sql` for `projects.service_types` was exactly this case
+  (broke the v2 Asana-import SQL with a "column does not exist" error) and
+  has since been confirmed applied by the user (2026-08-01) — don't assume
+  it's still unapplied. Still, check that migrations directory for a
+  ready-made fix before hand-writing new SQL from scratch when a similar
+  "column doesn't exist" error shows up on a different table — it's
+  happened more than once that the exact fix was already sitting there.
 - **Service catalog**: `lib/services.ts`'s `SERVICES_RAW`/`SERVICE_NAMES` is
   the single source of truth for service names across deals/projects/
   proposals/contracts/tasks — don't hardcode a service list anywhere else.

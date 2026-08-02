@@ -88,7 +88,9 @@ export const POST = withErrorHandler('admin/users POST', async (req) => {
       unit:     body.unit ?? 'Leadership/Admin',
       initials: initials,
       status:   'active',
-      is_admin: body.isAdmin ?? false,
+      // AUDIT #667 — derived from role, not trusted from the client, same
+      // fix as PUT /api/team-members/[id] — see that route's comment.
+      is_admin: body.role === 'Super Admin',
     })
     .select()
     .single()

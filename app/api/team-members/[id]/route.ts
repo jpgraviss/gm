@@ -29,9 +29,24 @@ export const PUT = withErrorHandler('team-members/[id] PUT', async (req: NextReq
   if (body.role !== undefined)     update.role = body.role
   if (body.unit !== undefined)     update.unit = body.unit
   if (body.status !== undefined)   update.status = body.status
-  if (body.isAdmin !== undefined)  update.is_admin = body.isAdmin
   if (body.initials !== undefined) update.initials = body.initials
   if (body.emailSignature !== undefined) update.email_signature = body.emailSignature
+  // AUDIT #667 — role and is_admin are two independent columns that two
+  // different admin surfaces (app/admin/page.tsx, app/settings/page.tsx)
+  // both PUT to this same route. Only the former computed isAdmin itself
+  // client-side before sending it; the latter never sent it at all, so a
+  // role change made there left is_admin silently stale — most dangerous
+  // on demotion, where a former Super Admin kept full requireAdmin access
+  // (the Admin Panel itself, user CRUD, pending-approval queue) indefinitely
+  // with no visible sign anything was wrong. Deriving is_admin here, once,
+  // whenever role changes is the only way it can't drift regardless of
+  // which caller changes it. A direct API caller changing only isAdmin
+  // (no role in the same call) is still honored, for completeness.
+  if (body.role !== undefined) {
+    update.is_admin = body.role === 'Super Admin'
+  } else if (body.isAdmin !== undefined) {
+    update.is_admin = body.isAdmin
+  }
   const { data, error } = await db.from('team_members').update(update).eq('id', id).select().single()
   if (error) {
     throw new Error(error?.message || 'Failed to update team member')

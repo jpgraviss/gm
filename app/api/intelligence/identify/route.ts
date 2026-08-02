@@ -46,7 +46,13 @@ export const GET = withErrorHandler('intelligence/identify GET', async (req) => 
   }
 
   if (search) {
-    query = query.or(`email.ilike.%${search}%,name.ilike.%${search}%,company.ilike.%${search}%`)
+    // AUDIT #677 — same PostgREST .or() comma/parens-splitting bug #404
+    // fixed for app/api/search/route.ts, missed here: an unescaped/
+    // unquoted search value containing a comma or parenthesis breaks this
+    // filter's parsing. Quoting the pattern and escaping embedded
+    // quotes/backslashes is the documented PostgREST escape.
+    const orPattern = `"%${search.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}%"`
+    query = query.or(`email.ilike.${orPattern},name.ilike.${orPattern},company.ilike.${orPattern}`)
   }
 
   const { data, count, error } = await query

@@ -17,6 +17,11 @@ export const GET = withErrorHandler('broadcasts/[id]/clicks GET', async (
     .from('broadcast_link_clicks')
     .select('original_url, email')
     .eq('broadcast_id', id)
+    // AUDIT #682 — was relying on the implicit PostgREST default row cap.
+    // Currently masked (see AUDIT #98: nothing writes to this table today,
+    // rewriteLinksForTracking() is never called), but a real latent gap
+    // for whoever eventually wires real click tracking back up.
+    .limit(5000)
 
   if (error) {
     throw new Error(error.message)

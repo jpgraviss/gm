@@ -223,7 +223,7 @@ function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) =
                 ))}
               </select>
               {serviceLine && (
-                <p className="text-[11px] text-gray-400 mt-1">Only visible to the assignee and Leadership/Admin — not the rest of the team.</p>
+                <p className="text-[11px] text-gray-400 mt-1">Only visible to the assignee and Leadership/Dept Managers/Admin — not the rest of the team.</p>
               )}
             </div>
           </div>

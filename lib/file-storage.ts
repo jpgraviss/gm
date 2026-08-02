@@ -22,6 +22,19 @@ export async function resolveFolder(
   company: string,
 ): Promise<{ folder: string; legacyFolder: string }> {
   const legacyFolder = sanitizePath(company)
-  const { data } = await db.from('crm_companies').select('id').ilike('name', company).maybeSingle()
+  const { data, error } = await db.from('crm_companies').select('id').ilike('name', company).maybeSingle()
+  // AUDIT #666 — .maybeSingle() returns { data: null, error: PGRST116 }
+  // (doesn't throw) when the ilike match hits 2+ rows, e.g. two real
+  // crm_companies both literally named "Acme Inc". That was silently
+  // swallowed here, which happened to still be safe (falls through to
+  // legacyFolder either way) but with zero visibility that two companies
+  // are colliding into the same shared folder — reopening exactly the
+  // class of bug #584 fixed, just for identical names instead of
+  // punctuation-different ones. Surface it so it isn't invisible.
+  if (error && error.code !== 'PGRST116') {
+    console.error('resolveFolder: crm_companies lookup failed', { company, error })
+  } else if (error?.code === 'PGRST116') {
+    console.error('resolveFolder: ambiguous company name match, falling back to legacy folder', { company })
+  }
   return { folder: data?.id ?? legacyFolder, legacyFolder }
 }

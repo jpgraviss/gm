@@ -35,6 +35,8 @@ export const GET = withErrorHandler('monitored-sites GET', async (req) => {
     .from('monitored_sites')
     .select('*')
     .order('created_at', { ascending: false })
+    // AUDIT #681 — was relying on the implicit PostgREST default row cap.
+    .limit(2000)
 
   if (error) {
     throw new Error(error?.message || 'Failed to fetch monitored sites')

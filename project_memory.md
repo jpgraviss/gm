@@ -105,10 +105,6 @@ here is generated output.
   correctly scoped, and list/download dual-read the legacy folder so
   nothing's invisible in the meantime — but pre-existing files stay under
   their old (collision-prone) path until this script actually runs.
-- **`supabase/migrations/add_dismiss_duplicate_rpc.sql`** — adds the
-  `dismiss_duplicate()` RPC `POST /api/crm/duplicates/ignore` now calls.
-  Not yet confirmed applied — until it runs, "Ignore" on the CRM Duplicates
-  page will 500.
 
 ## Recently shipped this session
 

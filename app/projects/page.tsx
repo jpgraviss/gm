@@ -37,7 +37,11 @@ type FilterTab = 'All' | 'Active' | 'Completed' | 'On Hold'
 const serviceTypeIcons: Partial<Record<string, React.ReactNode>> = {
   'Website Build': <Globe size={14} />,
   'Website Management': <Globe size={14} />,
+  // 'SEO / AEO' kept alongside the current 'SEO / AEO / GEO' catalog name
+  // (lib/services.ts) so projects tagged before the two were merged into
+  // one service still get an icon instead of silently falling back.
   'SEO / AEO': <BarChart2 size={14} />,
+  'SEO / AEO / GEO': <BarChart2 size={14} />,
   'Social Media': <Share2 size={14} />,
   'Email Marketing': <Mail size={14} />,
   'Fractional CMO': <Briefcase size={14} />,

@@ -52,7 +52,11 @@ export async function applyRoutingRules(
   const unitMap: Record<string, string> = {
     'Website Build': 'Delivery/Operations',
     'Website Management': 'Delivery/Operations',
+    // 'SEO / AEO' kept alongside the current 'SEO / AEO / GEO' catalog name
+    // (lib/services.ts) so tickets tagged before the two were merged into
+    // one service still route correctly instead of falling through unassigned.
     'SEO / AEO': 'Delivery/Operations',
+    'SEO / AEO / GEO': 'Delivery/Operations',
     'Social Media': 'Delivery/Operations',
     'Email Marketing': 'Delivery/Operations',
     'Fractional CMO': 'Delivery/Operations',

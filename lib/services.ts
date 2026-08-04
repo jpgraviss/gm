@@ -54,7 +54,14 @@ const SERVICES_RAW = [
     tiers: [{ label: 'Website Management', price: 350, cadence: 'monthly' }],
   },
   {
-    name: 'SEO / AEO',
+    // Previously two separately-selectable catalog entries ('SEO / AEO' and
+    // 'GEO', the latter bundled under the former with no pricing of its own
+    // per a 2026-08-01 decision). User feedback: this is one service, not
+    // two things to pick independently — merged into a single entry.
+    // 'GEO' kept as an alias so any deal/project/proposal that already
+    // stored the literal 'GEO' value still resolves to a real color/name
+    // instead of falling back to gray.
+    name: 'SEO / AEO / GEO',
     lane: 'Marketing', layer: 'Foundation', category: 'Ongoing MRR',
     color: 'bg-teal-100 text-teal-700',
     tiers: [
@@ -62,14 +69,7 @@ const SERVICES_RAW = [
       { label: 'Standard', price: 700, cadence: 'monthly' },
       { label: 'Premium', price: 900, cadence: 'monthly' },
     ],
-    aliases: ['SEO'],
-  },
-  {
-    name: 'GEO',
-    lane: 'Marketing', layer: 'Foundation', category: 'Ongoing MRR',
-    color: 'bg-sky-100 text-sky-700',
-    // Bundled under SEO / AEO engagements rather than sold on its own — no
-    // standalone tiers/pricing (per 2026-08-01 decision).
+    aliases: ['SEO', 'AEO', 'GEO', 'SEO / AEO'],
   },
   {
     name: 'Social Media',
@@ -277,7 +277,7 @@ export function normalizeServiceType(val?: string | null, fallback?: string | nu
   if (check.includes('sales enablement') || check.includes('enablement foundation') || check.includes('enablement core') || check.includes('enablement system')) return 'Sales Enablement'
   if (check.includes('website manage')) return 'Website Management'
   if (check.includes('website') || check.includes('web design') || check.includes('web dev')) return 'Website Build'
-  if (check.includes('seo') || check.includes('aeo')) return 'SEO / AEO'
+  if (check.includes('seo') || check.includes('aeo') || check.includes('geo')) return 'SEO / AEO / GEO'
   if (check.includes('social')) return 'Social Media'
   if (check.includes('email')) return 'Email Marketing'
   if (check.includes('brand')) return 'Branding'

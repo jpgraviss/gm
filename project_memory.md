@@ -150,6 +150,22 @@ here is generated output.
   several tables) and #699 (calendar-sync pushes public bookings to an
   arbitrary staff calendar — `booking_types` has no owner concept in the
   schema at all). See `AUDIT.md` #691-#700 for the full list.
+- Fixed a live-only schema-drift bug (#701) the user hit directly: every
+  `POST /api/deals` 500'd because `deals.service_types` was never actually
+  added to the live DB (unlike the equivalent `projects.service_types`
+  migration, confirmed applied 2026-08-01) — the code was already correct.
+  User ran the `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` + backfill in the
+  Supabase SQL Editor and confirmed success. Also merged `SEO / AEO` and
+  `GEO` into one catalog entry (#702, `lib/services.ts`) per user feedback
+  that they shouldn't be two separately-pickable services.
+- Still on the table, not yet built (raised directly by the user, larger in
+  scope than a bug fix): a deal line-items model (per-service amount,
+  one-time vs. recurring, rolling up into pipeline totals — currently a
+  deal has one aggregate `value` number only) and a quick-action button on
+  company/contact pages to create a deal/proposal/contract without going
+  through the Pipeline page (confirmed no such entry point exists today).
+  Both need a scoping conversation before building, not schema work to do
+  silently.
 
 ## Where to look first
 

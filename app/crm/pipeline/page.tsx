@@ -12,7 +12,9 @@ import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
 import LogActivityForm, { type LoggedActivity } from '@/components/crm/LogActivityForm'
 import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
-import type { Deal, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/types'
+import DealLineItemsEditor from '@/components/crm/DealLineItemsEditor'
+import { computeLineItemsTotal, computeLineItemsBreakdown, serviceTypesFromLineItems } from '@/lib/deal-line-items'
+import type { Deal, DealLineItem, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
 import { downloadCsv } from '@/lib/csv-export'
@@ -291,13 +293,18 @@ function DealPanel({
   const [editing, setEditing] = useState(false)
   const [linkingContact, setLinkingContact] = useState(false)
   const [contactSearch, setContactSearch] = useState('')
-  const dealServiceTypes = deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]
+  // Deals created before line items existed have none — fall back to a
+  // single line item built from the plain value/serviceType fields so
+  // editing an old deal still shows something sensible in the editor
+  // rather than an empty list.
+  const initialLineItems: DealLineItem[] = deal.lineItems && deal.lineItems.length > 0
+    ? deal.lineItems
+    : [{ id: `li-${deal.id}`, serviceType: deal.serviceType, billingType: 'one-time', amount: deal.value }]
   const [editForm, setEditForm] = useState({
-    value: String(deal.value),
+    lineItems: initialLineItems,
     probability: String(deal.probability),
     closeDate: deal.closeDate,
     stage: deal.stage,
-    serviceTypes: dealServiceTypes as string[],
   })
   const [customFields, setCustomFields] = useState<Record<string, string>>(deal.customFields ?? {})
   const dealAny = deal as LocalDeal & { companyId?: string; contactId?: string }
@@ -325,13 +332,19 @@ function DealPanel({
 
   function handleSaveDealEdit() {
     if (!onUpdateDeal) return
-    const selectedTypes = editForm.serviceTypes.length > 0 ? editForm.serviceTypes : ['General']
+    // Computed client-side (not just sent as lineItems and left to the
+    // server) so the optimistic local update in handleUpdateDeal reflects
+    // the real total/service types immediately — that function doesn't
+    // re-sync from the PATCH response on success, only reverts on failure.
+    const value = computeLineItemsTotal(editForm.lineItems)
+    const selectedTypes = serviceTypesFromLineItems(editForm.lineItems)
     const updates: Partial<LocalDeal> = {
-      value: parseFloat(editForm.value) || 0,
+      lineItems: editForm.lineItems,
+      value,
       probability: parseInt(editForm.probability) || 0,
       closeDate: editForm.closeDate,
       stage: editForm.stage,
-      serviceType: selectedTypes[0] as LocalDeal['serviceType'],
+      serviceType: (selectedTypes[0] ?? 'General') as LocalDeal['serviceType'],
       serviceTypes: selectedTypes as LocalDeal['serviceTypes'],
       customFields,
     }
@@ -444,7 +457,14 @@ function DealPanel({
             <div className="flex items-center gap-1">
               {onUpdateDeal && (
                 <button
-                  onClick={() => { setEditing(e => !e); setEditForm({ value: String(deal.value), probability: String(deal.probability), closeDate: deal.closeDate, stage: deal.stage, serviceTypes: (deal.serviceTypes && deal.serviceTypes.length > 0 ? deal.serviceTypes : [deal.serviceType]) as string[] }); setCustomFields(deal.customFields ?? {}) }}
+                  onClick={() => {
+                    setEditing(e => !e)
+                    const lineItems: DealLineItem[] = deal.lineItems && deal.lineItems.length > 0
+                      ? deal.lineItems
+                      : [{ id: `li-${deal.id}`, serviceType: deal.serviceType, billingType: 'one-time', amount: deal.value }]
+                    setEditForm({ lineItems, probability: String(deal.probability), closeDate: deal.closeDate, stage: deal.stage })
+                    setCustomFields(deal.customFields ?? {})
+                  }}
                   className="p-2 rounded-lg hover:bg-gray-50"
                   title="Edit deal"
                 >
@@ -531,14 +551,29 @@ function DealPanel({
                   )}
                 </div>
                 <div className="flex flex-col gap-2.5">
-                  <InfoRow icon={<DollarSign size={14} />} label="Value" value={
-                    editing ? (
-                      <input type="number" value={editForm.value} onChange={e => setEditForm(f => ({ ...f, value: e.target.value }))}
-                        className="text-sm border border-gray-200 rounded-lg px-2 py-1 w-28 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                    ) : (
-                      <span className="font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>{formatCurrency(deal.value)}</span>
-                    )
-                  } />
+                  {editing ? (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Products / Services</p>
+                      <DealLineItemsEditor
+                        items={editForm.lineItems}
+                        onChange={lineItems => setEditForm(f => ({ ...f, lineItems }))}
+                      />
+                    </div>
+                  ) : (
+                    <InfoRow icon={<DollarSign size={14} />} label="Value" value={
+                      <div className="text-right">
+                        <span className="font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>{formatCurrency(deal.value)}</span>
+                        {deal.lineItems && deal.lineItems.length > 0 && (() => {
+                          const breakdown = computeLineItemsBreakdown(deal.lineItems)
+                          return breakdown.oneTime > 0 && breakdown.recurring > 0 ? (
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                              {formatCurrency(breakdown.oneTime)} one-time · {formatCurrency(breakdown.recurring)} recurring
+                            </p>
+                          ) : null
+                        })()}
+                      </div>
+                    } />
+                  )}
                   <InfoRow icon={<TrendingUp size={14} />} label="Probability" value={
                     editing ? (
                       <input type="number" min={0} max={100} value={editForm.probability} onChange={e => setEditForm(f => ({ ...f, probability: e.target.value }))}
@@ -1361,17 +1396,15 @@ export default function PipelinePage() {
   }
 
   async function handleNewDeal(data: NewDealData) {
-    const serviceTypes = data.serviceTypes && data.serviceTypes.length > 0
-      ? data.serviceTypes
-      : [data.serviceType]
+    // value/serviceType(s) are no longer sent — the server derives both
+    // from lineItems (lib/deal-line-items.ts) so they can never drift from
+    // the actual per-product breakdown.
     const payload = {
       company: data.company,
       companyId: data.companyId,
       contact: { id: `contact-${Date.now()}`, name: data.contactName, email: data.contactEmail, phone: data.contactPhone, title: data.contactTitle },
       stage: data.stage,
-      value: Number(data.value) || 0,
-      serviceType: serviceTypes[0],
-      serviceTypes,
+      lineItems: data.lineItems,
       closeDate: data.closeDate,
       assignedRep: data.assignedRep,
       probability: Number(data.probability) || 20,
@@ -1396,7 +1429,20 @@ export default function PipelinePage() {
         toast('Deal created', 'success')
       }
     } catch {
-      setLocalDeals(prev => [{ ...payload, id: `deal-${Date.now()}`, lastActivity: new Date().toISOString().split('T')[0] } as LocalDeal, ...prev])
+      // Network-error fallback keeps the deal visible locally rather than
+      // silently losing the user's work — value/serviceTypes are computed
+      // here the same way the server would, since this path never gets a
+      // real mapDeal() response to read them from.
+      const fallbackValue = computeLineItemsTotal(data.lineItems)
+      const fallbackServiceTypes = serviceTypesFromLineItems(data.lineItems)
+      setLocalDeals(prev => [{
+        ...payload,
+        id: `deal-${Date.now()}`,
+        value: fallbackValue,
+        serviceType: fallbackServiceTypes[0] ?? 'General',
+        serviceTypes: fallbackServiceTypes,
+        lastActivity: new Date().toISOString().split('T')[0],
+      } as LocalDeal, ...prev])
       toast('Network error — deal was not saved, please retry', 'error')
     }
     setCreatingDeal(false)

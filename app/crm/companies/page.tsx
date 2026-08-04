@@ -17,6 +17,8 @@ import NewCompanyPanel, { type NewCompanyFormData } from '@/components/crm/NewCo
 import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
+import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
+import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
 import type { CRMCompany, CRMContact, CompanyStatus, Deal, Contract, Invoice, Project, CRMActivity, AppTask } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
@@ -516,6 +518,8 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
   const [creatingProposal, setCreatingProposal] = useState(false)
+  const [creatingDeal, setCreatingDeal] = useState(false)
+  const [creatingContract, setCreatingContract] = useState(false)
   const [extraContacts, setExtraContacts] = useState<CRMContact[]>([])
   const [localTags, setLocalTags] = useState<string[]>(company.tags)
   const [newTag, setNewTag] = useState('')
@@ -1304,12 +1308,20 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               {companyDeals.length === 0 && (
                 <p className="text-sm text-gray-400 text-center py-8">No deals linked to this company.</p>
               )}
-              <button
-                onClick={() => setCreatingProposal(true)}
-                className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
-              >
-                <Plus size={14} /> New Proposal
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setCreatingDeal(true)}
+                  className="py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} /> New Deal
+                </button>
+                <button
+                  onClick={() => setCreatingProposal(true)}
+                  className="py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} /> New Proposal
+                </button>
+              </div>
             </div>
           )}
 
@@ -1366,6 +1378,12 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               {companyContracts.length === 0 && (
                 <p className="text-sm text-gray-400 text-center py-8">No contracts found for this company.</p>
               )}
+              <button
+                onClick={() => setCreatingContract(true)}
+                className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Plus size={14} /> New Contract
+              </button>
             </div>
           )}
 
@@ -1580,6 +1598,92 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
           }
         }}
         onClose={() => setCreatingProposal(false)}
+      />
+    )}
+    {creatingDeal && (
+      <NewDealPanel
+        initialCompany={company.name}
+        initialCompanyId={company.id}
+        onSave={async (data: NewDealData) => {
+          setCreatingDeal(false)
+          try {
+            const res = await fetch('/api/deals', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                company: data.company,
+                companyId: company.id,
+                contact: { id: `contact-${Date.now()}`, name: data.contactName, email: data.contactEmail, phone: data.contactPhone, title: data.contactTitle },
+                stage: data.stage,
+                lineItems: data.lineItems,
+                closeDate: data.closeDate,
+                assignedRep: data.assignedRep,
+                probability: Number(data.probability) || 20,
+                notes: data.notes ? [data.notes] : [],
+              }),
+            })
+            if (res.ok) {
+              const saved = await res.json()
+              toast('Deal created', 'success')
+              router.push(`/crm/pipeline?open=${saved.id}`)
+            } else {
+              const err = await res.json().catch(() => ({}))
+              toast(err.error || 'Failed to create deal', 'error')
+            }
+          } catch {
+            toast('Network error — could not create deal', 'error')
+          }
+        }}
+        onClose={() => setCreatingDeal(false)}
+      />
+    )}
+    {creatingContract && (
+      <NewContractPanel
+        initialCompany={company.name}
+        initialCompanyId={company.id}
+        onSave={async (data: NewContractFormData) => {
+          setCreatingContract(false)
+          const startDate = data.startDate
+          const renewalDate = (() => {
+            try {
+              const d = new Date(startDate)
+              d.setMonth(d.getMonth() + Number(data.duration))
+              return d.toISOString().split('T')[0]
+            } catch {
+              return startDate
+            }
+          })()
+          try {
+            const res = await fetch('/api/contracts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                company: data.company,
+                companyId: company.id,
+                status: 'Draft',
+                value: Number(data.value),
+                serviceType: data.serviceType,
+                assignedRep: data.assignedRep,
+                billingStructure: data.billingStructure,
+                duration: Number(data.duration),
+                startDate,
+                renewalDate,
+                proposalId: data.proposalId,
+              }),
+            })
+            if (res.ok) {
+              const saved = await res.json()
+              toast('Contract created', 'success')
+              router.push(`/contracts?open=${saved.id}`)
+            } else {
+              const err = await res.json().catch(() => ({}))
+              toast(err.error || 'Failed to create contract', 'error')
+            }
+          } catch {
+            toast('Network error — could not create contract', 'error')
+          }
+        }}
+        onClose={() => setCreatingContract(false)}
       />
     )}
     </>

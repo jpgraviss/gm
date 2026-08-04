@@ -87,6 +87,25 @@ export interface Contact {
   title: string
 }
 
+// A single product/service pitched as part of a deal, with its own rate and
+// billing type — lets a deal like "$25.5K one-time (sales enablement) +
+// $57K recurring (6-month engagement)" be tracked as two real line items
+// instead of one opaque `value` number. `amount` is this line's own
+// contribution to the deal total (for a recurring line, the full value of
+// the engagement over `termMonths`, not a monthly rate — matches how a
+// deal's total pitched value is sized, unlike a signed contract's `value`,
+// which lib/metrics.ts documents as a per-billing-period amount because it
+// bills indefinitely post-signature).
+export interface DealLineItem {
+  id: string
+  serviceType: ServiceType
+  billingType: 'one-time' | 'recurring'
+  amount: number
+  /** Only meaningful when billingType === 'recurring'; informational
+   *  (amount / termMonths ≈ the monthly rate), not used to derive amount. */
+  termMonths?: number
+}
+
 export interface Deal {
   id: string
   company: string
@@ -95,6 +114,11 @@ export interface Deal {
   value: number
   serviceType: ServiceType
   serviceTypes?: ServiceType[]
+  /** When present, `value` and `serviceTypes` are derived from these
+   *  server-side — see lib/deal-line-items.ts. Optional/empty for deals
+   *  created before this existed, which keep working on the plain `value`
+   *  field alone. */
+  lineItems?: DealLineItem[]
   closeDate: string
   assignedRep: string
   probability: number

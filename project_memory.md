@@ -105,6 +105,14 @@ here is generated output.
   correctly scoped, and list/download dual-read the legacy folder so
   nothing's invisible in the meantime — but pre-existing files stay under
   their old (collision-prone) path until this script actually runs.
+- **`add_deals_line_items.sql`** — adds `deals.line_items jsonb not null
+  default '[]'`. Same live-DB-drift risk class as the `service_types` fix
+  a few entries up: the code (`app/api/deals/route.ts`,
+  `app/api/deals/[id]/route.ts`) unconditionally reads/writes this column
+  the moment a deal is saved with line items, so until this runs, saving a
+  deal with `lineItems` will 500 exactly like the `service_types` bug did.
+  Delivered to the user directly in chat per this repo's established
+  "paste SQL in chat" convention; no confirmation yet as of this writing.
 
 ## Recently shipped this session
 
@@ -158,14 +166,31 @@ here is generated output.
   Supabase SQL Editor and confirmed success. Also merged `SEO / AEO` and
   `GEO` into one catalog entry (#702, `lib/services.ts`) per user feedback
   that they shouldn't be two separately-pickable services.
-- Still on the table, not yet built (raised directly by the user, larger in
-  scope than a bug fix): a deal line-items model (per-service amount,
-  one-time vs. recurring, rolling up into pipeline totals — currently a
-  deal has one aggregate `value` number only) and a quick-action button on
-  company/contact pages to create a deal/proposal/contract without going
-  through the Pipeline page (confirmed no such entry point exists today).
-  Both need a scoping conversation before building, not schema work to do
-  silently.
+- Built both items flagged above, per the user's "Work on it" go-ahead:
+  - **Deal line items** (`lib/types.ts`'s `DealLineItem`, `lib/deal-line-items.ts`,
+    `components/crm/DealLineItemsEditor.tsx`): a deal can now be pitched as
+    multiple products/services at different rates and billing types
+    (`"$25.5K one-time + $57K recurring"` instead of one opaque `value`).
+    `amount` on a line item is that line's full contribution to the deal's
+    total pitched value (not a monthly rate, even for recurring lines) —
+    deliberately the opposite convention from `lib/metrics.ts`'s signed
+    *contract* `value` (per-billing-period, since a contract bills
+    indefinitely) — matched to the user's own stated arithmetic. Both
+    `POST /api/deals` and `PATCH /api/deals/[id]` derive `value`/
+    `serviceTypes` from `lineItems` when present via shared helpers; old
+    deals with no line items keep working unchanged. Requires the
+    `deals.line_items jsonb` column — see "Pending user action" below,
+    same live-DB-drift risk as the `service_types` fix.
+  - **Company-page quick-action buttons**: `app/crm/companies/page.tsx`'s
+    `CompanyPanel` gained "New Deal" (Deals tab) and "New Contract"
+    (Contracts tab) buttons, mirroring the existing self-contained "New
+    Proposal" button already there (fire-and-forget POST, company
+    pre-filled, no shared list state to update). New Deal navigates to
+    `/crm/pipeline?open=<id>` on success; New Contract to
+    `/contracts?open=<id>`. Correction to an earlier note in this file:
+    proposals could *already* be created from the company page before this
+    session — only deals and contracts were actually missing that entry
+    point.
 
 ## Where to look first
 

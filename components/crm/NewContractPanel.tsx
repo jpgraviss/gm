@@ -61,9 +61,14 @@ interface Props {
   // contract's proposalId isn't editable after creation), and relabels
   // the header/footer accordingly.
   initialData?: Contract
+  // Pre-fills company when opened from a company's own page (e.g. the
+  // Companies page's Contracts tab) so the user doesn't have to re-select
+  // a company they're already looking at.
+  initialCompany?: string
+  initialCompanyId?: string
 }
 
-export default function NewContractPanel({ onSave, onClose, initialProposalId, initialData }: Props) {
+export default function NewContractPanel({ onSave, onClose, initialProposalId, initialData, initialCompany, initialCompanyId }: Props) {
   const REPS = useTeamMembers()
   const today = new Date().toISOString().split('T')[0]
   const isEditing = !!initialData
@@ -77,7 +82,8 @@ export default function NewContractPanel({ onSave, onClose, initialProposalId, i
     duration: String(initialData.duration ?? ''),
     startDate: initialData.startDate || today,
   } : {
-    company: '',
+    company: initialCompany ?? '',
+    companyId: initialCompanyId,
     serviceType: 'Website Build',
     assignedRep: 'Graviss Marketing',
     value: '',

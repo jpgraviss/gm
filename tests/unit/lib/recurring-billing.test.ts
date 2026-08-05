@@ -58,6 +58,23 @@ describe('recurring-billing — period boundaries', () => {
   it('returns null for a contract that has not started yet', () => {
     expect(currentPeriodStart('2027-01-01', 1, new Date('2026-06-01'))).toBeNull()
   })
+
+  it('never returns a period start in the future for a month-end contract', () => {
+    // The bug this pins: Date.setMonth() overflows Jan 31 to Mar 3, so the
+    // computed period start landed AFTER today. The idempotency check
+    // (`issued_date >= periodStart`) could then never match, and the cron
+    // minted a fresh invoice every 5 minutes for days.
+    for (const start of ['2026-01-31', '2026-01-30', '2025-08-31']) {
+      const now = new Date('2026-03-01T12:00:00Z')
+      const result = currentPeriodStart(start, 1, now)!
+      expect(result <= '2026-03-01').toBe(true)
+    }
+  })
+
+  it('clamps a month-end anniversary into a short month', () => {
+    // Jan 31 + 1 month is Feb 28, not Mar 3.
+    expect(currentPeriodStart('2026-01-31', 1, new Date('2026-02-28T12:00:00Z'))).toBe('2026-02-28')
+  })
 })
 
 // ── Integration-style: the real generator against a mocked DB ───────────
@@ -67,7 +84,10 @@ interface Row { [k: string]: unknown }
 function makeDb(opts: {
   contracts?: Row[]
   maintenance?: Row[]
-  existingInvoice?: Row | null
+  /** Simulate the invoices primary key already holding this period's row. */
+  duplicateInvoiceId?: boolean
+  /** Simulate another concurrent run having already claimed the billing date. */
+  claimLost?: boolean
 }) {
   const inserted: Record<string, Row[]> = {}
   const updated: Row[] = []
@@ -79,9 +99,13 @@ function makeDb(opts: {
       chain.eq = vi.fn(() => chain)
       chain.gte = vi.fn(() => chain)
       chain.limit = vi.fn(() => chain)
-      chain.maybeSingle = vi.fn(() =>
-        Promise.resolve({ data: table === 'invoices' ? (opts.existingInvoice ?? null) : null, error: null }))
+      chain.maybeSingle = vi.fn(() => Promise.resolve({ data: null, error: null }))
       chain.insert = vi.fn((payload: Row) => {
+        if (table === 'invoices' && opts.duplicateInvoiceId) {
+          // Postgres unique_violation on the invoices primary key — the
+          // expected outcome on every cron tick after the first.
+          return Promise.resolve({ data: null, error: { code: '23505', message: 'duplicate key' } })
+        }
         inserted[table] = inserted[table] ?? []
         inserted[table].push(payload)
         return Promise.resolve({ data: payload, error: null })
@@ -90,6 +114,10 @@ function makeDb(opts: {
         updated.push(payload)
         const upd: Record<string, unknown> = {}
         upd.eq = vi.fn(() => upd)
+        upd.select = vi.fn(() => upd)
+        // The maintenance atomic claim: `data` non-null means this run won.
+        upd.maybeSingle = vi.fn(() =>
+          Promise.resolve({ data: opts.claimLost ? null : { id: 'm-1' }, error: null }))
         upd.then = (res: (v: unknown) => void) => Promise.resolve({ error: null }).then(res)
         return upd
       })
@@ -134,31 +162,54 @@ describe('recurring-billing — generateRecurringInvoices', () => {
     )
   })
 
-  it('is idempotent — skips when this period was already invoiced', async () => {
-    // The cron is pinged every 5 minutes; without this it would mint
-    // duplicate invoices continuously all day.
+  it('derives a deterministic invoice id from the contract and period', async () => {
+    // This id IS the idempotency mechanism: a second attempt for the same
+    // period collides with the invoices primary key. A check-then-insert
+    // would not survive the overlapping cron runs the GitHub pinger causes
+    // (--max-time 30 --retry 3 against a maxDuration=300 handler).
+    const { db, inserted } = makeDb({ contracts: [MONTHLY_CONTRACT] })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await generateRecurringInvoices(db as any, new Date('2026-03-20'))
+    expect(inserted['invoices'][0].id).toBe('inv-rec-c-1-2026-03-15')
+  })
+
+  it('treats a duplicate-key rejection as "already billed", not an error', async () => {
     const { db, inserted } = makeDb({
       contracts: [MONTHLY_CONTRACT],
-      existingInvoice: { id: 'inv-existing' },
+      duplicateInvoiceId: true,
     })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await generateRecurringInvoices(db as any, new Date('2026-03-20'))
 
     expect(res.invoicesCreated).toBe(0)
     expect(res.skipped).toBe(1)
+    expect(res.errors).toBe(0)
     expect(inserted['invoices']).toBeUndefined()
   })
 
-  it('normalizes an Annual contract to its per-period amount', async () => {
-    // Billing the full annual value every period would be a serious
-    // overcharge — this is the same guard the Create Invoice action has.
+  it('bills an Annual contract its full annual value, once per year', async () => {
+    // `contracts.value` is the per-BILLING-PERIOD amount (lib/metrics.ts), and
+    // an Annual contract is invoiced once per 12 months — so $12,000/yr must
+    // raise one $12,000 invoice. An earlier version ran the value through
+    // contractMonthlyValue() (the MRR normalization) and raised $1,000
+    // instead, under-billing the client 12x for the year.
     const { db, inserted } = makeDb({
       contracts: [{ ...MONTHLY_CONTRACT, billing_structure: 'Annual', value: 12_000 }],
     })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await generateRecurringInvoices(db as any, new Date('2026-03-20'))
 
-    expect(inserted['invoices'][0].amount).toBe(1000)
+    expect(inserted['invoices'][0].amount).toBe(12_000)
+  })
+
+  it('bills a Quarterly contract its full quarterly value', async () => {
+    const { db, inserted } = makeDb({
+      contracts: [{ ...MONTHLY_CONTRACT, billing_structure: 'Quarterly', value: 9_000 }],
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await generateRecurringInvoices(db as any, new Date('2026-03-20'))
+
+    expect(inserted['invoices'][0].amount).toBe(9_000)
   })
 
   it('never bills a one-time contract', async () => {
@@ -205,8 +256,43 @@ describe('recurring-billing — generateRecurringInvoices', () => {
     expect(inserted['invoices'][0]).toEqual(
       expect.objectContaining({ amount: 800, contract_id: 'c-1', source: 'recurring' }),
     )
-    // Schedule advanced by exactly one month.
+    // Schedule advanced by exactly one month — and the claim is written
+    // BEFORE the invoice, so a losing concurrent run never inserts at all.
     expect(updated[0]).toEqual({ next_billing_date: '2026-04-01' })
+  })
+
+  it('does not invoice when another concurrent run already claimed the date', async () => {
+    // The claim runs first precisely so the loser skips. The previous order
+    // (insert, then claim) had both runs insert an $800 invoice and quietly
+    // discarded only the losing claim.
+    const { db, inserted } = makeDb({
+      claimLost: true,
+      maintenance: [{
+        id: 'm-1', company: 'Acme Co', monthly_fee: 800,
+        next_billing_date: '2026-03-01', status: 'Active',
+      }],
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await generateRecurringInvoices(db as any, new Date('2026-03-20'))
+
+    expect(res.invoicesCreated).toBe(0)
+    expect(inserted['invoices']).toBeUndefined()
+  })
+
+  it('advances a month-end maintenance schedule without skipping February', async () => {
+    // Plain Date.setMonth() turns Jan 31 into Mar 3 — February would never
+    // be invoiced ($800 permanently lost) and the billing date would drift
+    // off the 31st forever.
+    const { db, updated } = makeDb({
+      maintenance: [{
+        id: 'm-1', company: 'Acme Co', monthly_fee: 800,
+        next_billing_date: '2026-01-31', status: 'Active',
+      }],
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await generateRecurringInvoices(db as any, new Date('2026-02-05'))
+
+    expect(updated[0]).toEqual({ next_billing_date: '2026-02-28' })
   })
 
   it('does not bill a maintenance record before its next billing date', async () => {

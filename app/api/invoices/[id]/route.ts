@@ -92,8 +92,9 @@ export const PATCH = withErrorHandler('invoices/[id] PATCH', async (req, { param
   if (body.status === 'Paid') {
     fireAutomations('invoice_paid', { invoiceId: id, ...data })
     // Delivery step 2 ("Invoice & Payment") — mirrors the Stripe webhook,
-    // which is the other way an invoice reaches Paid.
-    onInvoicePaid(data)
+    // which is the other way an invoice reaches Paid. Awaited so it isn't
+    // lost to the serverless freeze-on-response.
+    await onInvoicePaid(data)
   } else if (body.status === 'Overdue') {
     fireAutomations('invoice_overdue', { invoiceId: id, ...data })
   }

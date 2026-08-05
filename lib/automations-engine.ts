@@ -5,6 +5,7 @@ import { wrapBrandedEmail } from '@/lib/email-template'
 import { getSettings } from '@/lib/settings'
 import { shouldSendPushForEvent } from '@/lib/notification-preferences'
 import { contractMonthlyValue } from '@/lib/metrics'
+import { contractPeriodAmount, isRecurringStructure } from '@/lib/recurring-billing'
 import { getFirstPipelineStageName } from '@/lib/pipelines'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -806,7 +807,16 @@ async function executeAction(
       // Prefer the contract as the source of truth for amount/service when
       // this fires off a contract trigger — the whole point is that staff
       // shouldn't re-key what the contract already says.
-      let amount = Number(context.invoiceAmount ?? context.value ?? 0) || 0
+      //
+      // Deliberately does NOT fall back to `context.value`. `executeWorkflow`
+      // spreads the whole trigger row over the config (see the
+      // ACTION_CONFIG_ADAPTERS note above), and deals, contracts, proposals
+      // and renewals all carry a `value` column — so a "Deal Stage Changed →
+      // Create Invoice" automation on an $82,500 multi-year deal would raise
+      // a single $82,500 invoice off the raw row and skip the contract
+      // normalization below entirely. Only the action's own explicit
+      // `invoiceAmount` counts as a caller-supplied amount.
+      let amount = Number(context.invoiceAmount ?? 0) || 0
       let invServiceType = (context.invoiceServiceType as string) ?? (context.service_type as string) ?? 'General'
       let invCompany = company
       if (contractId) {
@@ -817,13 +827,18 @@ async function executeAction(
           .maybeSingle()
         if (contractRow) {
           if (!amount) {
-            // contractMonthlyValue normalizes Quarterly/Annual to a real
-            // per-period figure — billing an Annual contract's full value
-            // every month would be a serious overcharge.
-            amount = contractMonthlyValue({
-              value: Number(contractRow.value) || 0,
-              billingStructure: contractRow.billing_structure ?? '',
-            })
+            const structure = contractRow.billing_structure ?? ''
+            const contractValue = Number(contractRow.value) || 0
+            // `contracts.value` is the per-billing-period amount (lib/metrics.ts),
+            // which is exactly what one invoice should charge. Using
+            // contractMonthlyValue() here instead would divide Quarterly by 3
+            // and Annual by 12 — the right figure for an MRR dashboard, the
+            // wrong one for an invoice — and would resolve a One-time or
+            // Milestone contract to 0, silently raising no invoice at all for
+            // precisely the contracts most likely to need one.
+            amount = isRecurringStructure(structure)
+              ? contractPeriodAmount(contractValue, structure)
+              : contractValue
           }
           if (!context.invoiceServiceType && contractRow.service_type) invServiceType = contractRow.service_type
           if (!invCompany && contractRow.company) invCompany = contractRow.company

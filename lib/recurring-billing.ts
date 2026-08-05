@@ -1,5 +1,4 @@
 import { createServiceClient } from '@/lib/supabase'
-import { contractMonthlyValue } from '@/lib/metrics'
 import { logActivity } from '@/lib/activity-log'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -20,16 +19,30 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  *      (AUDIT #467) but regular month-to-month billing never did.
  *
  * Safety properties this deliberately guarantees:
- * - **Idempotent per period.** Before inserting, it checks whether an
- *   invoice already exists for that contract in the current billing period.
- *   The cron can run many times a day (a GitHub Action pings it every 5
- *   minutes) — without this it would mint duplicate invoices continuously.
- * - **Correct per-period amount.** `contractMonthlyValue()` normalizes
- *   Quarterly/Annual contract values; billing an Annual contract's full
- *   value every period would be a serious overcharge.
+ * - **Idempotent per period, enforced by the database.** The invoice id is
+ *   derived from the contract and the period start, so a second attempt for
+ *   the same period hits the `invoices` primary key and is rejected by
+ *   Postgres. An earlier version used a check-then-insert, which is not
+ *   safe here: the GitHub Action pings this route with
+ *   `--max-time 30 --retry 3` against a handler declaring `maxDuration = 300`,
+ *   so a slow tick genuinely runs up to four times concurrently, and
+ *   `vercel.json` schedules a fourth collision at 00:00 UTC. Four overlapping
+ *   runs would all read "no invoice yet" and all insert one.
+ * - **Correct per-period amount.** `contracts.value` is already the
+ *   per-billing-period figure (see lib/metrics.ts) — a Quarterly contract
+ *   with value 9000 bills $9,000 per quarter. This bills `value` directly.
+ *   It deliberately does NOT use `contractMonthlyValue()`, which divides by
+ *   3/12 to normalize for MRR: that is the right figure for a dashboard
+ *   metric and the wrong one for an invoice raised once per period, and
+ *   using it here under-billed Quarterly 3x and Annual 12x.
  * - **Never bills a $0 or negative amount.**
  * - **Never bills past the contract's end.** A contract whose renewal date
  *   has passed stops generating invoices rather than billing indefinitely.
+ * - **Month-end safe.** All month arithmetic clamps to the target month's
+ *   last day. Plain `Date.setMonth()` overflows (Jan 31 + 1 month → Mar 3),
+ *   which both pushed the computed period start into the future — defeating
+ *   the idempotency key entirely — and silently skipped a whole billing
+ *   month for month-end maintenance records.
  */
 
 export interface RecurringBillingResult {
@@ -59,6 +72,43 @@ export function isRecurringStructure(billingStructure: string): boolean {
 }
 
 /**
+ * The per-invoice amount for one billing period.
+ *
+ * `contracts.value` is already the per-billing-period figure — a Quarterly
+ * contract with value 9000 bills $9,000 every quarter. Deliberately NOT
+ * `contractMonthlyValue()`: that divides Quarterly by 3 and Annual by 12 to
+ * normalize for MRR, which is correct for a dashboard metric and wrong for
+ * an invoice raised once per period.
+ */
+export function contractPeriodAmount(value: number, billingStructure: string): number {
+  if (!isRecurringStructure(billingStructure)) return 0
+  return Number(value) || 0
+}
+
+/**
+ * Add whole months, clamping the day-of-month to the target month's last day.
+ *
+ * `Date.setMonth()` overflows instead of clamping: Jan 31 + 1 month lands on
+ * Mar 3, not Feb 28. That single behavior caused two separate billing bugs —
+ * a period start computed into the future (so the idempotency key never
+ * matched and invoices duplicated every tick) and a maintenance schedule that
+ * skipped February outright and then drifted off the 31st permanently.
+ */
+export function addMonthsClamped(dateStr: string, months: number): string {
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return dateStr
+  const day = d.getUTCDate()
+  // Day 0 of the following month is the last day of the target month.
+  const lastDayOfTarget = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months + 1, 0)).getUTCDate()
+  const result = new Date(Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth() + months,
+    Math.min(day, lastDayOfTarget),
+  ))
+  return result.toISOString().split('T')[0]
+}
+
+/**
  * The inclusive start date of the billing period `now` falls into, given a
  * contract that started on `startDate` and bills every `months` months.
  * Used as the idempotency key: at most one invoice per contract per period.
@@ -70,23 +120,19 @@ export function currentPeriodStart(startDate: string, months: number, now: Date)
 
   const monthsElapsed =
     (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth())
-  // Whole periods completed since the contract began.
   let periodsElapsed = Math.floor(monthsElapsed / months)
-  // Not yet past the anniversary day-of-month within this period.
-  const candidate = new Date(start)
-  candidate.setMonth(candidate.getMonth() + periodsElapsed * months)
-  if (candidate > now) periodsElapsed -= 1
-  if (periodsElapsed < 0) return null
 
-  const periodStart = new Date(start)
-  periodStart.setMonth(periodStart.getMonth() + periodsElapsed * months)
-  return periodStart.toISOString().split('T')[0]
-}
-
-function addMonths(dateStr: string, months: number): string {
-  const d = new Date(dateStr)
-  d.setMonth(d.getMonth() + months)
-  return d.toISOString().split('T')[0]
+  // Walk back until the period start is genuinely on or before `now`. A
+  // single decrement isn't enough — the old code decremented based on one
+  // candidate and then recomputed the answer without re-checking it, so a
+  // month-end contract could still return a future date.
+  const today = now.toISOString().split('T')[0]
+  while (periodsElapsed >= 0) {
+    const candidate = addMonthsClamped(startDate, periodsElapsed * months)
+    if (candidate <= today) return candidate
+    periodsElapsed -= 1
+  }
+  return null
 }
 
 export async function generateRecurringInvoices(
@@ -122,40 +168,31 @@ export async function generateRecurringInvoices(
       const periodStart = currentPeriodStart(startDate, months, now)
       if (!periodStart) { result.skipped++; continue }
 
-      const amount = contractMonthlyValue({
-        value: Number(contract.value) || 0,
-        billingStructure,
-      })
+      const amount = contractPeriodAmount(Number(contract.value) || 0, billingStructure)
       if (amount <= 0) { result.skipped++; continue }
 
-      // Idempotency: one invoice per contract per period. Without this the
-      // cron (pinged every 5 minutes) would mint duplicates all day.
-      const { data: existing } = await db
-        .from('invoices')
-        .select('id')
-        .eq('contract_id', contract.id as string)
-        .gte('issued_date', periodStart)
-        .limit(1)
-        .maybeSingle()
-      if (existing) { result.skipped++; continue }
-
-      const dueDate = addMonths(today, 0)
+      // Idempotency enforced by the primary key, not by a check-then-insert:
+      // overlapping cron runs would all read "no invoice yet" and all insert.
+      const invoiceId = `inv-rec-${contract.id}-${periodStart}`
       const due = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
       const { error } = await db.from('invoices').insert({
-        id: `inv-rec-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: invoiceId,
         company: contract.company ?? '',
         company_id: contract.company_id ?? null,
         contract_id: contract.id,
         amount,
         status: 'Pending',
-        issued_date: dueDate,
-        issue_date: dueDate,
+        issued_date: today,
+        issue_date: today,
         due_date: due,
         service_type: contract.service_type ?? 'General',
         source: 'recurring',
       })
       if (error) {
+        // 23505 = unique_violation: this period is already invoiced, which is
+        // the expected outcome on every tick after the first. Not an error.
+        if (error.code === '23505') { result.skipped++; continue }
         console.error(`[recurring-billing] contract ${contract.id} invoice insert failed:`, error.message)
         result.errors++
         continue
@@ -195,8 +232,24 @@ export async function generateRecurringInvoices(
       const amount = Number(record.monthly_fee) || 0
       if (amount <= 0) { result.skipped++; continue }
 
+      // Claim the billing date FIRST, and only invoice if the claim won.
+      // The previous order (insert, then claim) meant two overlapping runs
+      // both inserted an $800 invoice and only the losing claim was silently
+      // discarded — and a failed claim left next_billing_date unchanged, so
+      // the next tick five minutes later invoiced again, forever.
+      const { data: claimed } = await db
+        .from('maintenance_records')
+        .update({ next_billing_date: addMonthsClamped(nextBilling, 1) })
+        .eq('id', record.id as string)
+        .eq('next_billing_date', nextBilling)
+        .select('id')
+        .maybeSingle()
+      if (!claimed) { result.skipped++; continue }
+
       const { error } = await db.from('invoices').insert({
-        id: `inv-maint-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        // Deterministic on the claimed billing date — belt and braces
+        // alongside the claim above.
+        id: `inv-maint-${record.id}-${nextBilling}`,
         company: record.company ?? '',
         company_id: record.company_id ?? null,
         contract_id: record.contract_id ?? null,
@@ -209,21 +262,16 @@ export async function generateRecurringInvoices(
         source: 'recurring',
       })
       if (error) {
+        if (error.code === '23505') { result.skipped++; continue }
         console.error(`[recurring-billing] maintenance ${record.id} invoice insert failed:`, error.message)
+        // Release the claim so the next run retries rather than silently
+        // skipping a client's billing month.
+        await db
+          .from('maintenance_records')
+          .update({ next_billing_date: nextBilling })
+          .eq('id', record.id as string)
         result.errors++
         continue
-      }
-
-      // Advance the schedule only after the invoice actually landed — an
-      // insert failure must not silently skip a client's billing month.
-      const { error: advanceErr } = await db
-        .from('maintenance_records')
-        .update({ next_billing_date: addMonths(nextBilling, 1) })
-        .eq('id', record.id as string)
-        .eq('next_billing_date', nextBilling) // atomic claim vs. overlapping runs
-      if (advanceErr) {
-        console.error(`[recurring-billing] maintenance ${record.id} schedule advance failed:`, advanceErr.message)
-        result.errors++
       }
 
       result.invoicesCreated++

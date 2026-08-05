@@ -219,7 +219,7 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
     // contract can reach Fully Executed through must advance delivery
     // step 1 identically, or which one a client happened to use would
     // decide whether their onboarding board is accurate.
-    onContractFullyExecuted(data)
+    await onContractFullyExecuted(data)
   } else if (body.status === 'Sent') {
     fireAutomations('contract_sent', { contractId: id, ...data })
   }

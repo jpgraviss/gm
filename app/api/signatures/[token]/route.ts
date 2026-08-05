@@ -265,7 +265,7 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
       // staff member remembered to tick it on the Delivery dashboard — even
       // though this is the exact moment the app learns the contract is
       // signed, and the client sees that same step on /client/workflow.
-      onContractFullyExecuted(executedContract)
+      await onContractFullyExecuted(executedContract)
     }
   } else if (!contractIsTerminal && clientSigned) {
     // Only client signed — countersign needed

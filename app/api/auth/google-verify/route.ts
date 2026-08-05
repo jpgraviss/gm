@@ -263,7 +263,7 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   // ── 3. Check portal_clients (external clients) ──
   const { data: clientRow, error: clientErr } = await db
     .from('portal_clients')
-    .select('id, email, company, company_id, contact, service, access, pending_approval')
+    .select('id, email, company, company_id, contact, service, access, pending_approval, last_login')
     .ilike('email', email)
     .maybeSingle()
 
@@ -302,8 +302,10 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   }
 
   // Delivery step 4 ("Portal Access") — see the matching call in
-  // app/api/auth/session/route.ts.
-  onPortalFirstLogin(clientRow)
+  // app/api/auth/session/route.ts for why this is gated and awaited.
+  if (!clientRow.last_login || clientRow.last_login === 'Never') {
+    await onPortalFirstLogin(clientRow)
+  }
 
   const names = (clientRow.contact ?? '').split(' ')
   return respondWithUser({

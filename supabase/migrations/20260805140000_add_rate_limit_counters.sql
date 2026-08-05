@@ -1,7 +1,8 @@
 -- Durable, cross-instance counters for account lockout and rate limiting.
 --
--- `lib/login-attempts.ts` (account lockout for Google Sign-In, the portal
--- magic link, and the onboarding verification code) used an in-process Map.
+-- `lib/login-attempts.ts` (account lockout for Google Sign-In, the staff and
+-- portal onboarding verification codes, and the 2FA code) used an in-process
+-- Map.
 -- The file honestly documented the tradeoff, but on Vercel it isn't a small
 -- one: functions run as many short-lived, independently-scaled instances,
 -- so an attacker hitting different instances effectively resets the

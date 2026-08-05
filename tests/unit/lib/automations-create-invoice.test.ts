@@ -105,9 +105,11 @@ describe('automations-engine — Create Invoice action (Phase 1.1)', () => {
     )
   })
 
-  it('normalizes an Annual contract to its per-period amount, not the full year', async () => {
-    // Billing an Annual contract's whole value every period would be a
-    // serious overcharge — contractMonthlyValue exists precisely for this.
+  it('bills an Annual contract its per-billing-period value, not a monthly slice', async () => {
+    // `contracts.value` is already the per-billing-period amount
+    // (lib/metrics.ts), so an Annual contract worth $12,000/yr invoices
+    // $12,000. An earlier version ran it through contractMonthlyValue() —
+    // the MRR normalization — and raised $1,000, under-billing 12x.
     contractResult = {
       data: { company: 'Acme Co', company_id: 'comp-1', value: 12_000, service_type: 'Retainer', billing_structure: 'Annual' },
       error: null,
@@ -116,7 +118,34 @@ describe('automations-engine — Create Invoice action (Phase 1.1)', () => {
     fireAutomations('contract_executed', { company: 'Acme Co', contractId: 'c-annual' })
     await flush()
 
-    expect(insertCalls['invoices'][0].amount).toBe(1000)
+    expect(insertCalls['invoices'][0].amount).toBe(12_000)
+  })
+
+  it('bills a One-time contract its full value instead of skipping it', async () => {
+    // contractMonthlyValue() resolves One-time/Milestone/Project to 0, so
+    // routing through it made the action silently raise NO invoice for
+    // exactly the contracts most likely to need one.
+    contractResult = {
+      data: { company: 'Acme Co', company_id: 'comp-1', value: 25_000, service_type: 'Web Design', billing_structure: 'One-time' },
+      error: null,
+    }
+    setupAutomation('Contract Fully Executed')
+    fireAutomations('contract_executed', { company: 'Acme Co', contractId: 'c-onetime' })
+    await flush()
+
+    expect(insertCalls['invoices'][0].amount).toBe(25_000)
+  })
+
+  it('ignores a raw `value` spread in from the trigger row', async () => {
+    // executeWorkflow spreads the whole trigger row over the config, and
+    // deals/contracts/proposals/renewals all carry `value`. Reading it here
+    // meant a "Deal Stage Changed → Create Invoice" automation on an $82,500
+    // multi-year deal raised a single $82,500 invoice off the raw row.
+    setupAutomation('Contract Fully Executed')
+    fireAutomations('contract_executed', { company: 'Acme Co', companyId: 'comp-1', value: 82_500 })
+    await flush()
+
+    expect(insertCalls['invoices']).toBeUndefined()
   })
 
   it('skips entirely rather than creating a $0 invoice when no amount resolves', async () => {

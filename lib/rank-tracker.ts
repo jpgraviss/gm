@@ -352,6 +352,17 @@ export async function checkAllRanks(batchSize = 25): Promise<{
     } catch (err) {
       failed += 1
       console.error('[rank-tracker] check failed for', row.id, err)
+      // Stamp the attempt even though it failed. checkKeyword() already does
+      // this when a lookup returns null, but not when it THROWS — and
+      // rankCheckDue() is "any keyword not checked today", so one keyword
+      // that throws every time would otherwise keep the daily gate open
+      // forever, re-running the whole rank + competitor sweep every 5
+      // minutes indefinitely. A failed attempt today is still an attempt
+      // today; the next run retries it tomorrow.
+      await db
+        .from('tracked_keywords')
+        .update({ last_checked_at: new Date().toISOString() })
+        .eq('id', row.id)
     }
   }
 
@@ -392,15 +403,38 @@ export async function checkCompetitorRanks(maxLookups = 50): Promise<{
   ])
 
   const checkedAt = new Date().toISOString()
+  const todayStart = new Date()
+  todayStart.setUTCHours(0, 0, 0, 0)
+
+  // Which pairs already have a snapshot today. Without this, the caller's
+  // `rankCheckDue()` gate is not enough: it stays true all day while
+  // checkAllRanks() clears only 25 keywords per tick, so every 5-minute tick
+  // re-ran the SAME first `maxLookups` pairs — billable SERP calls plus
+  // duplicate same-day rows — while pairs past the cap were never reached.
+  // Skipping already-done pairs makes the budget advance through the backlog
+  // instead of spinning on its head.
+  const doneToday = new Set<string>()
+  const { data: todaysSnapshots } = await db
+    .from('competitor_rank_snapshots')
+    .select('competitor_id, tracked_keyword_id')
+    .gte('checked_at', todayStart.toISOString())
+  for (const s of (todaysSnapshots ?? []) as Record<string, unknown>[]) {
+    doneToday.add(`${s.competitor_id}::${s.tracked_keyword_id}`)
+  }
+
   let checked = 0
   let recorded = 0
 
   outer:
   for (const competitor of (competitors ?? []) as Record<string, unknown>[]) {
     for (const kw of (keywords ?? []) as Record<string, unknown>[]) {
-      // Only compare a competitor against keywords for the same client —
-      // ranking a competitor for an unrelated client's keyword is noise.
-      if (competitor.company_id && kw.company_id && competitor.company_id !== kw.company_id) continue
+      // Only compare a competitor against keywords for the same client.
+      // Strict equality including null: a competitor row with no company_id
+      // (the column is nullable and nothing enforces it) used to be scored
+      // against EVERY client's keywords, burning the per-run budget and
+      // writing cross-client noise into the Competitors chart.
+      if ((competitor.company_id ?? null) !== (kw.company_id ?? null)) continue
+      if (doneToday.has(`${competitor.id}::${kw.id}`)) continue
       // Hard cap: each lookup is a billable SERP call.
       if (checked >= maxLookups) break outer
 
@@ -421,8 +455,10 @@ export async function checkCompetitorRanks(maxLookups = 50): Promise<{
         competitor_id:      competitor.id,
         tracked_keyword_id: kw.id,
         position:           serp.position,
+        url:                serp.url ?? null,
         checked_at:         checkedAt,
       })
+      doneToday.add(`${competitor.id}::${kw.id}`)
       if (error) {
         console.error('[rank-tracker] competitor snapshot insert failed', error.message)
         continue

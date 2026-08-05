@@ -55,6 +55,17 @@ interface WorkflowRow {
   [column: string]: unknown
 }
 
+function normalizeService(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
+/** Either service label containing the other counts as the same line —
+ *  'website' vs 'website development', 'seo' vs 'seo / aeo'. */
+function servicesOverlap(a: string, b: string): boolean {
+  if (!a || !b) return false
+  return a === b || a.includes(b) || b.includes(a)
+}
+
 function isTerminal(status: unknown): boolean {
   return typeof status === 'string' && (DELIVERY_TERMINAL_STATUSES as readonly string[]).includes(status)
 }
@@ -86,9 +97,14 @@ async function findWorkflows(
   const rows = [...seen.values()]
   if (companyId) return rows
 
-  // Name-only match: tighten the exact-string DB filter to the same
-  // normalization the rest of the app compares companies with, so
-  // "ADCO, Inc." and "adco inc" don't silently miss each other.
+  // Name-only match. Note the tolerance here is narrow and deliberately not
+  // oversold: the DB filter is already exact-string `.eq()`, and
+  // normalizeCompanyName only trims and lowercases — it does NOT strip
+  // punctuation or legal suffixes, so "ADCO, Inc." and "ADCO Inc" are still
+  // different companies to this code. That's acceptable because company_id
+  // is the real key and this branch only exists for legacy workflow rows
+  // created before the FK was populated; the fix for a genuine name mismatch
+  // is to backfill company_id, not to loosen the matching.
   const target = normalizeCompanyName(companyName)
   return rows.filter(r => normalizeCompanyName(r.company_name) === target)
 }
@@ -112,8 +128,14 @@ export async function advanceDeliveryStep(input: AdvanceDeliveryStepInput): Prom
     if (all.length === 0) return 0
 
     // Prefer this event's own service line when the company runs several.
-    const service = input.serviceType || null
-    const scoped = service ? all.filter(w => w.service_type === service) : []
+    // Matched loosely on purpose: `delivery_workflows.service_type` defaults
+    // to 'Website' while a contract or invoice may carry 'Website
+    // Development', and an exact comparison would miss and silently fall
+    // back to advancing every workflow — the opposite of the intent.
+    const service = normalizeService(input.serviceType)
+    const scoped = service
+      ? all.filter(w => servicesOverlap(normalizeService(w.service_type), service))
+      : []
     const candidates = scoped.length > 0 ? scoped : all
 
     const now = new Date().toISOString()

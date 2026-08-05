@@ -1,8 +1,13 @@
 // AUDIT.md #207 — "Login Attempts" (brute-force protection) had zero
 // enforcement. Real account-level lockout for the auth surfaces where a
 // failure is actually observable server-side: Google Sign-In against an
-// unrecognized/disabled account, the portal magic-link token, and the
-// portal onboarding verification code. Password-based login for portal
+// unrecognized/disabled account, and the staff and portal onboarding
+// verification codes (plus the 2FA code). The portal magic-link redemption
+// route is deliberately NOT tracked here — its token is 32 bytes of
+// crypto.randomBytes and single-use, so there is no small guess space to
+// lock out, and it is IP-rate-limited in proxy.ts regardless. (An earlier
+// version of this comment claimed it was covered; it never was.)
+// Password-based login for portal
 // clients goes straight to Supabase Auth client-side — a wrong password
 // never reaches this backend at all, so it can't be tracked here; Supabase
 // has its own independent brute-force protection on that path regardless.

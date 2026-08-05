@@ -8,7 +8,7 @@
  * never divide by contract duration.
  */
 
-import { serviceRevenueKind } from '@/lib/services'
+import { serviceRevenueKind, type RevenueKind } from '@/lib/services'
 
 export interface MrrContract {
   status?: string
@@ -72,8 +72,37 @@ export function contractMonthlyValue(c: MrrContract): number {
  * service dimension existed, so historical records aren't reclassified.
  */
 export function isRecurringRevenue(c: MrrContract): boolean {
-  if (contractMonthlyValue(c) <= 0) return false
-  return serviceRevenueKind(c.serviceType) !== 'one-time'
+  return contractRevenueKind(c) === 'recurring' && contractMonthlyValue(c) > 0
+}
+
+/**
+ * Which revenue bucket a contract belongs in. Every contract lands in exactly
+ * one, so the four totals below sum to the whole book with no double-counting
+ * and nothing silently dropped.
+ *
+ *   recurring     run rate — MRR/ARR
+ *   one-time      a job that's billed once (or financed over a payment plan)
+ *   other         real revenue billed ad hoc: training, cancellation, hourly
+ *   pass-through  NOT revenue — billed to the client and remitted onward
+ *
+ * The service decides when the catalog recognizes it. When it doesn't
+ * (legacy free-text), the billing structure alone decides, which is what this
+ * returned before the service dimension existed — historical records are
+ * never silently reclassified.
+ */
+export function contractRevenueKind(c: MrrContract): Exclude<RevenueKind, never> {
+  const fromService = serviceRevenueKind(c.serviceType)
+  if (fromService) return fromService
+  return contractMonthlyValue(c) > 0 ? 'recurring' : 'one-time'
+}
+
+/** Sum of a bucket. Uses the monthly-normalized figure for run rate and the
+ *  contract's own value for everything else, which is billed as a lump. */
+function sumKind(contracts: MrrContract[], kind: RevenueKind): number {
+  return contracts
+    .filter(c => RECURRING_STATUSES.includes(c.status ?? ''))
+    .filter(c => contractRevenueKind(c) === kind)
+    .reduce((sum, c) => sum + (kind === 'recurring' ? contractMonthlyValue(c) : (c.value ?? 0)), 0)
 }
 
 /**
@@ -81,10 +110,7 @@ export function isRecurringRevenue(c: MrrContract): boolean {
  * executed/active recurring contracts.
  */
 export function computeMRR(contracts: MrrContract[]): number {
-  return contracts
-    .filter(c => RECURRING_STATUSES.includes(c.status ?? ''))
-    .filter(isRecurringRevenue)
-    .reduce((sum, c) => sum + contractMonthlyValue(c), 0)
+  return sumKind(contracts, 'recurring')
 }
 
 /**
@@ -94,10 +120,29 @@ export function computeMRR(contracts: MrrContract[]): number {
  * money that arrives once per job and shouldn't be read as run rate.
  */
 export function computeOneTimeValue(contracts: MrrContract[]): number {
-  return contracts
-    .filter(c => RECURRING_STATUSES.includes(c.status ?? ''))
-    .filter(c => !isRecurringRevenue(c))
-    .reduce((sum, c) => sum + (c.value ?? 0), 0)
+  return sumKind(contracts, 'one-time')
+}
+
+/** Ad-hoc revenue: Sales Training, Cancellation fees, Hourly Services. */
+export function computeOtherValue(contracts: MrrContract[]): number {
+  return sumKind(contracts, 'other')
+}
+
+/**
+ * Money billed to clients and remitted straight on to a third party —
+ * Advertising Spend, Client Reimbursable Expenses. **Not agency revenue.**
+ * Reported so the cash movement stays visible, and deliberately excluded from
+ * MRR, one-time and other, so no revenue total can accidentally absorb it.
+ * Billing $10,000 of ad spend alongside a $2,000 management fee is $2,000 of
+ * revenue and $10,000 of pass-through, not $12,000 of anything.
+ */
+export function computePassThroughValue(contracts: MrrContract[]): number {
+  return sumKind(contracts, 'pass-through')
+}
+
+/** Agency revenue proper: everything except pass-through. */
+export function computeTotalRevenue(contracts: MrrContract[]): number {
+  return computeMRR(contracts) + computeOneTimeValue(contracts) + computeOtherValue(contracts)
 }
 
 /** Annual Recurring Revenue = MRR × 12. */

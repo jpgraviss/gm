@@ -17,7 +17,19 @@
 
 export type ServiceLane = 'Marketing' | 'Sales'
 export type ServiceLayer = 'Foundation' | 'Fractional Leadership'
-export type ServiceCategory = 'One-Time Build' | 'Ongoing MRR' | 'Fractional Engagement'
+export type ServiceCategory =
+  | 'One-Time Build'
+  | 'Ongoing MRR'
+  | 'Fractional Engagement'
+  // Billed to the client and remitted straight on to a third party (ad
+  // platforms, travel, hardware). Cash moves through the agency but is not
+  // agency revenue, so it must be excluded from revenue totals entirely —
+  // not merely from MRR. Billing $10k of ad spend alongside a $2k management
+  // fee is $2k of revenue.
+  | 'Pass-Through'
+  // Real revenue that is neither run rate nor a standard one-time build —
+  // billed ad hoc (training, cancellation fees, hourly work).
+  | 'Other'
 
 interface ServiceTierInput {
   label: string
@@ -29,8 +41,10 @@ interface ServiceTierInput {
 
 interface ServiceDefinitionInput {
   name: string
-  lane: ServiceLane
-  layer: ServiceLayer
+  /** Omitted for billing/accounting categories that aren't sold as a
+   *  packaged offering in a lane (pass-through costs, cancellation fees). */
+  lane?: ServiceLane
+  layer?: ServiceLayer
   category: ServiceCategory
   color: string
   tiers?: readonly ServiceTierInput[]
@@ -61,7 +75,10 @@ const SERVICES_RAW = [
     // 'GEO' kept as an alias so any deal/project/proposal that already
     // stored the literal 'GEO' value still resolves to a real color/name
     // instead of falling back to gray.
-    name: 'SEO / AEO / GEO',
+    // Renamed to 'SEO Management' (Jonathan's billing taxonomy). Every prior
+    // spelling stays an alias, so stored deals/contracts/invoices keep
+    // resolving to this entry and keep their revenue classification.
+    name: 'SEO Management',
     lane: 'Marketing', layer: 'Foundation', category: 'Ongoing MRR',
     color: 'bg-teal-100 text-teal-700',
     tiers: [
@@ -69,10 +86,10 @@ const SERVICES_RAW = [
       { label: 'Standard', price: 700, cadence: 'monthly' },
       { label: 'Premium', price: 900, cadence: 'monthly' },
     ],
-    aliases: ['SEO', 'AEO', 'GEO', 'SEO / AEO'],
+    aliases: ['SEO', 'AEO', 'GEO', 'SEO / AEO', 'SEO / AEO / GEO'],
   },
   {
-    name: 'Social Media',
+    name: 'Social Media Management',
     lane: 'Marketing', layer: 'Foundation', category: 'Ongoing MRR',
     color: 'bg-pink-100 text-pink-700',
     tiers: [
@@ -80,6 +97,15 @@ const SERVICES_RAW = [
       { label: 'Standard', price: 2750, cadence: 'monthly' },
       { label: 'Premium', price: 4000, cadence: 'monthly', note: '$4,000+/mo' },
     ],
+    aliases: ['Social Media'],
+  },
+  {
+    name: 'Advertising Management',
+    lane: 'Marketing', layer: 'Foundation', category: 'Ongoing MRR',
+    color: 'bg-fuchsia-100 text-fuchsia-700',
+    // The agency's monthly fee for running paid media. Deliberately separate
+    // from 'Advertising Spend' below: the fee is revenue, the spend is not.
+    aliases: ['PPC', 'Paid Ads', 'Ad Management'],
   },
   {
     name: 'Email Marketing',
@@ -106,8 +132,10 @@ const SERVICES_RAW = [
   },
   // ── Sales Lane — Foundation ──────────────────────────────────────────────
   {
+    // Classified 'Other' rather than 'One-Time Build': billed ad hoc per
+    // sprint rather than as a delivery project with a build lifecycle.
     name: 'Sales Training',
-    lane: 'Sales', layer: 'Foundation', category: 'One-Time Build',
+    lane: 'Sales', layer: 'Foundation', category: 'Other',
     color: 'bg-orange-100 text-orange-700',
     tiers: [
       { label: 'Sales Training Sprint', price: 10000, cadence: 'one-time', note: 'Per sprint · five AE sprints, à la carte, any order' },
@@ -148,6 +176,51 @@ const SERVICES_RAW = [
       { label: 'Hourly Consulting', price: 250, cadence: 'hourly', note: '5-hr blocks' },
     ],
   },
+  // ── Pass-through — billed to the client, remitted to a third party ───────
+  // Not agency revenue. Excluded from MRR, one-time revenue AND revenue
+  // totals; reported separately so the cash movement is still visible.
+  {
+    name: 'Advertising Spend',
+    category: 'Pass-Through',
+    color: 'bg-slate-100 text-slate-700',
+    aliases: ['Ad Spend', 'Media Spend'],
+  },
+  {
+    name: 'Client Reimbursable Expenses',
+    category: 'Pass-Through',
+    color: 'bg-stone-100 text-stone-700',
+    // Replaces the previous free-text 'Travel Expense' and 'Amazon Order'
+    // values — kept as aliases so historical records reclassify to
+    // pass-through automatically instead of being counted as revenue.
+    aliases: ['Travel Expense', 'Amazon Order', 'Reimbursable Expenses', 'Expenses'],
+  },
+  // ── One-time jobs ────────────────────────────────────────────────────────
+  {
+    name: 'Onboarding and Setup Fee',
+    lane: 'Marketing', layer: 'Foundation', category: 'One-Time Build',
+    color: 'bg-sky-100 text-sky-700',
+    aliases: ['Onboarding Fee', 'Setup Fee', 'Onboarding'],
+  },
+  {
+    name: 'Content and Creative',
+    lane: 'Marketing', layer: 'Foundation', category: 'One-Time Build',
+    color: 'bg-rose-100 text-rose-700',
+    aliases: ['Content', 'Creative', 'Design', 'Content Marketing'],
+  },
+  // ── Other — real revenue, billed ad hoc ──────────────────────────────────
+  {
+    name: 'Cancellation',
+    category: 'Other',
+    color: 'bg-red-100 text-red-700',
+    aliases: ['Cancellation Fee', 'Early Termination'],
+  },
+  {
+    name: 'Hourly Services',
+    category: 'Other',
+    color: 'bg-zinc-100 text-zinc-700',
+    // Billed from logged time entries rather than a contract cadence.
+    aliases: ['Hourly', 'Hourly Consulting', 'Consulting'],
+  },
 ] as const satisfies readonly ServiceDefinitionInput[]
 
 export type ServiceName = typeof SERVICES_RAW[number]['name']
@@ -162,8 +235,8 @@ export interface ServiceTier {
 
 export interface ServiceDefinition {
   name: ServiceName
-  lane: ServiceLane
-  layer: ServiceLayer
+  lane?: ServiceLane
+  layer?: ServiceLayer
   category: ServiceCategory
   color: string
   tiers?: readonly ServiceTier[]
@@ -212,13 +285,19 @@ export function getService(name: string) {
  * — callers fall back to the contract's own billing structure rather than
  * silently reclassifying historical records.
  */
-export function serviceRevenueKind(name?: string | null): 'recurring' | 'one-time' | null {
+export type RevenueKind = 'recurring' | 'one-time' | 'pass-through' | 'other'
+
+export function serviceRevenueKind(name?: string | null): RevenueKind | null {
   if (!name) return null
   const service = getService(name)
   if (!service) return null
   switch (service.category) {
     case 'Ongoing MRR': return 'recurring'
     case 'One-Time Build': return 'one-time'
+    // Billed to the client, remitted to a third party. Never revenue.
+    case 'Pass-Through': return 'pass-through'
+    // Real revenue, billed ad hoc — training, cancellation fees, hourly.
+    case 'Other': return 'other'
     // Fractional engagements are sold as monthly retainer tiers (Tier 1-3),
     // alongside a one-time assessment and hourly blocks. The retainer is the
     // ongoing part and the reason a fractional client is on the books, so the

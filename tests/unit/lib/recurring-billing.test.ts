@@ -138,7 +138,7 @@ const MONTHLY_CONTRACT: Row = {
   id: 'c-1', company: 'Acme Co', company_id: 'comp-1',
   value: 2500, billing_structure: 'Monthly',
   start_date: '2026-01-15', renewal_date: '2027-01-15',
-  service_type: 'SEO / AEO / GEO', status: 'Fully Executed',
+  service_type: 'SEO Management', status: 'Fully Executed',
 }
 
 describe('recurring-billing — generateRecurringInvoices', () => {

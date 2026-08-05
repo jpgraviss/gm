@@ -10,7 +10,7 @@ import type { DealLineItem } from '@/lib/types'
 function item(partial: Partial<DealLineItem> & { amount: number }): DealLineItem {
   return {
     id: partial.id ?? `li-${Math.random().toString(36).slice(2)}`,
-    serviceType: (partial.serviceType ?? 'SEO / AEO / GEO') as DealLineItem['serviceType'],
+    serviceType: (partial.serviceType ?? 'SEO Management') as DealLineItem['serviceType'],
     billingType: partial.billingType ?? 'one-time',
     amount: partial.amount,
     ...(partial.termMonths !== undefined ? { termMonths: partial.termMonths } : {}),
@@ -24,7 +24,7 @@ describe('computeDealBillingSplit', () => {
       serviceType: 'Website Build',
       lineItems: [
         item({ serviceType: 'Website Build', billingType: 'one-time', amount: 57_000 }),
-        item({ serviceType: 'SEO / AEO / GEO', billingType: 'recurring', amount: 30_000, termMonths: 6 }),
+        item({ serviceType: 'SEO Management', billingType: 'recurring', amount: 30_000, termMonths: 6 }),
       ],
     }
     expect(computeDealBillingSplit(deal)).toEqual({ oneTime: 57_000, recurring: 30_000, total: 87_000 })
@@ -40,7 +40,7 @@ describe('computeDealBillingSplit', () => {
   it('keeps total equal to deal.value, booking any line-item drift as one-time', () => {
     const deal: ReportableDeal = {
       value: 10_000,
-      serviceType: 'SEO / AEO / GEO',
+      serviceType: 'SEO Management',
       lineItems: [item({ billingType: 'recurring', amount: 6_000 })],
     }
     expect(computeDealBillingSplit(deal)).toEqual({ oneTime: 4_000, recurring: 6_000, total: 10_000 })
@@ -58,11 +58,11 @@ describe('computeDealsBillingSplit', () => {
           item({ serviceType: 'Maintenance', billingType: 'recurring', amount: 5_000, termMonths: 1 }),
         ],
       },
-      { value: 12_000, serviceType: 'SEO / AEO / GEO' },
+      { value: 12_000, serviceType: 'SEO Management' },
       {
         value: 9_000,
-        serviceType: 'SEO / AEO / GEO',
-        lineItems: [item({ serviceType: 'SEO / AEO / GEO', billingType: 'recurring', amount: 9_000, termMonths: 3 })],
+        serviceType: 'SEO Management',
+        lineItems: [item({ serviceType: 'SEO Management', billingType: 'recurring', amount: 9_000, termMonths: 3 })],
       },
     ]
     expect(computeDealsBillingSplit(deals)).toEqual({ oneTime: 69_000, recurring: 14_000, total: 83_000 })
@@ -74,7 +74,7 @@ describe('computeDealsBillingSplit', () => {
 
   it('total matches a plain sum of deal.value (the headline KPI)', () => {
     const deals: ReportableDeal[] = [
-      { value: 5_000, serviceType: 'SEO / AEO / GEO' },
+      { value: 5_000, serviceType: 'SEO Management' },
       { value: 7_500, serviceType: 'PPC', lineItems: [item({ serviceType: 'PPC', amount: 7_500 })] },
     ]
     const split = computeDealsBillingSplit(deals)
@@ -87,30 +87,30 @@ describe('aggregateServiceRevenue (AUDIT #719)', () => {
   it('splits a line-item deal across two services by each line item amount', () => {
     const deals: ReportableDeal[] = [{
       value: 82_500,
-      serviceType: 'SEO / AEO / GEO',
+      serviceType: 'SEO Management',
       lineItems: [
-        item({ serviceType: 'SEO / AEO / GEO', amount: 25_500 }),
+        item({ serviceType: 'SEO Management', amount: 25_500 }),
         item({ serviceType: 'Website Build', amount: 57_000 }),
       ],
     }]
     expect(aggregateServiceRevenue(deals)).toEqual([
       { service: 'Website Build', revenue: 57_000, deals: 1 },
-      { service: 'SEO / AEO / GEO', revenue: 25_500, deals: 1 },
+      { service: 'SEO Management', revenue: 25_500, deals: 1 },
     ])
   })
 
   it('sums multiple line items of the same service within one deal, counting the deal once', () => {
     const deals: ReportableDeal[] = [{
       value: 15_000,
-      serviceType: 'SEO / AEO / GEO',
+      serviceType: 'SEO Management',
       lineItems: [
-        item({ serviceType: 'SEO / AEO / GEO', billingType: 'one-time', amount: 4_000 }),
-        item({ serviceType: 'SEO / AEO / GEO', billingType: 'recurring', amount: 6_000 }),
+        item({ serviceType: 'SEO Management', billingType: 'one-time', amount: 4_000 }),
+        item({ serviceType: 'SEO Management', billingType: 'recurring', amount: 6_000 }),
         item({ serviceType: 'PPC', amount: 5_000 }),
       ],
     }]
     expect(aggregateServiceRevenue(deals)).toEqual([
-      { service: 'SEO / AEO / GEO', revenue: 10_000, deals: 1 },
+      { service: 'SEO Management', revenue: 10_000, deals: 1 },
       { service: 'PPC', revenue: 5_000, deals: 1 },
     ])
   })
@@ -126,13 +126,13 @@ describe('aggregateServiceRevenue (AUDIT #719)', () => {
     const deals: ReportableDeal[] = [
       {
         value: 82_500,
-        serviceType: 'SEO / AEO / GEO',
+        serviceType: 'SEO Management',
         lineItems: [
-          item({ serviceType: 'SEO / AEO / GEO', amount: 25_500 }),
+          item({ serviceType: 'SEO Management', amount: 25_500 }),
           item({ serviceType: 'Website Build', amount: 57_000 }),
         ],
       },
-      { value: 20_000, serviceType: 'SEO / AEO / GEO' },
+      { value: 20_000, serviceType: 'SEO Management' },
       { value: 8_000, serviceType: 'Email Marketing' },
       {
         value: 12_000,
@@ -142,7 +142,7 @@ describe('aggregateServiceRevenue (AUDIT #719)', () => {
     ]
     expect(aggregateServiceRevenue(deals)).toEqual([
       { service: 'Website Build', revenue: 69_000, deals: 2 },
-      { service: 'SEO / AEO / GEO', revenue: 45_500, deals: 2 },
+      { service: 'SEO Management', revenue: 45_500, deals: 2 },
       { service: 'Email Marketing', revenue: 8_000, deals: 1 },
     ])
   })
@@ -151,13 +151,13 @@ describe('aggregateServiceRevenue (AUDIT #719)', () => {
     const deals: ReportableDeal[] = [
       {
         value: 82_500,
-        serviceType: 'SEO / AEO / GEO',
+        serviceType: 'SEO Management',
         lineItems: [
-          item({ serviceType: 'SEO / AEO / GEO', amount: 25_500 }),
+          item({ serviceType: 'SEO Management', amount: 25_500 }),
           item({ serviceType: 'Website Build', amount: 57_000 }),
         ],
       },
-      { value: 20_000, serviceType: 'SEO / AEO / GEO' },
+      { value: 20_000, serviceType: 'SEO Management' },
     ]
     const total = aggregateServiceRevenue(deals).reduce((s, e) => s + e.revenue, 0)
     expect(total).toBe(102_500)

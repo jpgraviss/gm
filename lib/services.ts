@@ -132,10 +132,12 @@ const SERVICES_RAW = [
   },
   // ── Sales Lane — Foundation ──────────────────────────────────────────────
   {
-    // Classified 'Other' rather than 'One-Time Build': billed ad hoc per
-    // sprint rather than as a delivery project with a build lifecycle.
+    // Stays 'One-Time Build'. It was briefly reclassified to 'Other', which
+    // Jonathan corrected: a training sprint is a discrete one-time job that
+    // gets delivered, not a miscellaneous ad-hoc charge, so 'Other' described
+    // it inaccurately and hid real one-time revenue in a catch-all bucket.
     name: 'Sales Training',
-    lane: 'Sales', layer: 'Foundation', category: 'Other',
+    lane: 'Sales', layer: 'Foundation', category: 'One-Time Build',
     color: 'bg-orange-100 text-orange-700',
     tiers: [
       { label: 'Sales Training Sprint', price: 10000, cadence: 'one-time', note: 'Per sprint · five AE sprints, à la carte, any order' },

@@ -37,7 +37,7 @@ describe('serviceRevenueKind', () => {
     expect(serviceRevenueKind('Website Build')).toBe('one-time')
     expect(serviceRevenueKind('Onboarding and Setup Fee')).toBe('one-time')
     expect(serviceRevenueKind('Content and Creative')).toBe('one-time')
-    expect(serviceRevenueKind('Sales Training')).toBe('other')
+    expect(serviceRevenueKind('Sales Training')).toBe('one-time')
     expect(serviceRevenueKind('Cancellation')).toBe('other')
     expect(serviceRevenueKind('Hourly Services')).toBe('other')
   })
@@ -129,7 +129,7 @@ describe('revenue buckets', () => {
     active({ value: 1200, serviceType: 'Advertising Management' }),           // retainer
     active({ value: 833, serviceType: 'Website Build' }),                     // payment plan
     active({ value: 2500, billingStructure: 'One-time', serviceType: 'Onboarding and Setup Fee' }),
-    active({ value: 10000, billingStructure: 'One-time', serviceType: 'Sales Training' }),   // other
+    active({ value: 10000, billingStructure: 'One-time', serviceType: 'Sales Training' }),   // one-time
     active({ value: 1500, billingStructure: 'One-time', serviceType: 'Cancellation' }),      // other
     active({ value: 20000, serviceType: 'Advertising Spend' }),               // pass-through
     active({ value: 600, billingStructure: 'One-time', serviceType: 'Travel Expense' }),     // pass-through
@@ -145,11 +145,11 @@ describe('revenue buckets', () => {
   })
 
   it('reports one-time jobs separately, including the payment plan', () => {
-    expect(computeOneTimeValue(book)).toBe(833 + 2500)
+    expect(computeOneTimeValue(book)).toBe(833 + 2500 + 10000)
   })
 
   it('reports ad-hoc revenue separately', () => {
-    expect(computeOtherValue(book)).toBe(10000 + 1500)
+    expect(computeOtherValue(book)).toBe(1500)
   })
 
   it('keeps pass-through out of every revenue figure', () => {

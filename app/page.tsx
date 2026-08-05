@@ -1111,25 +1111,47 @@ function MarketingView() {
 
 // ─── Executive View ─────────────────────────────────────────────────────────
 
+interface Recommendation {
+  type: string
+  priority: string
+  title: string
+  description: string
+  suggestedAction: string
+  companyName?: string
+}
+
 function AiInsightsWidget() {
-  const [recs, setRecs] = useState<{ type: string; priority: string; title: string; description: string; suggestedAction: string; companyName?: string }[]>([])
+  const [recs, setRecs] = useState<Recommendation[]>([])
+  const [recsSource, setRecsSource] = useState<'ai' | 'fallback'>('ai')
   const [loading, setLoading] = useState(true)
   const [loaded, setLoaded] = useState(false)
+
+  // AUDIT #709 — the response now carries `source`, so a rule-based
+  // fallback (every AI provider unreachable) is labeled rather than
+  // rendered as if it were real model output.
+  function applyRecsResponse(data: unknown) {
+    if (Array.isArray(data)) { setRecs(data as Recommendation[]); return }
+    const payload = data as { recommendations?: Recommendation[]; source?: string }
+    if (Array.isArray(payload?.recommendations)) {
+      setRecs(payload.recommendations)
+      setRecsSource(payload.source === 'ai' ? 'ai' : 'fallback')
+    }
+  }
 
   function loadRecs() {
     if (loaded) return
     setLoading(true)
     fetch('/api/ai/recommendations?type=all')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setRecs(data) })
+      .then(r => r.ok ? r.json() : null)
+      .then(applyRecsResponse)
       .catch(() => {})
       .finally(() => { setLoading(false); setLoaded(true) })
   }
 
   useEffect(() => {
     fetch('/api/ai/recommendations?type=all')
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (Array.isArray(data)) setRecs(data) })
+      .then(r => r.ok ? r.json() : null)
+      .then(applyRecsResponse)
       .catch(() => {})
       .finally(() => { setLoading(false); setLoaded(true) })
   }, [])
@@ -1146,6 +1168,14 @@ function AiInsightsWidget() {
         <div className="flex items-center gap-2">
           <Sparkles size={14} className="text-purple-600" />
           <h3 className="font-bold text-gray-800 text-sm">AI Insights</h3>
+          {/* AUDIT #709 — when every AI provider is unreachable this widget
+              falls back to rule-based heuristics. Label it, so staff never
+              mistake canned output for real model analysis. */}
+          {recsSource === 'fallback' && recs.length > 0 && (
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 uppercase tracking-wide">
+              Rule-based
+            </span>
+          )}
         </div>
         <button
           onClick={() => { setLoaded(false); loadRecs() }}

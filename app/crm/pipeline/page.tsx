@@ -14,6 +14,7 @@ import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
 import DealLineItemsEditor from '@/components/crm/DealLineItemsEditor'
 import { computeLineItemsTotal, computeLineItemsBreakdown, serviceTypesFromLineItems } from '@/lib/deal-line-items'
+import { computeDealsBillingSplit } from '@/lib/deal-reporting'
 import type { Deal, DealLineItem, CRMActivity, CRMCompany, CRMContact, Contract } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
@@ -880,7 +881,10 @@ function DealPanel({
               body: JSON.stringify({
                 dealId: deal.id,
                 company: data.company,
-                companyId: company?.id,
+                // AUDIT #721 — prefer the company the user actually picked
+                // in the form over the deal's own company, which they may
+                // have deliberately changed before saving.
+                companyId: data.companyId ?? company?.id,
                 serviceType: data.serviceType,
                 assignedRep: data.assignedRep,
                 value: Number(data.value) || 0,
@@ -1365,6 +1369,12 @@ export default function PipelinePage() {
   const totalPipeline = openDeals.reduce((s, d) => s + d.value, 0)
   const wonValue = filteredDeals.filter(d => d.stage === 'Closed Won').reduce((s, d) => s + d.value, 0)
   const weightedValue = openDeals.reduce((s, d) => s + (d.value * d.probability) / 100, 0)
+  // `value` blends one-time cash and multi-month recurring commitments into a
+  // single number, so the headline total above reads as if a "$57K build +
+  // $5K/mo retainer" deal were $62K of one-time cash. Break it out (deals with
+  // no line items count fully as one-time — see lib/deal-reporting.ts) without
+  // changing the headline itself, which still sums `value`.
+  const openBillingSplit = computeDealsBillingSplit(openDeals)
 
   function onDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result
@@ -1697,6 +1707,11 @@ export default function PipelinePage() {
                 <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">Open Pipeline</p>
               </div>
               <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>{formatCurrency(totalPipeline)}</p>
+              {openDeals.length > 0 && (
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  One-time {formatCurrency(openBillingSplit.oneTime)} · Recurring {formatCurrency(openBillingSplit.recurring)}
+                </p>
+              )}
               <p className="text-[11px] text-gray-400 mt-0.5">{openDeals.length} active deals</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">

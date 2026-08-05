@@ -29,6 +29,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# database backups (scripts/backup-database.mjs) — full row dumps of every
+# client's contracts, invoices, and contact data. Never commit these.
+/backups/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

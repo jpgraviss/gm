@@ -5,7 +5,7 @@ import Header from '@/components/layout/Header'
 import { fetchContracts, fetchCrmContacts, fetchProposals } from '@/lib/supabase'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatCurrency, renewalStatusColors, formatDate } from '@/lib/utils'
-import { contractMonthlyValue } from '@/lib/metrics'
+import { renewalBaseline, renewalQuote } from '@/lib/renewal-pricing'
 import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
@@ -77,17 +77,38 @@ function RenewalProposalSidebar({
   const [notes, setNotes] = useState('')
   const [includeSetup, setIncludeSetup] = useState(false)
   const [setupFee, setSetupFee] = useState(0)
+  // AUDIT #707 — the term this renewal's value covers, supplied by the rep.
+  // 0 = not yet chosen. Nothing on the renewal record can supply it (see
+  // lib/renewal-pricing.ts), so it is never defaulted to a guess.
+  const [currentTermMonths, setCurrentTermMonths] = useState(0)
 
   // contract.value is billing-structure-relative, not always a monthly
   // figure — using it directly showed "Current Monthly: $12,000" for a
   // $12,000/yr Annual contract (12x too high), and computed the same
   // wrong Total Contract Value for the generated renewal proposal a rep
-  // could actually quote to a client.
-  const baseMonthly = contract ? contractMonthlyValue(contract) : renewal.renewalValue
-  const newMonthly = Math.round(baseMonthly * (1 + increasePercent / 100))
-  const newContractTotal = newMonthly * months
-  const totalWithSetup = newContractTotal + setupFee
-  const difference = newMonthly - baseMonthly
+  // could actually quote to a client. AUDIT #128 fixed that branch;
+  // AUDIT #707 fixes the fallback, which treated renewal.renewalValue — a
+  // multi-month TOTAL written by LogRenewalModal as monthlyRate × months —
+  // as if it were itself a monthly rate.
+  const baseline = renewalBaseline({
+    contract,
+    renewalValue: renewal.renewalValue,
+    termMonths: currentTermMonths,
+  })
+  const baseMonthly = baseline.monthly
+  const quote = renewalQuote(baseMonthly, increasePercent, months, includeSetup ? setupFee : 0)
+
+  const currentFields = [
+    { label: 'Service', value: renewal.serviceType },
+    baseMonthly !== null
+      ? { label: 'Current Monthly', value: formatCurrency(Math.round(baseMonthly)) }
+      // Honest label: this is a TOTAL contract value, not a monthly rate.
+      : { label: 'Current Total', value: formatCurrency(Math.round(baseline.total ?? 0)) },
+    baseMonthly !== null
+      ? { label: 'Current Annual', value: formatCurrency(Math.round(baseMonthly * 12)) }
+      : { label: 'Current Annual', value: 'Term unknown' },
+    { label: 'Expires', value: formatDate(renewal.expirationDate) },
+  ]
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
@@ -108,12 +129,7 @@ function RenewalProposalSidebar({
           <div className="p-4 bg-gray-50 rounded-xl">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Current Contract</p>
             <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: 'Service', value: renewal.serviceType },
-                { label: 'Current Monthly', value: formatCurrency(Math.round(baseMonthly)) },
-                { label: 'Current Annual', value: formatCurrency(Math.round(baseMonthly * 12)) },
-                { label: 'Expires', value: formatDate(renewal.expirationDate) },
-              ].map(f => (
+              {currentFields.map(f => (
                 <div key={f.label} className="bg-white rounded-lg p-2.5 border border-gray-100">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{f.label}</p>
                   <p className="text-xs font-semibold text-gray-800">{f.value}</p>
@@ -121,6 +137,37 @@ function RenewalProposalSidebar({
               ))}
             </div>
           </div>
+
+          {/* AUDIT #707 — no linked contract to normalize, so renewalValue is
+              all we have and it is a TOTAL. The renewals table stores no term
+              length (no start_date / months column, and the POST route drops
+              LogRenewalModal's startDate), so the monthly rate has to be asked
+              for rather than guessed at. */}
+          {baseline.source !== 'contract' && (
+            <div className="p-4 bg-gray-50 rounded-xl">
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Current Term Length</p>
+              <p className="text-xs text-gray-500 leading-relaxed mb-3">
+                This renewal records a total contract value of{' '}
+                <strong className="text-gray-700">{formatCurrency(Math.round(baseline.total ?? 0))}</strong> with no
+                linked contract and no term length, so the current monthly rate can&apos;t be derived. Select the term
+                that total covers.
+              </p>
+              <select
+                value={currentTermMonths}
+                onChange={e => setCurrentTermMonths(parseInt(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700 bg-white"
+              >
+                <option value={0}>Select term...</option>
+                {[3, 6, 12, 18, 24, 36].map(m => <option key={m} value={m}>{m} months</option>)}
+              </select>
+              {baseMonthly !== null && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Current rate: <strong className="text-gray-700">{formatCurrency(Math.round(baseMonthly))}/mo</strong>
+                  {' '}({formatCurrency(Math.round(baseline.total ?? 0))} &divide; {currentTermMonths} months)
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="p-4 bg-gray-50 rounded-xl">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Price Adjustment</p>
@@ -218,15 +265,21 @@ function RenewalProposalSidebar({
 
           <div className="p-4 rounded-xl" style={{ background: '#012b1e' }}>
             <p className="text-white/60 text-[10px] font-semibold uppercase tracking-wide mb-3">Renewal Summary</p>
+            {quote === null ? (
+              <p className="text-white/70 text-xs leading-relaxed">
+                Select the current term length above to compute a monthly rate. Quoting off the total contract value
+                directly would overstate every figure here by the length of the term.
+              </p>
+            ) : (
             <div className="flex flex-col gap-2">
               <div className="flex justify-between items-center">
                 <span className="text-white/70 text-xs">New Monthly Rate</span>
-                <span className="text-white font-bold">{formatCurrency(newMonthly)}/mo</span>
+                <span className="text-white font-bold">{formatCurrency(quote.newMonthly)}/mo</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-white/70 text-xs">Change from Current</span>
-                <span className={`text-xs font-semibold ${difference >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {difference >= 0 ? '+' : ''}{formatCurrency(difference)}/mo
+                <span className={`text-xs font-semibold ${quote.differencePerMonth >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {quote.differencePerMonth >= 0 ? '+' : ''}{formatCurrency(Math.round(quote.differencePerMonth))}/mo
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -241,22 +294,30 @@ function RenewalProposalSidebar({
               )}
               <div className="border-t border-white/10 pt-2 mt-1 flex justify-between items-center">
                 <span className="text-white/70 text-xs font-semibold">Total Contract Value</span>
-                <span className="text-white font-bold text-lg">{formatCurrency(totalWithSetup)}</span>
+                <span className="text-white font-bold text-lg">{formatCurrency(quote.totalWithSetup)}</span>
               </div>
             </div>
+            )}
           </div>
         </div>
 
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
           <button
-            onClick={() => onSave(renewal.id, {
-              newMonthlyRate: newMonthly,
-              contractMonths: months,
-              setupFee: includeSetup ? setupFee : 0,
-              notes,
-              increasePercent,
-            })}
-            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90"
+            onClick={() => {
+              // AUDIT #707 — never save a proposal whose monthly rate was
+              // inferred from a multi-month total.
+              if (!quote) return
+              onSave(renewal.id, {
+                newMonthlyRate: quote.newMonthly,
+                contractMonths: months,
+                setupFee: includeSetup ? setupFee : 0,
+                notes,
+                increasePercent,
+              })
+            }}
+            disabled={!quote}
+            title={quote ? undefined : 'Select the current term length to compute a monthly rate'}
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-40"
             style={{ background: '#015035' }}
           >
             Save Renewal Proposal

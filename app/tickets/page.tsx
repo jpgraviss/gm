@@ -10,6 +10,7 @@ import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import { downloadCsv } from '@/lib/csv-export'
+import { useTeamMembers } from '@/lib/useTeamMembers'
 import {
   MessageSquare, CheckCircle, Clock, X, ExternalLink,
   Plus, ChevronRight, Send, User, FolderKanban,
@@ -75,16 +76,28 @@ const filterTabs: Array<TicketStatus | 'All'> = ['All', 'Open', 'In Progress', '
 const priorityLevels: Array<TicketPriority | 'All'> = ['All', 'Urgent', 'High', 'Medium', 'Low']
 
 function TicketPanel({
-  ticket, onClose, onSendReply, onUpdateStatus, onDelete,
+  ticket, onClose, onSendReply, onUpdateStatus, onUpdateAssignee, onDelete,
 }: {
   ticket: Ticket
   onClose: () => void
   onSendReply: (id: string, body: string, isInternal: boolean) => void
   onUpdateStatus: (id: string, status: TicketStatus) => void
+  onUpdateAssignee: (id: string, assignedTo: string) => void
   onDelete: (id: string) => void
 }) {
   const [reply, setReply] = useState('')
   const [showInternal, setShowInternal] = useState(true)
+  // Same team-member source the New Ticket panel's "Assigned To" select and
+  // every other assignee dropdown in the app uses (active members only).
+  const teamMembers = useTeamMembers()
+
+  // lib/ticket-routing.ts assigns a ticket once, at creation. If its rules
+  // picked the wrong person there was previously no way to correct it in the
+  // app. Keep a stale/departed assignee in the list so reassigning away from
+  // them doesn't silently blank the field first.
+  const assigneeOptions = ticket.assignedTo && !teamMembers.includes(ticket.assignedTo)
+    ? [ticket.assignedTo, ...teamMembers]
+    : teamMembers
 
   const cfg = statusConfig[ticket.status]
   const priCfg = priorityConfig[ticket.priority]
@@ -137,16 +150,27 @@ function TicketPanel({
         </div>
 
         <div className="flex-shrink-0 grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100">
-          {[
-            { label: 'Contact', value: ticket.contactName },
-            { label: 'Assigned', value: ticket.assignedTo ?? 'Unassigned' },
-            { label: 'Service', value: ticket.serviceType },
-          ].map((item, i) => (
-            <div key={i} className="p-3">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{item.label}</p>
-              <p className="text-xs font-semibold text-gray-800 truncate">{item.value}</p>
-            </div>
-          ))}
+          <div className="p-3 min-w-0">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Contact</p>
+            <p className="text-xs font-semibold text-gray-800 truncate">{ticket.contactName}</p>
+          </div>
+          <div className="p-3 min-w-0">
+            <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Assigned</label>
+            <select
+              value={ticket.assignedTo ?? ''}
+              onChange={e => onUpdateAssignee(ticket.id, e.target.value)}
+              className={`w-full text-xs font-semibold bg-transparent border-none p-0 cursor-pointer focus:outline-none truncate ${
+                ticket.assignedTo ? 'text-gray-800' : 'text-amber-500'
+              }`}
+            >
+              <option value="">Unassigned</option>
+              {assigneeOptions.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div className="p-3 min-w-0">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Service</p>
+            <p className="text-xs font-semibold text-gray-800 truncate">{ticket.serviceType}</p>
+          </div>
         </div>
 
         {ticket.projectId && (
@@ -434,6 +458,28 @@ export default function TicketsPage() {
       if (!res.ok) throw new Error('Failed')
     }).catch(() => {
       toast('Failed to update ticket status', 'error')
+      refetchTicket(id)
+    })
+  }
+
+  // Tickets are auto-assigned exactly once, at creation, by
+  // lib/ticket-routing.ts. When those rules pick the wrong person there was no
+  // in-app correction path — only status could be changed. Same optimistic
+  // PATCH + res.ok check + refetch-on-failure shape as updateTicketStatus
+  // above (AUDIT #100); /api/tickets/[id] already accepts `assignedTo` and
+  // rejects it for non-staff callers.
+  function updateTicketAssignee(id: string, assignedTo: string) {
+    const next = assignedTo || undefined
+    setLocalTickets(prev => prev.map(t => t.id === id ? { ...t, assignedTo: next } : t))
+    setSelected(prev => prev?.id === id ? { ...prev, assignedTo: next } : prev)
+    fetch(`/api/tickets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignedTo: assignedTo || null }),
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed')
+    }).catch(() => {
+      toast('Failed to update assignee', 'error')
       refetchTicket(id)
     })
   }
@@ -809,6 +855,7 @@ export default function TicketsPage() {
           onClose={() => setSelected(null)}
           onSendReply={sendReply}
           onUpdateStatus={updateTicketStatus}
+          onUpdateAssignee={updateTicketAssignee}
           onDelete={deleteTicket}
         />
       )}

@@ -556,6 +556,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const [socialOpen, setSocialOpen] = useState(false)
   const [companyRecs, setCompanyRecs] = useState<{ type: string; priority: string; title: string; description: string; suggestedAction: string }[]>([])
   const [recsLoading, setRecsLoading] = useState(false)
+  const [recsSource, setRecsSource] = useState<'ai' | 'fallback'>('ai')
   const [recsOpen, setRecsOpen] = useState(false)
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiProposalContent, setAiProposalContent] = useState<string | null>(null)
@@ -1009,8 +1010,18 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                       setRecsOpen(true)
                       setRecsLoading(true)
                       fetch(`/api/ai/recommendations?companyId=${company.id}`)
-                        .then(r => r.ok ? r.json() : [])
-                        .then(data => { if (Array.isArray(data)) setCompanyRecs(data) })
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => {
+                          // AUDIT #709 — the response now carries `source`,
+                          // so a rule-based fallback (every AI provider
+                          // unreachable) is labeled rather than rendered as
+                          // if it were real model output.
+                          if (Array.isArray(data)) { setCompanyRecs(data); return }
+                          if (Array.isArray(data?.recommendations)) {
+                            setCompanyRecs(data.recommendations)
+                            setRecsSource(data.source === 'ai' ? 'ai' : 'fallback')
+                          }
+                        })
                         .catch(() => {})
                         .finally(() => setRecsLoading(false))
                     } else {
@@ -1022,6 +1033,11 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                   <div className="flex items-center gap-2">
                     <Brain size={14} className="text-purple-600" />
                     <span className="text-sm font-semibold text-purple-800">AI Recommendations</span>
+                    {recsSource === 'fallback' && companyRecs.length > 0 && (
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 uppercase tracking-wide">
+                        Rule-based
+                      </span>
+                    )}
                   </div>
                   <ChevronRight size={14} className={`text-purple-600 transition-transform ${recsOpen ? 'rotate-90' : ''}`} />
                 </button>
@@ -1728,7 +1744,10 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               body: JSON.stringify({
                 dealId: '',
                 company: data.company,
-                companyId: company.id,
+                // Use what the form actually has selected (AUDIT #721) —
+                // same fix already applied to the New Deal/New Contract
+                // handlers below; the panel no longer discards the id.
+                companyId: data.companyId ?? company.id,
                 serviceType: data.serviceType,
                 assignedRep: data.assignedRep,
                 value: Number(data.value) || 0,

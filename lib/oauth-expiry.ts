@@ -1,15 +1,36 @@
 /**
- * 6-month re-auth policy for all OAuth connections.
+ * 6-month re-auth policy for advertising/marketing OAuth connections.
  *
- * Every OAuth-backed integration (Google Calendar, Drive, Gmail, Marketing
- * products, Meta Ads) must be re-consented every 180 days.
- * The refresh token keeps working inside the window; after 180 days, the
- * library layer treats the connection as expired regardless of refresh
- * token validity and the user has to click "Connect" again.
+ * AUDIT #656 — this doc comment used to claim the policy covered "every
+ * OAuth-backed integration (Google Calendar, Drive, Gmail, Marketing
+ * products, Meta Ads)". It never did: only `lib/google-marketing.ts` and
+ * `lib/meta-ads.ts` call into this module. Calendar, Drive, and Gmail have
+ * never been subject to it. The claim is corrected here rather than
+ * extended, deliberately — see below.
  *
- * Why: security compliance (force periodic re-consent so an employee who
- * leaves the company can't leave stale OAuth tokens active forever) and
- * Google Security Assessment requirements for sensitive scopes.
+ * WHAT ENFORCES IT (verified by grep of `isWithinReauthWindow` callers):
+ *   - lib/google-marketing.ts — Search Console, Analytics 4, Ads, Business Profile
+ *   - lib/meta-ads.ts
+ * Both are workspace-level, staff-initiated connections whose failure mode
+ * on expiry is a visible "reconnect" prompt in the Integrations UI.
+ *
+ * WHAT DOESN'T, AND WHY (a deliberate decision, not an oversight):
+ *   - Google Calendar (lib/google-calendar.ts) drives an UNATTENDED cron
+ *     sync. A policy-forced expiry would silently stop syncing real client
+ *     bookings until someone noticed and reconnected — a worse failure mode
+ *     for a single trusted internal team than the stale-token risk it
+ *     mitigates. Neither it nor Drive even stores a `connected_at`, so
+ *     enforcing this would also require a schema change.
+ *   - Google Drive (lib/google-drive.ts) — same, workspace-level and
+ *     background-read.
+ *   - Gmail is per-user and browser-based: its access already expires
+ *     roughly hourly and requires a manual reconnect (see the note in
+ *     app/settings/page.tsx), so a 180-day ceiling adds nothing.
+ *
+ * The real mitigation for the departing-employee case those integrations
+ * care about is revoking the person's GravHub access (which cuts off the
+ * app-side path to their tokens) and disconnecting the integration in
+ * Admin → Integrations — not a timer.
  */
 
 export const REAUTH_WINDOW_DAYS = 180

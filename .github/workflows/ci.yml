@@ -47,6 +47,15 @@ jobs:
             exit 1
           fi
 
+      - name: Migration filenames follow the timestamp convention
+        # 144 of the 145 files in supabase/migrations/ predate the
+        # YYYYMMDDHHMMSS_ convention, so the directory has no enforced apply
+        # order and nothing stops the next file from compounding that. The
+        # existing 144 are grandfathered via an explicit checked-in list
+        # (scripts/legacy-migration-filenames.txt) — this only fails on NEW
+        # misnamed files. See supabase/migrations/README.md.
+        run: node scripts/check-migration-naming.mjs
+
       - name: Build
         run: npm run build
         env:

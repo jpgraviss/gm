@@ -1847,6 +1847,22 @@ export default function SettingsPage() {
                           <button onClick={connectGmail} className="text-xs font-medium px-4 py-2 rounded-lg text-white flex-shrink-0 transition-colors" style={{ background: '#015035' }}>Connect Gmail</button>
                         </div>
                       )}
+                      {/* AUDIT #647 — connecting Gmail also enrolls the
+                          inbox in the from-email support pipeline
+                          (app/api/tickets/from-email/route.ts), which turns
+                          unread mail from any non-@gravissmarketing.com
+                          sender into an org-visible ticket. That's the
+                          intended design, but it was never disclosed here,
+                          so staff connecting a personal-adjacent inbox had
+                          no way to know. */}
+                      <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                        <p className="text-[11px] text-amber-800 font-semibold mb-0.5">Before you connect</p>
+                        <p className="text-[11px] text-amber-700">
+                          Unread mail in a connected inbox from anyone outside @gravissmarketing.com is
+                          automatically turned into a support ticket your whole team can see. Don&apos;t connect
+                          an inbox you also use for personal mail.
+                        </p>
+                      </div>
                       <p className="text-[11px] text-gray-400 mt-2">
                         Gmail access expires roughly every hour and currently requires manually reconnecting — Google&apos;s
                         browser-based sign-in doesn&apos;t issue a renewable token the way a server-side OAuth flow would.

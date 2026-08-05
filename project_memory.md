@@ -116,6 +116,28 @@ here is generated output.
 
 ## Recently shipped this session
 
+- **Full strategic + technical assessment** (user request: "comprehensive audit... know
+  every detail... how to finish it"), scoped via `AskUserQuestion` to: internal tool for
+  Graviss Marketing (SaaS-resale direction explicitly retired), build on `AUDIT.md`
+  rather than re-hunting bugs, and — per an explicit follow-up instruction — a dedicated
+  focus on whether modules actually connect to each other. Ran 8 parallel agent lanes (7
+  by module + 1 cross-module integration lane) and rewrote `DEVELOPMENT_PLAN.md`
+  (current-state assessment, replacing a stale April "99% functional" claim) and
+  `STRATEGIC_ROADMAP.md` (phased forward plan, replacing the retired HubSpot/GoHighLevel
+  competitive-SaaS framing). Headline finding: individual modules are unusually mature,
+  but cross-module wiring is the real gap — Contract→Invoice has zero automation wiring
+  at all, the Company Panel still filters Deals/Contracts/Invoices by name instead of
+  `company_id`, the real client proposal-accept path doesn't auto-create a contract
+  (only a rarely-used internal button does), Delivery/Operations and Client
+  Support can't trigger automations at all, and the main dashboard is missing
+  Projects/Tickets/Proposals/Marketing entirely. Also surfaced: no recurring/retainer
+  invoice generation despite ~30 real contract clients (biggest Finance gap), no
+  verified backup/DR process, Sentry code-complete but production-activation
+  unconfirmed, and zero test coverage on `app/api/cron` (highest blast-radius file in
+  the app). See `STRATEGIC_ROADMAP.md` for the full phased plan (Phase 0 data-safety →
+  Phase 1 connect-the-modules → Phase 2 client-facing fixes → Phase 3 recurring billing
+  → Phase 4 marketing channel completion → Phase 5 polish). Not yet built — this pass
+  was audit + plan only, execution starts next per the user's direction.
 - Full 8-agent audit sweep (CRM Core, Finance & Billing, Marketing &
   Automation, Client Portal & Learning, Admin/Settings/Auth, Operations,
   Data/AI & Misc, plus a dedicated adversarial-review agent on the last ~12

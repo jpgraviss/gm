@@ -89,24 +89,15 @@ here is generated output.
   Dog Partners Hardware, Midha Realty, Neighborhood TV, Lead Outdoor)
   intentionally excluded per "old or finished, do not add."
 
-## Pending user action (delivered, not yet confirmed run)
+## Pending user action
 
-- **`20260805120000_add_serpapi_settings_column.sql`** — adds
-  `app_settings.serpapi jsonb`. Optional: with no SerpApi key configured the
-  rank tracker falls back to Google Search Console exactly as before, so
-  this is safe to apply whether or not the SERP provider is ever paid for.
-  Until it runs, saving a SerpApi key in Admin → Integrations will fail.
-- **`20260805130000_add_booking_type_owner.sql`** — adds
-  `booking_types.owner_calendar_slug` (AUDIT #699). Until it runs, the
-  calendar-sync loop still pushes every pending public booking to whichever
-  staff Google Calendar processes first. **After applying, assign an owner
-  to each booking type in the editor** — a NULL owner is deliberately
-  skipped rather than falling back to the old random-calendar behavior.
-- **`20260805140000_add_rate_limit_counters.sql`** — adds the
-  `rate_limit_counters` table + `increment_rate_limit_counter()` RPC that
-  back durable account lockout (AUDIT #722). Not urgent: `login-attempts.ts`
-  keeps its in-process Map as a second layer, so until this runs, lockout
-  degrades to exactly the old per-instance behavior rather than breaking.
+All five 2026-08-05 migrations are **applied and verified live** (see AUDIT
+#507/#439/#699/#722/#724/#725): project budget+hours, SerpApi settings,
+booking-type owner, rate-limit counters, and the #507 RLS patch that closed
+the last four policies bypassing the 2FA gate. Verified by querying the
+running database, not assumed. One follow-up remains: **assign an owner to
+each booking type in the editor** — until then the sync deliberately skips
+them rather than falling back to a random staff calendar.
 
 - **`asana_import_v4_migrate_to_app_tasks.sql`** — moves the 55 Asana tasks
   out of the dead `projects.tasks` JSONB into real `app_tasks` rows with

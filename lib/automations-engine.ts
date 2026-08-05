@@ -4,7 +4,7 @@ import { sendPushNotification } from '@/lib/push-notifications'
 import { wrapBrandedEmail } from '@/lib/email-template'
 import { getSettings } from '@/lib/settings'
 import { shouldSendPushForEvent } from '@/lib/notification-preferences'
-import { contractMonthlyValue } from '@/lib/metrics'
+import { contractMonthlyValue, computeMRR } from '@/lib/metrics'
 import { contractPeriodAmount, isRecurringStructure } from '@/lib/recurring-billing'
 import { sendInvoiceEmail } from '@/lib/invoice-send'
 import { getFirstPipelineStageName } from '@/lib/pipelines'
@@ -979,17 +979,22 @@ async function executeAction(
       const monthKey = new Date().toISOString().slice(0, 7)
       const { data: contracts } = await db
         .from('contracts')
-        .select('value, billing_structure, status')
+        .select('value, billing_structure, status, service_type')
         .eq('status', 'Fully Executed')
-      const totalRevenue = (contracts ?? []).reduce((s: number, c: { value: number | null; billing_structure: string | null }) =>
-        s + contractMonthlyValue({ value: Number(c.value) || 0, billingStructure: c.billing_structure ?? '' }), 0)
-      const recurring = (contracts ?? [])
-        .filter((c: { billing_structure: string | null }) => {
-          const bs = (c.billing_structure ?? '').toLowerCase()
-          return !bs.includes('one') && !bs.includes('milestone') && !bs.includes('project')
-        })
-        .reduce((s: number, c: { value: number | null; billing_structure: string | null }) =>
-          s + contractMonthlyValue({ value: Number(c.value) || 0, billingStructure: c.billing_structure ?? '' }), 0)
+
+      // This used to re-implement the recurring test inline with its own
+      // string matching on billing_structure — the exact drift that let
+      // 'Custom' count as recurring here while the retainer cron ignored it.
+      // Both figures now come from lib/metrics.ts, so a change to what
+      // counts as recurring lands here automatically.
+      const mrrRows = (contracts ?? []).map((c: { value: number | null; billing_structure: string | null; service_type: string | null }) => ({
+        status: 'Fully Executed',
+        value: Number(c.value) || 0,
+        billingStructure: c.billing_structure ?? '',
+        serviceType: c.service_type,
+      }))
+      const totalRevenue = mrrRows.reduce((s, c) => s + contractMonthlyValue(c), 0)
+      const recurring = computeMRR(mrrRows)
       await db.from('revenue_months').upsert(
         { month: monthKey, revenue: totalRevenue, recurring },
         { onConflict: 'month' }

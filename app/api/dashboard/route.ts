@@ -156,6 +156,7 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
       if (contract && contractMonthlyValue({
         value: Number(contract.value) || 0,
         billingStructure: (contract.billing_structure as string) ?? '',
+        serviceType: (contract.service_type as string) ?? null,
       }) > 0) {
         bucket.recurring += amount
       }

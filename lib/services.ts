@@ -191,6 +191,44 @@ export function getService(name: string) {
   return SERVICES.find((s) => s.name === name || s.aliases?.includes(name))
 }
 
+/**
+ * Whether a service is sold as ongoing monthly work or as a one-time job.
+ *
+ * This is the identifier that keeps recurring and one-time revenue accounted
+ * for separately. It is deliberately a property of the *service*, not of the
+ * contract: 'Website Build' is a one-time job no matter how the client pays
+ * for it, and 'SEO / AEO / GEO' is a retainer no matter what.
+ *
+ * That distinction matters because the two can legitimately disagree. A
+ * $10,000 Website Build can be contracted as 12 monthly payments — a payment
+ * plan. The contract's `billing_structure` says Monthly and the retainer cron
+ * correctly invoices it every month, but it is NOT recurring revenue: it ends
+ * when the build is paid off, and counting it in MRR would overstate the
+ * agency's actual run rate by the size of every active payment plan.
+ * `lib/metrics.ts` uses this to keep those apart.
+ *
+ * Returns null for a service the catalog doesn't recognize (legacy free-text
+ * values like 'Consulting' or 'General'). Null means "unknown", not "one-time"
+ * — callers fall back to the contract's own billing structure rather than
+ * silently reclassifying historical records.
+ */
+export function serviceRevenueKind(name?: string | null): 'recurring' | 'one-time' | null {
+  if (!name) return null
+  const service = getService(name)
+  if (!service) return null
+  switch (service.category) {
+    case 'Ongoing MRR': return 'recurring'
+    case 'One-Time Build': return 'one-time'
+    // Fractional engagements are sold as monthly retainer tiers (Tier 1-3),
+    // alongside a one-time assessment and hourly blocks. The retainer is the
+    // ongoing part and the reason a fractional client is on the books, so the
+    // service classifies as recurring; the one-time assessment is contracted
+    // separately, and hourly blocks are billed from time tracking rather
+    // than through a contract at all.
+    case 'Fractional Engagement': return 'recurring'
+  }
+}
+
 /** Pre-existing free-text service values that predate this catalog. Kept for
  * backward-compatible badge coloring of historical records only — never
  * offered as a choice on new records. */

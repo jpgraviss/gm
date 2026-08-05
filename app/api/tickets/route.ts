@@ -7,6 +7,8 @@ import { requirePortalClient, isStaffCaller, blockIfPreview } from '@/lib/portal
 import { withErrorHandler } from '@/lib/api-handler'
 import { mapTicket } from '@/lib/tickets'
 import { applyRoutingRules, notifyRoutedAssignee, type RoutingResult } from '@/lib/ticket-routing'
+import { fireAutomations } from '@/lib/automations-engine'
+import { logActivity } from '@/lib/activity-log'
 
 export const GET = withErrorHandler('tickets GET', async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
@@ -138,6 +140,30 @@ export const POST = withErrorHandler('tickets POST', async (req: NextRequest) =>
   // response, same posture as lib/portal-notify.ts and the automations
   // engine's own push call sites.
   await notifyRoutedAssignee(db, routing, body.subject, body.company ?? '')
+
+  // Client Support previously had no automation trigger at all — a client
+  // opening a ticket could not set off anything automatic. Fire-and-forget,
+  // same posture as every other fireAutomations call site.
+  // Support previously never wrote to crm_activities, so a client opening a
+  // ticket never appeared on that company's Activity timeline.
+  logActivity({
+    type: 'ticket',
+    title: `Ticket opened — ${data.subject}`,
+    body: `${data.priority} priority${data.assigned_to ? ` · assigned to ${data.assigned_to}` : ''}`,
+    companyId: data.company_id,
+    companyName: data.company,
+    contactName: data.contact_name ?? undefined,
+  })
+
+  fireAutomations('ticket_created', {
+    ticketId: data.id,
+    subject: data.subject,
+    priority: data.priority,
+    company: data.company,
+    companyId: data.company_id,
+    assignedTo: data.assigned_to,
+    serviceType: data.service_type,
+  })
 
   return NextResponse.json(mapTicket(data, true), { status: 201 })
 })

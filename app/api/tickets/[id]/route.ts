@@ -8,6 +8,8 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { mapTicket } from '@/lib/tickets'
 import { stableStringify } from '@/lib/stable-json'
 import { notifyPortalClient } from '@/lib/portal-notify'
+import { fireAutomations } from '@/lib/automations-engine'
+import { logActivity } from '@/lib/activity-log'
 
 // Portal clients can only reply to their own ticket (Tickets page's Reply
 // box) — status/priority/assignedTo/tags/companyId are staff-only.
@@ -86,6 +88,11 @@ export const PATCH = withErrorHandler('tickets/[id] PATCH', async (req: NextRequ
   // so this stays empty on that branch.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let newStaffMessages: any[] = []
+  // How many messages a PORTAL CLIENT appended on this PATCH (the staff
+  // branch tracks its own in newStaffMessages) — drives the
+  // 'ticket_replied' automation trigger below, which only fires for a real
+  // client reply, not a staff one.
+  let clientAppendedReplies = 0
   if (body.status !== undefined)     update.status = body.status
   if (body.priority !== undefined)   update.priority = body.priority
   if (body.assignedTo !== undefined) update.assigned_to = body.assignedTo
@@ -152,6 +159,7 @@ export const PATCH = withErrorHandler('tickets/[id] PATCH', async (req: NextRequ
 
       const appended = incoming.slice(existingVisible.length).map(m => ({ ...m, isInternal: false }))
       update.messages = [...existing, ...appended]
+      clientAppendedReplies = appended.length
     }
   }
   if (body.linkedTaskId !== undefined) update.linked_task_id = body.linkedTaskId
@@ -188,6 +196,30 @@ export const PATCH = withErrorHandler('tickets/[id] PATCH', async (req: NextRequ
     } catch (err) {
       console.error('[tickets/[id]] portal-client notify failed:', err)
     }
+  }
+
+  // Client Support previously had no automation trigger at all — nothing
+  // staff-side could react automatically to a client replying on a ticket.
+  // Only fires for a real client reply (not a staff one, which would make
+  // any "notify us on client reply" automation fire on our own messages).
+  if (clientAppendedReplies > 0) {
+    logActivity({
+      type: 'ticket',
+      title: `Client replied on ticket — ${data.subject}`,
+      companyId: data.company_id,
+      companyName: data.company,
+      contactName: data.contact_name ?? undefined,
+    })
+    fireAutomations('ticket_replied', {
+      ticketId: id,
+      subject: data.subject,
+      priority: data.priority,
+      company: data.company,
+      companyId: data.company_id,
+      assignedTo: data.assigned_to,
+      serviceType: data.service_type,
+      replyCount: clientAppendedReplies,
+    })
   }
 
   // AUDIT.md #202 — this used to return the raw DB row, unlike GET/POST

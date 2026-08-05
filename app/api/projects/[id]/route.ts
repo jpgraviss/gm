@@ -4,6 +4,8 @@ import { validate, validationError, PROJECT_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
+import { fireAutomations } from '@/lib/automations-engine'
+import { logActivity } from '@/lib/activity-log'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProject(row: any) {
@@ -73,6 +75,13 @@ export const PATCH = withErrorHandler('projects/[id] PATCH', async (req, ctx) =>
     }
   }
 
+  // Read the pre-update status so the automation trigger below only fires
+  // on a real status transition, not on every unrelated field edit.
+  const { data: current } = body.status !== undefined
+    ? await db.from('projects').select('status').eq('id', id).maybeSingle()
+    : { data: null }
+  const actor = body.status !== undefined ? await getAuthUser(req) : null
+
   const update: Record<string, unknown> = {}
   if (body.contractId !== undefined)           update.contract_id = body.contractId || null
   if (body.status !== undefined)               update.status = body.status
@@ -99,6 +108,36 @@ export const PATCH = withErrorHandler('projects/[id] PATCH', async (req, ctx) =>
   if (error) {
     throw new Error(error?.message || 'Failed to update project')
   }
+
+  // Delivery/Operations previously could not trigger any automation — the
+  // one project trigger that existed ('project_launched') was only ever
+  // fired by a dead endpoint with zero callers. Only fires on a real status
+  // transition, not on every field edit.
+  if (body.status !== undefined && body.status !== current?.status) {
+    const projectContext = {
+      projectId: id,
+      status: data.status,
+      previousStatus: current?.status ?? null,
+      company: data.company,
+      companyId: data.company_id,
+      contractId: data.contract_id,
+      service_type: data.service_type,
+    }
+    fireAutomations('project_status_changed', projectContext)
+    if (data.status === 'Completed') fireAutomations('project_completed', projectContext)
+
+    // Operations previously never wrote to crm_activities, so a project
+    // moving through its lifecycle never showed on the client's timeline.
+    logActivity({
+      type: 'project',
+      title: `Project ${data.status} — ${data.service_type ?? 'General'}`,
+      body: current?.status ? `Moved from ${current.status} to ${data.status}` : undefined,
+      companyId: data.company_id,
+      companyName: data.company,
+      userName: actor?.name || actor?.email || 'System',
+    })
+  }
+
   return NextResponse.json(mapProject(data))
 })
 

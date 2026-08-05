@@ -4,6 +4,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole, getAuthUser } from '@/lib/rbac'
 import { departmentForUnit, TASK_DEPARTMENTS } from '@/lib/task-department'
 import { VALID_STATUSES, VALID_PRIORITIES, VALID_CATEGORIES, mapTask } from '../route'
+import { fireAutomations } from '@/lib/automations-engine'
 
 // Mirrors the department-visibility rule in tasks GET (Operations should
 // never touch a Finance task by id just because they know/guessed its id) —
@@ -49,7 +50,7 @@ export const PATCH = withErrorHandler('tasks/[id] PATCH', async (req: NextReques
   }
 
   const user = await getAuthUser(req)
-  const { data: existing } = await db.from('app_tasks').select('department, assigned_to, team_service_line').eq('id', id).maybeSingle()
+  const { data: existing } = await db.from('app_tasks').select('department, assigned_to, team_service_line, status').eq('id', id).maybeSingle()
   if (existing && user && !(await canTouchTask(user, existing.department, existing.team_service_line, existing.assigned_to))) {
     return NextResponse.json({ error: 'Forbidden: task belongs to another department' }, { status: 403 })
   }
@@ -74,6 +75,22 @@ export const PATCH = withErrorHandler('tasks/[id] PATCH', async (req: NextReques
   if (error) {
     throw new Error(error?.message || 'Failed to update task')
   }
+  // Delivery/Operations previously had no automation trigger at all. Only
+  // fires on a real transition INTO Completed, so re-saving an
+  // already-completed task doesn't re-fire downstream automations.
+  if (body.status === 'Completed' && existing?.status !== 'Completed') {
+    fireAutomations('task_completed', {
+      taskId: id,
+      title: data.title,
+      category: data.category,
+      priority: data.priority,
+      assignedTo: data.assigned_to,
+      company: data.company,
+      companyId: data.company_id,
+      projectId: data.project_id,
+    })
+  }
+
   // AUDIT #537 — GET/POST both return mapTask()'s camelCase shape; this
   // used to return the raw snake_case row, the same bug class #202 fixed
   // for tickets.

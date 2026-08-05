@@ -17,6 +17,15 @@ const TRIGGER_MAP: Record<string, string> = {
   'invoice_paid':         'Invoice Paid',
   'invoice_overdue':      'Invoice Overdue',
   'project_launched':     'Project Status = Launched',
+  // Delivery/Operations and Client Support previously had NO usable triggers
+  // at all — 'project_launched' existed here but was only ever fired by a
+  // dead endpoint with zero callers, so an entire half of the business was
+  // invisible to the automation engine in both directions.
+  'project_status_changed': 'Project Status Changed',
+  'project_completed':    'Project Completed',
+  'task_completed':       'Task Completed',
+  'ticket_created':       'Ticket Created',
+  'ticket_replied':       'Ticket Reply Received',
   'deal_stage_changed':   'Deal Stage Changed',
   'contact_created':      'Contact Created',
   'form_submitted':       'Form Submitted',
@@ -92,6 +101,7 @@ const ACTION_CONFIG_ADAPTERS: Record<string, (cfg: Record<string, unknown>) => R
   // AUDIT.md #524 — previously had no adapter at all, so the builder's
   // config had nowhere real to go even after a template picker was added.
   'Apply Service Template': (cfg) => ({ templateId: cfg.templateId }),
+  'Create Invoice': (cfg) => ({ invoiceAmount: cfg.amount, invoiceServiceType: cfg.serviceType, invoiceDueDays: cfg.dueDays }),
 }
 
 function translateActionConfig(actionType: string, cfg: Record<string, unknown>): Record<string, unknown> {
@@ -779,6 +789,69 @@ async function executeAction(
         service_type: (context.service_type as string) ?? 'General',
         status: 'Active',
         contract_id: (context.contractId as string) ?? null,
+      })
+      break
+    }
+
+    // Previously there was NO invoice-creation action of any kind, so even a
+    // fully hand-built automation could not generate an invoice — the single
+    // biggest cross-module wiring gap in the app (Contract → Invoice had no
+    // path at all, and all three real invoice-creation call sites left
+    // `contract_id` null). This closes that, and is what the recurring
+    // retainer-billing cron builds on.
+    case 'Create Invoice': {
+      const invCompanyId = (context.companyId as string) ?? (context.company_id as string) ?? null
+      const contractId = (context.contractId as string) ?? (context.contract_id as string) ?? null
+
+      // Prefer the contract as the source of truth for amount/service when
+      // this fires off a contract trigger — the whole point is that staff
+      // shouldn't re-key what the contract already says.
+      let amount = Number(context.invoiceAmount ?? context.value ?? 0) || 0
+      let invServiceType = (context.invoiceServiceType as string) ?? (context.service_type as string) ?? 'General'
+      let invCompany = company
+      if (contractId) {
+        const { data: contractRow } = await db
+          .from('contracts')
+          .select('company, company_id, value, service_type, billing_structure')
+          .eq('id', contractId)
+          .maybeSingle()
+        if (contractRow) {
+          if (!amount) {
+            // contractMonthlyValue normalizes Quarterly/Annual to a real
+            // per-period figure — billing an Annual contract's full value
+            // every month would be a serious overcharge.
+            amount = contractMonthlyValue({
+              value: Number(contractRow.value) || 0,
+              billingStructure: contractRow.billing_structure ?? '',
+            })
+          }
+          if (!context.invoiceServiceType && contractRow.service_type) invServiceType = contractRow.service_type
+          if (!invCompany && contractRow.company) invCompany = contractRow.company
+        }
+      }
+
+      if (amount <= 0) {
+        console.warn(`[automations-engine] Create Invoice skipped for ${invCompany || 'unknown company'} — no positive amount resolved`)
+        break
+      }
+
+      const dueOffsetDays = Number(context.invoiceDueDays ?? 30) || 30
+      const dueDate = new Date(Date.now() + dueOffsetDays * 24 * 60 * 60 * 1000)
+        .toISOString().split('T')[0]
+
+      await db.from('invoices').insert({
+        id: `inv-auto-${uid()}`,
+        company: invCompany,
+        company_id: invCompanyId,
+        // The field every existing invoice-creation path leaves null.
+        contract_id: contractId,
+        amount,
+        status: 'Pending',
+        issued_date: today,
+        issue_date: today,
+        due_date: dueDate,
+        service_type: invServiceType,
+        source: 'automation',
       })
       break
     }

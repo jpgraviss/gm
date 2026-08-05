@@ -71,7 +71,16 @@ export const POST = withErrorHandler('chatbots/[id]/chat POST', async (req, { pa
   // that tenant's AI spend and impersonating their brand off-domain. Only
   // enforced when website_url is actually configured, since it's an
   // optional field on the chatbot form.
-  if (chatbot.website_url) {
+  // AUDIT #346 — `POST /api/chatbots` now refuses to create a bot that is
+  // neither bound to a site nor explicitly marked `allowAnyOrigin`, so the
+  // unbound state can no longer be reached by leaving a field blank. This
+  // check is unchanged for bots that predate that: a legacy bot with no
+  // website_url still runs anywhere, because retroactively blocking one
+  // would take a live widget off a client's site without warning. Setting a
+  // website URL on it — or ticking "allow any domain" — resolves it either
+  // way, and the bot list already flags which ones are unbound.
+  const allowAnyOrigin = (chatbot.settings as Record<string, unknown> | null)?.allowAnyOrigin === true
+  if (chatbot.website_url && !allowAnyOrigin) {
     const origin = req.headers.get('origin') || req.headers.get('referer')
     // AUDIT #616 — this only ran the check `if (origin)`, so a request with
     // no Origin/Referer at all (trivial for a direct scripted/curl caller —

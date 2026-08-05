@@ -42,6 +42,7 @@ interface Chatbot {
 interface ChatbotForm {
   name: string
   website_url: string
+  allow_any_origin: boolean
   welcome_message: string
   system_prompt: string
   knowledge: string
@@ -63,6 +64,7 @@ const uid = () => `ki_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 const defaultForm: ChatbotForm = {
   name: '',
   website_url: '',
+  allow_any_origin: false,
   welcome_message: 'Hi! How can I help you today?',
   system_prompt: 'You are a helpful support agent. Answer questions about our services politely and accurately.',
   knowledge: '',
@@ -144,6 +146,7 @@ export default function ChatbotsPage() {
     setForm({
       name: bot.name,
       website_url: bot.website_url || '',
+      allow_any_origin: ((bot.settings || {}) as Record<string, unknown>).allowAnyOrigin === true,
       welcome_message: bot.welcome_message,
       system_prompt: bot.system_prompt,
       knowledge: bot.knowledge || '',
@@ -160,6 +163,10 @@ export default function ChatbotsPage() {
 
   async function handleSave() {
     if (!form.name.trim()) { toast('Name is required', 'error'); return }
+    if (!editingBot && !form.website_url.trim() && !form.allow_any_origin) {
+      toast('Add a website URL, or tick "embeddable on any domain" to confirm that\u2019s intended', 'error')
+      return
+    }
     setSaving(true)
     try {
       const existingSettings = (editingBot?.settings || {}) as Record<string, unknown>
@@ -172,7 +179,7 @@ export default function ChatbotsPage() {
         brand_color: form.brand_color,
         avatar_url: form.avatar_url || null,
         active: form.active,
-        settings: { ...existingSettings, knowledge_items: form.knowledge_items },
+        settings: { ...existingSettings, knowledge_items: form.knowledge_items, allowAnyOrigin: form.allow_any_origin },
       }
       const url = editingBot ? `/api/chatbots/${editingBot.id}` : '/api/chatbots'
       const method = editingBot ? 'PATCH' : 'POST'
@@ -582,9 +589,23 @@ export default function ChatbotsPage() {
                           and run it from any site, burning this bot's AI
                           spend and impersonating this brand off-domain. */}
                       {!form.website_url.trim() && (
-                        <p className="text-[10px] text-amber-600 mt-1">
-                          Without a website URL, anyone who has this bot&apos;s id can embed it on their own site and run up your AI usage. Set it once the bot&apos;s live domain is known.
-                        </p>
+                        <div className="mt-1">
+                          <p className="text-[10px] text-amber-600">
+                            Without a website URL, anyone who has this bot&apos;s id can embed it on their own site and run up your AI usage.
+                          </p>
+                          {/* The API refuses to CREATE a bot that is neither
+                              bound to a site nor explicitly unbound, so this
+                              is the deliberate opt-out rather than a blank
+                              field quietly becoming "runs anywhere". */}
+                          <label className="flex items-center gap-2 mt-1.5 text-[11px] text-gray-600">
+                            <input
+                              type="checkbox"
+                              checked={form.allow_any_origin}
+                              onChange={e => setForm(f => ({ ...f, allow_any_origin: e.target.checked }))}
+                            />
+                            I want this bot embeddable on any domain
+                          </label>
+                        </div>
                       )}
                     </div>
                     <div>

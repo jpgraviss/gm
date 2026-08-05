@@ -141,18 +141,33 @@ export const GET = withErrorHandler('cron GET', async (req) => {
   //    so running more than once/day is wasted quota. We detect "already ran
   //    today" by checking whether the most-recently-checked tracked keyword
   //    was updated during the current UTC date.
+  let rankCheckWasDue = false
   try {
-    if (await rankCheckDue()) {
+    rankCheckWasDue = await rankCheckDue()
+    if (rankCheckWasDue) {
       results.rankTracker = await checkAllRanks()
-      // Competitor ranking needs a live SERP source (GSC only reports
-      // properties you own) — no-ops cleanly when one isn't configured.
-      results.competitorRanks = await checkCompetitorRanks()
     } else {
       results.rankTracker = { skipped: true }
     }
   } catch (err) {
     console.error('[cron] Rank tracker failed:', err)
     results.rankTracker = { error: 'Failed' }
+  }
+
+  // 6a. Competitor ranking — needs a live SERP source (GSC only reports
+  //     properties you own), so it no-ops cleanly when one isn't
+  //     configured. Deliberately its OWN try/catch rather than sharing the
+  //     rank-tracker block above: this route's whole design is per-job
+  //     isolation, and nesting these meant a competitor-lookup failure also
+  //     wiped out the keyword-rank result. Always reports a status so the
+  //     response shape doesn't vary between runs.
+  try {
+    results.competitorRanks = rankCheckWasDue
+      ? await checkCompetitorRanks()
+      : { skipped: true }
+  } catch (err) {
+    console.error('[cron] Competitor rank check failed:', err)
+    results.competitorRanks = { error: 'Failed' }
   }
 
   // 6b. Rescue scheduled_emails rows left stuck in 'sending' — the pending

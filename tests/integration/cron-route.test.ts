@@ -326,6 +326,31 @@ describe('GET /api/cron — job isolation', () => {
     expect(erroredJobs(json)).toEqual(['scheduledEmails'])
   })
 
+  it('isolates a competitor-rank failure from the keyword-rank result', async () => {
+    // Regression: checkCompetitorRanks was originally added INSIDE
+    // checkAllRanks's try block, so a competitor-lookup failure (a billable
+    // third-party SERP call — the most likely thing here to fail) also
+    // wiped out the keyword-rank result. They are separate jobs and must
+    // fail separately, like every other job in this route.
+    dbResults.tracked_keywords = { count: 3 } // make the rank check due
+    failingJobs.add('checkCompetitorRanks')
+
+    const json = await (await authorized()).json()
+
+    expect(json.competitorRanks).toEqual({ error: 'Failed' })
+    expect(json.rankTracker).not.toHaveProperty('error')
+  })
+
+  it('isolates a keyword-rank failure from the competitor-rank result', async () => {
+    dbResults.tracked_keywords = { count: 3 } // make the rank check due
+    failingJobs.add('checkAllRanks')
+
+    const json = await (await authorized()).json()
+
+    expect(json.rankTracker).toEqual({ error: 'Failed' })
+    expect(json.competitorRanks).not.toHaveProperty('error')
+  })
+
   it('isolates a recurring-billing failure from the rest of the tick', async () => {
     // generateRecurringInvoices touches real money and runs mid-chain; a throw
     // there must not stop scheduled email/broadcast delivery.

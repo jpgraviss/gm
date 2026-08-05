@@ -39,7 +39,21 @@ vi.mock('@/lib/supabase', () => ({
   createServiceClient: () => ({
     from(table: string) {
       if (table === 'portal_clients') {
-        return { select: () => ({ limit: async () => ({ data: portalClients, error: null }) }) }
+        // The real code filters in the query (by company_id, else ilike on
+        // company). The mock applies the same filter so the tests exercise
+        // the preference order rather than a JS-side scan the code no
+        // longer does.
+        return {
+          select: () => ({
+            eq: async (_c: string, v: string) => ({
+              data: portalClients.filter(r => r.company_id === v), error: null,
+            }),
+            ilike: async (_c: string, v: string) => ({
+              data: portalClients.filter(r =>
+                String(r.company ?? '').trim().toLowerCase() === v.trim().toLowerCase()), error: null,
+            }),
+          }),
+        }
       }
       return {
         select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: invoice, error: null }) }) }),

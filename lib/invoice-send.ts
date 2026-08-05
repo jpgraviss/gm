@@ -73,17 +73,23 @@ async function resolveRecipient(
   db: SupabaseClient,
   invoice: InvoiceRow,
 ): Promise<{ email: string; contact: string | null } | null> {
-  const { data: rows } = await db
-    .from('portal_clients')
-    .select('email, contact, company, company_id, access')
-    .limit(2000)
+  // Filtered in the query, not in JS over every portal client — this repo
+  // has a long history of silent 100/1000-row truncation, and "we scanned
+  // the first N clients and yours wasn't there" is exactly the failure mode
+  // that would look like a missing billing contact.
+  const query = db.from('portal_clients').select('email, contact, company, company_id, access')
+  const { data: rows } = invoice.company_id
+    ? await query.eq('company_id', invoice.company_id)
+    : await query.ilike('company', (invoice.company ?? '').trim())
 
   const candidates = ((rows ?? []) as Record<string, string | null>[])
     .filter(r => !!r.email)
-    // A disabled portal account is still a real billing contact — access
-    // controls who can log in, not who receives an invoice.
+    // A disabled portal account is still a real billing contact — `access`
+    // controls who can log in, not who receives an invoice. The name branch
+    // re-checks under normalization since `ilike` without wildcards is only
+    // case-insensitive, not whitespace-tolerant.
     .filter(r => invoice.company_id
-      ? r.company_id === invoice.company_id
+      ? true
       : normalizeCompanyName(r.company) === normalizeCompanyName(invoice.company))
 
   if (candidates.length === 0) return null
